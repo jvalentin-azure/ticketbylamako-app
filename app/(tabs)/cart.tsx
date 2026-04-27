@@ -1,11 +1,11 @@
-import { Text, View, TouchableOpacity, FlatList, Alert } from "react-native";
+import { Text, View, TouchableOpacity, FlatList, Alert, StyleSheet } from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useCart } from "@/lib/cart-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { formatAriary } from "@/lib/format";
+import { formatAriary, decodeHtmlEntities } from "@/lib/format";
 
 export default function CartScreen() {
   const colors = useColors();
@@ -19,19 +19,19 @@ export default function CartScreen() {
 
   if (items.length === 0) {
     return (
-      <ScreenContainer>
-        <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 }}>
-          <Text style={{ color: colors.foreground, fontSize: 24, fontWeight: "700" }}>Panier</Text>
+      <ScreenContainer edges={["left", "right"]}>
+        <View style={styles.headerRow}>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Panier</Text>
         </View>
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 40 }}>
+        <View style={styles.emptyContainer}>
           <IconSymbol name="cart.fill" size={64} color={colors.muted} />
-          <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "600", marginTop: 16 }}>Votre panier est vide</Text>
-          <Text style={{ color: colors.muted, fontSize: 14, textAlign: "center", marginTop: 8 }}>Parcourez nos événements et notre boutique pour ajouter des articles</Text>
+          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Votre panier est vide</Text>
+          <Text style={[styles.emptySub, { color: colors.muted }]}>Parcourez nos événements et notre boutique pour ajouter des articles</Text>
           <TouchableOpacity
             onPress={() => router.push("/(tabs)/" as any)}
-            style={{ backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 28, marginTop: 20 }}
+            style={[styles.emptyBtn, { backgroundColor: colors.primary }]}
           >
-            <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>Découvrir</Text>
+            <Text style={styles.emptyBtnText}>Découvrir</Text>
           </TouchableOpacity>
         </View>
       </ScreenContainer>
@@ -39,11 +39,11 @@ export default function CartScreen() {
   }
 
   return (
-    <ScreenContainer>
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 }}>
-        <Text style={{ color: colors.foreground, fontSize: 24, fontWeight: "700" }}>Panier ({itemCount})</Text>
+    <ScreenContainer edges={["left", "right"]}>
+      <View style={styles.headerRowFull}>
+        <Text style={[styles.headerTitle, { color: colors.foreground }]}>Panier ({itemCount})</Text>
         <TouchableOpacity onPress={() => Alert.alert("Vider le panier", "Supprimer tous les articles ?", [{ text: "Annuler" }, { text: "Vider", style: "destructive", onPress: clearCart }])}>
-          <Text style={{ color: colors.error, fontSize: 13, fontWeight: "600" }}>Tout supprimer</Text>
+          <Text style={[styles.clearText, { color: colors.error }]}>Tout supprimer</Text>
         </TouchableOpacity>
       </View>
 
@@ -52,33 +52,33 @@ export default function CartScreen() {
         keyExtractor={(item, i) => `${item.productId}-${item.seatLabel || i}`}
         contentContainerStyle={{ padding: 16 }}
         renderItem={({ item }) => (
-          <View style={{ flexDirection: "row", backgroundColor: colors.surface, borderRadius: 14, borderWidth: 1, borderColor: colors.border, padding: 12, marginBottom: 12 }}>
-            <Image source={{ uri: item.image }} style={{ width: 72, height: 72, borderRadius: 10 }} contentFit="cover" />
-            <View style={{ flex: 1, marginLeft: 12, justifyContent: "space-between" }}>
+          <View style={[styles.cartItem, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Image source={{ uri: item.image }} style={styles.cartItemImage} contentFit="cover" />
+            <View style={styles.cartItemBody}>
               <View>
-                <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "600" }} numberOfLines={2}>{item.name}</Text>
+                <Text style={[styles.cartItemName, { color: colors.foreground }]} numberOfLines={2}>{decodeHtmlEntities(item.name)}</Text>
                 {item.isEvent && (
-                  <View style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}>
+                  <View style={styles.ticketBadge}>
                     <IconSymbol name="ticket.fill" size={12} color={colors.primary} />
-                    <Text style={{ color: colors.primary, fontSize: 11, marginLeft: 4 }}>Billet{item.seatLabel ? ` - ${item.seatLabel}` : ""}</Text>
+                    <Text style={[styles.ticketBadgeText, { color: colors.primary }]}>Billet{item.seatLabel ? ` - ${item.seatLabel}` : ""}</Text>
                   </View>
                 )}
               </View>
-              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                <Text style={{ color: colors.primary, fontSize: 15, fontWeight: "700" }}>{formatAriary(item.price)}</Text>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <View style={styles.cartItemFooter}>
+                <Text style={[styles.cartItemPrice, { color: colors.primary }]}>{formatAriary(item.price)}</Text>
+                <View style={styles.qtyControls}>
                   <TouchableOpacity
                     onPress={() => item.quantity <= 1 ? removeItem(item.productId, item.seatLabel) : updateQuantity(item.productId, item.quantity - 1, item.seatLabel)}
-                    style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: colors.border, alignItems: "center", justifyContent: "center" }}
+                    style={[styles.qtyBtn, { backgroundColor: colors.border }]}
                   >
-                    <Text style={{ color: colors.foreground, fontSize: 16, fontWeight: "700" }}>{item.quantity <= 1 ? "×" : "-"}</Text>
+                    <Text style={[styles.qtyBtnText, { color: colors.foreground }]}>{item.quantity <= 1 ? "×" : "-"}</Text>
                   </TouchableOpacity>
-                  <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "700", minWidth: 16, textAlign: "center" }}>{item.quantity}</Text>
+                  <Text style={[styles.qtyValue, { color: colors.foreground }]}>{item.quantity}</Text>
                   <TouchableOpacity
                     onPress={() => updateQuantity(item.productId, item.quantity + 1, item.seatLabel)}
-                    style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" }}
+                    style={[styles.qtyBtn, { backgroundColor: colors.primary }]}
                   >
-                    <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>+</Text>
+                    <Text style={[styles.qtyBtnText, { color: "#fff" }]}>+</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -87,27 +87,59 @@ export default function CartScreen() {
         )}
         ListFooterComponent={
           <View style={{ marginTop: 8 }}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.border }}>
-              <Text style={{ color: colors.muted, fontSize: 15 }}>Sous-total</Text>
-              <Text style={{ color: colors.foreground, fontSize: 15, fontWeight: "600" }}>{formatAriary(total)}</Text>
+            <View style={[styles.totalRow, { borderTopColor: colors.border }]}>
+              <Text style={[styles.totalLabel, { color: colors.muted }]}>Sous-total</Text>
+              <Text style={[styles.totalValue, { color: colors.foreground }]}>{formatAriary(total)}</Text>
             </View>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.border }}>
-              <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "700" }}>Total</Text>
-              <Text style={{ color: colors.primary, fontSize: 20, fontWeight: "800" }}>{formatAriary(total)}</Text>
+            <View style={[styles.totalRow, { borderTopColor: colors.border }]}>
+              <Text style={[styles.grandTotalLabel, { color: colors.foreground }]}>Total</Text>
+              <Text style={[styles.grandTotalValue, { color: colors.primary }]}>{formatAriary(total)}</Text>
             </View>
           </View>
         }
       />
 
-      <View style={{ padding: 16, paddingBottom: 32, borderTopWidth: 1, borderTopColor: colors.border }}>
+      <View style={[styles.bottomCta, { borderTopColor: colors.border }]}>
         <TouchableOpacity
           onPress={handleCheckout}
-          style={{ backgroundColor: colors.primary, borderRadius: 14, paddingVertical: 16, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 8 }}
+          style={[styles.checkoutBtn, { backgroundColor: colors.primary }]}
         >
           <IconSymbol name="lock.fill" size={18} color="#fff" />
-          <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>Passer la commande</Text>
+          <Text style={styles.checkoutBtnText}>Passer la commande</Text>
         </TouchableOpacity>
       </View>
     </ScreenContainer>
   );
 }
+
+const styles = StyleSheet.create({
+  headerRow: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
+  headerRowFull: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
+  headerTitle: { fontSize: 22, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  clearText: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  emptyContainer: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 40 },
+  emptyTitle: { fontSize: 18, fontWeight: "600", marginTop: 16, fontFamily: "Raleway-SemiBold" },
+  emptySub: { fontSize: 14, textAlign: "center", marginTop: 8, fontFamily: "Raleway-Regular" },
+  emptyBtn: { borderRadius: 12, paddingVertical: 12, paddingHorizontal: 28, marginTop: 20 },
+  emptyBtnText: { color: "#fff", fontSize: 14, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  cartItem: { flexDirection: "row", borderRadius: 14, borderWidth: 1, padding: 12, marginBottom: 12 },
+  cartItemImage: { width: 72, height: 72, borderRadius: 10 },
+  cartItemBody: { flex: 1, marginLeft: 12, justifyContent: "space-between" },
+  cartItemName: { fontSize: 14, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  ticketBadge: { flexDirection: "row", alignItems: "center", marginTop: 2 },
+  ticketBadgeText: { fontSize: 11, marginLeft: 4, fontFamily: "Raleway-Medium" },
+  cartItemFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  cartItemPrice: { fontSize: 15, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  qtyControls: { flexDirection: "row", alignItems: "center", gap: 10 },
+  qtyBtn: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  qtyBtnText: { fontSize: 16, fontWeight: "700" },
+  qtyValue: { fontSize: 14, fontWeight: "700", minWidth: 16, textAlign: "center", fontFamily: "Raleway-Bold" },
+  totalRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 12, borderTopWidth: 1 },
+  totalLabel: { fontSize: 15, fontFamily: "Raleway-Regular" },
+  totalValue: { fontSize: 15, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  grandTotalLabel: { fontSize: 18, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  grandTotalValue: { fontSize: 20, fontWeight: "800", fontFamily: "Raleway-Bold" },
+  bottomCta: { padding: 16, paddingBottom: 32, borderTopWidth: 1 },
+  checkoutBtn: { borderRadius: 14, paddingVertical: 16, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 8 },
+  checkoutBtnText: { color: "#fff", fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold" },
+});

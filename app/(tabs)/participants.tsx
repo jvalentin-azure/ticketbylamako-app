@@ -80,10 +80,10 @@ export default function ParticipantsScreen() {
     notChecked: participants.filter(p => p.status === "not_checked").length,
   }), [participants]);
 
-  if (loading) return <ScreenContainer className="flex-1 items-center justify-center"><ActivityIndicator size="large" color={colors.primary} /></ScreenContainer>;
+  if (loading) return <ScreenContainer edges={["left", "right"]} className="flex-1 items-center justify-center"><ActivityIndicator size="large" color={colors.primary} /></ScreenContainer>;
 
   return (
-    <ScreenContainer>
+    <ScreenContainer edges={["left", "right"]}>
       {/* Header */}
       <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 }}>
         <Text style={{ color: colors.foreground, fontSize: 24, fontWeight: "700" }}>Participants</Text>
@@ -148,7 +148,7 @@ export default function ParticipantsScreen() {
             </View>
 
             <View style={{ flex: 1 }}>
-              <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "600" }}>{item.name}</Text>
+              <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "600", fontFamily: "Raleway-SemiBold" }}>{item.name}</Text>
               <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>{item.ticketType}{item.seatLabel ? ` - ${item.seatLabel}` : ""}</Text>
               <Text style={{ color: colors.muted, fontSize: 11, marginTop: 1 }}>{item.email}</Text>
             </View>

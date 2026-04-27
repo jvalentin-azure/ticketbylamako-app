@@ -67,6 +67,15 @@ const MAPPING = {
   "location.fill": "location-on",
   "phone.fill": "phone",
   "envelope.fill": "email",
+  "line.3.horizontal": "menu",
+  "lock.fill": "lock",
+  "eye.slash.fill": "visibility-off",
+  "globe": "language",
+  "shield.fill": "security",
+  "text.bubble.fill": "chat",
+  "hand.raised.fill": "privacy-tip",
+  "storefront.fill": "storefront",
+  "calendar.badge.clock": "event-available",
 } as IconMapping;
 
 /**

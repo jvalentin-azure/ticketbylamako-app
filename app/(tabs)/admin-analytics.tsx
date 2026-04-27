@@ -84,12 +84,12 @@ export default function AdminAnalyticsScreen() {
   useEffect(() => { loadData(); }, []);
   const onRefresh = () => { setRefreshing(true); loadData(); };
 
-  if (loading) return <ScreenContainer className="flex-1 items-center justify-center"><ActivityIndicator size="large" color={colors.primary} /></ScreenContainer>;
+  if (loading) return <ScreenContainer edges={["left", "right"]} className="flex-1 items-center justify-center"><ActivityIndicator size="large" color={colors.primary} /></ScreenContainer>;
 
   const maxMonthRevenue = Math.max(...(data?.revenueByMonth.map(m => m.amount) || [1]));
 
   return (
-    <ScreenContainer>
+    <ScreenContainer edges={["left", "right"]}>
       <ScrollView
         contentContainerStyle={{ padding: 16 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
@@ -109,7 +109,7 @@ export default function AdminAnalyticsScreen() {
 
         {/* Revenue Chart */}
         <View style={{ backgroundColor: colors.surface, borderRadius: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: colors.border }}>
-          <Text style={{ color: colors.foreground, fontSize: 16, fontWeight: "700", marginBottom: 16 }}>Revenus (6 mois)</Text>
+          <Text style={{ color: colors.foreground, fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold", marginBottom: 16 }}>Revenus (6 mois)</Text>
           <View style={{ flexDirection: "row", alignItems: "flex-end", height: 120, gap: 8 }}>
             {data?.revenueByMonth.map((month, idx) => {
               const height = maxMonthRevenue > 0 ? (month.amount / maxMonthRevenue) * 100 + 4 : 4;
@@ -126,7 +126,7 @@ export default function AdminAnalyticsScreen() {
 
         {/* Orders by Status */}
         <View style={{ backgroundColor: colors.surface, borderRadius: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: colors.border }}>
-          <Text style={{ color: colors.foreground, fontSize: 16, fontWeight: "700", marginBottom: 16 }}>Répartition des commandes</Text>
+          <Text style={{ color: colors.foreground, fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold", marginBottom: 16 }}>Répartition des commandes</Text>
           {data?.ordersByStatus.map((item, idx) => {
             const totalOrders = data.ordersByStatus.reduce((s, i) => s + i.count, 0);
             const pct = totalOrders > 0 ? Math.round((item.count / totalOrders) * 100) : 0;

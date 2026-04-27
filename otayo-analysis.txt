@@ -1,0 +1,53 @@
+OTAYO App UI Analysis
+=====================
+
+HEADER:
+- Burger menu (☰) on top-left
+- Logo centered in header
+- Profile avatar circle on top-right
+- Search bar below header (rounded, full width, "Search for an event")
+
+HOME SCREEN:
+- "Featured Events" section with large event card carousel
+- Event card: full-width image, date badge (day + month), "Last Tickets Left" badge
+- Event name, location icon + venue, "As From Rs. XXX" price
+- "Upcoming Events" section below
+- Category filter chips: All, Cinema, Concerts, Festivals (horizontal scroll)
+
+BOTTOM TABS (5):
+- Home (house icon, filled when active)
+- Events (ticket icon)
+- O-Culture (their custom)
+- Rezo (map icon)
+- Profile (person icon)
+
+PROFILE SCREEN:
+- Large logo at top on dark gradient background
+- "My Account" button (orange/coral)
+- Account Settings list:
+  - My Tickets
+  - Edit Profile
+  - Privacy & Security
+  - FAQs
+  - Help & Support
+
+COLOR SCHEME:
+- Dark background (#1A1A2E or similar dark)
+- Orange/coral accent for active states
+- White text on dark
+- Cards with subtle borders
+
+EVENTS LIST:
+- Search bar at top
+- "Showing X Results" counter
+- Category filter chips (All, Cinema, Concerts, Festivals, Trip)
+- Event cards: large image, date badge, event name, venue, price
+- Dark theme throughout
+
+KEY PATTERNS:
+1. Dark mode primary, clean and modern
+2. Large hero images for events
+3. Category chips for filtering
+4. Bottom tab bar with 5 items
+5. Burger menu for additional navigation
+6. Profile avatar in header for quick access

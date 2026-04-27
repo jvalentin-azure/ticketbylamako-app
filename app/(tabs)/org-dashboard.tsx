@@ -70,16 +70,16 @@ export default function OrgDashboardScreen() {
         <IconSymbol name={icon} size={18} color={color} />
       </View>
       <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}>{label}</Text>
-      <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "800" }}>{value}</Text>
+      <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "800", fontFamily: "Raleway-Bold" }}>{value}</Text>
     </View>
   );
 
   if (loading) {
-    return <ScreenContainer className="flex-1 items-center justify-center"><ActivityIndicator size="large" color={colors.primary} /></ScreenContainer>;
+    return <ScreenContainer edges={["left", "right"]} className="flex-1 items-center justify-center"><ActivityIndicator size="large" color={colors.primary} /></ScreenContainer>;
   }
 
   return (
-    <ScreenContainer>
+    <ScreenContainer edges={["left", "right"]}>
       <ScrollView
         contentContainerStyle={{ padding: 16 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
@@ -87,7 +87,7 @@ export default function OrgDashboardScreen() {
         {/* Header */}
         <View style={{ marginBottom: 20 }}>
           <Text style={{ color: colors.muted, fontSize: 14 }}>Bonjour,</Text>
-          <Text style={{ color: colors.foreground, fontSize: 24, fontWeight: "800" }}>{user?.firstName || "Organisateur"}</Text>
+          <Text style={{ color: colors.foreground, fontSize: 24, fontWeight: "800", fontFamily: "Raleway-Bold" }}>{user?.firstName || "Organisateur"}</Text>
         </View>
 
         {/* Quick Actions */}
@@ -97,14 +97,14 @@ export default function OrgDashboardScreen() {
             style={{ flex: 1, backgroundColor: colors.primary, borderRadius: 14, padding: 16, flexDirection: "row", alignItems: "center", gap: 10 }}
           >
             <IconSymbol name="qrcode.viewfinder" size={22} color="#fff" />
-            <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>Scanner</Text>
+            <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700", fontFamily: "Raleway-Bold" }}>Scanner</Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => router.push("/(tabs)/participants" as any)}
             style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 14, padding: 16, flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderColor: colors.border }}
           >
             <IconSymbol name="person.2.fill" size={22} color={colors.primary} />
-            <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "700" }}>Participants</Text>
+            <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "700", fontFamily: "Raleway-Bold" }}>Participants</Text>
           </TouchableOpacity>
         </View>
 
@@ -121,7 +121,7 @@ export default function OrgDashboardScreen() {
         {/* Recent Orders */}
         <View style={{ marginBottom: 20 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "700" }}>Commandes récentes</Text>
+            <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "700", fontFamily: "Raleway-Bold" }}>Commandes récentes</Text>
             <TouchableOpacity onPress={() => router.push("/(tabs)/admin-orders" as any)}>
               <Text style={{ color: colors.primary, fontSize: 13, fontWeight: "600" }}>Voir tout</Text>
             </TouchableOpacity>
@@ -130,10 +130,10 @@ export default function OrgDashboardScreen() {
             <View key={order.id} style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: colors.border }}>
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                 <View>
-                  <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "600" }}>#{order.id} - {order.billing?.first_name} {order.billing?.last_name}</Text>
+                  <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "600", fontFamily: "Raleway-SemiBold" }}>#{order.id} - {order.billing?.first_name} {order.billing?.last_name}</Text>
                   <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>{order.line_items.length} article(s)</Text>
                 </View>
-                <Text style={{ color: colors.primary, fontSize: 15, fontWeight: "700" }}>{formatAriary(order.total)}</Text>
+                <Text style={{ color: colors.primary, fontSize: 15, fontWeight: "700", fontFamily: "Raleway-Bold" }}>{formatAriary(order.total)}</Text>
               </View>
             </View>
           ))}

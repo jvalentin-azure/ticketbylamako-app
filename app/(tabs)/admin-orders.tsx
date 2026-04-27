@@ -55,10 +55,10 @@ export default function AdminOrdersScreen() {
     return list;
   }, [orders, filter, search]);
 
-  if (loading) return <ScreenContainer className="flex-1 items-center justify-center"><ActivityIndicator size="large" color={colors.primary} /></ScreenContainer>;
+  if (loading) return <ScreenContainer edges={["left", "right"]} className="flex-1 items-center justify-center"><ActivityIndicator size="large" color={colors.primary} /></ScreenContainer>;
 
   return (
-    <ScreenContainer>
+    <ScreenContainer edges={["left", "right"]}>
       {/* Header */}
       <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 }}>
         <Text style={{ color: colors.foreground, fontSize: 24, fontWeight: "700" }}>Commandes</Text>
@@ -120,7 +120,7 @@ export default function AdminOrdersScreen() {
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                   <IconSymbol name={st.icon} size={18} color={st.color} />
-                  <Text style={{ color: colors.foreground, fontSize: 15, fontWeight: "700" }}>#{order.id}</Text>
+                  <Text style={{ color: colors.foreground, fontSize: 15, fontWeight: "700", fontFamily: "Raleway-Bold" }}>#{order.id}</Text>
                 </View>
                 <View style={{ backgroundColor: st.color + "15", paddingHorizontal: 10, paddingVertical: 3, borderRadius: 8 }}>
                   <Text style={{ color: st.color, fontSize: 11, fontWeight: "600" }}>{st.label}</Text>
@@ -136,7 +136,7 @@ export default function AdminOrdersScreen() {
 
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border }}>
                 <Text style={{ color: colors.muted, fontSize: 11 }}>{formatDateTime(order.date_created)}</Text>
-                <Text style={{ color: colors.primary, fontSize: 15, fontWeight: "700" }}>{formatAriary(order.total)}</Text>
+                <Text style={{ color: colors.primary, fontSize: 15, fontWeight: "700", fontFamily: "Raleway-Bold" }}>{formatAriary(order.total)}</Text>
               </View>
             </View>
           );

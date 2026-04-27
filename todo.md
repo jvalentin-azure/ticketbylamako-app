@@ -4,7 +4,7 @@
 - [x] Configure theme colors (gold/white brand palette)
 - [x] Set up API secrets (WC keys, JWT secret, site URL)
 - [x] Generate app logo
-- [ ] Load Raleway font
+- [x] Load Raleway font
 
 ## Phase 2: Core Infrastructure
 - [x] WooCommerce API service (products, orders, events)
@@ -55,3 +55,43 @@
 - [x] Generate WooCommerce API keys (read/write)
 - [x] Configure CORS headers
 - [x] Add JWT secret to wp-config.php
+
+## V2 - Major Redesign (OTAYO-inspired)
+
+### Navigation & Layout
+- [x] Splash screen on app open (like OTAYO)
+- [x] Burger menu (drawer) with profile section
+- [x] Header with profile icon + notifications bell
+- [x] 5 bottom tabs: Accueil, Événement, Boutique, Mes billets, Panier
+- [x] Remove old role-based tab switching (keep role detection for features)
+
+### Branding
+- [x] Update colors to official: #663d17 (marron foncé), #c79f6c (or), #ffffff, #000000
+- [x] Use dark logo (TicketbyLamako_Dark.png) for light backgrounds
+- [x] Use white logo (TicketbyLamako_White.png) for dark backgrounds
+- [x] Logo on login page
+- [x] Use RALEWAY font (5 weights: Regular, Medium, SemiBold, Bold, ExtraBold)
+
+### Events Fix
+- [x] Fix events not loading - now uses wp/v2/tc_events endpoint (Tickera CPT)
+- [x] Support events with and without seating chart
+- [x] Separate ticket products from shop products
+
+### Shop
+- [x] Shop shows only non-ticket products (getShopProducts filters out ticket category)
+- [x] Shop organized by WooCommerce categories with category chips
+
+### Authentication
+- [x] Social login: Facebook (button, placeholder for OAuth)
+- [x] Social login: Apple (button, placeholder for OAuth)
+- [x] Social login: Google (button, placeholder for OAuth)
+
+### Support & Legal
+- [x] Privacy policy page (full French content)
+- [x] Help & Support page with WhatsApp contact button, FAQ, email/phone options
+
+### Styling Consistency
+- [x] All screens use Raleway font family
+- [x] All tab screens use edges={["left", "right"]} (AppHeader handles top safe area)
+- [x] Drawer content with gradient header, organized menu sections
+- [x] Fixed TypeScript errors (0 errors)

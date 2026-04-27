@@ -1,12 +1,12 @@
 import { useEffect, useState, useCallback } from "react";
-import { Text, View, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl } from "react-native";
+import { Text, View, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/lib/auth-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { getCustomerOrders, type WCOrder } from "@/lib/api/woocommerce";
-import { formatDateShort } from "@/lib/format";
+import { formatDateShort, decodeHtmlEntities } from "@/lib/format";
 
 interface TicketItem {
   orderId: number;
@@ -36,7 +36,7 @@ export default function TicketsScreen() {
           tix.push({
             orderId: order.id,
             ticketCode: codeMeta?.value || `TKT-${order.id}-${item.id}`,
-            eventName: item.name,
+            eventName: decodeHtmlEntities(item.name),
             ticketType: item.meta_data?.find((m: any) => m.key === "Ticket Type" || m.key === "_tc_ticket_type_name")?.value || "Standard",
             date: order.date_created,
             status: order.status,
@@ -51,15 +51,15 @@ export default function TicketsScreen() {
 
   if (!isAuthenticated) {
     return (
-      <ScreenContainer className="flex-1 items-center justify-center px-6">
+      <ScreenContainer edges={["left", "right"]} className="flex-1 items-center justify-center px-6">
         <IconSymbol name="ticket.fill" size={64} color={colors.muted} />
-        <Text style={{ color: colors.foreground, fontSize: 20, fontWeight: "700", marginTop: 16 }}>Mes Billets</Text>
-        <Text style={{ color: colors.muted, fontSize: 14, textAlign: "center", marginTop: 8 }}>Connectez-vous pour voir vos billets et QR codes</Text>
+        <Text style={[styles.loginTitle, { color: colors.foreground }]}>Mes Billets</Text>
+        <Text style={[styles.loginSub, { color: colors.muted }]}>Connectez-vous pour voir vos billets et QR codes</Text>
         <TouchableOpacity
           onPress={() => router.push("/(auth)/login" as any)}
-          style={{ backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 32, marginTop: 20 }}
+          style={[styles.loginBtn, { backgroundColor: colors.primary }]}
         >
-          <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>Se connecter</Text>
+          <Text style={styles.loginBtnText}>Se connecter</Text>
         </TouchableOpacity>
       </ScreenContainer>
     );
@@ -71,13 +71,23 @@ export default function TicketsScreen() {
     return colors.error;
   };
 
+  const statusLabel = (s: string) => {
+    if (s === "completed") return "Validé";
+    if (s === "processing") return "Actif";
+    if (s === "pending") return "En attente";
+    if (s === "on-hold") return "En attente";
+    if (s === "cancelled") return "Annulé";
+    if (s === "refunded") return "Remboursé";
+    return s;
+  };
+
   return (
-    <ScreenContainer>
-      <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 }}>
-        <Text style={{ color: colors.foreground, fontSize: 24, fontWeight: "700" }}>Mes Billets</Text>
+    <ScreenContainer edges={["left", "right"]}>
+      <View style={styles.headerRow}>
+        <Text style={[styles.headerTitle, { color: colors.foreground }]}>Mes Billets</Text>
       </View>
       {loading ? (
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+        <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : (
@@ -90,30 +100,28 @@ export default function TicketsScreen() {
             <TouchableOpacity
               activeOpacity={0.8}
               onPress={() => router.push(`/ticket/${item.orderId}` as any)}
-              style={{ backgroundColor: colors.surface, borderRadius: 14, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: colors.border, flexDirection: "row", alignItems: "center" }}
+              style={[styles.ticketCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
             >
-              <View style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: colors.primary + "15", alignItems: "center", justifyContent: "center" }}>
+              <View style={[styles.ticketIcon, { backgroundColor: colors.primary + "15" }]}>
                 <IconSymbol name="ticket.fill" size={24} color={colors.primary} />
               </View>
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={{ color: colors.foreground, fontSize: 15, fontWeight: "600" }} numberOfLines={1}>{item.eventName}</Text>
-                <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>{item.ticketType} - {formatDateShort(item.date)}</Text>
+              <View style={styles.ticketInfo}>
+                <Text style={[styles.ticketName, { color: colors.foreground }]} numberOfLines={1}>{item.eventName}</Text>
+                <Text style={[styles.ticketMeta, { color: colors.muted }]}>{item.ticketType} - {formatDateShort(item.date)}</Text>
               </View>
-              <View style={{ alignItems: "flex-end" }}>
-                <View style={{ backgroundColor: statusColor(item.status) + "20", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
-                  <Text style={{ color: statusColor(item.status), fontSize: 11, fontWeight: "600" }}>
-                    {item.status === "completed" ? "Validé" : item.status === "processing" ? "Actif" : item.status}
-                  </Text>
+              <View style={styles.ticketRight}>
+                <View style={[styles.statusBadge, { backgroundColor: statusColor(item.status) + "20" }]}>
+                  <Text style={[styles.statusText, { color: statusColor(item.status) }]}>{statusLabel(item.status)}</Text>
                 </View>
                 <IconSymbol name="chevron.right" size={16} color={colors.muted} style={{ marginTop: 6 }} />
               </View>
             </TouchableOpacity>
           )}
           ListEmptyComponent={
-            <View style={{ alignItems: "center", paddingTop: 60 }}>
+            <View style={styles.emptyContainer}>
               <IconSymbol name="ticket.fill" size={48} color={colors.muted} />
-              <Text style={{ color: colors.muted, fontSize: 15, marginTop: 12 }}>Aucun billet trouvé</Text>
-              <Text style={{ color: colors.muted, fontSize: 13, marginTop: 4 }}>Vos billets apparaîtront ici après achat</Text>
+              <Text style={[styles.emptyText, { color: colors.muted }]}>Aucun billet trouvé</Text>
+              <Text style={[styles.emptySubText, { color: colors.muted }]}>Vos billets apparaîtront ici après achat</Text>
             </View>
           }
         />
@@ -121,3 +129,24 @@ export default function TicketsScreen() {
     </ScreenContainer>
   );
 }
+
+const styles = StyleSheet.create({
+  headerRow: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
+  headerTitle: { fontSize: 22, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  loadingContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
+  ticketCard: { borderRadius: 14, padding: 16, marginBottom: 12, borderWidth: 1, flexDirection: "row", alignItems: "center" },
+  ticketIcon: { width: 48, height: 48, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  ticketInfo: { flex: 1, marginLeft: 12 },
+  ticketName: { fontSize: 15, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  ticketMeta: { fontSize: 12, marginTop: 2, fontFamily: "Raleway-Regular" },
+  ticketRight: { alignItems: "flex-end" },
+  statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  statusText: { fontSize: 11, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  emptyContainer: { alignItems: "center", paddingTop: 60 },
+  emptyText: { fontSize: 15, marginTop: 12, fontFamily: "Raleway-Medium" },
+  emptySubText: { fontSize: 13, marginTop: 4, fontFamily: "Raleway-Regular" },
+  loginTitle: { fontSize: 20, fontWeight: "700", marginTop: 16, fontFamily: "Raleway-Bold" },
+  loginSub: { fontSize: 14, textAlign: "center", marginTop: 8, fontFamily: "Raleway-Regular" },
+  loginBtn: { borderRadius: 12, paddingVertical: 12, paddingHorizontal: 32, marginTop: 20 },
+  loginBtnText: { color: "#fff", fontSize: 15, fontWeight: "700", fontFamily: "Raleway-Bold" },
+});

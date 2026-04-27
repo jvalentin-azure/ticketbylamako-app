@@ -5,6 +5,7 @@
 export {
   Colors,
   Fonts,
+  RalewayFonts,
   SchemeColors,
   ThemeColors,
   type ColorScheme,

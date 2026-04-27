@@ -67,10 +67,10 @@ export default function ReportsScreen() {
   useEffect(() => { loadData(); }, []);
   const onRefresh = () => { setRefreshing(true); loadData(); };
 
-  if (loading) return <ScreenContainer className="flex-1 items-center justify-center"><ActivityIndicator size="large" color={colors.primary} /></ScreenContainer>;
+  if (loading) return <ScreenContainer edges={["left", "right"]} className="flex-1 items-center justify-center"><ActivityIndicator size="large" color={colors.primary} /></ScreenContainer>;
 
   return (
-    <ScreenContainer>
+    <ScreenContainer edges={["left", "right"]}>
       <ScrollView
         contentContainerStyle={{ padding: 16 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
@@ -92,10 +92,10 @@ export default function ReportsScreen() {
         </View>
 
         {/* Event Reports */}
-        <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "700", marginBottom: 12 }}>Par événement</Text>
+        <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "700", fontFamily: "Raleway-Bold", marginBottom: 12 }}>Par événement</Text>
         {reports.map((report, idx) => (
           <View key={idx} style={{ backgroundColor: colors.surface, borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: colors.border }}>
-            <Text style={{ color: colors.foreground, fontSize: 15, fontWeight: "700", marginBottom: 10 }} numberOfLines={2}>{report.name}</Text>
+            <Text style={{ color: colors.foreground, fontSize: 15, fontWeight: "700", fontFamily: "Raleway-Bold", marginBottom: 10 }} numberOfLines={2}>{report.name}</Text>
             <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
               <View style={{ alignItems: "center" }}>
                 <Text style={{ color: colors.primary, fontSize: 16, fontWeight: "800" }}>{report.ticketsSold}</Text>

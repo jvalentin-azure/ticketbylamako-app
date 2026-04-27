@@ -17,12 +17,17 @@ import {
   initialWindowMetrics,
 } from "react-native-safe-area-context";
 import type { EdgeInsets, Metrics, Rect } from "react-native-safe-area-context";
+import { useFonts } from "expo-font";
+import * as SplashScreen from "expo-splash-screen";
 
 import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-runtime";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
+
+// Prevent splash screen from auto-hiding while fonts load
+SplashScreen.preventAutoHideAsync();
 
 export const unstable_settings = {
   anchor: "(tabs)",
@@ -35,10 +40,26 @@ export default function RootLayout() {
   const [insets, setInsets] = useState<EdgeInsets>(initialInsets);
   const [frame, setFrame] = useState<Rect>(initialFrame);
 
+  // Load Raleway fonts
+  const [fontsLoaded, fontError] = useFonts({
+    "Raleway-Regular": require("@/assets/fonts/Raleway-Regular.ttf"),
+    "Raleway-Medium": require("@/assets/fonts/Raleway-Medium.ttf"),
+    "Raleway-SemiBold": require("@/assets/fonts/Raleway-SemiBold.ttf"),
+    "Raleway-Bold": require("@/assets/fonts/Raleway-Bold.ttf"),
+    "Raleway-ExtraBold": require("@/assets/fonts/Raleway-ExtraBold.ttf"),
+  });
+
   // Initialize Manus runtime for cookie injection from parent container
   useEffect(() => {
     initManusRuntime();
   }, []);
+
+  // Hide splash screen once fonts are loaded
+  useEffect(() => {
+    if (fontsLoaded || fontError) {
+      SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded, fontError]);
 
   const handleSafeAreaUpdate = useCallback((metrics: Metrics) => {
     setInsets(metrics.insets);
@@ -80,6 +101,11 @@ export default function RootLayout() {
     };
   }, [initialInsets, initialFrame]);
 
+  // Don't render until fonts are loaded
+  if (!fontsLoaded && !fontError) {
+    return null;
+  }
+
   const content = (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <trpc.Provider client={trpcClient} queryClient={queryClient}>
@@ -96,6 +122,8 @@ export default function RootLayout() {
             <Stack.Screen name="ticket/[id]" />
             <Stack.Screen name="checkout" options={{ presentation: "fullScreenModal" }} />
             <Stack.Screen name="orders" />
+            <Stack.Screen name="privacy" />
+            <Stack.Screen name="help" />
             <Stack.Screen name="oauth/callback" />
           </Stack>
           <StatusBar style="auto" />

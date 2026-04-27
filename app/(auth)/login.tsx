@@ -1,13 +1,17 @@
 import { useState } from "react";
-import { Text, View, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
+import { Text, View, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Alert } from "react-native";
+import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useAuth } from "@/lib/auth-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 
 export default function LoginScreen() {
   const colors = useColors();
+  const scheme = useColorScheme();
   const router = useRouter();
   const { login } = useAuth();
   const [email, setEmail] = useState("");
@@ -28,36 +32,86 @@ export default function LoginScreen() {
     } finally { setLoading(false); }
   };
 
+  const handleSocialLogin = (provider: string) => {
+    Alert.alert("Bientôt disponible", `La connexion avec ${provider} sera disponible prochainement.`);
+  };
+
   return (
     <ScreenContainer edges={["top", "bottom", "left", "right"]}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 24 }} keyboardShouldPersistTaps="handled">
           {/* Back button */}
-          <TouchableOpacity onPress={() => router.back()} style={{ position: "absolute", top: 16, left: 24 }}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
           </TouchableOpacity>
 
-          {/* Logo area */}
-          <View style={{ alignItems: "center", marginBottom: 40 }}>
-            <View style={{ width: 80, height: 80, borderRadius: 20, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
-              <Text style={{ color: "#fff", fontSize: 32, fontWeight: "800" }}>L</Text>
-            </View>
-            <Text style={{ color: colors.foreground, fontSize: 26, fontWeight: "700" }}>Bienvenue</Text>
-            <Text style={{ color: colors.muted, fontSize: 14, marginTop: 4 }}>Connectez-vous à votre compte</Text>
+          {/* Logo */}
+          <View style={styles.logoArea}>
+            <Image
+              source={
+                scheme === "dark"
+                  ? require("@/assets/images/logo-white.png")
+                  : require("@/assets/images/logo-dark.png")
+              }
+              style={styles.logo}
+              contentFit="contain"
+            />
+            <Text style={[styles.welcomeText, { color: colors.foreground }]}>Bienvenue</Text>
+            <Text style={[styles.subtitleText, { color: colors.muted }]}>Connectez-vous à votre compte</Text>
+          </View>
+
+          {/* Social Login Buttons */}
+          <View style={styles.socialContainer}>
+            {/* Facebook */}
+            <TouchableOpacity
+              onPress={() => handleSocialLogin("Facebook")}
+              style={[styles.socialButton, { backgroundColor: "#1877F2" }]}
+              activeOpacity={0.8}
+            >
+              <MaterialIcons name="facebook" size={22} color="#fff" />
+              <Text style={styles.socialButtonText}>Facebook</Text>
+            </TouchableOpacity>
+
+            {/* Apple */}
+            <TouchableOpacity
+              onPress={() => handleSocialLogin("Apple")}
+              style={[styles.socialButton, { backgroundColor: scheme === "dark" ? "#fff" : "#000" }]}
+              activeOpacity={0.8}
+            >
+              <MaterialIcons name="apple" size={22} color={scheme === "dark" ? "#000" : "#fff"} />
+              <Text style={[styles.socialButtonText, { color: scheme === "dark" ? "#000" : "#fff" }]}>Apple</Text>
+            </TouchableOpacity>
+
+            {/* Google */}
+            <TouchableOpacity
+              onPress={() => handleSocialLogin("Google")}
+              style={[styles.socialButton, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }]}
+              activeOpacity={0.8}
+            >
+              <Text style={{ fontSize: 18, fontWeight: "700", color: "#4285F4" }}>G</Text>
+              <Text style={[styles.socialButtonText, { color: colors.foreground }]}>Google</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Divider */}
+          <View style={styles.divider}>
+            <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+            <Text style={[styles.dividerText, { color: colors.muted }]}>ou</Text>
+            <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
           </View>
 
           {/* Error */}
           {error ? (
-            <View style={{ backgroundColor: colors.error + "15", padding: 12, borderRadius: 10, marginBottom: 16, flexDirection: "row", alignItems: "center" }}>
+            <View style={[styles.errorBox, { backgroundColor: colors.error + "15" }]}>
               <IconSymbol name="xmark.circle.fill" size={18} color={colors.error} />
-              <Text style={{ color: colors.error, fontSize: 13, marginLeft: 8, flex: 1 }}>{error}</Text>
+              <Text style={{ color: colors.error, fontSize: 13, marginLeft: 8, flex: 1, fontFamily: "Raleway-Medium" }}>{error}</Text>
             </View>
           ) : null}
 
           {/* Email */}
           <View style={{ marginBottom: 14 }}>
-            <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "600", marginBottom: 6 }}>Email ou nom d'utilisateur</Text>
-            <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14 }}>
+            <Text style={[styles.inputLabel, { color: colors.foreground }]}>Email ou nom d'utilisateur</Text>
+            <View style={[styles.inputRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <IconSymbol name="person.fill" size={18} color={colors.muted} />
               <TextInput
                 placeholder="votre@email.com"
@@ -67,15 +121,15 @@ export default function LoginScreen() {
                 autoCapitalize="none"
                 keyboardType="email-address"
                 returnKeyType="next"
-                style={{ flex: 1, paddingVertical: 14, paddingHorizontal: 10, color: colors.foreground, fontSize: 15 }}
+                style={[styles.input, { color: colors.foreground }]}
               />
             </View>
           </View>
 
           {/* Password */}
           <View style={{ marginBottom: 20 }}>
-            <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "600", marginBottom: 6 }}>Mot de passe</Text>
-            <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14 }}>
+            <Text style={[styles.inputLabel, { color: colors.foreground }]}>Mot de passe</Text>
+            <View style={[styles.inputRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <IconSymbol name="lock.fill" size={18} color={colors.muted} />
               <TextInput
                 placeholder="Votre mot de passe"
@@ -85,7 +139,7 @@ export default function LoginScreen() {
                 secureTextEntry={!showPw}
                 returnKeyType="done"
                 onSubmitEditing={handleLogin}
-                style={{ flex: 1, paddingVertical: 14, paddingHorizontal: 10, color: colors.foreground, fontSize: 15 }}
+                style={[styles.input, { color: colors.foreground }]}
               />
               <TouchableOpacity onPress={() => setShowPw(!showPw)}>
                 <IconSymbol name={showPw ? "eye.slash.fill" : "eye.fill"} size={20} color={colors.muted} />
@@ -97,20 +151,135 @@ export default function LoginScreen() {
           <TouchableOpacity
             onPress={handleLogin}
             disabled={loading}
-            style={{ backgroundColor: colors.primary, borderRadius: 14, paddingVertical: 16, alignItems: "center", opacity: loading ? 0.7 : 1 }}
+            style={[styles.loginButton, { backgroundColor: colors.primary, opacity: loading ? 0.7 : 1 }]}
           >
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>Se connecter</Text>}
+            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.loginButtonText}>Se connecter</Text>}
           </TouchableOpacity>
 
           {/* Register link */}
-          <View style={{ flexDirection: "row", justifyContent: "center", marginTop: 20 }}>
-            <Text style={{ color: colors.muted, fontSize: 14 }}>Pas encore de compte ? </Text>
+          <View style={styles.registerRow}>
+            <Text style={{ color: colors.muted, fontSize: 14, fontFamily: "Raleway-Regular" }}>Pas encore de compte ? </Text>
             <TouchableOpacity onPress={() => router.push("/(auth)/register" as any)}>
-              <Text style={{ color: colors.primary, fontSize: 14, fontWeight: "600" }}>S'inscrire</Text>
+              <Text style={{ color: colors.primary, fontSize: 14, fontWeight: "600", fontFamily: "Raleway-SemiBold" }}>S'inscrire</Text>
             </TouchableOpacity>
           </View>
+
+          {/* Privacy link */}
+          <TouchableOpacity onPress={() => router.push("/privacy" as any)} style={styles.privacyLink}>
+            <Text style={{ color: colors.muted, fontSize: 12, fontFamily: "Raleway-Regular", textDecorationLine: "underline" }}>Politique de confidentialité</Text>
+          </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
     </ScreenContainer>
   );
 }
+
+const styles = StyleSheet.create({
+  backButton: {
+    position: "absolute",
+    top: 16,
+    left: 24,
+    zIndex: 1,
+  },
+  logoArea: {
+    alignItems: "center",
+    marginBottom: 32,
+  },
+  logo: {
+    width: 180,
+    height: 60,
+    marginBottom: 20,
+  },
+  welcomeText: {
+    fontSize: 26,
+    fontWeight: "700",
+    fontFamily: "Raleway-Bold",
+  },
+  subtitleText: {
+    fontSize: 14,
+    marginTop: 4,
+    fontFamily: "Raleway-Regular",
+  },
+  socialContainer: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 20,
+  },
+  socialButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 6,
+  },
+  socialButtonText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
+    fontFamily: "Raleway-SemiBold",
+  },
+  divider: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    fontSize: 13,
+    fontFamily: "Raleway-Medium",
+  },
+  errorBox: {
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 16,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 6,
+    fontFamily: "Raleway-SemiBold",
+  },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+  },
+  input: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    fontSize: 15,
+    fontFamily: "Raleway-Regular",
+  },
+  loginButton: {
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: "center",
+  },
+  loginButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
+    fontFamily: "Raleway-Bold",
+  },
+  registerRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    marginTop: 20,
+  },
+  privacyLink: {
+    alignItems: "center",
+    marginTop: 16,
+    marginBottom: 20,
+  },
+});
