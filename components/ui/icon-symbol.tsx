@@ -5,7 +5,7 @@ import { SymbolWeight, SymbolViewProps } from "expo-symbols";
 import { ComponentProps } from "react";
 import { OpaqueColorValue, type StyleProp, type TextStyle } from "react-native";
 
-type IconMapping = Record<SymbolViewProps["name"], ComponentProps<typeof MaterialIcons>["name"]>;
+type IconMapping = Record<string, ComponentProps<typeof MaterialIcons>["name"]>;
 type IconSymbolName = keyof typeof MAPPING;
 
 /**
@@ -15,9 +15,58 @@ type IconSymbolName = keyof typeof MAPPING;
  */
 const MAPPING = {
   "house.fill": "home",
-  "paperplane.fill": "send",
-  "chevron.left.forwardslash.chevron.right": "code",
+  "calendar": "event",
+  "bag.fill": "shopping-bag",
+  "ticket.fill": "confirmation-number",
+  "person.fill": "person",
+  "chart.bar.fill": "bar-chart",
+  "qrcode.viewfinder": "qr-code-scanner",
+  "person.2.fill": "people",
+  "clipboard.fill": "assignment",
+  "chart.line.uptrend.xyaxis": "trending-up",
+  "gearshape.fill": "settings",
   "chevron.right": "chevron-right",
+  "chevron.left": "chevron-left",
+  "magnifyingglass": "search",
+  "cart.fill": "shopping-cart",
+  "xmark": "close",
+  "plus": "add",
+  "minus": "remove",
+  "trash.fill": "delete",
+  "square.and.arrow.up": "share",
+  "heart.fill": "favorite",
+  "heart": "favorite-border",
+  "star.fill": "star",
+  "mappin": "place",
+  "clock": "schedule",
+  "checkmark.circle.fill": "check-circle",
+  "xmark.circle.fill": "cancel",
+  "exclamationmark.triangle.fill": "warning",
+  "arrow.right": "arrow-forward",
+  "arrow.left": "arrow-back",
+  "paperplane.fill": "send",
+  "moon.fill": "dark-mode",
+  "sun.max.fill": "light-mode",
+  "bell.fill": "notifications",
+  "doc.text.fill": "description",
+  "arrow.down.circle.fill": "download",
+  "eye.fill": "visibility",
+  "pencil": "edit",
+  "power": "logout",
+  "camera.fill": "camera-alt",
+  "flashlight.on.fill": "flash-on",
+  "flashlight.off.fill": "flash-off",
+  "chevron.left.forwardslash.chevron.right": "code",
+  "banknote.fill": "payments",
+  "tag.fill": "local-offer",
+  "pause.circle.fill": "pause-circle-filled",
+  "arrow.uturn.left.circle.fill": "replay",
+  "questionmark.circle.fill": "help",
+  "clock.fill": "access-time",
+  "info.circle.fill": "info",
+  "location.fill": "location-on",
+  "phone.fill": "phone",
+  "envelope.fill": "email",
 } as IconMapping;
 
 /**
@@ -37,5 +86,6 @@ export function IconSymbol({
   style?: StyleProp<TextStyle>;
   weight?: SymbolWeight;
 }) {
-  return <MaterialIcons color={color} size={size} name={MAPPING[name]} style={style} />;
+  const mappedName = MAPPING[name as string] || "help-outline";
+  return <MaterialIcons color={color} size={size} name={mappedName} style={style} />;
 }
