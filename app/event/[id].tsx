@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { ScrollView, Text, View, TouchableOpacity, ActivityIndicator, Dimensions, StyleSheet } from "react-native";
+import { useEffect, useState, useRef } from "react";
+import { ScrollView, Text, View, TouchableOpacity, ActivityIndicator, Dimensions, StyleSheet, FlatList, Platform, Linking } from "react-native";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
@@ -10,6 +10,15 @@ import { getTCEvent, getEventTickets, type TCEvent, type TicketType } from "@/li
 import { formatAriary, formatDate, stripHtml, decodeHtmlEntities } from "@/lib/format";
 
 const { width: SCREEN_W } = Dimensions.get("window");
+const SITE_URL = process.env.EXPO_PUBLIC_WC_SITE_URL || "https://www.ticketbylamako.com";
+
+// Conditionally require WebView for native platforms
+let WebViewComponent: any = null;
+if (Platform.OS !== "web") {
+  try {
+    WebViewComponent = require("react-native-webview").default;
+  } catch {}
+}
 
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -21,6 +30,8 @@ export default function EventDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [selectedTicket, setSelectedTicket] = useState<TicketType | null>(null);
   const [qty, setQty] = useState(1);
+  const [showSeatingChart, setShowSeatingChart] = useState(false);
+  const [galleryIndex, setGalleryIndex] = useState(0);
 
   useEffect(() => {
     if (!id) return;
@@ -52,9 +63,20 @@ export default function EventDetailScreen() {
   }
 
   const name = decodeHtmlEntities(event.title.rendered);
-  const desc = stripHtml(event.content?.rendered || "");
+  const mobileDesc = event.mobileFields?.description;
+  const siteDesc = stripHtml(event.content?.rendered || "");
+  const desc = mobileDesc || siteDesc;
+  const gallery = event.mobileFields?.gallery;
+  const practicalInfo = event.mobileFields?.practical_info;
   const cats = event.categoryNames?.join(", ") || "";
   const hasSeating = tickets.some(t => t.usesSeating);
+
+  // Build image list: featured image + gallery
+  const allImages: string[] = [];
+  if (event.featuredImage) allImages.push(event.featuredImage);
+  if (gallery && gallery.length > 0) {
+    gallery.forEach(img => { if (img && !allImages.includes(img)) allImages.push(img); });
+  }
 
   const handleAddToCart = () => {
     if (!selectedTicket) return;
@@ -69,12 +91,132 @@ export default function EventDetailScreen() {
     router.back();
   };
 
+  const handleOpenSeatingChart = () => {
+    if (selectedTicket?.usesSeating) {
+      setShowSeatingChart(true);
+    }
+  };
+
+  // Seating Chart WebView
+  if (showSeatingChart && selectedTicket) {
+    const seatingUrl = `${SITE_URL}/?tc_seat_chart=${id}&ticket_type_id=${selectedTicket.id}`;
+    
+    if (Platform.OS === "web") {
+      return (
+        <ScreenContainer edges={["top", "left", "right", "bottom"]}>
+          <View style={[styles.seatingHeader, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
+            <TouchableOpacity onPress={() => setShowSeatingChart(false)} style={styles.seatingBackBtn}>
+              <IconSymbol name="chevron.left" size={20} color={colors.foreground} />
+              <Text style={[styles.seatingBackText, { color: colors.foreground }]}>Retour</Text>
+            </TouchableOpacity>
+            <Text style={[styles.seatingTitle, { color: colors.foreground }]}>Plan de salle</Text>
+            <View style={{ width: 80 }} />
+          </View>
+          <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 20 }}>
+            <Text style={{ color: colors.muted, fontFamily: "Raleway-Medium", textAlign: "center" }}>
+              Le plan de salle interactif n'est pas disponible sur le web.{"\n"}Ouvrez l'app sur votre téléphone pour sélectionner votre siège.
+            </Text>
+            <TouchableOpacity
+              onPress={() => Linking.openURL(seatingUrl)}
+              style={[styles.webFallbackBtn, { backgroundColor: colors.primary }]}
+            >
+              <Text style={styles.webFallbackBtnText}>Ouvrir sur le site</Text>
+            </TouchableOpacity>
+          </View>
+        </ScreenContainer>
+      );
+    }
+
+    if (!WebViewComponent) {
+      return (
+        <ScreenContainer edges={["top", "left", "right", "bottom"]}>
+          <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+            <Text style={{ color: colors.muted }}>WebView non disponible</Text>
+          </View>
+        </ScreenContainer>
+      );
+    }
+
+    return (
+      <ScreenContainer edges={["top", "left", "right", "bottom"]}>
+        <View style={[styles.seatingHeader, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
+          <TouchableOpacity onPress={() => setShowSeatingChart(false)} style={styles.seatingBackBtn}>
+            <IconSymbol name="chevron.left" size={20} color={colors.foreground} />
+            <Text style={[styles.seatingBackText, { color: colors.foreground }]}>Retour</Text>
+          </TouchableOpacity>
+          <Text style={[styles.seatingTitle, { color: colors.foreground }]}>Plan de salle</Text>
+          <View style={{ width: 80 }} />
+        </View>
+        <WebViewComponent
+          source={{ uri: seatingUrl }}
+          style={{ flex: 1 }}
+          javaScriptEnabled
+          domStorageEnabled
+          startInLoadingState
+          renderLoading={() => (
+            <View style={{ flex: 1, alignItems: "center", justifyContent: "center", position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={{ marginTop: 10, color: colors.muted, fontFamily: "Raleway-Medium" }}>Chargement du plan...</Text>
+            </View>
+          )}
+          onMessage={(e: any) => {
+            // Handle seat selection messages from the WebView
+            try {
+              const data = JSON.parse(e.nativeEvent.data);
+              if (data.type === "seat_selected" && data.seat) {
+                // Seat was selected, add to cart with seat info
+                addItem({
+                  productId: selectedTicket.id,
+                  name: `${name} - ${selectedTicket.name} (Siège ${data.seat})`,
+                  price: parseFloat(selectedTicket.price) || 0,
+                  image: event.featuredImage || "",
+                  quantity: 1,
+                  isEvent: true,
+                });
+                setShowSeatingChart(false);
+                router.back();
+              }
+            } catch {}
+          }}
+        />
+      </ScreenContainer>
+    );
+  }
+
   return (
     <ScreenContainer edges={["top", "left", "right"]}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Hero Image */}
+        {/* Hero Image / Gallery */}
         <View style={{ position: "relative" }}>
-          <Image source={{ uri: event.featuredImage }} style={{ width: SCREEN_W, height: 280 }} contentFit="cover" />
+          {allImages.length > 1 ? (
+            <View>
+              <FlatList
+                data={allImages}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onMomentumScrollEnd={(e) => {
+                  const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_W);
+                  setGalleryIndex(idx);
+                }}
+                keyExtractor={(_, i) => String(i)}
+                renderItem={({ item }) => (
+                  <Image source={{ uri: item }} style={{ width: SCREEN_W, height: 280 }} contentFit="cover" />
+                )}
+              />
+              {/* Gallery dots */}
+              <View style={styles.galleryDots}>
+                {allImages.map((_, i) => (
+                  <View
+                    key={i}
+                    style={[styles.dot, { backgroundColor: i === galleryIndex ? "#fff" : "rgba(255,255,255,0.5)" }]}
+                  />
+                ))}
+              </View>
+            </View>
+          ) : (
+            <Image source={{ uri: event.featuredImage }} style={{ width: SCREEN_W, height: 280 }} contentFit="cover" />
+          )}
           <TouchableOpacity
             onPress={() => router.back()}
             style={styles.backButton}
@@ -113,6 +255,22 @@ export default function EventDetailScreen() {
               </View>
             </View>
           </View>
+
+          {/* Practical Info Table */}
+          {practicalInfo && practicalInfo.length > 0 && (
+            <View style={[styles.practicalInfoBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.sectionTitle, { color: colors.foreground, marginBottom: 12 }]}>Infos pratiques</Text>
+              {practicalInfo.map((item, idx) => (
+                <View
+                  key={idx}
+                  style={[styles.practicalInfoRow, idx < practicalInfo.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }]}
+                >
+                  <Text style={[styles.practicalInfoLabel, { color: colors.muted }]}>{item.label}</Text>
+                  <Text style={[styles.practicalInfoValue, { color: colors.foreground }]}>{item.value}</Text>
+                </View>
+              ))}
+            </View>
+          )}
 
           {/* Price Range */}
           {tickets.length > 0 && (
@@ -162,7 +320,18 @@ export default function EventDetailScreen() {
             </View>
           )}
 
-          {/* Quantity */}
+          {/* Seating Chart Button */}
+          {selectedTicket?.usesSeating && (
+            <TouchableOpacity
+              onPress={handleOpenSeatingChart}
+              style={[styles.seatingChartBtn, { backgroundColor: "#663d17" }]}
+            >
+              <IconSymbol name="mappin" size={18} color="#fff" />
+              <Text style={styles.seatingChartBtnText}>Voir le plan de salle & choisir mon siège</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Quantity (for non-seating tickets) */}
           {selectedTicket && !selectedTicket.usesSeating && (
             <View style={[styles.qtyRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <Text style={[styles.qtyLabel, { color: colors.foreground }]}>Quantité</Text>
@@ -190,18 +359,28 @@ export default function EventDetailScreen() {
 
       {/* Bottom CTA */}
       <View style={[styles.bottomCta, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
-        <TouchableOpacity
-          onPress={handleAddToCart}
-          disabled={!selectedTicket}
-          style={[styles.ctaButton, { backgroundColor: selectedTicket ? colors.primary : colors.muted, opacity: selectedTicket ? 1 : 0.5 }]}
-        >
-          <IconSymbol name="cart.fill" size={20} color="#fff" />
-          <Text style={styles.ctaButtonText}>
-            {selectedTicket
-              ? `Ajouter au panier - ${formatAriary(Number(selectedTicket.price) * qty)}`
-              : "Sélectionnez un billet"}
-          </Text>
-        </TouchableOpacity>
+        {selectedTicket?.usesSeating ? (
+          <TouchableOpacity
+            onPress={handleOpenSeatingChart}
+            style={[styles.ctaButton, { backgroundColor: "#663d17" }]}
+          >
+            <IconSymbol name="mappin" size={20} color="#fff" />
+            <Text style={styles.ctaButtonText}>Choisir mon siège</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            onPress={handleAddToCart}
+            disabled={!selectedTicket}
+            style={[styles.ctaButton, { backgroundColor: selectedTicket ? colors.primary : colors.muted, opacity: selectedTicket ? 1 : 0.5 }]}
+          >
+            <IconSymbol name="cart.fill" size={20} color="#fff" />
+            <Text style={styles.ctaButtonText}>
+              {selectedTicket
+                ? `Ajouter au panier - ${formatAriary(Number(selectedTicket.price) * qty)}`
+                : "Sélectionnez un billet"}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     </ScreenContainer>
   );
@@ -219,6 +398,10 @@ const styles = StyleSheet.create({
   infoIcon: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   infoLabel: { fontSize: 11, fontFamily: "Raleway-Regular" },
   infoValue: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  practicalInfoBox: { marginTop: 20, padding: 16, borderRadius: 14, borderWidth: 1 },
+  practicalInfoRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 10 },
+  practicalInfoLabel: { fontSize: 13, fontFamily: "Raleway-Medium", flex: 1 },
+  practicalInfoValue: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold", flex: 1, textAlign: "right" },
   priceBox: { marginTop: 20, padding: 16, borderRadius: 14, borderWidth: 1 },
   priceLabel: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
   priceValue: { fontSize: 28, fontWeight: "800", marginTop: 2, fontFamily: "Raleway-Bold" },
@@ -228,6 +411,8 @@ const styles = StyleSheet.create({
   radioInner: { width: 10, height: 10, borderRadius: 5 },
   ticketName: { fontSize: 14, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
   ticketPrice: { fontSize: 15, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  seatingChartBtn: { marginTop: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 14, borderRadius: 12 },
+  seatingChartBtnText: { color: "#fff", fontSize: 14, fontWeight: "700", fontFamily: "Raleway-Bold" },
   qtyRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 20, padding: 14, borderRadius: 12, borderWidth: 1 },
   qtyLabel: { fontSize: 15, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
   qtyControls: { flexDirection: "row", alignItems: "center", gap: 16 },
@@ -238,4 +423,12 @@ const styles = StyleSheet.create({
   bottomCta: { padding: 16, paddingBottom: 32, borderTopWidth: 1 },
   ctaButton: { borderRadius: 14, paddingVertical: 16, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 8 },
   ctaButtonText: { color: "#fff", fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  galleryDots: { position: "absolute", bottom: 16, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 6 },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  seatingHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
+  seatingBackBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
+  seatingBackText: { fontSize: 15, fontFamily: "Raleway-Medium" },
+  seatingTitle: { fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  webFallbackBtn: { marginTop: 20, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10 },
+  webFallbackBtnText: { color: "#fff", fontSize: 14, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
 });

@@ -4,6 +4,7 @@ import {
   TouchableOpacity, ActivityIndicator, RefreshControl, StyleSheet,
 } from "react-native";
 import { Image } from "expo-image";
+import { Image as RNImage } from "react-native";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
@@ -239,7 +240,7 @@ export default function HomeScreen() {
                 </Text>
               </View>
               <View style={styles.rewardsBannerIcon}>
-                <IconSymbol name="star.fill" size={24} color="#FFD700" />
+                <RNImage source={require("@/assets/images/lamako-rewards-white.png")} style={{ width: 80, height: 30 }} resizeMode="contain" />
               </View>
               <IconSymbol name="chevron.right" size={16} color="rgba(255,255,255,0.7)" />
             </LinearGradient>

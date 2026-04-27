@@ -18,7 +18,7 @@
 - [x] Home screen (hero carousel, categories, upcoming events, shop highlights)
 - [x] Events list screen (search, filter, category chips)
 - [x] Event detail screen (hero image, description, ticket types, buy CTA)
-- [ ] Seating chart WebView for seated events
+- [x] Seating chart WebView for seated events
 - [x] Shop screen (product grid, categories)
 - [x] Product detail screen (images, description, add to cart)
 
@@ -105,7 +105,7 @@
 - [x] Shop categories already using small horizontal chips
 - [x] Profile/Login/Help/Privacy back button fixed - proper positioning
 - [x] Custom animated splash screen added (works in Expo Go)
-- [ ] Event/product descriptions too long for mobile - add mobile-specific short text field
+- [x] Event/product descriptions too long for mobile - mobile-specific fields plugin installed
 
 ### LamakoRewards Loyalty Program
 - [x] Create rewards provider (connected to myCred API on WordPress)
@@ -124,3 +124,22 @@
 - [x] Create custom plugin (lamako-rewards-api.php) with REST endpoints
 - [x] API endpoints: /balance, /history, /tiers, /user-by-email
 - [x] App rewards-provider syncs with WordPress myCred API
+
+## V2.2 - LamakoRewards Logos, Mobile Descriptions, Seating Chart
+
+### LamakoRewards Logo Integration
+- [x] Copy LamakoRewards logos (dark/white) to assets
+- [x] Use LamakoRewards logo in rewards dashboard screen
+- [x] Use LamakoRewards logo in home screen rewards banner
+
+### Mobile-Specific Descriptions
+- [x] Add custom WordPress fields for mobile descriptions (short text, gallery, info table)
+- [x] Event detail: show mobile description with gallery and practical info table
+- [x] Product detail: show mobile description with gallery and practical info table
+- [x] Fallback to site description if no mobile-specific content exists
+
+### Tickera Seating Chart WebView
+- [x] Integrate WebView component for seating chart on event detail
+- [x] Detect events with seating chart enabled
+- [x] Allow seat selection within the WebView
+- [x] Pass selected seats to cart/checkout flow

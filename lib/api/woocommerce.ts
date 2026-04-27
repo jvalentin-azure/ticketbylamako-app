@@ -75,6 +75,12 @@ export interface WCCategory {
  * Events are WordPress custom post type, NOT WooCommerce products.
  * Ticket products (WC products) link to events via _event_name meta.
  */
+export interface MobileFields {
+  description: string | null;
+  gallery: string[] | null;
+  practical_info: { label: string; value: string }[] | null;
+}
+
 export interface TCEvent {
   id: number;
   date: string;
@@ -88,6 +94,8 @@ export interface TCEvent {
   // Populated from _embed
   featuredImage?: string;
   categoryNames?: string[];
+  // Mobile-specific fields from lamako-mobile-fields plugin
+  mobileFields?: MobileFields;
   // Computed from ticket products
   tickets?: TicketType[];
   minPrice?: number;
@@ -173,6 +181,7 @@ export async function getTCEvents(params: Record<string, string> = {}): Promise<
     link: e.link,
     featuredImage: e._embedded?.["wp:featuredmedia"]?.[0]?.source_url,
     categoryNames: e._embedded?.["wp:term"]?.flat()?.map((t: any) => t.name) || [],
+    mobileFields: e.lamako_mobile || undefined,
   }));
 }
 
@@ -193,6 +202,7 @@ export async function getTCEvent(id: number): Promise<TCEvent> {
     link: raw.link,
     featuredImage: raw._embedded?.["wp:featuredmedia"]?.[0]?.source_url,
     categoryNames: raw._embedded?.["wp:term"]?.flat()?.map((t: any) => t.name) || [],
+    mobileFields: raw.lamako_mobile || undefined,
   };
 }
 

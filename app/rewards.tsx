@@ -1,16 +1,21 @@
-import { Text, View, TouchableOpacity, ScrollView, StyleSheet, Dimensions } from "react-native";
+import { Text, View, TouchableOpacity, ScrollView, StyleSheet, Dimensions, Image } from "react-native";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useRewards, TIERS, type TierInfo } from "@/lib/rewards-provider";
 import { useAuth } from "@/lib/auth-provider";
 import { LinearGradient } from "expo-linear-gradient";
 
+const rewardsLogoDark = require("@/assets/images/lamako-rewards-dark.png");
+const rewardsLogoWhite = require("@/assets/images/lamako-rewards-white.png");
+
 const { width: SCREEN_W } = Dimensions.get("window");
 
 export default function RewardsScreen() {
   const colors = useColors();
+  const colorScheme = useColorScheme();
   const router = useRouter();
   const { isAuthenticated } = useAuth();
   const { state, currentTier, nextTier, progressToNextTier, pointsToNextTier, getDiscountValue, syncRewards, isSyncing } = useRewards();
@@ -35,6 +40,15 @@ export default function RewardsScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+        {/* LamakoRewards Logo */}
+        <View style={styles.logoContainer}>
+          <Image
+            source={colorScheme === "dark" ? rewardsLogoWhite : rewardsLogoDark}
+            style={styles.rewardsLogo}
+            resizeMode="contain"
+          />
+        </View>
+
         {/* Points Card */}
         <LinearGradient
           colors={["#663d17", "#8B5E34", "#c79f6c"]}
@@ -210,6 +224,8 @@ const styles = StyleSheet.create({
   backButton: { flexDirection: "row", alignItems: "center", paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10 },
   headerTitle: { fontSize: 17, fontWeight: "700", fontFamily: "Raleway-Bold" },
   content: { padding: 16, paddingBottom: 40 },
+  logoContainer: { alignItems: "center", marginBottom: 16 },
+  rewardsLogo: { width: 200, height: 72 },
 
   // Points card
   pointsCard: { borderRadius: 20, padding: 24, marginBottom: 16 },
