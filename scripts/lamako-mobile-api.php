@@ -45,7 +45,7 @@ function lamako_mobile_maybe_serve_seat_embed() {
 <html <?php language_attributes(); ?>>
 <head>
 <meta charset="<?php bloginfo( 'charset' ); ?>" />
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<meta name="viewport" content="width=1920, initial-scale=0.2, minimum-scale=0.1, maximum-scale=3, user-scalable=yes" />
 <style>
     /* Reset and hide everything except the seating chart */
     * { box-sizing: border-box; }
@@ -103,14 +103,91 @@ function lamako_mobile_maybe_serve_seat_embed() {
         opacity: 0.9;
     }
     
-    /* Seating chart map container */
-    .tc_seating_map { width: 100% !important; max-width: 100% !important; }
+    /* Seating chart map container - CRITICAL for mobile rendering */
+    .tc_seating_map {
+        position: fixed !important;
+        inset: 0 !important;
+        z-index: 999999 !important;
+        overflow: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        touch-action: pan-x pan-y pinch-zoom !important;
+    }
+    .tc-wrapper {
+        min-width: 1920px !important;
+        min-height: 1400px !important;
+        overflow: visible !important;
+        position: relative !important;
+    }
     .tc-seatchart-cart-info { display: block !important; text-align: center; padding: 8px; }
     .tc_in_cart { display: block !important; text-align: center; padding: 8px; font-weight: 600; }
     
     /* jQuery UI Dialog (seating chart popup) */
     .ui-dialog { z-index: 99999 !important; }
     .ui-widget-overlay { z-index: 99998 !important; }
+    
+    /* Legend - keep visible and accessible */
+    .tc-seating-legend-wrap {
+        position: fixed !important;
+        top: 10px !important;
+        left: 10px !important;
+        z-index: 1000001 !important;
+        background: rgba(255,255,255,0.95) !important;
+        border-radius: 8px !important;
+        padding: 8px !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
+        max-width: 200px !important;
+        font-size: 12px !important;
+    }
+    
+    /* Subtotal bar - keep fixed at top */
+    .tc-seatchart-subtotal {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        z-index: 1000002 !important;
+        background: rgba(255,255,255,0.97) !important;
+        padding: 10px 16px !important;
+        font-weight: 600 !important;
+        text-align: center !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
+        font-size: 16px !important;
+    }
+    
+    /* GO TO CART button - keep fixed at bottom */
+    .tc-seatchart-go-to-cart, a[href*="cart"].tc-seatchart-go-to-cart {
+        position: fixed !important;
+        bottom: 20px !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        z-index: 1000002 !important;
+        background: #663d17 !important;
+        color: #fff !important;
+        padding: 14px 40px !important;
+        border-radius: 14px !important;
+        font-weight: 700 !important;
+        font-size: 16px !important;
+        text-decoration: none !important;
+        box-shadow: 0 4px 14px rgba(102,61,23,0.4) !important;
+        white-space: nowrap !important;
+    }
+    
+    /* Close button - keep visible */
+    .tc-seating-close, .tc_seating_map > .dashicons-no-alt, .tc_seating_map > [class*="close"] {
+        position: fixed !important;
+        top: 10px !important;
+        right: 10px !important;
+        z-index: 1000003 !important;
+        background: rgba(255,255,255,0.9) !important;
+        border-radius: 50% !important;
+        width: 36px !important;
+        height: 36px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.2) !important;
+        cursor: pointer !important;
+    }
     
     /* Checkout bar at bottom */
     .tc-checkout-bar {
@@ -124,12 +201,6 @@ function lamako_mobile_maybe_serve_seat_embed() {
         padding: 12px 16px !important;
         z-index: 99997 !important;
         box-shadow: 0 -2px 10px rgba(0,0,0,0.1) !important;
-    }
-    .tc-seatchart-subtotal {
-        display: block !important;
-        text-align: center;
-        padding: 8px;
-        font-weight: 600;
     }
     
     /* Instruction text */

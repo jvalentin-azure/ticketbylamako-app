@@ -124,7 +124,6 @@ export default function EventDetailScreen() {
     const injectedJS = `
       (function() {
         function cleanup() {
-          // Safety net: hide any theme elements that might still appear
           var style = document.createElement('style');
           style.textContent = 
             'header, .site-header, #masthead, .header-wrapper, .header-main, .header-top, .header-bottom,' +
@@ -133,8 +132,12 @@ export default function EventDetailScreen() {
             '.sidebar, #sidebar, aside,' +
             '[class*="whatsapp"], .joinchat, [id*="whatsapp"],' +
             '[class*="cookie"], [class*="consent"],' +
-            '#fkcart-floating-toggler, .fkcart-main-wrapper' +
+            '#fkcart-floating-toggler, .fkcart-main-wrapper,' +
+            '[class*="tidio"], [id*="tidio"], [class*="chat-widget"],' +
+            '[class*="crisp"], [id*="crisp"],' +
+            '[class*="tawk"], [id*="tawk"]' +
             '{ display: none !important; }' +
+            /* Auto-click the Pick your seat(s) button after page load */
             '.tc_seating_map_button {' +
             '  display: block !important; margin: 20px auto !important; padding: 16px 40px !important;' +
             '  font-size: 17px !important; font-weight: 700 !important;' +
@@ -142,17 +145,51 @@ export default function EventDetailScreen() {
             '  border: none !important; border-radius: 14px !important;' +
             '  cursor: pointer !important; text-align: center !important;' +
             '  width: 90% !important; max-width: 400px !important;' +
-            '  box-shadow: 0 4px 14px rgba(102,61,23,0.3) !important;' +
             '}' +
-            '.ui-dialog { z-index: 99999 !important; }' +
-            '.ui-widget-overlay { z-index: 99998 !important; }';
+            /* Make the seating map overlay scrollable on mobile */
+            '.tc_seating_map {' +
+            '  overflow: auto !important;' +
+            '  -webkit-overflow-scrolling: touch !important;' +
+            '}' +
+            '.tc-wrapper {' +
+            '  min-width: 1920px !important;' +
+            '  min-height: 1400px !important;' +
+            '  overflow: visible !important;' +
+            '}' +
+            /* Keep subtotal bar fixed at top */
+            '.tc-seatchart-subtotal {' +
+            '  position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important;' +
+            '  z-index: 1000002 !important; background: rgba(255,255,255,0.97) !important;' +
+            '  padding: 10px 16px !important; font-weight: 600 !important; text-align: center !important;' +
+            '  box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important; font-size: 16px !important;' +
+            '}' +
+            /* Keep GO TO CART fixed at bottom */
+            '.tc-seatchart-go-to-cart, a.tc-seatchart-go-to-cart {' +
+            '  position: fixed !important; bottom: 20px !important; left: 50% !important;' +
+            '  transform: translateX(-50%) !important; z-index: 1000002 !important;' +
+            '  background: #663d17 !important; color: #fff !important;' +
+            '  padding: 14px 40px !important; border-radius: 14px !important;' +
+            '  font-weight: 700 !important; font-size: 16px !important;' +
+            '  text-decoration: none !important; box-shadow: 0 4px 14px rgba(102,61,23,0.4) !important;' +
+            '  white-space: nowrap !important;' +
+            '}' +
+            /* Keep legend accessible */
+            '.tc-seating-legend-wrap {' +
+            '  position: fixed !important; top: 50px !important; left: 10px !important;' +
+            '  z-index: 1000001 !important; background: rgba(255,255,255,0.95) !important;' +
+            '  border-radius: 8px !important; padding: 8px !important;' +
+            '  box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important; max-width: 200px !important;' +
+            '  font-size: 12px !important;' +
+            '}';
           document.head.appendChild(style);
-          // Scroll to button
-          var btn = document.querySelector('.tc_seating_map_button');
-          if (btn) btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // Auto-click the "Pick your seat(s)" button after a short delay
+          setTimeout(function() {
+            var btn = document.querySelector('.tc_seating_map_button');
+            if (btn) btn.click();
+          }, 1500);
         }
-        if (document.readyState === 'complete') setTimeout(cleanup, 800);
-        else window.addEventListener('load', function() { setTimeout(cleanup, 800); });
+        if (document.readyState === 'complete') setTimeout(cleanup, 500);
+        else window.addEventListener('load', function() { setTimeout(cleanup, 500); });
       })();
       true;
     `;
@@ -213,7 +250,10 @@ export default function EventDetailScreen() {
           thirdPartyCookiesEnabled
           allowsInlineMediaPlayback
           mixedContentMode="compatibility"
-          userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+          scalesPageToFit={true}
+          allowsBackForwardNavigationGestures={false}
+          bounces={false}
+          scrollEnabled={true}
           injectedJavaScript={injectedJS}
           renderLoading={() => (
             <View style={{ flex: 1, alignItems: "center", justifyContent: "center", position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "#fff" }}>

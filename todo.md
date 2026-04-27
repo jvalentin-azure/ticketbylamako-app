@@ -202,3 +202,9 @@
   - Andry Rakoto (testuser1@lamako.mg / TestLamako2024!) - Antananarivo
   - Nomena Randria (testuser2@lamako.mg / TestLamako2024!) - Toamasina
   - Fidy Rasoanaivo (testuser3@lamako.mg / TestLamako2024!) - Antsirabe
+
+## V2.5.2 - Seating Chart Mobile Rendering Fix
+
+### Bug Fixes
+- [x] Fix seating chart seats not visible on mobile WebView - viewport set to width=1920 for proper scaling, CSS makes tc_seating_map scrollable with touch, subtotal/GO TO CART fixed positioned, auto-click button on load
+- [x] Updated lamako-mobile-api.php plugin on WordPress with mobile-friendly CSS embed template
