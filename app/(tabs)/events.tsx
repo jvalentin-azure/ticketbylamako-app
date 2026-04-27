@@ -1,11 +1,12 @@
-import { useEffect, useState, useCallback } from "react";
-import { Text, View, FlatList, TouchableOpacity, TextInput, ActivityIndicator, RefreshControl, StyleSheet } from "react-native";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { Text, View, FlatList, TouchableOpacity, TextInput, ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Platform, Modal } from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { getEventsWithTickets, type TCEvent } from "@/lib/api/woocommerce";
+import { getEventsWithTickets, getEventCategories, type TCEvent, type EventCategory } from "@/lib/api/woocommerce";
+import { useFavorites } from "@/lib/favorites-provider";
 import { formatAriary, formatDateShort, decodeHtmlEntities } from "@/lib/format";
 
 export default function EventsScreen() {
@@ -16,12 +17,21 @@ export default function EventsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
+  const [categories, setCategories] = useState<EventCategory[]>([]);
+  const [selectedCat, setSelectedCat] = useState<number | null>(null);
+  const [showDateFilter, setShowDateFilter] = useState(false);
+  const [dateFilter, setDateFilter] = useState<"all" | "today" | "week" | "month" | "upcoming">("all");
+  const { isFavorite, toggleFavorite } = useFavorites();
 
   const load = useCallback(async () => {
     try {
-      const ev = await getEventsWithTickets();
+      const [ev, cats] = await Promise.all([
+        getEventsWithTickets(),
+        getEventCategories(),
+      ]);
       setEvents(ev);
       setFiltered(ev);
+      setCategories(cats);
     } catch (e) {
       console.warn("Events load error:", e);
     } finally {
@@ -32,11 +42,80 @@ export default function EventsScreen() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Get only parent categories (parent === 0) for the filter chips
+  const parentCategories = useMemo(() => {
+    return categories.filter(c => c.parent === 0);
+  }, [categories]);
+
+  // Get all child category IDs for a given parent
+  const getChildCategoryIds = useCallback((parentId: number): number[] => {
+    const children = categories.filter(c => c.parent === parentId).map(c => c.id);
+    return [parentId, ...children];
+  }, [categories]);
+
+  // Filter events
   useEffect(() => {
-    if (!search.trim()) { setFiltered(events); return; }
-    const q = search.toLowerCase();
-    setFiltered(events.filter(e => decodeHtmlEntities(e.title.rendered).toLowerCase().includes(q)));
-  }, [search, events]);
+    let result = events;
+
+    // Category filter
+    if (selectedCat) {
+      const catIds = getChildCategoryIds(selectedCat);
+      result = result.filter(e =>
+        e.event_category?.some(catId => catIds.includes(catId))
+      );
+    }
+
+    // Date filter
+    if (dateFilter !== "all") {
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      result = result.filter(e => {
+        const eventDate = new Date(e.date);
+        switch (dateFilter) {
+          case "today":
+            return eventDate >= today && eventDate < new Date(today.getTime() + 86400000);
+          case "week": {
+            const weekEnd = new Date(today.getTime() + 7 * 86400000);
+            return eventDate >= today && eventDate < weekEnd;
+          }
+          case "month": {
+            const monthEnd = new Date(today.getTime() + 30 * 86400000);
+            return eventDate >= today && eventDate < monthEnd;
+          }
+          case "upcoming":
+            return eventDate >= today;
+          default:
+            return true;
+        }
+      });
+    }
+
+    // Search filter
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter(e => decodeHtmlEntities(e.title.rendered).toLowerCase().includes(q));
+    }
+
+    setFiltered(result);
+  }, [search, events, selectedCat, dateFilter, getChildCategoryIds]);
+
+  const dateFilterLabel = useMemo(() => {
+    switch (dateFilter) {
+      case "today": return "Aujourd'hui";
+      case "week": return "Cette semaine";
+      case "month": return "Ce mois";
+      case "upcoming": return "À venir";
+      default: return "Date";
+    }
+  }, [dateFilter]);
+
+  const dateOptions: { key: typeof dateFilter; label: string }[] = [
+    { key: "all", label: "Toutes les dates" },
+    { key: "today", label: "Aujourd'hui" },
+    { key: "week", label: "Cette semaine" },
+    { key: "month", label: "Ce mois-ci" },
+    { key: "upcoming", label: "À venir" },
+  ];
 
   const renderEvent = ({ item }: { item: TCEvent }) => {
     const name = decodeHtmlEntities(item.title.rendered);
@@ -47,7 +126,15 @@ export default function EventsScreen() {
         onPress={() => router.push(`/event/${item.id}` as any)}
         style={[styles.eventCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
       >
-        <Image source={{ uri: item.featuredImage }} style={styles.eventImage} contentFit="cover" />
+        <View style={{ position: "relative" }}>
+          <Image source={{ uri: item.featuredImage }} style={styles.eventImage} contentFit="cover" />
+          <TouchableOpacity
+            onPress={() => toggleFavorite({ id: item.id, type: "event", name, image: item.featuredImage })}
+            style={styles.favBtn}
+          >
+            <IconSymbol name={isFavorite(item.id, "event") ? "heart.fill" : "heart"} size={18} color={isFavorite(item.id, "event") ? "#EF4444" : "#fff"} />
+          </TouchableOpacity>
+        </View>
         {item.hasSeatingChart && (
           <View style={styles.seatingBadge}>
             <IconSymbol name="mappin" size={10} color="#fff" />
@@ -62,7 +149,7 @@ export default function EventsScreen() {
               <Text style={[styles.metaText, { color: colors.muted }]}>{formatDateShort(item.date)}</Text>
             </View>
             {cats ? (
-              <View style={styles.metaItem}>
+              <View style={[styles.metaItem, { flex: 1 }]}>
                 <IconSymbol name="tag.fill" size={14} color={colors.muted} />
                 <Text style={[styles.metaText, { color: colors.muted }]} numberOfLines={1}>{cats}</Text>
               </View>
@@ -87,11 +174,24 @@ export default function EventsScreen() {
     );
   };
 
+  const activeFilterCount = (selectedCat ? 1 : 0) + (dateFilter !== "all" ? 1 : 0);
+
   return (
     <ScreenContainer edges={["left", "right"]}>
       <View style={styles.headerRow}>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>Événements</Text>
+        {activeFilterCount > 0 && (
+          <TouchableOpacity
+            onPress={() => { setSelectedCat(null); setDateFilter("all"); }}
+            style={[styles.clearFiltersBtn, { backgroundColor: colors.primary + "15" }]}
+          >
+            <Text style={[styles.clearFiltersText, { color: colors.primary }]}>
+              Effacer ({activeFilterCount})
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
+
       {/* Search */}
       <View style={[styles.searchBar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <IconSymbol name="magnifyingglass" size={20} color={colors.muted} />
@@ -103,6 +203,51 @@ export default function EventsScreen() {
           style={[styles.searchInput, { color: colors.foreground }]}
         />
       </View>
+
+      {/* Date Filter Chips */}
+      <View style={styles.dateFilterRow}>
+        <TouchableOpacity
+          onPress={() => setShowDateFilter(true)}
+          style={[styles.dateChip, {
+            backgroundColor: dateFilter !== "all" ? colors.primary : colors.surface,
+            borderColor: dateFilter !== "all" ? colors.primary : colors.border,
+          }]}
+        >
+          <IconSymbol name="calendar" size={14} color={dateFilter !== "all" ? "#fff" : colors.muted} />
+          <Text style={[styles.dateChipText, { color: dateFilter !== "all" ? "#fff" : colors.foreground }]}>
+            {dateFilterLabel}
+          </Text>
+          <IconSymbol name="chevron.right" size={12} color={dateFilter !== "all" ? "#fff" : colors.muted} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Category Chips */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsContainer}>
+        <TouchableOpacity
+          onPress={() => setSelectedCat(null)}
+          style={[styles.chip, {
+            backgroundColor: !selectedCat ? colors.primary : colors.surface,
+            borderColor: !selectedCat ? colors.primary : colors.border,
+          }]}
+        >
+          <Text style={[styles.chipText, { color: !selectedCat ? "#fff" : colors.foreground }]}>Tous</Text>
+        </TouchableOpacity>
+        {parentCategories.map(cat => (
+          <TouchableOpacity
+            key={cat.id}
+            onPress={() => setSelectedCat(selectedCat === cat.id ? null : cat.id)}
+            style={[styles.chip, {
+              backgroundColor: selectedCat === cat.id ? colors.primary : colors.surface,
+              borderColor: selectedCat === cat.id ? colors.primary : colors.border,
+            }]}
+          >
+            <Text style={[styles.chipText, { color: selectedCat === cat.id ? "#fff" : colors.foreground }]}>
+              {decodeHtmlEntities(cat.name).replace(/^[^\w\s]*\s*/, "")}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
@@ -117,19 +262,70 @@ export default function EventsScreen() {
             <View style={styles.emptyContainer}>
               <IconSymbol name="calendar" size={48} color={colors.muted} />
               <Text style={[styles.emptyText, { color: colors.muted }]}>Aucun événement trouvé</Text>
+              {(selectedCat || dateFilter !== "all" || search) && (
+                <TouchableOpacity
+                  onPress={() => { setSelectedCat(null); setDateFilter("all"); setSearch(""); }}
+                  style={[styles.resetBtn, { borderColor: colors.primary }]}
+                >
+                  <Text style={[styles.resetBtnText, { color: colors.primary }]}>Réinitialiser les filtres</Text>
+                </TouchableOpacity>
+              )}
             </View>
           }
         />
       )}
+
+      {/* Date Filter Modal */}
+      <Modal
+        visible={showDateFilter}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDateFilter(false)}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => setShowDateFilter(false)}
+          style={styles.modalOverlay}
+        >
+          <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
+            <Text style={[styles.modalTitle, { color: colors.foreground }]}>Filtrer par date</Text>
+            {dateOptions.map(opt => (
+              <TouchableOpacity
+                key={opt.key}
+                onPress={() => { setDateFilter(opt.key); setShowDateFilter(false); }}
+                style={[styles.modalOption, {
+                  backgroundColor: dateFilter === opt.key ? colors.primary + "15" : "transparent",
+                }]}
+              >
+                <Text style={[styles.modalOptionText, {
+                  color: dateFilter === opt.key ? colors.primary : colors.foreground,
+                  fontFamily: dateFilter === opt.key ? "Raleway-Bold" : "Raleway-Regular",
+                }]}>{opt.label}</Text>
+                {dateFilter === opt.key && (
+                  <IconSymbol name="checkmark.circle.fill" size={20} color={colors.primary} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  headerRow: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
+  headerRow: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   headerTitle: { fontSize: 22, fontWeight: "700", fontFamily: "Raleway-Bold" },
-  searchBar: { marginHorizontal: 16, marginBottom: 12, flexDirection: "row", alignItems: "center", borderRadius: 12, paddingHorizontal: 12, borderWidth: 1 },
+  clearFiltersBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
+  clearFiltersText: { fontSize: 12, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  searchBar: { marginHorizontal: 16, marginBottom: 8, flexDirection: "row", alignItems: "center", borderRadius: 12, paddingHorizontal: 12, borderWidth: 1 },
   searchInput: { flex: 1, paddingVertical: 12, paddingHorizontal: 8, fontSize: 15, fontFamily: "Raleway-Regular" },
+  dateFilterRow: { paddingHorizontal: 16, paddingVertical: 4 },
+  dateChip: { flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
+  dateChipText: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  chipsContainer: { paddingHorizontal: 16, paddingVertical: 8, gap: 8 },
+  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
+  chipText: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
   loadingContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
   eventCard: { marginHorizontal: 16, marginBottom: 14, borderRadius: 16, overflow: "hidden", borderWidth: 1 },
   eventImage: { width: "100%", height: 160 },
@@ -146,4 +342,13 @@ const styles = StyleSheet.create({
   buyButtonText: { color: "#fff", fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
   emptyContainer: { alignItems: "center", paddingTop: 60 },
   emptyText: { fontSize: 15, marginTop: 12, fontFamily: "Raleway-Medium" },
+  resetBtn: { marginTop: 16, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10, borderWidth: 1 },
+  resetBtnText: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  // Date filter modal
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
+  modalContent: { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 40 },
+  modalTitle: { fontSize: 18, fontWeight: "700", fontFamily: "Raleway-Bold", marginBottom: 16 },
+  modalOption: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 14, paddingHorizontal: 16, borderRadius: 12, marginBottom: 4 },
+  modalOptionText: { fontSize: 15 },
+  favBtn: { position: "absolute", top: 8, right: 8, width: 32, height: 32, borderRadius: 16, backgroundColor: "rgba(0,0,0,0.4)", alignItems: "center", justifyContent: "center", zIndex: 10 },
 });

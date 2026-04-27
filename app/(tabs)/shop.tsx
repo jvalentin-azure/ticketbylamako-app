@@ -11,20 +11,15 @@ import { formatAriary, decodeHtmlEntities } from "@/lib/format";
 const { width: SCREEN_W } = Dimensions.get("window");
 const CARD_W = (SCREEN_W - 48) / 2;
 
-// Main boutique parent categories
-const BOUTIQUE_PARENTS = [
-  { id: 123, name: "Goodies", icon: "bag.fill" as const },
-  { id: 124, name: "Livres & Supports", icon: "book.fill" as const },
-  { id: 125, name: "Affiches & Visuels", icon: "photo.fill" as const },
-  { id: 126, name: "Packs", icon: "gift.fill" as const },
-  { id: 127, name: "Promotions", icon: "tag.fill" as const },
-];
+// Boutique parent category slugs to filter from API
+const BOUTIQUE_SLUGS = ["boutique-goodies", "boutique-livres-supports", "boutique-affiches-visuels", "boutique-packs", "boutique-promotions"];
 
 export default function ShopScreen() {
   const colors = useColors();
   const router = useRouter();
   const [products, setProducts] = useState<WCProduct[]>([]);
   const [categories, setCategories] = useState<WCCategory[]>([]);
+  const [shopCats, setShopCats] = useState<{ id: number; name: string }[]>([]);
   const [filtered, setFiltered] = useState<WCProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -39,6 +34,11 @@ export default function ShopScreen() {
       ]);
       setProducts(p);
       setCategories(cats);
+      // Build shop category chips from API data
+      const boutiqueCats = cats
+        .filter(c => c.slug?.startsWith("boutique-") && c.parent === 0)
+        .map(c => ({ id: c.id, name: decodeHtmlEntities(c.name).replace(/^Boutique\s*[–-]\s*/i, "") }));
+      setShopCats(boutiqueCats);
       setFiltered(p);
     } catch (e) {
       console.warn("Shop load error:", e);
@@ -105,7 +105,7 @@ export default function ShopScreen() {
         >
           <Text style={[styles.chipText, { color: !selectedCat ? "#fff" : colors.foreground }]}>Tous</Text>
         </TouchableOpacity>
-        {BOUTIQUE_PARENTS.map(cat => (
+        {shopCats.map(cat => (
           <TouchableOpacity
             key={cat.id}
             onPress={() => setSelectedCat(selectedCat === cat.id ? null : cat.id)}

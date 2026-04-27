@@ -11,6 +11,7 @@ import { ThemeProvider } from "@/lib/theme-provider";
 import { AuthProvider } from "@/lib/auth-provider";
 import { CartProvider } from "@/lib/cart-provider";
 import { RewardsProvider } from "@/lib/rewards-provider";
+import { FavoritesProvider } from "@/lib/favorites-provider";
 import {
   SafeAreaFrameContext,
   SafeAreaInsetsContext,
@@ -24,6 +25,12 @@ import * as SplashScreen from "expo-splash-screen";
 import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-runtime";
 import { CustomSplash } from "@/components/splash-screen";
+import { setupNotificationHandler, registerForPushNotificationsAsync, setupAndroidChannel } from "@/lib/notifications";
+import * as Notifications from "expo-notifications";
+import { router as expoRouter } from "expo-router";
+
+// Set up notification handler at module level (before any component renders)
+setupNotificationHandler();
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
@@ -56,6 +63,29 @@ export default function RootLayout() {
   // Initialize Manus runtime for cookie injection from parent container
   useEffect(() => {
     initManusRuntime();
+  }, []);
+
+  // Set up push notifications
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    setupAndroidChannel();
+    registerForPushNotificationsAsync();
+
+    const notificationListener = Notifications.addNotificationReceivedListener(notification => {
+      console.log("Notification received:", notification.request.content.title);
+    });
+
+    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+      const data = response.notification.request.content.data;
+      if (data?.type === "event_reminder" && data?.eventId) {
+        expoRouter.push(`/event/${data.eventId}` as any);
+      }
+    });
+
+    return () => {
+      notificationListener.remove();
+      responseListener.remove();
+    };
   }, []);
 
   // Hide splash screen once fonts are loaded
@@ -137,6 +167,7 @@ export default function RootLayout() {
             <Stack.Screen name="privacy" />
             <Stack.Screen name="help" />
             <Stack.Screen name="rewards" />
+            <Stack.Screen name="favorites" />
             <Stack.Screen name="oauth/callback" />
           </Stack>
           <StatusBar style="auto" />
@@ -153,13 +184,15 @@ export default function RootLayout() {
         <AuthProvider>
           <CartProvider>
             <RewardsProvider>
-              <SafeAreaProvider initialMetrics={providerInitialMetrics}>
-                <SafeAreaFrameContext.Provider value={frame}>
-                  <SafeAreaInsetsContext.Provider value={insets}>
-                    {content}
-                  </SafeAreaInsetsContext.Provider>
-                </SafeAreaFrameContext.Provider>
-              </SafeAreaProvider>
+              <FavoritesProvider>
+                <SafeAreaProvider initialMetrics={providerInitialMetrics}>
+                  <SafeAreaFrameContext.Provider value={frame}>
+                    <SafeAreaInsetsContext.Provider value={insets}>
+                      {content}
+                    </SafeAreaInsetsContext.Provider>
+                  </SafeAreaFrameContext.Provider>
+                </SafeAreaProvider>
+              </FavoritesProvider>
             </RewardsProvider>
           </CartProvider>
         </AuthProvider>
@@ -171,9 +204,11 @@ export default function RootLayout() {
     <ThemeProvider>
       <AuthProvider>
         <CartProvider>
-          <RewardsProvider>
-            <SafeAreaProvider initialMetrics={providerInitialMetrics}>{content}</SafeAreaProvider>
-          </RewardsProvider>
+            <RewardsProvider>
+              <FavoritesProvider>
+                <SafeAreaProvider initialMetrics={providerInitialMetrics}>{content}</SafeAreaProvider>
+              </FavoritesProvider>
+            </RewardsProvider>
         </CartProvider>
       </AuthProvider>
     </ThemeProvider>

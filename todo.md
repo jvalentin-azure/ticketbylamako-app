@@ -149,3 +149,23 @@
 - [x] Fix seating chart WebView URL - now loads event page and auto-opens Tickera seating popup
 - [x] Add placeholder mobile content to WordPress events (description + practical info for 12673 & 11109)
 - [x] Add placeholder mobile content to WordPress products (description + practical info for 10424)
+
+## V2.4 - Bug Fixes & New Features
+
+### Bug Fixes
+- [ ] Fix seating chart WebView - auto-click not working, only shows event page
+- [x] Fix shop categories - buttons too large, need small compact chips (already using compact horizontal chips)
+
+### New Features
+- [x] Event filters by category (parent category chips + child category matching)
+- [x] Event filters by date (today, this week, this month, upcoming - modal picker)
+- [x] Favorites system (save events/products locally with AsyncStorage)
+- [x] Favorites screen (tabs: all/events/products, remove, navigate)
+- [x] Favorite heart buttons on event cards (home, events list, event detail)
+- [x] Favorite heart buttons on product cards (home screen)
+- [x] Favorites link in drawer menu (Mon Compte section)
+- [x] Social media sharing for events (native Share sheet on event detail - WhatsApp, Facebook, etc.)
+- [x] Push notifications setup (expo-notifications, permission request, Android channels)
+- [x] Push notification handler (foreground display, response listener, event deep link)
+- [x] Notification preferences storage (AsyncStorage)
+- [x] Event reminder scheduling (local notification 1 hour before event)

@@ -13,6 +13,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { getEventsWithTickets, getShopProducts, type TCEvent, type WCProduct } from "@/lib/api/woocommerce";
 import { formatAriary, formatDateShort, decodeHtmlEntities } from "@/lib/format";
 import { useRewards } from "@/lib/rewards-provider";
+import { useFavorites } from "@/lib/favorites-provider";
 import { LinearGradient } from "expo-linear-gradient";
 
 const { width: SCREEN_W } = Dimensions.get("window");
@@ -23,6 +24,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuth();
   const { state: rewardsState, currentTier } = useRewards();
+  const { isFavorite, toggleFavorite } = useFavorites();
   const [events, setEvents] = useState<TCEvent[]>([]);
   const [products, setProducts] = useState<WCProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -164,7 +166,15 @@ export default function HomeScreen() {
               onPress={() => router.push(`/event/${item.id}` as any)}
               style={[styles.eventCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
             >
-              <Image source={{ uri: item.featuredImage }} style={styles.eventCardImage} contentFit="cover" />
+              <View style={{ position: "relative" }}>
+                <Image source={{ uri: item.featuredImage }} style={styles.eventCardImage} contentFit="cover" />
+                <TouchableOpacity
+                  onPress={() => toggleFavorite({ id: item.id, type: "event", name: decodeHtmlEntities(item.title.rendered), image: item.featuredImage })}
+                  style={styles.favBtn}
+                >
+                  <IconSymbol name={isFavorite(item.id, "event") ? "heart.fill" : "heart"} size={18} color={isFavorite(item.id, "event") ? "#EF4444" : "#fff"} />
+                </TouchableOpacity>
+              </View>
               <View style={styles.eventCardBody}>
                 <Text style={[styles.eventCardTitle, { color: colors.foreground }]} numberOfLines={2}>
                   {decodeHtmlEntities(item.title.rendered)}
@@ -207,7 +217,15 @@ export default function HomeScreen() {
                   onPress={() => router.push(`/product/${p.id}` as any)}
                   style={[styles.shopCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
                 >
-                  <Image source={{ uri: p.images?.[0]?.src }} style={{ width: "100%", height: 120 }} contentFit="cover" />
+                  <View style={{ position: "relative" }}>
+                    <Image source={{ uri: p.images?.[0]?.src }} style={{ width: "100%", height: 120 }} contentFit="cover" />
+                    <TouchableOpacity
+                      onPress={() => toggleFavorite({ id: p.id, type: "product", name: decodeHtmlEntities(p.name), image: p.images?.[0]?.src })}
+                      style={styles.favBtn}
+                    >
+                      <IconSymbol name={isFavorite(p.id, "product") ? "heart.fill" : "heart"} size={18} color={isFavorite(p.id, "product") ? "#EF4444" : "#fff"} />
+                    </TouchableOpacity>
+                  </View>
                   <View style={{ padding: 10 }}>
                     <Text style={[styles.shopCardName, { color: colors.foreground }]} numberOfLines={2}>
                       {decodeHtmlEntities(p.name)}
@@ -308,4 +326,5 @@ const styles = StyleSheet.create({
   rewardsBannerTitle: { color: "#fff", fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold" },
   rewardsBannerSub: { color: "rgba(255,255,255,0.8)", fontSize: 13, marginTop: 2, fontFamily: "Raleway-Medium" },
   rewardsBannerIcon: { marginRight: 8 },
+  favBtn: { position: "absolute", top: 8, right: 8, width: 32, height: 32, borderRadius: 16, backgroundColor: "rgba(0,0,0,0.4)", alignItems: "center", justifyContent: "center" },
 });

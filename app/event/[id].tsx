@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { ScrollView, Text, View, TouchableOpacity, ActivityIndicator, Dimensions, StyleSheet, FlatList, Platform, Linking } from "react-native";
+import { ScrollView, Text, View, TouchableOpacity, ActivityIndicator, Dimensions, StyleSheet, FlatList, Platform, Linking, Share } from "react-native";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
@@ -7,6 +7,7 @@ import { useColors } from "@/hooks/use-colors";
 import { useCart } from "@/lib/cart-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { getTCEvent, getEventTickets, type TCEvent, type TicketType } from "@/lib/api/woocommerce";
+import { useFavorites } from "@/lib/favorites-provider";
 import { formatAriary, formatDate, stripHtml, decodeHtmlEntities } from "@/lib/format";
 
 const { width: SCREEN_W } = Dimensions.get("window");
@@ -32,6 +33,7 @@ export default function EventDetailScreen() {
   const [qty, setQty] = useState(1);
   const [showSeatingChart, setShowSeatingChart] = useState(false);
   const [galleryIndex, setGalleryIndex] = useState(0);
+  const { isFavorite, toggleFavorite } = useFavorites();
 
   useEffect(() => {
     if (!id) return;
@@ -102,35 +104,59 @@ export default function EventDetailScreen() {
     // The seating chart is a JS popup on the event page itself, not a separate URL
     const seatingUrl = event.link || `${SITE_URL}/tc-events/${event.slug}/`;
     
-    // JavaScript to inject: hide the page content and auto-click the seating map button
+    // JavaScript to inject: hide page chrome and auto-click the seating map button using jQuery
     const injectedJS = `
       (function() {
-        // Wait for the page to fully load, then auto-click the seating map button
+        var attempts = 0;
+        var maxAttempts = 30; // Try for up to 15 seconds
+        
+        function hidePageChrome() {
+          // Hide everything except the seating chart popup
+          var selectors = [
+            'header', '.site-header', 'nav:not(.tc-nav)',
+            '#wpadminbar', 'footer', '.site-footer',
+            '[class*="whatsapp"]', '.joinchat', '[id*="whatsapp"]',
+            '[class*="cookie"]', '[class*="consent"]',
+            '.wc-block-components-drawer__screen-overlay'
+          ];
+          selectors.forEach(function(sel) {
+            var els = document.querySelectorAll(sel);
+            els.forEach(function(el) { el.style.display = 'none'; });
+          });
+        }
+        
         function tryClickSeatingButton() {
+          attempts++;
           var btn = document.querySelector('.tc_seating_map_button');
-          if (btn) {
-            // Hide the rest of the page content for a cleaner experience
-            var header = document.querySelector('header, .site-header, nav');
-            if (header) header.style.display = 'none';
-            var adminBar = document.getElementById('wpadminbar');
-            if (adminBar) adminBar.style.display = 'none';
-            var footer = document.querySelector('footer, .site-footer');
-            if (footer) footer.style.display = 'none';
-            var whatsapp = document.querySelector('[class*="whatsapp"], .joinchat, [id*="whatsapp"]');
-            if (whatsapp) whatsapp.style.display = 'none';
-            var cookie = document.querySelector('[class*="cookie"], [class*="consent"]');
-            if (cookie) cookie.style.display = 'none';
-            // Click the seating map button
-            btn.click();
-          } else {
+          
+          if (btn && typeof jQuery !== 'undefined') {
+            hidePageChrome();
+            // Use jQuery to trigger the click - Tickera uses jQuery event handlers
+            jQuery(btn).trigger('click');
+            // Keep hiding chrome after popup opens
+            setTimeout(hidePageChrome, 1000);
+            setTimeout(hidePageChrome, 3000);
+          } else if (btn) {
+            // jQuery not loaded yet, try native click + dispatchEvent
+            hidePageChrome();
+            var clickEvent = new MouseEvent('click', {
+              bubbles: true, cancelable: true, view: window
+            });
+            btn.dispatchEvent(clickEvent);
+            setTimeout(hidePageChrome, 1000);
+          } else if (attempts < maxAttempts) {
             setTimeout(tryClickSeatingButton, 500);
           }
         }
+        
+        // Wait for page to be fully loaded including all scripts
         if (document.readyState === 'complete') {
-          setTimeout(tryClickSeatingButton, 1000);
+          // Page already loaded, but Tickera scripts may still be initializing
+          setTimeout(tryClickSeatingButton, 2000);
         } else {
           window.addEventListener('load', function() {
-            setTimeout(tryClickSeatingButton, 1000);
+            // Give Tickera scripts extra time to initialize after page load
+            setTimeout(tryClickSeatingButton, 2000);
           });
         }
       })();
@@ -250,6 +276,29 @@ export default function EventDetailScreen() {
           >
             <IconSymbol name="chevron.left" size={22} color="#fff" />
           </TouchableOpacity>
+          {/* Share & Favorite buttons */}
+          <View style={styles.topRightActions}>
+            <TouchableOpacity
+              onPress={async () => {
+                try {
+                  await Share.share({
+                    title: name,
+                    message: `${name} - Découvrez cet événement sur TicketByLamako !\n${event.link || `https://www.ticketbylamako.com/tc-events/${event.slug}/`}`,
+                    url: event.link || `https://www.ticketbylamako.com/tc-events/${event.slug}/`,
+                  });
+                } catch {}
+              }}
+              style={styles.topActionBtn}
+            >
+              <IconSymbol name="square.and.arrow.up" size={18} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => toggleFavorite({ id: event.id, type: "event", name, image: event.featuredImage })}
+              style={styles.topActionBtn}
+            >
+              <IconSymbol name={isFavorite(event.id, "event") ? "heart.fill" : "heart"} size={18} color={isFavorite(event.id, "event") ? "#EF4444" : "#fff"} />
+            </TouchableOpacity>
+          </View>
           {hasSeating && (
             <View style={styles.seatingOverlayBadge}>
               <IconSymbol name="mappin" size={12} color="#fff" />
@@ -458,4 +507,6 @@ const styles = StyleSheet.create({
   seatingTitle: { fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold" },
   webFallbackBtn: { marginTop: 20, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10 },
   webFallbackBtnText: { color: "#fff", fontSize: 14, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  topRightActions: { position: "absolute", top: 12, right: 16, flexDirection: "row", gap: 8 },
+  topActionBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center" },
 });

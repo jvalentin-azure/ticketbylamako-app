@@ -64,6 +64,7 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
         ...(isAuthenticated
           ? [
               { icon: "star.fill" as const, label: "LamakoRewards", onPress: () => navigate("/rewards") },
+              { icon: "heart.fill" as const, label: "Mes Favoris", onPress: () => navigate("/favorites") },
               { icon: "clipboard.fill" as const, label: "Mes Commandes", onPress: () => navigate("/orders") },
             ]
           : []),
@@ -226,7 +227,7 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
 
         {/* Version */}
         <Text style={[styles.version, { color: colors.muted }]}>
-          TicketByLamako v2.0.0
+          TicketByLamako v2.4.0
         </Text>
       </ScrollView>
     </View>
