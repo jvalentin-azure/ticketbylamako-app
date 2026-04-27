@@ -208,3 +208,11 @@
 ### Bug Fixes
 - [x] Fix seating chart seats not visible on mobile WebView - viewport set to width=1920 for proper scaling, CSS makes tc_seating_map scrollable with touch, subtotal/GO TO CART fixed positioned, auto-click button on load
 - [x] Updated lamako-mobile-api.php plugin on WordPress with mobile-friendly CSS embed template
+
+## V2.5.3 - Category Filter Chips Fix
+
+### Bug Fixes
+- [x] Fix shop category chips - compact pills with fixed height 32px, centered text
+- [x] Fix events category chips - compact pills with fixed height 32px, centered text
+- [x] Fix events category filter - recursive descendant matching (grandchildren categories now included)
+- [x] Fix events date chip - compact with fixed height 32px

@@ -47,19 +47,28 @@ export default function EventsScreen() {
     return categories.filter(c => c.parent === 0);
   }, [categories]);
 
-  // Get all child category IDs for a given parent
-  const getChildCategoryIds = useCallback((parentId: number): number[] => {
-    const children = categories.filter(c => c.parent === parentId).map(c => c.id);
-    return [parentId, ...children];
+  // Get ALL descendant category IDs for a given parent (recursive)
+  const getDescendantCategoryIds = useCallback((parentId: number): number[] => {
+    const result = [parentId];
+    const findChildren = (pid: number) => {
+      categories.forEach(c => {
+        if (c.parent === pid) {
+          result.push(c.id);
+          findChildren(c.id); // recurse into grandchildren
+        }
+      });
+    };
+    findChildren(parentId);
+    return result;
   }, [categories]);
 
   // Filter events
   useEffect(() => {
     let result = events;
 
-    // Category filter
+    // Category filter (recursive - includes grandchildren)
     if (selectedCat) {
-      const catIds = getChildCategoryIds(selectedCat);
+      const catIds = getDescendantCategoryIds(selectedCat);
       result = result.filter(e =>
         e.event_category?.some(catId => catIds.includes(catId))
       );
@@ -97,7 +106,7 @@ export default function EventsScreen() {
     }
 
     setFiltered(result);
-  }, [search, events, selectedCat, dateFilter, getChildCategoryIds]);
+  }, [search, events, selectedCat, dateFilter, getDescendantCategoryIds]);
 
   const dateFilterLabel = useMemo(() => {
     switch (dateFilter) {
@@ -321,11 +330,11 @@ const styles = StyleSheet.create({
   searchBar: { marginHorizontal: 16, marginBottom: 8, flexDirection: "row", alignItems: "center", borderRadius: 12, paddingHorizontal: 12, borderWidth: 1 },
   searchInput: { flex: 1, paddingVertical: 12, paddingHorizontal: 8, fontSize: 15, fontFamily: "Raleway-Regular" },
   dateFilterRow: { paddingHorizontal: 16, paddingVertical: 4 },
-  dateChip: { flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
-  dateChipText: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
-  chipsContainer: { paddingHorizontal: 16, paddingVertical: 8, gap: 8 },
-  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
-  chipText: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  dateChip: { height: 32, flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: 6, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1 },
+  dateChipText: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold", lineHeight: 16 },
+  chipsContainer: { paddingHorizontal: 16, paddingVertical: 8, gap: 8, flexDirection: "row", alignItems: "center" },
+  chip: { height: 32, paddingHorizontal: 14, borderRadius: 16, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  chipText: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold", lineHeight: 16 },
   loadingContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
   eventCard: { marginHorizontal: 16, marginBottom: 14, borderRadius: 16, overflow: "hidden", borderWidth: 1 },
   eventImage: { width: "100%", height: 160 },
