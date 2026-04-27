@@ -430,13 +430,30 @@ export async function getEventsWithTickets(): Promise<TCEvent[]> {
 
 /**
  * Get the seating chart embed URL for an event.
- * The approach: scrape the event page to find the data-seating-map-id,
- * then resolve the tc_seat_charts permalink via ?post_type=tc_seat_charts&p=ID.
- * The resulting URL is loaded in a WebView with injected CSS to hide theme chrome.
+ * 
+ * Strategy:
+ * 1. Try the lamako-mobile API endpoint (server-side lookup by event_name meta)
+ * 2. Fallback: scrape the event page for data-seating-map-id and build embed URL
+ * 
+ * The embed URL uses ?lamako_seat_embed=1&chart_id=X which renders a clean page
+ * with only the seating chart shortcode (no theme header/footer).
  */
 export async function getSeatingChartUrl(eventId: number, eventSlug?: string, eventLink?: string): Promise<string | null> {
   try {
-    // First, fetch the event page to get the seating map ID
+    // Method 1: Use the lamako-mobile API to get the correct chart for this event
+    try {
+      const apiRes = await fetch(mobileApiUrl(`seat-chart-url/${eventId}`));
+      if (apiRes.ok) {
+        const data = await apiRes.json();
+        if (data.has_chart && data.embed_url) {
+          return data.embed_url;
+        }
+      }
+    } catch {
+      // API not available, fall through to scraping
+    }
+    
+    // Method 2: Fallback - scrape the event page for the seating map ID
     const eventUrl = eventLink || `${SITE_URL}/tc-events/${eventSlug || eventId}/`;
     const res = await fetch(eventUrl);
     if (!res.ok) return null;
@@ -447,13 +464,9 @@ export async function getSeatingChartUrl(eventId: number, eventSlug?: string, ev
     if (!match) return null;
     const chartId = match[1];
     
-    // Resolve the tc_seat_charts permalink by fetching with post_type + p params
-    // This will redirect to the actual permalink
-    const chartRes = await fetch(`${SITE_URL}/?post_type=tc_seat_charts&p=${chartId}`, { redirect: 'follow' });
-    if (!chartRes.ok) return null;
-    
-    // The final URL after redirect is the permalink
-    return chartRes.url;
+    // Build the clean embed URL using our WordPress plugin's template_redirect handler
+    // This renders ONLY the seating chart shortcode without any theme chrome
+    return `${SITE_URL}/?lamako_seat_embed=1&chart_id=${chartId}`;
   } catch {
     return null;
   }

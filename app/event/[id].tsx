@@ -118,74 +118,41 @@ export default function EventDetailScreen() {
 
   // Seating Chart WebView - loads the tc_seat_charts page directly (same approach as POS plugin)
   if (showSeatingChart && event && seatingChartUrl) {
-    // The tc_seat_charts page already has the seating chart button, Firebase, jQuery, and all Tickera JS.
-    // We inject CSS identical to the POS embed to hide theme chrome and style the seating button.
+    // The embed URL (lamako_seat_embed=1) renders a clean page with only the seating chart.
+    // This injected JS is a safety net: hides any remaining theme elements and ensures
+    // the seating chart button is visible and styled correctly.
     const injectedJS = `
       (function() {
-        var attempts = 0;
-        var maxAttempts = 40;
-        
-        function applyEmbedStyles() {
-          // Inject the same CSS as the POS lpos_embed=1 mode
+        function cleanup() {
+          // Safety net: hide any theme elements that might still appear
           var style = document.createElement('style');
-          style.textContent = '\n' +
-            'body { margin: 0 !important; padding: 0 !important; background: #f8fafc !important; overflow-x: hidden; }\n' +
-            'header, .site-header, .page-header, #masthead, .header-wrapper, ' +
-            'footer, .site-footer, .page-footer, #colophon, .footer-wrapper, ' +
-            'nav, .navigation, .nav-links, .breadcrumbs, .breadcrumb, ' +
-            '.sidebar, #sidebar, aside, ' +
-            '.woocommerce-breadcrumb, #wpadminbar, ' +
-            '.header-main, .header-top, .header-bottom, ' +
-            '.footer-1, .footer-2, .absolute-footer, ' +
-            '.page-title-inner, .page-title, ' +
-            '.comments-area, #comments, ' +
-            '[class*="whatsapp"], .joinchat, [id*="whatsapp"], ' +
-            '[class*="cookie"], [class*="consent"], ' +
-            '#fkcart-floating-toggler, .fkcart-main-wrapper, ' +
-            '.tc-checkout-bar, .tc-seatchart-subtotal ' +
-            '{ display: none !important; }\n' +
-            '.entry-content, .page-content, .post-content, ' +
-            'article, main, #main, #content, .content-area, ' +
-            '.col-inner, .large-12, .row, .row-main ' +
-            '{ width: 100% !important; max-width: 100% !important; padding: 0 !important; margin: 0 !important; }\n' +
-            '.tc_seating_map_button { ' +
-            '  display: block !important; margin: 20px auto !important; padding: 16px 40px !important; ' +
-            '  font-size: 18px !important; font-weight: 700 !important; ' +
-            '  background: #663d17 !important; color: #fff !important; ' +
-            '  border: none !important; border-radius: 14px !important; ' +
-            '  cursor: pointer !important; text-align: center !important; ' +
-            '  width: 90% !important; max-width: 400px !important; box-sizing: border-box !important; ' +
-            '  box-shadow: 0 4px 14px rgba(102, 61, 23, 0.3) !important; ' +
-            '}\n' +
-            '.tc_seating_map { width: 100% !important; max-width: 100% !important; }\n' +
-            '.tc-seatchart-cart-info { display: block !important; }\n' +
-            '.tc_in_cart { display: block !important; text-align: center; padding: 8px; font-weight: 600; }\n' +
-            '.ui-dialog { z-index: 99999 !important; }\n' +
-            '.ui-widget-overlay { z-index: 99998 !important; }\n';
+          style.textContent = 
+            'header, .site-header, #masthead, .header-wrapper, .header-main, .header-top, .header-bottom,' +
+            'footer, .site-footer, #colophon, .footer-wrapper, .absolute-footer,' +
+            'nav:not(.tc-nav), .breadcrumbs, .woocommerce-breadcrumb, #wpadminbar,' +
+            '.sidebar, #sidebar, aside,' +
+            '[class*="whatsapp"], .joinchat, [id*="whatsapp"],' +
+            '[class*="cookie"], [class*="consent"],' +
+            '#fkcart-floating-toggler, .fkcart-main-wrapper' +
+            '{ display: none !important; }' +
+            '.tc_seating_map_button {' +
+            '  display: block !important; margin: 20px auto !important; padding: 16px 40px !important;' +
+            '  font-size: 17px !important; font-weight: 700 !important;' +
+            '  background: #663d17 !important; color: #fff !important;' +
+            '  border: none !important; border-radius: 14px !important;' +
+            '  cursor: pointer !important; text-align: center !important;' +
+            '  width: 90% !important; max-width: 400px !important;' +
+            '  box-shadow: 0 4px 14px rgba(102,61,23,0.3) !important;' +
+            '}' +
+            '.ui-dialog { z-index: 99999 !important; }' +
+            '.ui-widget-overlay { z-index: 99998 !important; }';
           document.head.appendChild(style);
-        }
-        
-        function setup() {
-          attempts++;
+          // Scroll to button
           var btn = document.querySelector('.tc_seating_map_button');
-          if (btn) {
-            applyEmbedStyles();
-            btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          } else if (attempts < maxAttempts) {
-            setTimeout(setup, 500);
-          } else {
-            // Even without button, apply styles
-            applyEmbedStyles();
-          }
+          if (btn) btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
-        
-        if (document.readyState === 'complete') {
-          setTimeout(setup, 1000);
-        } else {
-          window.addEventListener('load', function() {
-            setTimeout(setup, 1000);
-          });
-        }
+        if (document.readyState === 'complete') setTimeout(cleanup, 800);
+        else window.addEventListener('load', function() { setTimeout(cleanup, 800); });
       })();
       true;
     `;

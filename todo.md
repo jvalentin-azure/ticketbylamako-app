@@ -188,3 +188,17 @@
 - [x] WordPress REST API plugin for ticket instances (lamako-mobile-api.php)
 - [x] Order detail screen with dedicated route /order/[id]
 - [x] extractTicketsFromOrder utility for parsing tc_cart_info meta data
+
+## V2.5.1 - Seating Chart Fix, WordPress Plugin, Test Users
+
+### Bug Fixes
+- [x] Fix seating chart - header/footer hidden via lamako_seat_embed template (no theme chrome)
+- [x] Fix seating chart - correct chart loaded per event via /lamako-mobile/v1/seat-chart-url/{event_id}
+- [x] Fix seating chart CSS injection - chat widget, cart icon, all theme elements hidden
+
+### WordPress Server
+- [x] Install lamako-mobile-api.php plugin on WordPress (v1.0.0 - activated)
+- [x] Create 3 test users with different profiles:
+  - Andry Rakoto (testuser1@lamako.mg / TestLamako2024!) - Antananarivo
+  - Nomena Randria (testuser2@lamako.mg / TestLamako2024!) - Toamasina
+  - Fidy Rasoanaivo (testuser3@lamako.mg / TestLamako2024!) - Antsirabe
