@@ -1,13 +1,16 @@
 import { useState } from "react";
-import { Text, View, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
+import { Text, View, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from "react-native";
+import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useAuth } from "@/lib/auth-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 
 export default function RegisterScreen() {
   const colors = useColors();
+  const scheme = useColorScheme();
   const router = useRouter();
   const { register } = useAuth();
   const [firstName, setFirstName] = useState("");
@@ -34,70 +37,88 @@ export default function RegisterScreen() {
     <ScreenContainer edges={["top", "bottom", "left", "right"]}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 24 }} keyboardShouldPersistTaps="handled">
-          <TouchableOpacity onPress={() => router.back()} style={{ position: "absolute", top: 16, left: 24 }}>
-            <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
+          {/* Back button */}
+          <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.surface }]}>
+            <IconSymbol name="chevron.left" size={22} color={colors.foreground} />
+            <Text style={{ color: colors.foreground, fontSize: 15, fontFamily: "Raleway-Medium", marginLeft: 4 }}>Retour</Text>
           </TouchableOpacity>
 
-          <View style={{ alignItems: "center", marginBottom: 32 }}>
-            <View style={{ width: 80, height: 80, borderRadius: 20, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
-              <Text style={{ color: "#fff", fontSize: 32, fontWeight: "800" }}>L</Text>
-            </View>
-            <Text style={{ color: colors.foreground, fontSize: 26, fontWeight: "700" }}>Créer un compte</Text>
-            <Text style={{ color: colors.muted, fontSize: 14, marginTop: 4 }}>Inscrivez-vous pour acheter des billets</Text>
+          {/* Logo */}
+          <View style={styles.logoArea}>
+            <Image
+              source={
+                scheme === "dark"
+                  ? require("@/assets/images/logo-white.png")
+                  : require("@/assets/images/logo-dark.png")
+              }
+              style={styles.logo}
+              contentFit="contain"
+            />
+            <Text style={[styles.titleText, { color: colors.foreground }]}>Créer un compte</Text>
+            <Text style={[styles.subtitleText, { color: colors.muted }]}>Inscrivez-vous pour acheter des billets</Text>
           </View>
 
           {error ? (
-            <View style={{ backgroundColor: colors.error + "15", padding: 12, borderRadius: 10, marginBottom: 16, flexDirection: "row", alignItems: "center" }}>
+            <View style={[styles.errorBox, { backgroundColor: colors.error + "15" }]}>
               <IconSymbol name="xmark.circle.fill" size={18} color={colors.error} />
-              <Text style={{ color: colors.error, fontSize: 13, marginLeft: 8, flex: 1 }}>{error}</Text>
+              <Text style={{ color: colors.error, fontSize: 13, marginLeft: 8, flex: 1, fontFamily: "Raleway-Medium" }}>{error}</Text>
             </View>
           ) : null}
 
-          <View style={{ flexDirection: "row", gap: 12, marginBottom: 14 }}>
+          {/* Name fields */}
+          <View style={styles.nameRow}>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "600", marginBottom: 6 }}>Prénom *</Text>
-              <TextInput placeholder="Prénom" placeholderTextColor={colors.muted} value={firstName} onChangeText={setFirstName}
-                style={{ backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.border, paddingVertical: 14, paddingHorizontal: 14, color: colors.foreground, fontSize: 15 }} />
+              <Text style={[styles.inputLabel, { color: colors.foreground }]}>Prénom *</Text>
+              <View style={[styles.inputRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <TextInput placeholder="Prénom" placeholderTextColor={colors.muted} value={firstName} onChangeText={setFirstName}
+                  style={[styles.input, { color: colors.foreground }]} />
+              </View>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "600", marginBottom: 6 }}>Nom</Text>
-              <TextInput placeholder="Nom" placeholderTextColor={colors.muted} value={lastName} onChangeText={setLastName}
-                style={{ backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.border, paddingVertical: 14, paddingHorizontal: 14, color: colors.foreground, fontSize: 15 }} />
+              <Text style={[styles.inputLabel, { color: colors.foreground }]}>Nom</Text>
+              <View style={[styles.inputRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <TextInput placeholder="Nom" placeholderTextColor={colors.muted} value={lastName} onChangeText={setLastName}
+                  style={[styles.input, { color: colors.foreground }]} />
+              </View>
             </View>
           </View>
 
+          {/* Email */}
           <View style={{ marginBottom: 14 }}>
-            <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "600", marginBottom: 6 }}>Email *</Text>
-            <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14 }}>
+            <Text style={[styles.inputLabel, { color: colors.foreground }]}>Email *</Text>
+            <View style={[styles.inputRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <IconSymbol name="paperplane.fill" size={18} color={colors.muted} />
               <TextInput placeholder="votre@email.com" placeholderTextColor={colors.muted} value={email} onChangeText={setEmail}
                 autoCapitalize="none" keyboardType="email-address"
-                style={{ flex: 1, paddingVertical: 14, paddingHorizontal: 10, color: colors.foreground, fontSize: 15 }} />
+                style={[styles.input, { color: colors.foreground }]} />
             </View>
           </View>
 
+          {/* Password */}
           <View style={{ marginBottom: 20 }}>
-            <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "600", marginBottom: 6 }}>Mot de passe *</Text>
-            <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14 }}>
+            <Text style={[styles.inputLabel, { color: colors.foreground }]}>Mot de passe *</Text>
+            <View style={[styles.inputRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <IconSymbol name="lock.fill" size={18} color={colors.muted} />
               <TextInput placeholder="Min. 6 caractères" placeholderTextColor={colors.muted} value={password} onChangeText={setPassword}
                 secureTextEntry={!showPw} returnKeyType="done" onSubmitEditing={handleRegister}
-                style={{ flex: 1, paddingVertical: 14, paddingHorizontal: 10, color: colors.foreground, fontSize: 15 }} />
+                style={[styles.input, { color: colors.foreground }]} />
               <TouchableOpacity onPress={() => setShowPw(!showPw)}>
                 <IconSymbol name={showPw ? "eye.slash.fill" : "eye.fill"} size={20} color={colors.muted} />
               </TouchableOpacity>
             </View>
           </View>
 
+          {/* Register button */}
           <TouchableOpacity onPress={handleRegister} disabled={loading}
-            style={{ backgroundColor: colors.primary, borderRadius: 14, paddingVertical: 16, alignItems: "center", opacity: loading ? 0.7 : 1 }}>
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>S'inscrire</Text>}
+            style={[styles.registerButton, { backgroundColor: colors.primary, opacity: loading ? 0.7 : 1 }]}>
+            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.registerButtonText}>S'inscrire</Text>}
           </TouchableOpacity>
 
-          <View style={{ flexDirection: "row", justifyContent: "center", marginTop: 20 }}>
-            <Text style={{ color: colors.muted, fontSize: 14 }}>Déjà un compte ? </Text>
+          {/* Login link */}
+          <View style={styles.loginRow}>
+            <Text style={{ color: colors.muted, fontSize: 14, fontFamily: "Raleway-Regular" }}>Déjà un compte ? </Text>
             <TouchableOpacity onPress={() => router.push("/(auth)/login" as any)}>
-              <Text style={{ color: colors.primary, fontSize: 14, fontWeight: "600" }}>Se connecter</Text>
+              <Text style={{ color: colors.primary, fontSize: 14, fontWeight: "600", fontFamily: "Raleway-SemiBold" }}>Se connecter</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -105,3 +126,82 @@ export default function RegisterScreen() {
     </ScreenContainer>
   );
 }
+
+const styles = StyleSheet.create({
+  backButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    marginBottom: 20,
+  },
+  logoArea: {
+    alignItems: "center",
+    marginBottom: 28,
+  },
+  logo: {
+    width: 160,
+    height: 50,
+    marginBottom: 16,
+  },
+  titleText: {
+    fontSize: 24,
+    fontWeight: "700",
+    fontFamily: "Raleway-Bold",
+  },
+  subtitleText: {
+    fontSize: 14,
+    marginTop: 4,
+    fontFamily: "Raleway-Regular",
+  },
+  errorBox: {
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 16,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  nameRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 14,
+  },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 6,
+    fontFamily: "Raleway-SemiBold",
+  },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+  },
+  input: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    fontSize: 15,
+    fontFamily: "Raleway-Regular",
+  },
+  registerButton: {
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: "center",
+  },
+  registerButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
+    fontFamily: "Raleway-Bold",
+  },
+  loginRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    marginTop: 20,
+  },
+});

@@ -95,3 +95,32 @@
 - [x] All tab screens use edges={["left", "right"]} (AppHeader handles top safe area)
 - [x] Drawer content with gradient header, organized menu sections
 - [x] Fixed TypeScript errors (0 errors)
+
+## V2.1 - Bug Fixes & LamakoRewards
+
+### UI Bug Fixes
+- [x] Logo sizes inconsistent between light/dark mode - fixed with new logo-white v2 (same 300x108px)
+- [x] Drawer logo too small - increased to 240x70
+- [x] WhatsApp button added directly in drawer Support section
+- [x] Shop categories already using small horizontal chips
+- [x] Profile/Login/Help/Privacy back button fixed - proper positioning
+- [x] Custom animated splash screen added (works in Expo Go)
+- [ ] Event/product descriptions too long for mobile - add mobile-specific short text field
+
+### LamakoRewards Loyalty Program
+- [x] Create rewards provider (connected to myCred API on WordPress)
+- [x] Points accumulation: 1 point per 1000 Ar spent (myCred hook configured)
+- [x] Tier system: Bronze (0), Argent (500), Or (2000), Platine (5000)
+- [x] Rewards dashboard screen (balance, tier, progress bar, history, sync)
+- [x] Points display in drawer (LamakoRewards link) + home screen banner
+- [x] Bonus points: 50 pts registration, 2 pts login (myCred hooks)
+- [x] Points redemption: 100 pts = 5000 Ar discount
+
+### WordPress myCred Integration
+- [x] Install myCred plugin on WordPress (ticketbylamako.com)
+- [x] Activate myCred REST API
+- [x] Configure point type: LamakoRewards / LamakoReward
+- [x] Activate hooks: registration (50 pts), login (2 pts), WooCommerce order (1% of total)
+- [x] Create custom plugin (lamako-rewards-api.php) with REST endpoints
+- [x] API endpoints: /balance, /history, /tiers, /user-by-email
+- [x] App rewards-provider syncs with WordPress myCred API

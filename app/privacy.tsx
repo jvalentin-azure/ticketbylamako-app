@@ -12,13 +12,14 @@ export default function PrivacyScreen() {
     <ScreenContainer>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
+        <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.surface }]}>
+          <IconSymbol name="chevron.left" size={20} color={colors.foreground} />
+          <Text style={{ color: colors.foreground, fontSize: 14, fontFamily: "Raleway-Medium", marginLeft: 4 }}>Retour</Text>
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>
-          Politique de confidentialité
+          Confidentialité
         </Text>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 80 }} />
       </View>
 
       <ScrollView
@@ -106,10 +107,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0.5,
   },
   backButton: {
-    width: 40,
-    height: 40,
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
   },
   headerTitle: {
     fontSize: 17,

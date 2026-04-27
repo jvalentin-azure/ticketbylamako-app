@@ -41,8 +41,9 @@ export default function LoginScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 24 }} keyboardShouldPersistTaps="handled">
           {/* Back button */}
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
+          <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.surface }]}>
+            <IconSymbol name="chevron.left" size={22} color={colors.foreground} />
+            <Text style={{ color: colors.foreground, fontSize: 15, fontFamily: "Raleway-Medium", marginLeft: 4 }}>Retour</Text>
           </TouchableOpacity>
 
           {/* Logo */}
@@ -176,10 +177,13 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   backButton: {
-    position: "absolute",
-    top: 16,
-    left: 24,
-    zIndex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    marginBottom: 20,
   },
   logoArea: {
     alignItems: "center",

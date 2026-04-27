@@ -76,10 +76,10 @@ describe("App Structure", () => {
 describe("Theme Configuration", () => {
   it("has TicketByLamako brand colors", () => {
     const themeConfig = fs.readFileSync(path.resolve(__dirname, "../theme.config.js"), "utf-8");
-    // Should have the gold/brown primary color
-    expect(themeConfig).toContain("#C8A951");
-    // Should have the dark background for dark mode
-    expect(themeConfig).toContain("#121212");
+    // Should have the official brand colors
+    expect(themeConfig).toContain("#663d17");
+    // Should have the gold accent color
+    expect(themeConfig).toContain("#c79f6c");
   });
 });
 

@@ -63,6 +63,7 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
       items: [
         ...(isAuthenticated
           ? [
+              { icon: "star.fill" as const, label: "LamakoRewards", onPress: () => navigate("/rewards") },
               { icon: "clipboard.fill" as const, label: "Mes Commandes", onPress: () => navigate("/orders") },
             ]
           : []),
@@ -77,7 +78,8 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
     {
       title: "Support",
       items: [
-        { icon: "text.bubble.fill" as const, label: "Aide & Support", onPress: () => navigate("/help") },
+        { icon: "text.bubble.fill" as const, label: "WhatsApp", onPress: openWhatsApp },
+        { icon: "questionmark.circle.fill" as const, label: "Aide & Support", onPress: () => navigate("/help") },
         { icon: "hand.raised.fill" as const, label: "Politique de confidentialité", onPress: () => navigate("/privacy") },
         { icon: "info.circle.fill" as const, label: "À propos", onPress: () => {} },
       ],
@@ -250,8 +252,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   drawerLogo: {
-    width: 160,
-    height: 44,
+    width: 240,
+    height: 70,
     alignSelf: "center",
     marginBottom: 20,
   },

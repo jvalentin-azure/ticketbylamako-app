@@ -11,6 +11,8 @@ import { useAuth } from "@/lib/auth-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { getEventsWithTickets, getShopProducts, type TCEvent, type WCProduct } from "@/lib/api/woocommerce";
 import { formatAriary, formatDateShort, decodeHtmlEntities } from "@/lib/format";
+import { useRewards } from "@/lib/rewards-provider";
+import { LinearGradient } from "expo-linear-gradient";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const HERO_H = 220;
@@ -19,6 +21,7 @@ export default function HomeScreen() {
   const colors = useColors();
   const router = useRouter();
   const { isAuthenticated, user } = useAuth();
+  const { state: rewardsState, currentTier } = useRewards();
   const [events, setEvents] = useState<TCEvent[]>([]);
   const [products, setProducts] = useState<WCProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -216,6 +219,33 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {/* LAMAKO REWARDS BANNER */}
+        {isAuthenticated && (
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => router.push("/rewards" as any)}
+            style={{ marginHorizontal: 16, marginTop: 24 }}
+          >
+            <LinearGradient
+              colors={["#663d17", "#8B5E34", "#c79f6c"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.rewardsBanner}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rewardsBannerTitle}>LamakoRewards</Text>
+                <Text style={styles.rewardsBannerSub}>
+                  {rewardsState.availablePoints} pts • {currentTier.name}
+                </Text>
+              </View>
+              <View style={styles.rewardsBannerIcon}>
+                <IconSymbol name="star.fill" size={24} color="#FFD700" />
+              </View>
+              <IconSymbol name="chevron.right" size={16} color="rgba(255,255,255,0.7)" />
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
+
         {/* LOGIN CTA */}
         {!isAuthenticated && (
           <View style={[styles.loginCta, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -273,4 +303,8 @@ const styles = StyleSheet.create({
   loginCtaSub: { fontSize: 13, marginTop: 4, fontFamily: "Raleway-Regular" },
   loginCtaButton: { borderRadius: 12, paddingVertical: 12, marginTop: 14, alignItems: "center" },
   loginCtaButtonText: { color: "#fff", fontSize: 15, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  rewardsBanner: { flexDirection: "row", alignItems: "center", padding: 16, borderRadius: 14 },
+  rewardsBannerTitle: { color: "#fff", fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  rewardsBannerSub: { color: "rgba(255,255,255,0.8)", fontSize: 13, marginTop: 2, fontFamily: "Raleway-Medium" },
+  rewardsBannerIcon: { marginRight: 8 },
 });

@@ -10,6 +10,7 @@ import "@/lib/_core/nativewind-pressable";
 import { ThemeProvider } from "@/lib/theme-provider";
 import { AuthProvider } from "@/lib/auth-provider";
 import { CartProvider } from "@/lib/cart-provider";
+import { RewardsProvider } from "@/lib/rewards-provider";
 import {
   SafeAreaFrameContext,
   SafeAreaInsetsContext,
@@ -22,6 +23,7 @@ import * as SplashScreen from "expo-splash-screen";
 
 import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-runtime";
+import { CustomSplash } from "@/components/splash-screen";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
@@ -48,6 +50,8 @@ export default function RootLayout() {
     "Raleway-Bold": require("@/assets/fonts/Raleway-Bold.ttf"),
     "Raleway-ExtraBold": require("@/assets/fonts/Raleway-ExtraBold.ttf"),
   });
+
+  const [showSplash, setShowSplash] = useState(true);
 
   // Initialize Manus runtime for cookie injection from parent container
   useEffect(() => {
@@ -106,6 +110,14 @@ export default function RootLayout() {
     return null;
   }
 
+  if (showSplash && fontsLoaded) {
+    return (
+      <ThemeProvider>
+        <CustomSplash onFinish={() => setShowSplash(false)} />
+      </ThemeProvider>
+    );
+  }
+
   const content = (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <trpc.Provider client={trpcClient} queryClient={queryClient}>
@@ -124,6 +136,7 @@ export default function RootLayout() {
             <Stack.Screen name="orders" />
             <Stack.Screen name="privacy" />
             <Stack.Screen name="help" />
+            <Stack.Screen name="rewards" />
             <Stack.Screen name="oauth/callback" />
           </Stack>
           <StatusBar style="auto" />
@@ -139,13 +152,15 @@ export default function RootLayout() {
       <ThemeProvider>
         <AuthProvider>
           <CartProvider>
-            <SafeAreaProvider initialMetrics={providerInitialMetrics}>
-              <SafeAreaFrameContext.Provider value={frame}>
-                <SafeAreaInsetsContext.Provider value={insets}>
-                  {content}
-                </SafeAreaInsetsContext.Provider>
-              </SafeAreaFrameContext.Provider>
-            </SafeAreaProvider>
+            <RewardsProvider>
+              <SafeAreaProvider initialMetrics={providerInitialMetrics}>
+                <SafeAreaFrameContext.Provider value={frame}>
+                  <SafeAreaInsetsContext.Provider value={insets}>
+                    {content}
+                  </SafeAreaInsetsContext.Provider>
+                </SafeAreaFrameContext.Provider>
+              </SafeAreaProvider>
+            </RewardsProvider>
           </CartProvider>
         </AuthProvider>
       </ThemeProvider>
@@ -156,7 +171,9 @@ export default function RootLayout() {
     <ThemeProvider>
       <AuthProvider>
         <CartProvider>
-          <SafeAreaProvider initialMetrics={providerInitialMetrics}>{content}</SafeAreaProvider>
+          <RewardsProvider>
+            <SafeAreaProvider initialMetrics={providerInitialMetrics}>{content}</SafeAreaProvider>
+          </RewardsProvider>
         </CartProvider>
       </AuthProvider>
     </ThemeProvider>
