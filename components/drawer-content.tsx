@@ -73,6 +73,7 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
           label: colorScheme === "dark" ? "Mode Clair" : "Mode Sombre",
           onPress: () => setColorScheme(colorScheme === "dark" ? "light" : "dark"),
         },
+        { icon: "bell.fill" as const, label: "Notifications", onPress: () => navigate("/notification-settings") },
         { icon: "gearshape.fill" as const, label: "Paramètres", onPress: () => {} },
       ],
     },
@@ -227,7 +228,7 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
 
         {/* Version */}
         <Text style={[styles.version, { color: colors.muted }]}>
-          TicketByLamako v2.4.0
+          TicketByLamako v2.5.0
         </Text>
       </ScrollView>
     </View>

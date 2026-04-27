@@ -169,3 +169,22 @@
 - [x] Push notification handler (foreground display, response listener, event deep link)
 - [x] Notification preferences storage (AsyncStorage)
 - [x] Event reminder scheduling (local notification 1 hour before event)
+
+## V2.5 - Bug Fixes & Improvements
+
+### Bug Fixes
+- [x] Fix seating chart WebView - now loads tc_seat_charts page directly with CSS injection to hide theme chrome
+- [x] Fix profile icon (top right) - now navigates to profile screen instead of opening drawer
+- [x] Fix orders detail - full professional order detail screen with status, payment, billing, all tickets
+- [x] Fix ticket detail - full info with real QR code (react-native-qrcode-svg), event info, owner info
+- [x] Fix ticket detail QR code - uses Tickera ticket code as QR data (same format as email/PDF tickets)
+- [x] Fix order tickets - now shows ALL tickets individually (extracted from tc_cart_info + API fallback)
+
+### New Features & Improvements
+- [x] Add LamakoRewards info section at bottom of home screen (program description, tiers, CTA)
+- [x] Add notification settings screen (toggle new events, orders, reminders, clear scheduled)
+- [x] Add favorite buttons on shop product grid
+- [x] Add notification settings link in drawer menu
+- [x] WordPress REST API plugin for ticket instances (lamako-mobile-api.php)
+- [x] Order detail screen with dedicated route /order/[id]
+- [x] extractTicketsFromOrder utility for parsing tc_cart_info meta data

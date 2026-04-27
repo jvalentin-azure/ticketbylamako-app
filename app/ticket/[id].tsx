@@ -1,107 +1,318 @@
-import { useEffect, useState } from "react";
-import { ScrollView, Text, View, TouchableOpacity, ActivityIndicator } from "react-native";
+import { useEffect, useState, useRef } from "react";
+import { ScrollView, Text, View, TouchableOpacity, ActivityIndicator, StyleSheet, Dimensions, Platform, Share } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { getOrder, type WCOrder } from "@/lib/api/woocommerce";
-import { formatAriary, formatDateTime } from "@/lib/format";
-import Svg, { Rect } from "react-native-svg";
+import { getOrder, getOrderTickets, extractTicketsFromOrder, type WCOrder, type TicketInstance } from "@/lib/api/woocommerce";
+import { formatAriary, formatDate, formatDateTime, decodeHtmlEntities } from "@/lib/format";
+import QRCode from "react-native-qrcode-svg";
 
-// Simple QR-like visual (actual QR would need a library)
-function QRPlaceholder({ value, size = 200, color }: { value: string; size?: number; color: string }) {
-  // Generate a deterministic pattern from the ticket code
-  const cells = 15;
-  const cellSize = size / cells;
-  const hash = value.split("").reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0);
-  const rects: { x: number; y: number }[] = [];
-  for (let r = 0; r < cells; r++) {
-    for (let c = 0; c < cells; c++) {
-      const seed = (hash + r * 31 + c * 17) & 0xffffffff;
-      if (seed % 3 !== 0 || r < 3 && c < 3 || r < 3 && c > cells - 4 || r > cells - 4 && c < 3) {
-        rects.push({ x: c * cellSize, y: r * cellSize });
-      }
-    }
-  }
+const { width: SCREEN_W } = Dimensions.get("window");
+
+const statusMap: Record<string, { label: string; color: string }> = {
+  completed: { label: "Validé", color: "#22C55E" },
+  processing: { label: "Actif", color: "#F59E0B" },
+  "on-hold": { label: "En attente", color: "#6366F1" },
+  pending: { label: "En attente", color: "#6366F1" },
+  cancelled: { label: "Annulé", color: "#EF4444" },
+  refunded: { label: "Remboursé", color: "#8B5CF6" },
+  failed: { label: "Échoué", color: "#EF4444" },
+};
+
+function TicketCard({ ticket, order, index, total, colors }: { ticket: TicketInstance; order: WCOrder; index: number; total: number; colors: any }) {
+  const st = statusMap[order.status] || { label: order.status, color: colors.muted };
+  const isValid = order.status === "completed" || order.status === "processing";
+  const qrValue = ticket.ticket_code;
+
+  const handleShare = async () => {
+    try {
+      await Share.share({
+        message: `Billet ${decodeHtmlEntities(ticket.product_name)}${ticket.seat_label ? ` - Siège ${ticket.seat_label}` : ""}\nCode: ${ticket.ticket_code}\nCommande #${order.id}`,
+      });
+    } catch {}
+  };
+
   return (
-    <View style={{ width: size, height: size, backgroundColor: "#fff", padding: 8, borderRadius: 12 }}>
-      <Svg width={size - 16} height={size - 16} viewBox={`0 0 ${size} ${size}`}>
-        {rects.map((r, i) => (
-          <Rect key={i} x={r.x} y={r.y} width={cellSize - 1} height={cellSize - 1} fill={color} />
-        ))}
-      </Svg>
+    <View style={[styles.ticketCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      {/* Ticket Header */}
+      <View style={[styles.ticketHeader, { backgroundColor: isValid ? colors.primary : colors.muted }]}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.ticketHeaderTitle} numberOfLines={2}>{decodeHtmlEntities(ticket.product_name)}</Text>
+          {ticket.event_name ? (
+            <Text style={styles.ticketHeaderSub}>{decodeHtmlEntities(ticket.event_name)}</Text>
+          ) : null}
+        </View>
+        {total > 1 && (
+          <View style={styles.ticketBadge}>
+            <Text style={styles.ticketBadgeText}>{index + 1}/{total}</Text>
+          </View>
+        )}
+      </View>
+
+      {/* QR Code Section */}
+      <View style={styles.qrSection}>
+        {isValid ? (
+          <>
+            <View style={styles.qrContainer}>
+              <QRCode
+                value={qrValue}
+                size={180}
+                backgroundColor="#fff"
+                color="#000"
+              />
+            </View>
+            <Text style={[styles.ticketCode, { color: colors.foreground }]}>{ticket.ticket_code}</Text>
+            <Text style={[styles.qrHint, { color: colors.muted }]}>Présentez ce QR code à l'entrée</Text>
+          </>
+        ) : (
+          <View style={styles.invalidQr}>
+            <IconSymbol name="xmark.circle.fill" size={48} color={colors.muted} />
+            <Text style={[styles.invalidText, { color: colors.muted }]}>Billet non valide</Text>
+            <Text style={[styles.invalidSub, { color: colors.muted }]}>Statut: {st.label}</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Dashed separator */}
+      <View style={[styles.dashedSep, { borderColor: colors.border }]} />
+
+      {/* Ticket Details */}
+      <View style={styles.detailsSection}>
+        {/* Seat info */}
+        {ticket.seat_label ? (
+          <View style={[styles.seatRow, { backgroundColor: "#663d17" + "12" }]}>
+            <IconSymbol name="mappin" size={16} color="#663d17" />
+            <Text style={[styles.seatLabel, { color: "#663d17" }]}>Siège {ticket.seat_label}</Text>
+          </View>
+        ) : null}
+
+        {/* Info grid */}
+        <View style={styles.infoGrid}>
+          <View style={styles.infoItem}>
+            <Text style={[styles.infoLabel, { color: colors.muted }]}>Commande</Text>
+            <Text style={[styles.infoValue, { color: colors.foreground }]}>#{order.number || order.id}</Text>
+          </View>
+          <View style={styles.infoItem}>
+            <Text style={[styles.infoLabel, { color: colors.muted }]}>Prix</Text>
+            <Text style={[styles.infoValue, { color: colors.foreground }]}>{formatAriary(String(ticket.price))}</Text>
+          </View>
+          <View style={styles.infoItem}>
+            <Text style={[styles.infoLabel, { color: colors.muted }]}>Date d'achat</Text>
+            <Text style={[styles.infoValue, { color: colors.foreground }]}>{formatDate(order.date_created)}</Text>
+          </View>
+          <View style={styles.infoItem}>
+            <Text style={[styles.infoLabel, { color: colors.muted }]}>Statut</Text>
+            <View style={[styles.statusPill, { backgroundColor: st.color + "15" }]}>
+              <Text style={[styles.statusPillText, { color: st.color }]}>{st.label}</Text>
+            </View>
+          </View>
+          {ticket.event_date ? (
+            <View style={styles.infoItem}>
+              <Text style={[styles.infoLabel, { color: colors.muted }]}>Date événement</Text>
+              <Text style={[styles.infoValue, { color: colors.foreground }]}>{ticket.event_date}</Text>
+            </View>
+          ) : null}
+          {ticket.event_location ? (
+            <View style={styles.infoItem}>
+              <Text style={[styles.infoLabel, { color: colors.muted }]}>Lieu</Text>
+              <Text style={[styles.infoValue, { color: colors.foreground }]}>{decodeHtmlEntities(ticket.event_location)}</Text>
+            </View>
+          ) : null}
+        </View>
+
+        {/* Attendee info */}
+        <View style={[styles.attendeeRow, { borderTopColor: colors.border }]}>
+          <IconSymbol name="person.fill" size={14} color={colors.muted} />
+          <Text style={[styles.attendeeName, { color: colors.foreground }]}>
+            {order.billing.first_name} {order.billing.last_name}
+          </Text>
+          <Text style={[styles.attendeeEmail, { color: colors.muted }]}>{order.billing.email}</Text>
+        </View>
+      </View>
+
+      {/* Share button */}
+      <TouchableOpacity onPress={handleShare} style={[styles.shareBtn, { borderTopColor: colors.border }]} activeOpacity={0.7}>
+        <IconSymbol name="square.and.arrow.up" size={16} color={colors.primary} />
+        <Text style={[styles.shareBtnText, { color: colors.primary }]}>Partager ce billet</Text>
+      </TouchableOpacity>
     </View>
   );
 }
 
 export default function TicketDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, ticketCode } = useLocalSearchParams<{ id: string; ticketCode?: string }>();
   const colors = useColors();
   const router = useRouter();
   const [order, setOrder] = useState<WCOrder | null>(null);
+  const [tickets, setTickets] = useState<TicketInstance[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     if (!id) return;
-    getOrder(Number(id)).then(o => { setOrder(o); setLoading(false); }).catch(() => setLoading(false));
+    
+    async function loadData() {
+      try {
+        const orderData = await getOrder(Number(id));
+        setOrder(orderData);
+        
+        // Try the mobile API first for real ticket codes
+        const apiTickets = await getOrderTickets(Number(id));
+        if (apiTickets && apiTickets.tickets.length > 0) {
+          setTickets(apiTickets.tickets);
+        } else {
+          // Fallback: extract from order meta
+          const extracted = extractTicketsFromOrder(orderData);
+          setTickets(extracted);
+        }
+      } catch {
+        // Minimal fallback
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    loadData();
   }, [id]);
 
-  if (loading) return <ScreenContainer className="flex-1 items-center justify-center"><ActivityIndicator size="large" color={colors.primary} /></ScreenContainer>;
-  if (!order) return <ScreenContainer className="flex-1 items-center justify-center"><Text style={{ color: colors.muted }}>Commande introuvable</Text></ScreenContainer>;
+  // If a specific ticket code was requested, scroll to it
+  useEffect(() => {
+    if (ticketCode && tickets.length > 0) {
+      const idx = tickets.findIndex(t => t.ticket_code === ticketCode);
+      if (idx >= 0) {
+        setActiveIndex(idx);
+        setTimeout(() => {
+          scrollRef.current?.scrollTo({ x: idx * (SCREEN_W - 32), animated: true });
+        }, 300);
+      }
+    }
+  }, [ticketCode, tickets]);
+
+  if (loading) {
+    return (
+      <ScreenContainer className="flex-1 items-center justify-center">
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={{ color: colors.muted, marginTop: 12, fontFamily: "Raleway-Medium" }}>Chargement des billets...</Text>
+      </ScreenContainer>
+    );
+  }
+
+  if (!order) {
+    return (
+      <ScreenContainer className="flex-1 items-center justify-center">
+        <IconSymbol name="ticket.fill" size={48} color={colors.muted} />
+        <Text style={{ color: colors.muted, fontSize: 16, marginTop: 12, fontFamily: "Raleway-Medium" }}>Commande introuvable</Text>
+        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 16 }}>
+          <Text style={{ color: colors.primary, fontFamily: "Raleway-SemiBold" }}>Retour</Text>
+        </TouchableOpacity>
+      </ScreenContainer>
+    );
+  }
+
+  if (tickets.length === 0) {
+    return (
+      <ScreenContainer>
+        <View style={[styles.header, { borderBottomColor: colors.border }]}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Billets</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <IconSymbol name="ticket.fill" size={48} color={colors.muted} />
+          <Text style={{ color: colors.muted, fontSize: 16, marginTop: 12, fontFamily: "Raleway-Medium", textAlign: "center" }}>
+            Aucun billet trouvé pour cette commande
+          </Text>
+        </View>
+      </ScreenContainer>
+    );
+  }
 
   return (
     <ScreenContainer edges={["top", "left", "right"]}>
-      <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12 }}>
-        <TouchableOpacity onPress={() => router.back()}>
+      {/* Header */}
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
         </TouchableOpacity>
-        <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "700", marginLeft: 12 }}>Billet #{order.id}</Text>
+        <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+          {tickets.length === 1 ? "Mon Billet" : `Mes Billets (${tickets.length})`}
+        </Text>
+        <View style={{ width: 40 }} />
       </View>
-      <ScrollView contentContainerStyle={{ padding: 16 }}>
-        {order.line_items.map((item, idx) => {
-          const code = item.meta_data?.find((m: any) => m.key === "Ticket Code" || m.key === "_tc_ticket_code")?.value || `TKT-${order.id}-${item.id}`;
-          const ticketType = item.meta_data?.find((m: any) => m.key === "Ticket Type" || m.key === "_tc_ticket_type_name")?.value || "Standard";
-          const seat = item.meta_data?.find((m: any) => m.key === "Seat" || m.key === "_tc_seat_label")?.value;
 
-          return (
-            <View key={idx} style={{ backgroundColor: colors.surface, borderRadius: 20, borderWidth: 1, borderColor: colors.border, marginBottom: 16, overflow: "hidden" }}>
-              {/* Ticket Header */}
-              <View style={{ backgroundColor: colors.primary, padding: 16 }}>
-                <Text style={{ color: "#fff", fontSize: 18, fontWeight: "700" }} numberOfLines={2}>{item.name}</Text>
-                <Text style={{ color: "rgba(255,255,255,0.8)", fontSize: 13, marginTop: 4 }}>{ticketType}{seat ? ` - Siège ${seat}` : ""}</Text>
-              </View>
+      {/* Ticket pagination dots */}
+      {tickets.length > 1 && (
+        <View style={styles.dotsRow}>
+          {tickets.map((_, i) => (
+            <View key={i} style={[styles.dot, { backgroundColor: i === activeIndex ? colors.primary : colors.border }]} />
+          ))}
+        </View>
+      )}
 
-              {/* QR Code */}
-              <View style={{ alignItems: "center", paddingVertical: 24 }}>
-                <QRPlaceholder value={code} size={200} color={colors.foreground} />
-                <Text style={{ color: colors.foreground, fontSize: 16, fontWeight: "700", marginTop: 12, letterSpacing: 2 }}>{code}</Text>
-              </View>
-
-              {/* Ticket Info */}
-              <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
-                <View style={{ borderTopWidth: 1, borderTopColor: colors.border, borderStyle: "dashed", paddingTop: 16 }}>
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
-                    <Text style={{ color: colors.muted, fontSize: 12 }}>Date d'achat</Text>
-                    <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "600" }}>{formatDateTime(order.date_created)}</Text>
-                  </View>
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
-                    <Text style={{ color: colors.muted, fontSize: 12 }}>Montant</Text>
-                    <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "600" }}>{formatAriary(item.total)}</Text>
-                  </View>
-                  <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                    <Text style={{ color: colors.muted, fontSize: 12 }}>Statut</Text>
-                    <View style={{ backgroundColor: order.status === "completed" ? colors.success + "20" : colors.warning + "20", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
-                      <Text style={{ color: order.status === "completed" ? colors.success : colors.warning, fontSize: 12, fontWeight: "600" }}>
-                        {order.status === "completed" ? "Validé" : order.status === "processing" ? "Actif" : order.status}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-            </View>
-          );
-        })}
-      </ScrollView>
+      {/* Tickets horizontal scroll */}
+      {tickets.length === 1 ? (
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+          <TicketCard ticket={tickets[0]} order={order} index={0} total={1} colors={colors} />
+        </ScrollView>
+      ) : (
+        <ScrollView
+          ref={scrollRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={(e) => {
+            const idx = Math.round(e.nativeEvent.contentOffset.x / (SCREEN_W - 32));
+            setActiveIndex(Math.max(0, Math.min(idx, tickets.length - 1)));
+          }}
+          contentContainerStyle={{ paddingVertical: 16 }}
+        >
+          {tickets.map((ticket, i) => (
+            <ScrollView key={i} style={{ width: SCREEN_W - 32, marginHorizontal: 16 }} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+              <TicketCard ticket={ticket} order={order} index={i} total={tickets.length} colors={colors} />
+            </ScrollView>
+          ))}
+        </ScrollView>
+      )}
     </ScreenContainer>
   );
 }
+
+const styles = StyleSheet.create({
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
+  backBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
+  headerTitle: { fontSize: 18, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  dotsRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 6, paddingVertical: 10 },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  ticketCard: { borderRadius: 20, borderWidth: 1, overflow: "hidden" },
+  ticketHeader: { padding: 20, paddingBottom: 16, flexDirection: "row", alignItems: "flex-start" },
+  ticketHeaderTitle: { color: "#fff", fontSize: 18, fontWeight: "700", fontFamily: "Raleway-Bold", flex: 1 },
+  ticketHeaderSub: { color: "rgba(255,255,255,0.8)", fontSize: 13, marginTop: 4, fontFamily: "Raleway-Medium" },
+  ticketBadge: { backgroundColor: "rgba(255,255,255,0.25)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginLeft: 8 },
+  ticketBadgeText: { color: "#fff", fontSize: 12, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  qrSection: { alignItems: "center", paddingVertical: 24, paddingHorizontal: 16 },
+  qrContainer: { padding: 12, backgroundColor: "#fff", borderRadius: 16, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3 },
+  ticketCode: { fontSize: 16, fontWeight: "700", marginTop: 14, letterSpacing: 1.5, fontFamily: "Raleway-Bold" },
+  qrHint: { fontSize: 12, marginTop: 6, fontFamily: "Raleway-Regular" },
+  invalidQr: { alignItems: "center", paddingVertical: 20 },
+  invalidText: { fontSize: 16, fontWeight: "600", marginTop: 12, fontFamily: "Raleway-SemiBold" },
+  invalidSub: { fontSize: 13, marginTop: 4, fontFamily: "Raleway-Regular" },
+  dashedSep: { borderTopWidth: 1, borderStyle: "dashed", marginHorizontal: 16 },
+  detailsSection: { padding: 16 },
+  seatRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, marginBottom: 14 },
+  seatLabel: { fontSize: 15, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  infoGrid: { gap: 10 },
+  infoItem: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  infoLabel: { fontSize: 13, fontFamily: "Raleway-Medium" },
+  infoValue: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold", textAlign: "right", flex: 1, marginLeft: 12 },
+  statusPill: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 8 },
+  statusPillText: { fontSize: 12, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  attendeeRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 14, paddingTop: 14, borderTopWidth: 1, flexWrap: "wrap" },
+  attendeeName: { fontSize: 14, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  attendeeEmail: { fontSize: 12, fontFamily: "Raleway-Regular" },
+  shareBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 14, borderTopWidth: 1 },
+  shareBtnText: { fontSize: 14, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+});

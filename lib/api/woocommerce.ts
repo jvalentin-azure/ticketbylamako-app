@@ -28,6 +28,145 @@ async function wpFetch<T>(endpoint: string, params: Record<string, string> = {})
   return res.json();
 }
 
+function mobileApiUrl(endpoint: string, params: Record<string, string> = {}): string {
+  const url = new URL(`${SITE_URL}/wp-json/lamako-mobile/v1/${endpoint}`);
+  url.searchParams.set("consumer_key", CK);
+  url.searchParams.set("consumer_secret", CS);
+  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+  return url.toString();
+}
+
+async function mobileApiFetch<T>(endpoint: string, params: Record<string, string> = {}): Promise<T> {
+  const res = await fetch(mobileApiUrl(endpoint, params));
+  if (!res.ok) throw new Error(`Mobile API error: ${res.status}`);
+  return res.json();
+}
+
+// ---- Ticket Instance Types ----
+
+export interface TicketInstance {
+  instance_id: number;
+  ticket_code: string;
+  product_name: string;
+  product_id: number;
+  price: number;
+  seat_label: string;
+  seat_id: string;
+  event_id: number;
+  event_name: string;
+  event_date: string;
+  event_location: string;
+}
+
+export interface OrderTicketsResponse {
+  order_id: number;
+  order_status: string;
+  order_date: string;
+  billing_name: string;
+  billing_email: string;
+  total: string;
+  tickets: TicketInstance[];
+}
+
+/**
+ * Get ticket instances for a WooCommerce order.
+ * Uses the lamako-mobile REST endpoint (requires lamako-mobile-api.php mu-plugin).
+ * Falls back to extracting info from tc_cart_info if the endpoint is not available.
+ */
+export async function getOrderTickets(orderId: number): Promise<OrderTicketsResponse | null> {
+  try {
+    return await mobileApiFetch<OrderTicketsResponse>(`order-tickets/${orderId}`);
+  } catch {
+    // Fallback: extract from WC order meta
+    return null;
+  }
+}
+
+/**
+ * Extract ticket info from WC order tc_cart_info meta (fallback when mobile API is unavailable).
+ * Returns individual ticket entries with seat info.
+ */
+export function extractTicketsFromOrder(order: WCOrder): TicketInstance[] {
+  const tickets: TicketInstance[] = [];
+  const cartInfo = order.meta_data?.find(m => m.key === "tc_cart_info")?.value;
+  const cartContents = order.meta_data?.find(m => m.key === "tc_cart_contents")?.value;
+  
+  if (!cartInfo || typeof cartInfo !== "object") {
+    // No Tickera data - create basic entries from line items
+    order.line_items.forEach(li => {
+      for (let i = 0; i < li.quantity; i++) {
+        tickets.push({
+          instance_id: 0,
+          ticket_code: `ORD-${order.id}-${li.id}-${i + 1}`,
+          product_name: li.name,
+          product_id: li.product_id,
+          price: parseFloat(li.total) / li.quantity,
+          seat_label: "",
+          seat_id: "",
+          event_id: 0,
+          event_name: "",
+          event_date: "",
+          event_location: "",
+        });
+      }
+    });
+    return tickets;
+  }
+  
+  const ownerData = (cartInfo as any).owner_data;
+  if (!ownerData || typeof ownerData !== "object") {
+    // Has cart_info but no owner_data
+    order.line_items.forEach(li => {
+      for (let i = 0; i < li.quantity; i++) {
+        tickets.push({
+          instance_id: 0,
+          ticket_code: `ORD-${order.id}-${li.id}-${i + 1}`,
+          product_name: li.name,
+          product_id: li.product_id,
+          price: parseFloat(li.total) / li.quantity,
+          seat_label: "",
+          seat_id: "",
+          event_id: 0,
+          event_name: "",
+          event_date: "",
+          event_location: "",
+        });
+      }
+    });
+    return tickets;
+  }
+  
+  // Extract from owner_data structure
+  const seatLabels = ownerData.seat_label_post_meta || {};
+  const seatIds = ownerData.seat_id_post_meta || {};
+  const ticketTypeIds = ownerData.ticket_type_id_post_meta || {};
+  
+  order.line_items.forEach(li => {
+    const typeId = String(li.product_id);
+    const seats = seatLabels[typeId] || [];
+    const seatIdList = seatIds[typeId] || [];
+    const pricePerTicket = parseFloat(li.total) / li.quantity;
+    
+    for (let i = 0; i < li.quantity; i++) {
+      tickets.push({
+        instance_id: 0,
+        ticket_code: `ORD-${order.id}-${li.product_id}-${i + 1}`,
+        product_name: li.name,
+        product_id: li.product_id,
+        price: pricePerTicket,
+        seat_label: seats[i] || "",
+        seat_id: seatIdList[i] || "",
+        event_id: 0,
+        event_name: "",
+        event_date: "",
+        event_location: "",
+      });
+    }
+  });
+  
+  return tickets;
+}
+
 // ---- Types ----
 
 export interface WCProduct {
@@ -54,11 +193,23 @@ export interface WCOrder {
   id: number;
   status: string;
   total: string;
+  subtotal?: string;
+  total_tax?: string;
+  discount_total?: string;
+  shipping_total?: string;
   currency: string;
   date_created: string;
-  billing: { first_name: string; last_name: string; email: string; phone: string };
-  line_items: { id: number; name: string; quantity: number; total: string; product_id: number; meta_data: { key: string; value: any }[] }[];
+  date_completed?: string;
+  date_paid?: string;
+  payment_method?: string;
+  payment_method_title?: string;
+  transaction_id?: string;
+  customer_note?: string;
+  billing: { first_name: string; last_name: string; email: string; phone: string; address_1?: string; city?: string; country?: string };
+  shipping?: { first_name: string; last_name: string; address_1?: string; city?: string; country?: string };
+  line_items: { id: number; name: string; quantity: number; total: string; subtotal?: string; price?: number; product_id: number; sku?: string; meta_data: { key: string; value: any }[] }[];
   meta_data: { key: string; value: any }[];
+  number?: string;
 }
 
 export interface WCCategory {
@@ -275,6 +426,37 @@ export async function getEventsWithTickets(): Promise<TCEvent[]> {
       hasSeatingChart: tickets.some(t => t.usesSeating),
     };
   });
+}
+
+/**
+ * Get the seating chart embed URL for an event.
+ * The approach: scrape the event page to find the data-seating-map-id,
+ * then resolve the tc_seat_charts permalink via ?post_type=tc_seat_charts&p=ID.
+ * The resulting URL is loaded in a WebView with injected CSS to hide theme chrome.
+ */
+export async function getSeatingChartUrl(eventId: number, eventSlug?: string, eventLink?: string): Promise<string | null> {
+  try {
+    // First, fetch the event page to get the seating map ID
+    const eventUrl = eventLink || `${SITE_URL}/tc-events/${eventSlug || eventId}/`;
+    const res = await fetch(eventUrl);
+    if (!res.ok) return null;
+    const html = await res.text();
+    
+    // Extract the seating map ID from data-seating-map-id attribute
+    const match = html.match(/data-seating-map-id="(\d+)"/);
+    if (!match) return null;
+    const chartId = match[1];
+    
+    // Resolve the tc_seat_charts permalink by fetching with post_type + p params
+    // This will redirect to the actual permalink
+    const chartRes = await fetch(`${SITE_URL}/?post_type=tc_seat_charts&p=${chartId}`, { redirect: 'follow' });
+    if (!chartRes.ok) return null;
+    
+    // The final URL after redirect is the permalink
+    return chartRes.url;
+  } catch {
+    return null;
+  }
 }
 
 // ---- Shop Products (non-ticket WC products) ----

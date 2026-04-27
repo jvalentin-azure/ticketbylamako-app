@@ -73,8 +73,8 @@ export function AppHeader({ onMenuPress }: AppHeaderProps) {
           <TouchableOpacity
             onPress={() => {
               if (isAuthenticated) {
-                // Open drawer for profile
-                onMenuPress?.();
+                // Navigate to profile screen
+                router.push("/(tabs)/profile" as any);
               } else {
                 router.push("/(auth)/login" as any);
               }

@@ -7,6 +7,7 @@ import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { getShopProducts, getShopCategories, type WCProduct, type WCCategory } from "@/lib/api/woocommerce";
 import { formatAriary, decodeHtmlEntities } from "@/lib/format";
+import { useFavorites } from "@/lib/favorites-provider";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const CARD_W = (SCREEN_W - 48) / 2;
@@ -17,6 +18,7 @@ const BOUTIQUE_SLUGS = ["boutique-goodies", "boutique-livres-supports", "boutiqu
 export default function ShopScreen() {
   const colors = useColors();
   const router = useRouter();
+  const { isFavorite, toggleFavorite } = useFavorites();
   const [products, setProducts] = useState<WCProduct[]>([]);
   const [categories, setCategories] = useState<WCCategory[]>([]);
   const [shopCats, setShopCats] = useState<{ id: number; name: string }[]>([]);
@@ -65,7 +67,15 @@ export default function ShopScreen() {
       onPress={() => router.push(`/product/${item.id}` as any)}
       style={[styles.productCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
     >
-      <Image source={{ uri: item.images?.[0]?.src }} style={{ width: CARD_W, height: CARD_W }} contentFit="cover" />
+      <View style={{ position: "relative" }}>
+        <Image source={{ uri: item.images?.[0]?.src }} style={{ width: CARD_W, height: CARD_W }} contentFit="cover" />
+        <TouchableOpacity
+          onPress={() => toggleFavorite({ id: item.id, type: "product", name: decodeHtmlEntities(item.name), image: item.images?.[0]?.src })}
+          style={styles.favBtn}
+        >
+          <IconSymbol name={isFavorite(item.id, "product") ? "heart.fill" : "heart"} size={16} color={isFavorite(item.id, "product") ? "#EF4444" : "#fff"} />
+        </TouchableOpacity>
+      </View>
       <View style={styles.productBody}>
         <Text style={[styles.productName, { color: colors.foreground }]} numberOfLines={2}>{decodeHtmlEntities(item.name)}</Text>
         <Text style={[styles.productCat, { color: colors.muted }]} numberOfLines={1}>
@@ -162,4 +172,5 @@ const styles = StyleSheet.create({
   emptyContainer: { alignItems: "center", paddingTop: 60 },
   emptyText: { fontSize: 15, marginTop: 12, fontFamily: "Raleway-Medium" },
   emptySubText: { fontSize: 13, marginTop: 4, fontFamily: "Raleway-Regular" },
+  favBtn: { position: "absolute", top: 8, right: 8, width: 30, height: 30, borderRadius: 15, backgroundColor: "rgba(0,0,0,0.4)", alignItems: "center", justifyContent: "center" },
 });

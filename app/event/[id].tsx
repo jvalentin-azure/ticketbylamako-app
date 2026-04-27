@@ -6,7 +6,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useCart } from "@/lib/cart-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { getTCEvent, getEventTickets, type TCEvent, type TicketType } from "@/lib/api/woocommerce";
+import { getTCEvent, getEventTickets, getSeatingChartUrl, type TCEvent, type TicketType } from "@/lib/api/woocommerce";
 import { useFavorites } from "@/lib/favorites-provider";
 import { formatAriary, formatDate, stripHtml, decodeHtmlEntities } from "@/lib/format";
 
@@ -32,6 +32,8 @@ export default function EventDetailScreen() {
   const [selectedTicket, setSelectedTicket] = useState<TicketType | null>(null);
   const [qty, setQty] = useState(1);
   const [showSeatingChart, setShowSeatingChart] = useState(false);
+  const [seatingChartUrl, setSeatingChartUrl] = useState<string | null>(null);
+  const [seatingLoading, setSeatingLoading] = useState(false);
   const [galleryIndex, setGalleryIndex] = useState(0);
   const { isFavorite, toggleFavorite } = useFavorites();
 
@@ -93,70 +95,95 @@ export default function EventDetailScreen() {
     router.back();
   };
 
-  const handleOpenSeatingChart = () => {
-    if (selectedTicket?.usesSeating) {
-      setShowSeatingChart(true);
+  const handleOpenSeatingChart = async () => {
+    if (!selectedTicket?.usesSeating || !event) return;
+    setSeatingLoading(true);
+    try {
+      const url = await getSeatingChartUrl(Number(id), event.slug, event.link);
+      if (url) {
+        setSeatingChartUrl(url);
+        setShowSeatingChart(true);
+      } else {
+        // Fallback: open event page directly in browser
+        const fallbackUrl = event.link || `${SITE_URL}/tc-events/${event.slug}/`;
+        Linking.openURL(fallbackUrl);
+      }
+    } catch {
+      const fallbackUrl = event.link || `${SITE_URL}/tc-events/${event.slug}/`;
+      Linking.openURL(fallbackUrl);
+    } finally {
+      setSeatingLoading(false);
     }
   };
 
-  // Seating Chart WebView - loads the actual event page and auto-opens the Tickera seating popup
-  if (showSeatingChart && event) {
-    // The seating chart is a JS popup on the event page itself, not a separate URL
-    const seatingUrl = event.link || `${SITE_URL}/tc-events/${event.slug}/`;
-    
-    // JavaScript to inject: hide page chrome and auto-click the seating map button using jQuery
+  // Seating Chart WebView - loads the tc_seat_charts page directly (same approach as POS plugin)
+  if (showSeatingChart && event && seatingChartUrl) {
+    // The tc_seat_charts page already has the seating chart button, Firebase, jQuery, and all Tickera JS.
+    // We inject CSS identical to the POS embed to hide theme chrome and style the seating button.
     const injectedJS = `
       (function() {
         var attempts = 0;
-        var maxAttempts = 30; // Try for up to 15 seconds
+        var maxAttempts = 40;
         
-        function hidePageChrome() {
-          // Hide everything except the seating chart popup
-          var selectors = [
-            'header', '.site-header', 'nav:not(.tc-nav)',
-            '#wpadminbar', 'footer', '.site-footer',
-            '[class*="whatsapp"]', '.joinchat', '[id*="whatsapp"]',
-            '[class*="cookie"]', '[class*="consent"]',
-            '.wc-block-components-drawer__screen-overlay'
-          ];
-          selectors.forEach(function(sel) {
-            var els = document.querySelectorAll(sel);
-            els.forEach(function(el) { el.style.display = 'none'; });
-          });
+        function applyEmbedStyles() {
+          // Inject the same CSS as the POS lpos_embed=1 mode
+          var style = document.createElement('style');
+          style.textContent = '\n' +
+            'body { margin: 0 !important; padding: 0 !important; background: #f8fafc !important; overflow-x: hidden; }\n' +
+            'header, .site-header, .page-header, #masthead, .header-wrapper, ' +
+            'footer, .site-footer, .page-footer, #colophon, .footer-wrapper, ' +
+            'nav, .navigation, .nav-links, .breadcrumbs, .breadcrumb, ' +
+            '.sidebar, #sidebar, aside, ' +
+            '.woocommerce-breadcrumb, #wpadminbar, ' +
+            '.header-main, .header-top, .header-bottom, ' +
+            '.footer-1, .footer-2, .absolute-footer, ' +
+            '.page-title-inner, .page-title, ' +
+            '.comments-area, #comments, ' +
+            '[class*="whatsapp"], .joinchat, [id*="whatsapp"], ' +
+            '[class*="cookie"], [class*="consent"], ' +
+            '#fkcart-floating-toggler, .fkcart-main-wrapper, ' +
+            '.tc-checkout-bar, .tc-seatchart-subtotal ' +
+            '{ display: none !important; }\n' +
+            '.entry-content, .page-content, .post-content, ' +
+            'article, main, #main, #content, .content-area, ' +
+            '.col-inner, .large-12, .row, .row-main ' +
+            '{ width: 100% !important; max-width: 100% !important; padding: 0 !important; margin: 0 !important; }\n' +
+            '.tc_seating_map_button { ' +
+            '  display: block !important; margin: 20px auto !important; padding: 16px 40px !important; ' +
+            '  font-size: 18px !important; font-weight: 700 !important; ' +
+            '  background: #663d17 !important; color: #fff !important; ' +
+            '  border: none !important; border-radius: 14px !important; ' +
+            '  cursor: pointer !important; text-align: center !important; ' +
+            '  width: 90% !important; max-width: 400px !important; box-sizing: border-box !important; ' +
+            '  box-shadow: 0 4px 14px rgba(102, 61, 23, 0.3) !important; ' +
+            '}\n' +
+            '.tc_seating_map { width: 100% !important; max-width: 100% !important; }\n' +
+            '.tc-seatchart-cart-info { display: block !important; }\n' +
+            '.tc_in_cart { display: block !important; text-align: center; padding: 8px; font-weight: 600; }\n' +
+            '.ui-dialog { z-index: 99999 !important; }\n' +
+            '.ui-widget-overlay { z-index: 99998 !important; }\n';
+          document.head.appendChild(style);
         }
         
-        function tryClickSeatingButton() {
+        function setup() {
           attempts++;
           var btn = document.querySelector('.tc_seating_map_button');
-          
-          if (btn && typeof jQuery !== 'undefined') {
-            hidePageChrome();
-            // Use jQuery to trigger the click - Tickera uses jQuery event handlers
-            jQuery(btn).trigger('click');
-            // Keep hiding chrome after popup opens
-            setTimeout(hidePageChrome, 1000);
-            setTimeout(hidePageChrome, 3000);
-          } else if (btn) {
-            // jQuery not loaded yet, try native click + dispatchEvent
-            hidePageChrome();
-            var clickEvent = new MouseEvent('click', {
-              bubbles: true, cancelable: true, view: window
-            });
-            btn.dispatchEvent(clickEvent);
-            setTimeout(hidePageChrome, 1000);
+          if (btn) {
+            applyEmbedStyles();
+            btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
           } else if (attempts < maxAttempts) {
-            setTimeout(tryClickSeatingButton, 500);
+            setTimeout(setup, 500);
+          } else {
+            // Even without button, apply styles
+            applyEmbedStyles();
           }
         }
         
-        // Wait for page to be fully loaded including all scripts
         if (document.readyState === 'complete') {
-          // Page already loaded, but Tickera scripts may still be initializing
-          setTimeout(tryClickSeatingButton, 2000);
+          setTimeout(setup, 1000);
         } else {
           window.addEventListener('load', function() {
-            // Give Tickera scripts extra time to initialize after page load
-            setTimeout(tryClickSeatingButton, 2000);
+            setTimeout(setup, 1000);
           });
         }
       })();
@@ -179,7 +206,7 @@ export default function EventDetailScreen() {
               Le plan de salle interactif n'est pas disponible sur le web.{"\n"}Ouvrez l'app sur votre téléphone pour sélectionner votre siège.
             </Text>
             <TouchableOpacity
-              onPress={() => Linking.openURL(seatingUrl)}
+              onPress={() => Linking.openURL(seatingChartUrl!)}
               style={[styles.webFallbackBtn, { backgroundColor: colors.primary }]}
             >
               <Text style={styles.webFallbackBtnText}>Ouvrir sur le site</Text>
@@ -210,26 +237,38 @@ export default function EventDetailScreen() {
           <View style={{ width: 80 }} />
         </View>
         <WebViewComponent
-          source={{ uri: seatingUrl }}
+          source={{ uri: seatingChartUrl! }}
           style={{ flex: 1 }}
           javaScriptEnabled
           domStorageEnabled
           startInLoadingState
           sharedCookiesEnabled
+          thirdPartyCookiesEnabled
+          allowsInlineMediaPlayback
+          mixedContentMode="compatibility"
+          userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
           injectedJavaScript={injectedJS}
           renderLoading={() => (
-            <View style={{ flex: 1, alignItems: "center", justifyContent: "center", position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}>
+            <View style={{ flex: 1, alignItems: "center", justifyContent: "center", position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "#fff" }}>
               <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={{ marginTop: 10, color: colors.muted, fontFamily: "Raleway-Medium" }}>Chargement du plan de salle...</Text>
+              <Text style={{ marginTop: 12, color: colors.muted, fontFamily: "Raleway-Medium", textAlign: "center" }}>{"Chargement du plan de salle...\nAppuyez sur le bouton pour choisir votre siège"}</Text>
             </View>
           )}
           onNavigationStateChange={(navState: any) => {
-            // If user completes checkout from the seating chart, detect it
             const url = navState.url || "";
+            // If user completes checkout, go to tickets
             if (url.includes("order-received") || url.includes("commande-recue")) {
               setShowSeatingChart(false);
               router.replace("/(tabs)/tickets");
             }
+            // If user goes to cart/checkout, let them continue in WebView
+          }}
+          onShouldStartLoadWithRequest={(request: any) => {
+            // Allow all navigation within the site
+            const url = request.url || "";
+            if (url.startsWith(SITE_URL) || url.startsWith("about:") || url.startsWith("data:")) return true;
+            // Block external navigation
+            return false;
           }}
         />
       </ScreenContainer>
@@ -400,10 +439,15 @@ export default function EventDetailScreen() {
           {selectedTicket?.usesSeating && (
             <TouchableOpacity
               onPress={handleOpenSeatingChart}
-              style={[styles.seatingChartBtn, { backgroundColor: "#663d17" }]}
+              disabled={seatingLoading}
+              style={[styles.seatingChartBtn, { backgroundColor: "#663d17", opacity: seatingLoading ? 0.7 : 1 }]}
             >
-              <IconSymbol name="mappin" size={18} color="#fff" />
-              <Text style={styles.seatingChartBtnText}>Voir le plan de salle & choisir mon siège</Text>
+              {seatingLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <IconSymbol name="mappin" size={18} color="#fff" />
+              )}
+              <Text style={styles.seatingChartBtnText}>{seatingLoading ? "Chargement..." : "Voir le plan de salle & choisir mon siège"}</Text>
             </TouchableOpacity>
           )}
 
@@ -438,10 +482,15 @@ export default function EventDetailScreen() {
         {selectedTicket?.usesSeating ? (
           <TouchableOpacity
             onPress={handleOpenSeatingChart}
-            style={[styles.ctaButton, { backgroundColor: "#663d17" }]}
+            disabled={seatingLoading}
+            style={[styles.ctaButton, { backgroundColor: "#663d17", opacity: seatingLoading ? 0.7 : 1 }]}
           >
-            <IconSymbol name="mappin" size={20} color="#fff" />
-            <Text style={styles.ctaButtonText}>Choisir mon siège</Text>
+            {seatingLoading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <IconSymbol name="mappin" size={20} color="#fff" />
+            )}
+            <Text style={styles.ctaButtonText}>{seatingLoading ? "Chargement du plan..." : "Choisir mon siège"}</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
