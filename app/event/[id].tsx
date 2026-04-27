@@ -97,9 +97,45 @@ export default function EventDetailScreen() {
     }
   };
 
-  // Seating Chart WebView
-  if (showSeatingChart && selectedTicket) {
-    const seatingUrl = `${SITE_URL}/?tc_seat_chart=${id}&ticket_type_id=${selectedTicket.id}`;
+  // Seating Chart WebView - loads the actual event page and auto-opens the Tickera seating popup
+  if (showSeatingChart && event) {
+    // The seating chart is a JS popup on the event page itself, not a separate URL
+    const seatingUrl = event.link || `${SITE_URL}/tc-events/${event.slug}/`;
+    
+    // JavaScript to inject: hide the page content and auto-click the seating map button
+    const injectedJS = `
+      (function() {
+        // Wait for the page to fully load, then auto-click the seating map button
+        function tryClickSeatingButton() {
+          var btn = document.querySelector('.tc_seating_map_button');
+          if (btn) {
+            // Hide the rest of the page content for a cleaner experience
+            var header = document.querySelector('header, .site-header, nav');
+            if (header) header.style.display = 'none';
+            var adminBar = document.getElementById('wpadminbar');
+            if (adminBar) adminBar.style.display = 'none';
+            var footer = document.querySelector('footer, .site-footer');
+            if (footer) footer.style.display = 'none';
+            var whatsapp = document.querySelector('[class*="whatsapp"], .joinchat, [id*="whatsapp"]');
+            if (whatsapp) whatsapp.style.display = 'none';
+            var cookie = document.querySelector('[class*="cookie"], [class*="consent"]');
+            if (cookie) cookie.style.display = 'none';
+            // Click the seating map button
+            btn.click();
+          } else {
+            setTimeout(tryClickSeatingButton, 500);
+          }
+        }
+        if (document.readyState === 'complete') {
+          setTimeout(tryClickSeatingButton, 1000);
+        } else {
+          window.addEventListener('load', function() {
+            setTimeout(tryClickSeatingButton, 1000);
+          });
+        }
+      })();
+      true;
+    `;
     
     if (Platform.OS === "web") {
       return (
@@ -153,30 +189,21 @@ export default function EventDetailScreen() {
           javaScriptEnabled
           domStorageEnabled
           startInLoadingState
+          sharedCookiesEnabled
+          injectedJavaScript={injectedJS}
           renderLoading={() => (
             <View style={{ flex: 1, alignItems: "center", justifyContent: "center", position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}>
               <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={{ marginTop: 10, color: colors.muted, fontFamily: "Raleway-Medium" }}>Chargement du plan...</Text>
+              <Text style={{ marginTop: 10, color: colors.muted, fontFamily: "Raleway-Medium" }}>Chargement du plan de salle...</Text>
             </View>
           )}
-          onMessage={(e: any) => {
-            // Handle seat selection messages from the WebView
-            try {
-              const data = JSON.parse(e.nativeEvent.data);
-              if (data.type === "seat_selected" && data.seat) {
-                // Seat was selected, add to cart with seat info
-                addItem({
-                  productId: selectedTicket.id,
-                  name: `${name} - ${selectedTicket.name} (Siège ${data.seat})`,
-                  price: parseFloat(selectedTicket.price) || 0,
-                  image: event.featuredImage || "",
-                  quantity: 1,
-                  isEvent: true,
-                });
-                setShowSeatingChart(false);
-                router.back();
-              }
-            } catch {}
+          onNavigationStateChange={(navState: any) => {
+            // If user completes checkout from the seating chart, detect it
+            const url = navState.url || "";
+            if (url.includes("order-received") || url.includes("commande-recue")) {
+              setShowSeatingChart(false);
+              router.replace("/(tabs)/tickets");
+            }
           }}
         />
       </ScreenContainer>

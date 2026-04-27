@@ -143,3 +143,9 @@
 - [x] Detect events with seating chart enabled
 - [x] Allow seat selection within the WebView
 - [x] Pass selected seats to cart/checkout flow
+
+## V2.3 - Seating Chart Fix & Placeholder Content
+
+- [x] Fix seating chart WebView URL - now loads event page and auto-opens Tickera seating popup
+- [x] Add placeholder mobile content to WordPress events (description + practical info for 12673 & 11109)
+- [x] Add placeholder mobile content to WordPress products (description + practical info for 10424)
