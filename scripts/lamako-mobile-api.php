@@ -205,25 +205,14 @@ function lamako_mobile_maybe_serve_seat_embed() {
         color: #663d17 !important;
     }
     
-    /* CRITICAL: Only boost z-index for jQuery UI dialog - do NOT override Tickera's layout */
-    /* Tickera's own CSS handles dialog positioning, content layout, and button styling */
-    .ui-widget-overlay {
-        z-index: 100000 !important;
-    }
-    .ui-dialog {
-        z-index: 100001 !important;
-    }
-    /* Make Add to Cart / Remove buttons more touch-friendly on mobile */
-    .tc-seat-dialog .tc_cart_button,
-    .tc-seat-dialog .tickera_button {
-        min-height: 44px !important;
-        font-size: 16px !important;
-        padding: 12px 20px !important;
-    }
-    .tc-seat-dialog .tc_remove_from_cart_button {
-        min-height: 44px !important;
-        font-size: 16px !important;
-        padding: 12px 20px !important;
+    /* HIDE jQuery UI dialog entirely - we bypass it with direct AJAX */
+    .ui-widget-overlay,
+    .ui-dialog,
+    .tc-seat-dialog {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
     }
     
     /* Seat count badge at top */
@@ -258,36 +247,45 @@ function lamako_mobile_maybe_serve_seat_embed() {
     }
 </style>
 <script>
-// Enhanced: seat count badge, AJAX error monitoring, and debug logging
+/**
+ * OPTION C: Bypass jQuery UI dialog entirely.
+ * Intercept seat clicks, call tc_woo_update_cart_seats AJAX directly.
+ * This avoids the dialog('destroy') issue in React Native WebView.
+ */
 document.addEventListener('DOMContentLoaded', function() {
+    // Wait for Tickera scripts to load
     setTimeout(function() {
         // Create seat count display
         var seatCount = document.createElement('div');
         seatCount.className = 'lamako-seat-count';
+        document.body.appendChild(seatCount);
         
-        // Append to seating map container
-        var mapContainer = document.querySelector('.tc_seating_map.active, .tc_seating_map');
-        if (mapContainer) {
-            mapContainer.appendChild(seatCount);
-        } else {
-            document.body.appendChild(seatCount);
-            var retryAppend = setInterval(function() {
-                var mc = document.querySelector('.tc_seating_map.active');
-                if (mc) {
-                    mc.appendChild(seatCount);
-                    clearInterval(retryAppend);
-                }
-            }, 1000);
+        // Track if we're currently processing a seat click
+        var processing = false;
+        
+        // Create a toast notification element
+        var toast = document.createElement('div');
+        toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:999999;background:#663d17;color:#fff;padding:10px 20px;border-radius:10px;font-size:14px;font-weight:600;font-family:-apple-system,BlinkMacSystemFont,sans-serif;box-shadow:0 4px 12px rgba(0,0,0,0.3);display:none;text-align:center;max-width:90%;transition:opacity 0.3s;';
+        document.body.appendChild(toast);
+        
+        function showToast(msg, isError) {
+            toast.textContent = msg;
+            toast.style.background = isError ? '#dc2626' : '#663d17';
+            toast.style.display = 'block';
+            toast.style.opacity = '1';
+            clearTimeout(toast._timer);
+            toast._timer = setTimeout(function() {
+                toast.style.opacity = '0';
+                setTimeout(function() { toast.style.display = 'none'; }, 300);
+            }, 2000);
         }
         
-        // Watch for seat changes - show count badge
         function updateSeatCount() {
             var seats = document.querySelectorAll('.tc_seat_in_cart');
             var count = seats.length;
             if (count > 0) {
                 seatCount.textContent = count + (count === 1 ? ' siège sélectionné' : ' sièges sélectionnés');
                 seatCount.classList.add('visible');
-                // Also notify the React Native app
                 try {
                     if (window.ReactNativeWebView) {
                         window.ReactNativeWebView.postMessage(JSON.stringify({
@@ -301,48 +299,271 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
         
-        // Monitor AJAX calls for errors (Tickera uses jQuery AJAX for seat add-to-cart)
-        if (window.jQuery) {
-            jQuery(document).ajaxError(function(event, jqXHR, settings, error) {
-                console.log('AJAX Error:', settings.url, error);
-                try {
-                    if (window.ReactNativeWebView) {
-                        window.ReactNativeWebView.postMessage(JSON.stringify({
-                            type: 'ajax_error',
-                            url: settings.url,
-                            status: jqXHR.status,
-                            error: error
-                        }));
-                    }
-                } catch(e) {}
-            });
+        /**
+         * Direct AJAX add-to-cart for a seat, bypassing the jQuery UI dialog.
+         */
+        function addSeatToCart(seatEl) {
+            if (processing) return;
             
-            // Monitor successful AJAX calls to detect seat additions
-            jQuery(document).ajaxSuccess(function(event, jqXHR, settings) {
-                // After any AJAX success, check for seat count changes
-                setTimeout(updateSeatCount, 500);
+            // Skip if already in cart
+            if (seatEl.classList.contains('tc_seat_in_cart')) {
+                // If already in cart, remove it
+                removeSeatFromCart(seatEl);
+                return;
+            }
+            
+            // Skip unavailable/reserved/blocked seats
+            if (seatEl.classList.contains('tc_seat_unavailable') ||
+                seatEl.classList.contains('tc_seat_reserved') ||
+                seatEl.classList.contains('tc_blocked_seat') ||
+                seatEl.classList.contains('tc_seat_in_others_cart')) {
+                return;
+            }
+            
+            processing = true;
+            
+            // Read seat data from DOM attributes
+            var ticketTypeId = seatEl.getAttribute('data-tt-id');
+            var seatId = seatEl.id || seatEl.getAttribute('data-seat-id') || '';
+            var mapEl = seatEl.closest('.tc_seating_map');
+            var chartId = mapEl ? mapEl.getAttribute('data-seating-chart-id') : '';
+            
+            // Get seat label from inner text
+            var labelEl = seatEl.querySelector('span p');
+            var seatLabel = labelEl ? labelEl.textContent.trim() : '';
+            // Replace hyphens with en-dashes in label (Tickera convention)
+            seatLabel = seatLabel.replace(/-/g, '\u2013');
+            
+            if (!ticketTypeId || !seatId || !chartId) {
+                processing = false;
+                showToast('Données du siège manquantes', true);
+                return;
+            }
+            
+            // Build the tc_seat_cart_items string: productId-seatId-seatLabel-chartId
+            var cartItem = ticketTypeId + '-' + seatId + '-' + seatLabel + '-' + chartId;
+            
+            showToast('Ajout en cours...');
+            
+            // Visual feedback - briefly highlight the seat
+            seatEl.style.opacity = '0.5';
+            
+            // Call Tickera AJAX directly
+            jQuery.post(
+                (typeof tc_seat_chart_ajax !== 'undefined' ? tc_seat_chart_ajax.ajaxUrl : '/wp-admin/admin-ajax.php'),
+                {
+                    action: 'tc_woo_update_cart_seats',
+                    tc_seat_cart_items: [cartItem],
+                    quantity: 1,
+                    variation_id: 0
+                },
+                function(response) {
+                    processing = false;
+                    seatEl.style.opacity = '1';
+                    
+                    if (response && !response.error) {
+                        // Success - mark seat as in cart
+                        seatEl.classList.add('tc_seat_in_cart');
+                        seatEl.classList.remove('ui-selected', 'ui-selectee');
+                        
+                        // Apply in-cart color from Tickera settings
+                        var inCartColor = (typeof tc_seat_chart_ajax !== 'undefined' && tc_seat_chart_ajax.tc_in_cart_seat_color)
+                            ? tc_seat_chart_ajax.tc_in_cart_seat_color : '#4CAF50';
+                        seatEl.style.backgroundColor = inCartColor;
+                        seatEl.style.color = inCartColor;
+                        
+                        // Update subtotal display
+                        if (response.subtotal && response.total) {
+                            var subtotalEl = document.querySelector('.tc-seatchart-subtotal');
+                            if (subtotalEl) subtotalEl.innerHTML = response.subtotal + '<strong>' + response.total + '</strong>';
+                        }
+                        if (response.in_cart_count !== undefined) {
+                            var countEl = document.querySelector('.tc-seatchart-in-cart-count');
+                            if (countEl) countEl.value = response.in_cart_count;
+                        }
+                        
+                        // Refresh WC fragments
+                        jQuery(document.body).trigger('wc_fragment_refresh');
+                        
+                        showToast('Siège ajouté ✓');
+                        updateSeatCount();
+                    } else {
+                        showToast(response.error_message || 'Erreur lors de l\'ajout', true);
+                    }
+                }
+            ).fail(function(xhr, status, error) {
+                processing = false;
+                seatEl.style.opacity = '1';
+                showToast('Erreur réseau: ' + error, true);
+                console.log('AJAX Error:', status, error);
             });
         }
         
-        // Observe DOM changes for seat selections
-        var observer = new MutationObserver(function(mutations) {
-            updateSeatCount();
-        });
+        /**
+         * Remove a seat from cart via AJAX (quantity=0)
+         */
+        function removeSeatFromCart(seatEl) {
+            if (processing) return;
+            processing = true;
+            
+            var ticketTypeId = seatEl.getAttribute('data-tt-id');
+            var seatId = seatEl.id || '';
+            var mapEl = seatEl.closest('.tc_seating_map');
+            var chartId = mapEl ? mapEl.getAttribute('data-seating-chart-id') : '';
+            var labelEl = seatEl.querySelector('span p');
+            var seatLabel = labelEl ? labelEl.textContent.trim() : '';
+            seatLabel = seatLabel.replace(/-/g, '\u2013');
+            
+            var cartItem = ticketTypeId + '-' + seatId + '-' + seatLabel + '-' + chartId;
+            
+            showToast('Retrait en cours...');
+            seatEl.style.opacity = '0.5';
+            
+            jQuery.post(
+                (typeof tc_seat_chart_ajax !== 'undefined' ? tc_seat_chart_ajax.ajaxUrl : '/wp-admin/admin-ajax.php'),
+                {
+                    action: 'tc_woo_update_cart_seats',
+                    tc_seat_cart_items: [cartItem],
+                    quantity: 0,
+                    variation_id: 0
+                },
+                function(response) {
+                    processing = false;
+                    seatEl.style.opacity = '1';
+                    
+                    if (response && !response.error) {
+                        seatEl.classList.remove('tc_seat_in_cart');
+                        // Restore original color from ticket type legend
+                        var ttLi = document.querySelector('li.tt_' + ticketTypeId);
+                        var origColor = ttLi ? window.getComputedStyle(ttLi).color : '';
+                        if (origColor) {
+                            seatEl.style.backgroundColor = origColor;
+                            seatEl.style.color = origColor;
+                        }
+                        
+                        if (response.subtotal && response.total) {
+                            var subtotalEl = document.querySelector('.tc-seatchart-subtotal');
+                            if (subtotalEl) subtotalEl.innerHTML = response.subtotal + '<strong>' + response.total + '</strong>';
+                        }
+                        
+                        jQuery(document.body).trigger('wc_fragment_refresh');
+                        showToast('Siège retiré');
+                        updateSeatCount();
+                    } else {
+                        showToast(response.error_message || 'Erreur lors du retrait', true);
+                    }
+                }
+            ).fail(function() {
+                processing = false;
+                seatEl.style.opacity = '1';
+                showToast('Erreur réseau', true);
+            });
+        }
         
-        function startObserving() {
-            var mc = document.querySelector('.tc_seating_map, .tc-wrapper, .tc_seat_chart_container');
-            if (mc) {
-                observer.observe(mc, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
-                setInterval(updateSeatCount, 1500);
-            } else {
-                setTimeout(startObserving, 500);
+        /**
+         * Intercept seat clicks BEFORE Tickera's selectable handler.
+         * We use a capturing event listener on the document to catch clicks
+         * before they reach jQuery UI's selectable widget.
+         */
+        function interceptSeatClicks() {
+            document.addEventListener('click', function(e) {
+                // Find the closest seat element (Tickera seats have data-tt-id attribute)
+                var seatEl = e.target.closest('[data-tt-id]');
+                if (!seatEl) return;
+                
+                // Only intercept if it's inside a seating map
+                var mapEl = seatEl.closest('.tc_seating_map');
+                if (!mapEl) return;
+                
+                // Prevent Tickera's default handler (which opens the dialog)
+                e.stopPropagation();
+                e.preventDefault();
+                
+                // Add/remove from cart directly
+                addSeatToCart(seatEl);
+            }, true); // true = capturing phase, runs before Tickera's bubbling handlers
+            
+            // Also intercept touch events for mobile
+            document.addEventListener('touchend', function(e) {
+                var seatEl = e.target.closest('[data-tt-id]');
+                if (!seatEl) return;
+                var mapEl = seatEl.closest('.tc_seating_map');
+                if (!mapEl) return;
+                
+                // Don't intercept if user was scrolling/zooming (multi-touch)
+                if (e.changedTouches && e.changedTouches.length > 1) return;
+                
+                e.stopPropagation();
+                e.preventDefault();
+                
+                addSeatToCart(seatEl);
+            }, true);
+        }
+        
+        /**
+         * Disable Tickera's jQuery UI selectable widget to prevent dialog popups.
+         * We do this after the map loads.
+         */
+        function disableSelectableWidget() {
+            if (window.jQuery && jQuery.fn.selectable) {
+                var maps = document.querySelectorAll('.tc_seating_map');
+                maps.forEach(function(map) {
+                    try {
+                        var $map = jQuery(map);
+                        if ($map.data('ui-selectable') || $map.data('selectable')) {
+                            $map.selectable('destroy');
+                        }
+                    } catch(e) {
+                        console.log('Could not destroy selectable:', e);
+                    }
+                });
             }
         }
-        startObserving();
+        
+        // Wait for the seating map to be rendered, then set up our interceptors
+        function initWhenReady() {
+            var map = document.querySelector('.tc_seating_map.active, .tc_seating_map');
+            if (map && map.querySelector('[data-tt-id]')) {
+                // Map is loaded with seats
+                disableSelectableWidget();
+                interceptSeatClicks();
+                updateSeatCount();
+                
+                // Also hide any open dialogs
+                if (window.jQuery) {
+                    jQuery('.ui-dialog').hide();
+                    jQuery('.ui-widget-overlay').hide();
+                }
+                
+                // Observe DOM changes for seat count updates
+                var observer = new MutationObserver(function() {
+                    updateSeatCount();
+                });
+                observer.observe(map, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
+                
+                console.log('[Lamako] Seat click interceptor active - dialog bypassed');
+            } else {
+                setTimeout(initWhenReady, 500);
+            }
+        }
+        initWhenReady();
+        
+        // Also re-check after the "Pick your seats" button is clicked
+        // (the map may not have seats until user clicks the button)
+        var mapBtnObserver = new MutationObserver(function() {
+            var map = document.querySelector('.tc_seating_map.active');
+            if (map && map.querySelector('[data-tt-id]')) {
+                setTimeout(function() {
+                    disableSelectableWidget();
+                    updateSeatCount();
+                }, 1000);
+            }
+        });
+        mapBtnObserver.observe(document.body, { childList: true, subtree: true });
         
         // Hide WhatsApp and FKCart that may load late
         function hideWidgets() {
-            var widgets = document.querySelectorAll('.qlwapp__container, [class*="qlwapp"], #fkcart-floating-toggler, [class*="fkcart"]');
+            var widgets = document.querySelectorAll('.qlwapp__container, [class*="qlwapp"], #fkcart-floating-toggler, [class*="fkcart"], [class*="tidio"], [id*="tidio"]');
             widgets.forEach(function(w) {
                 w.style.display = 'none';
                 w.style.visibility = 'hidden';
@@ -362,7 +583,7 @@ document.addEventListener('DOMContentLoaded', function() {
         WC()->session->set_customer_session_cookie( true );
     }
 ?>
-    <p class="lamako-embed-instruction">Appuyez sur le bouton ci-dessous, puis sélectionnez un siège et cliquez "Add to Cart" pour chaque siège souhaité</p>
+    <p class="lamako-embed-instruction">Appuyez sur le bouton ci-dessous, puis touchez un siège pour l'ajouter. Touchez-le à nouveau pour le retirer.</p>
     <?php echo do_shortcode( '[tc_seat_chart id="' . $chart_id . '" show_legend="true"]' ); ?>
 <?php wp_footer(); ?>
 </body>
@@ -396,6 +617,72 @@ function lamako_mobile_maybe_serve_checkout() {
     // Force products to be purchasable for this request
     add_filter( 'woocommerce_is_purchasable', '__return_true', 99999 );
     add_filter( 'woocommerce_product_is_in_stock', '__return_true', 99999 );
+    
+    // ============================================================
+    // HANDLE POST: Process payment directly via gateway
+    // ============================================================
+    if ( $_SERVER['REQUEST_METHOD'] === 'POST' && isset( $_POST['woocommerce_pay'] ) ) {
+        // Verify nonce
+        if ( ! wp_verify_nonce( $_POST['woocommerce-pay-nonce'] ?? '', 'woocommerce-pay' ) ) {
+            wp_die( 'Security check failed', 'Error', [ 'response' => 403 ] );
+        }
+        
+        // Get selected payment method
+        $payment_method = isset( $_POST['payment_method'] ) ? sanitize_text_field( $_POST['payment_method'] ) : '';
+        
+        if ( empty( $payment_method ) ) {
+            // Redirect back with error
+            wp_redirect( home_url( '/?lamako_checkout=1&order_id=' . $order_id . '&order_key=' . $order_key . '&error=no_payment_method' ) );
+            exit;
+        }
+        
+        // Set the payment method on the order
+        $available_gateways = WC()->payment_gateways->get_available_payment_gateways();
+        
+        if ( ! isset( $available_gateways[ $payment_method ] ) ) {
+            wp_redirect( home_url( '/?lamako_checkout=1&order_id=' . $order_id . '&order_key=' . $order_key . '&error=invalid_gateway' ) );
+            exit;
+        }
+        
+        $gateway = $available_gateways[ $payment_method ];
+        
+        // Update order with payment method
+        $order->set_payment_method( $gateway );
+        $order->save();
+        
+        // Process the payment via the gateway
+        // This typically returns array('result' => 'success', 'redirect' => 'https://...')
+        try {
+            $result = $gateway->process_payment( $order_id );
+            
+            if ( isset( $result['result'] ) && $result['result'] === 'success' ) {
+                // Gateway returned a redirect URL (to external payment page like MVola, Airtel, etc.)
+                if ( ! empty( $result['redirect'] ) ) {
+                    wp_redirect( $result['redirect'] );
+                    exit;
+                }
+            } else {
+                // Payment processing failed
+                $error_msg = 'Payment processing failed';
+                if ( function_exists( 'wc_get_notices' ) ) {
+                    $notices = wc_get_notices( 'error' );
+                    if ( ! empty( $notices ) ) {
+                        $error_msg = is_array( $notices[0] ) ? $notices[0]['notice'] : $notices[0];
+                    }
+                    wc_clear_notices();
+                }
+                wp_redirect( home_url( '/?lamako_checkout=1&order_id=' . $order_id . '&order_key=' . $order_key . '&error=' . urlencode( $error_msg ) ) );
+                exit;
+            }
+        } catch ( \Exception $e ) {
+            wp_redirect( home_url( '/?lamako_checkout=1&order_id=' . $order_id . '&order_key=' . $order_key . '&error=' . urlencode( $e->getMessage() ) ) );
+            exit;
+        }
+    }
+    
+    // ============================================================
+    // HANDLE GET: Show the checkout form
+    // ============================================================
     
     // Set up the pay-for-order context so WC renders the payment form
     global $wp;
@@ -635,6 +922,16 @@ function lamako_mobile_maybe_serve_checkout() {
 </head>
 <body class="lamako-mobile-checkout">
 
+<?php
+// Show error message if payment failed
+$checkout_error = isset( $_GET['error'] ) ? sanitize_text_field( urldecode( $_GET['error'] ) ) : '';
+if ( $checkout_error ) :
+?>
+<div style="background: #fef2f2; border-bottom: 2px solid #dc2626; padding: 12px 20px; font-size: 14px; color: #dc2626; font-weight: 500;">
+    ⚠️ <?php echo esc_html( $checkout_error ); ?>
+</div>
+<?php endif; ?>
+
 <div class="lamako-checkout-header">
     <h1>Paiement</h1>
     <span class="lamako-secure">
@@ -670,8 +967,9 @@ function lamako_mobile_maybe_serve_checkout() {
     $available_gateways = WC()->payment_gateways->get_available_payment_gateways();
     
     if ( ! empty( $available_gateways ) ) {
-        $pay_url = $order->get_checkout_payment_url();
-        echo '<form id="order_review" method="post" action="' . esc_url( $pay_url ) . '">';
+        // Form submits back to THIS dedicated page (not WooCommerce standard checkout)
+        $self_url = home_url( '/?lamako_checkout=1&order_id=' . $order_id . '&order_key=' . $order_key );
+        echo '<form id="order_review" method="post" action="' . esc_url( $self_url ) . '">';
         
         echo '<div id="payment" class="woocommerce-checkout-payment">';
         echo '<ul class="wc_payment_methods payment_methods methods">';
