@@ -89,52 +89,34 @@ export default function CheckoutScreen() {
     }
   };
 
-  // Inject CSS to make the checkout page mobile-friendly
+  // Handle messages from the checkout WebView (e.g. payment success)
+  const handleWebViewMessage = (event: any) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data.type === "payment_success") {
+        setPhase("success");
+        clearCart();
+      }
+    } catch {}
+  };
+
+  // Minimal JS injection - the dedicated checkout page handles its own styling
+  // This is just a safety net for hiding stray WordPress elements
   const checkoutInjectedJS = `
     (function() {
-      var style = document.createElement('style');
-      style.textContent = \`
-        /* Hide site chrome */
-        header, .site-header, #masthead, .header-wrapper,
-        footer, .site-footer, #colophon, .footer-wrapper,
-        nav, .navigation, .breadcrumbs, .woocommerce-breadcrumb,
-        #wpadminbar, .header-main, .header-top, .header-bottom,
-        .footer-1, .footer-2, .absolute-footer,
-        .page-title-inner, .page-title,
-        [class*="whatsapp"], .qlwapp__container, [class*="qlwapp"],
-        [class*="cookie"], [class*="consent"],
-        #fkcart-floating-toggler, #fkcart-modal, [class*="fkcart"],
-        [class*="tidio"], [id*="tidio"],
-        .wc-block-mini-cart, .wp-block-woocommerce-mini-cart,
-        .sidebar, #sidebar, aside
-        { display: none !important; }
-        
-        body { 
-          margin: 0 !important; 
-          padding: 8px !important; 
-          background: #fff !important;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
-        }
-        .woocommerce { max-width: 100% !important; padding: 0 !important; }
-        #order_review, .woocommerce-checkout-payment { max-width: 100% !important; }
-        
-        /* Make payment methods more touch-friendly */
-        .wc_payment_methods li { padding: 12px !important; margin-bottom: 8px !important; }
-        .wc_payment_methods label { font-size: 16px !important; }
-        #place_order { 
-          font-size: 18px !important; 
-          padding: 16px !important; 
-          border-radius: 12px !important;
-          width: 100% !important;
-        }
-      \`;
-      document.head.appendChild(style);
-      
-      // Hide widgets that load late
-      setInterval(function() {
-        var widgets = document.querySelectorAll('.qlwapp__container, [class*="qlwapp"], #fkcart-floating-toggler, [class*="fkcart"]');
-        widgets.forEach(function(w) { w.style.display = 'none'; });
-      }, 2000);
+      // Hide any WordPress admin bar or floating widgets
+      function cleanup() {
+        var hide = '#wpadminbar, .qlwapp__container, [class*="qlwapp"], #fkcart-floating-toggler, [class*="fkcart"], [class*="tidio"], [class*="whatsapp"]';
+        document.querySelectorAll(hide).forEach(function(el) { el.style.display = 'none'; });
+        // Ensure place_order button is visible
+        var btn = document.getElementById('place_order');
+        if (btn) { btn.removeAttribute('hidden'); btn.style.display = 'block'; }
+      }
+      cleanup();
+      setTimeout(cleanup, 500);
+      setTimeout(cleanup, 1500);
+      setTimeout(cleanup, 2000);
+      setInterval(cleanup, 5000);
     })();
     true;
   `;
@@ -287,6 +269,7 @@ export default function CheckoutScreen() {
           return false;
         }}
         injectedJavaScript={checkoutInjectedJS}
+        onMessage={handleWebViewMessage}
         style={{ flex: 1 }}
         javaScriptEnabled
         domStorageEnabled

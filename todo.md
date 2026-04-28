@@ -291,3 +291,23 @@
 - [x] Fix: Email verification bypass → added `woocommerce_order_email_verification_required` filter
 - [x] Fix: Pay URL → always constructed manually (no WP nonce dependency)
 - [x] Fix: Non-seating event checkout → same fix applies (all orders use create-order API)
+
+## V2.8.2 - Critical Checkout & Seating Fixes (from video 2)
+
+### Checkout Bugs (confirmed from video)
+- [ ] Fix: Error "Désolé, ce produit ne peut être acheté" on checkout page
+- [ ] Fix: No "Commander/Payer" button visible on checkout page (user stuck)
+- [ ] Fix: Website header and footer visible in checkout WebView (should be hidden)
+- [ ] Fix: Back button inaccessible/at very top of page
+- [ ] Fix: Checkout page shows full WordPress site instead of clean payment form
+
+### Seating Chart Bugs
+- [ ] Fix: Still cannot select more than one seat in seating chart
+
+## V2.8.3 - Dedicated Mobile Checkout Page
+- [x] Create dedicated mobile checkout page in WordPress plugin (no theme, mobile-first HTML)
+- [x] Fix seating chart dialog CSS (minimal z-index only, don't override Tickera structure)
+- [x] Update app checkout.tsx to use the new dedicated checkout URL + onMessage handler for payment_success
+- [x] Upload updated plugin to WordPress
+- [x] Added purchasability filter (woocommerce_is_purchasable + woocommerce_product_is_in_stock) for pay-for-order pages
+- [x] Seat extraction JS: now uses only .tc_seat_in_cart selector (not all seats)
