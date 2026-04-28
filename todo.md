@@ -344,3 +344,26 @@
 ### Deployment
 - [x] Built and uploaded updated plugin zip to WordPress
 - [x] Pushed all changes to GitHub
+
+## V2.9.1 - CRITICAL: AJAX Seat Add Error + Checkout Reload (FIXED)
+
+### Root Cause
+- Both bugs had the SAME root cause: `woocommerce_is_purchasable` returned false for Tickera ticket products
+- Tickera's bridge plugin hooks `is_purchasable` and checks `TC_Ticket::is_sales_available()` which returns false
+- Previous purchasability filter only applied on pay-for-order pages, not globally
+
+### Seating Chart Bug
+- [x] Fix: AJAX seat add returns "error to add seats" → Root cause: product not purchasable, WC()->cart->add_to_cart() fails
+- [x] Fix: Made woocommerce_is_purchasable filter GLOBAL (priority 9999) for all Tickera ticket products
+- [x] Fix: buildColorMap() used wrong selector (li.color instead of span[style*=background-color])
+- [x] Tested: AJAX add seat returns {error:false, action:"added", in_cart_count:2} ✓
+- [x] Tested: Click to add + click to remove both work ✓
+
+### Checkout Bug
+- [x] Fix: "Payer la commande" reloads page → Same root cause: WC validates is_purchasable during order payment
+- [x] Tested: Now returns gateway-specific error ("MVola indisponible") instead of product error ✓
+- [x] Payment flow works end-to-end (product is purchasable, gateway processes)
+
+### Deployment
+- [x] Plugin updated to v2.0.1 on WordPress
+- [x] Committed to git
