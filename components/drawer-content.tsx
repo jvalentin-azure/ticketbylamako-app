@@ -83,7 +83,7 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
         { icon: "text.bubble.fill" as const, label: "WhatsApp", onPress: openWhatsApp },
         { icon: "questionmark.circle.fill" as const, label: "Aide & Support", onPress: () => navigate("/help") },
         { icon: "hand.raised.fill" as const, label: "Politique de confidentialité", onPress: () => navigate("/privacy") },
-        { icon: "info.circle.fill" as const, label: "À propos", onPress: () => {} },
+        { icon: "info.circle.fill" as const, label: "À propos", onPress: () => navigate("/about") },
       ],
     },
   ];

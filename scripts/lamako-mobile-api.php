@@ -45,16 +45,15 @@ function lamako_mobile_maybe_serve_seat_embed() {
 <html <?php language_attributes(); ?>>
 <head>
 <meta charset="<?php bloginfo( 'charset' ); ?>" />
-<meta name="viewport" content="width=1920, initial-scale=0.2, minimum-scale=0.1, maximum-scale=3, user-scalable=yes" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes" />
 <style>
-    /* Reset and hide everything except the seating chart */
+    /* Reset */
     * { box-sizing: border-box; }
     body {
         margin: 0 !important;
-        padding: 16px !important;
+        padding: 0 !important;
         background: #f8f9fa !important;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        overflow-x: hidden;
     }
     /* Hide all theme elements */
     header, .site-header, .page-header, #masthead, .header-wrapper,
@@ -67,8 +66,10 @@ function lamako_mobile_maybe_serve_seat_embed() {
     .page-title-inner, .page-title,
     .comments-area, #comments,
     [class*="whatsapp"], .joinchat, [id*="whatsapp"],
+    .qlwapp__container, [class*="qlwapp"],
     [class*="cookie"], [class*="consent"],
-    #fkcart-floating-toggler, .fkcart-main-wrapper,
+    #fkcart-floating-toggler, #fkcart-modal, .fkcart-main-wrapper,
+    [class*="fkcart"],
     .woocommerce-mini-cart, .cart-icon, .shopping-cart,
     [class*="tidio"], [id*="tidio"], [class*="chat-widget"],
     [class*="crisp"], [id*="crisp"],
@@ -77,7 +78,7 @@ function lamako_mobile_maybe_serve_seat_embed() {
     [class*="drift"], [id*="drift"],
     [class*="livechat"], [id*="livechat"],
     .wc-block-mini-cart, .wp-block-woocommerce-mini-cart
-    { display: none !important; }
+    { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }
     
     /* Style the seating chart button */
     .tc_seating_map_button {
@@ -95,112 +96,70 @@ function lamako_mobile_maybe_serve_seat_embed() {
         width: 90% !important;
         max-width: 400px !important;
         box-shadow: 0 4px 14px rgba(102, 61, 23, 0.3) !important;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
-        letter-spacing: 0.3px;
-    }
-    .tc_seating_map_button:active {
-        transform: scale(0.97);
-        opacity: 0.9;
     }
     
-    /* Seating chart map container - CRITICAL for mobile rendering */
+    /* DO NOT override .tc_seating_map or .tc-wrapper positioning */
+    /* Let Tickera's own JS handle the seating chart layout and zoom */
+    /* Only ensure the map is scrollable on touch devices */
     .tc_seating_map {
-        position: fixed !important;
-        inset: 0 !important;
-        z-index: 999999 !important;
-        overflow: auto !important;
         -webkit-overflow-scrolling: touch !important;
-        touch-action: pan-x pan-y pinch-zoom !important;
-    }
-    .tc-wrapper {
-        min-width: 1920px !important;
-        min-height: 1400px !important;
-        overflow: visible !important;
-        position: relative !important;
-    }
-    .tc-seatchart-cart-info { display: block !important; text-align: center; padding: 8px; }
-    .tc_in_cart { display: block !important; text-align: center; padding: 8px; font-weight: 600; }
-    
-    /* jQuery UI Dialog (seating chart popup) */
-    .ui-dialog { z-index: 99999 !important; }
-    .ui-widget-overlay { z-index: 99998 !important; }
-    
-    /* Legend - keep visible and accessible */
-    .tc-seating-legend-wrap {
-        position: fixed !important;
-        top: 10px !important;
-        left: 10px !important;
-        z-index: 1000001 !important;
-        background: rgba(255,255,255,0.95) !important;
-        border-radius: 8px !important;
-        padding: 8px !important;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
-        max-width: 200px !important;
-        font-size: 12px !important;
+        touch-action: manipulation !important;
     }
     
-    /* Subtotal bar - keep fixed at top */
-    .tc-seatchart-subtotal {
-        position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        right: 0 !important;
-        z-index: 1000002 !important;
-        background: rgba(255,255,255,0.97) !important;
-        padding: 10px 16px !important;
-        font-weight: 600 !important;
-        text-align: center !important;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
-        font-size: 16px !important;
+    /* HIDE checkout elements - seating chart is for seat selection only */
+    .tc-seatchart-go-to-cart, a.tc-seatchart-go-to-cart,
+    .tc-seatchart-subtotal,
+    .tc-checkout-bar,
+    .tc_in_cart {
+        display: none !important;
     }
     
-    /* GO TO CART button - keep fixed at bottom */
-    .tc-seatchart-go-to-cart, a[href*="cart"].tc-seatchart-go-to-cart {
-        position: fixed !important;
-        bottom: 20px !important;
-        left: 50% !important;
-        transform: translateX(-50%) !important;
-        z-index: 1000002 !important;
-        background: #663d17 !important;
-        color: #fff !important;
-        padding: 14px 40px !important;
-        border-radius: 14px !important;
-        font-weight: 700 !important;
-        font-size: 16px !important;
-        text-decoration: none !important;
-        box-shadow: 0 4px 14px rgba(102,61,23,0.4) !important;
-        white-space: nowrap !important;
+    /* Custom confirm button - injected by JS after seats are selected */
+    .lamako-confirm-btn {
+        display: none;
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1000010;
+        background: #663d17;
+        color: #fff;
+        padding: 16px 40px;
+        border-radius: 14px;
+        border: none;
+        font-weight: 700;
+        font-size: 16px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        box-shadow: 0 4px 14px rgba(102,61,23,0.4);
+        cursor: pointer;
+        white-space: nowrap;
+        min-width: 260px;
+        text-align: center;
+    }
+    .lamako-confirm-btn.visible {
+        display: block;
     }
     
-    /* Close button - keep visible */
-    .tc-seating-close, .tc_seating_map > .dashicons-no-alt, .tc_seating_map > [class*="close"] {
-        position: fixed !important;
-        top: 10px !important;
-        right: 10px !important;
-        z-index: 1000003 !important;
-        background: rgba(255,255,255,0.9) !important;
-        border-radius: 50% !important;
-        width: 36px !important;
-        height: 36px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.2) !important;
-        cursor: pointer !important;
+    /* Seat count badge at top */
+    .lamako-seat-count {
+        display: none;
+        position: fixed;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1000010;
+        background: rgba(255,255,255,0.95);
+        color: #663d17;
+        padding: 8px 20px;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 14px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        text-align: center;
     }
-    
-    /* Checkout bar at bottom */
-    .tc-checkout-bar {
-        display: block !important;
-        position: fixed !important;
-        bottom: 0 !important;
-        left: 0 !important;
-        right: 0 !important;
-        background: #fff !important;
-        border-top: 1px solid #e5e7eb !important;
-        padding: 12px 16px !important;
-        z-index: 99997 !important;
-        box-shadow: 0 -2px 10px rgba(0,0,0,0.1) !important;
+    .lamako-seat-count.visible {
+        display: block;
     }
     
     /* Instruction text */
@@ -208,10 +167,94 @@ function lamako_mobile_maybe_serve_seat_embed() {
         text-align: center;
         color: #687076;
         font-size: 14px;
-        margin: 12px 0 8px;
+        margin: 16px 0 8px;
         padding: 0 16px;
     }
 </style>
+<script>
+// After Tickera loads, watch for seat selections and show confirm button
+document.addEventListener('DOMContentLoaded', function() {
+    // Wait for seating chart to initialize
+    setTimeout(function() {
+        // Create confirm button
+        var confirmBtn = document.createElement('button');
+        confirmBtn.className = 'lamako-confirm-btn';
+        confirmBtn.textContent = 'Confirmer ma sélection';
+        document.body.appendChild(confirmBtn);
+        
+        // Create seat count display
+        var seatCount = document.createElement('div');
+        seatCount.className = 'lamako-seat-count';
+        document.body.appendChild(seatCount);
+        
+        // When confirm is clicked, post message to WebView
+        confirmBtn.addEventListener('click', function() {
+            var selectedSeats = [];
+            document.querySelectorAll('.tc_seat_in_cart').forEach(function(seat) {
+                selectedSeats.push({
+                    id: seat.id || seat.getAttribute('data-seat-id') || '',
+                    label: seat.getAttribute('data-seat-label') || seat.textContent.trim() || '',
+                    price: seat.getAttribute('data-price') || '',
+                    ticketTypeId: seat.getAttribute('data-tt-id') || ''
+                });
+            });
+            // Send message to React Native WebView
+            if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                    type: 'seats_confirmed',
+                    seats: selectedSeats,
+                    count: selectedSeats.length
+                }));
+            }
+        });
+        
+        // Watch for seat changes using MutationObserver
+        // Tickera uses tc_seat_in_cart class (set by Firebase front.js)
+        function updateSeatCount() {
+            var seats = document.querySelectorAll('.tc_seat_in_cart');
+            var count = seats.length;
+            if (count > 0) {
+                seatCount.textContent = count + (count === 1 ? ' siège sélectionné' : ' sièges sélectionnés');
+                seatCount.classList.add('visible');
+                confirmBtn.textContent = 'Confirmer ma sélection (' + count + ')';
+                confirmBtn.classList.add('visible');
+            } else {
+                seatCount.classList.remove('visible');
+                confirmBtn.classList.remove('visible');
+            }
+        }
+        
+        // Observe DOM changes for seat selections
+        var observer = new MutationObserver(function() {
+            updateSeatCount();
+        });
+        
+        // Start observing once the seating map is open
+        function startObserving() {
+            var mapContainer = document.querySelector('.tc_seating_map, .tc-wrapper, .tc_seat_chart_container');
+            if (mapContainer) {
+                observer.observe(mapContainer, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
+                // Also poll periodically as backup (tc_seat_in_cart is set async via Firebase)
+                setInterval(updateSeatCount, 1500);
+            } else {
+                setTimeout(startObserving, 500);
+            }
+        }
+        startObserving();
+        
+        // Also hide WhatsApp and FKCart that may load late
+        function hideWidgets() {
+            var widgets = document.querySelectorAll('.qlwapp__container, [class*="qlwapp"], #fkcart-floating-toggler, [class*="fkcart"]');
+            widgets.forEach(function(w) {
+                w.style.display = 'none';
+                w.style.visibility = 'hidden';
+            });
+        }
+        hideWidgets();
+        setInterval(hideWidgets, 2000);
+    }, 2000);
+});
+</script>
 <?php wp_head(); ?>
 </head>
 <body>

@@ -168,6 +168,8 @@ export default function RootLayout() {
             <Stack.Screen name="help" />
             <Stack.Screen name="rewards" />
             <Stack.Screen name="favorites" />
+            <Stack.Screen name="search" />
+            <Stack.Screen name="about" />
             <Stack.Screen name="oauth/callback" />
           </Stack>
           <StatusBar style="auto" />

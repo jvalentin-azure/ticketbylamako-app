@@ -59,6 +59,15 @@ export function AppHeader({ onMenuPress }: AppHeaderProps) {
 
         {/* Right: Notifications + Profile */}
         <View style={styles.rightSection}>
+          {/* Search */}
+          <TouchableOpacity
+            onPress={() => router.push("/search" as any)}
+            style={[styles.iconButton, { backgroundColor: colors.surface }]}
+            activeOpacity={0.7}
+          >
+            <IconSymbol name="magnifyingglass" size={20} color={colors.foreground} />
+          </TouchableOpacity>
+
           {/* Notification Bell */}
           <TouchableOpacity
             style={[styles.iconButton, { backgroundColor: colors.surface }]}

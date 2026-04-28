@@ -216,3 +216,20 @@
 - [x] Fix events category chips - compact pills with fixed height 32px, centered text
 - [x] Fix events category filter - recursive descendant matching (grandchildren categories now included)
 - [x] Fix events date chip - compact with fixed height 32px
+
+## V2.6 - Seating Chart V3, Global Search, About Screen
+
+### Bug Fixes
+- [x] Fix seating chart - seats now render correctly (removed aggressive CSS overrides, let Tickera handle its own layout)
+
+### New Features
+- [x] Global search (events + products from single search field)
+- [x] About screen with Lamako Events info (contact, social media, legal mentions) from website
+
+### Seating Chart UX Improvements
+- [x] Hide GO TO CART button and subtotal bar in seating chart embed (selection only, no checkout)
+- [x] Add "Confirmer ma sélection" button that closes WebView and returns to app with selected seats
+
+### Native Payment Integration (no WebView checkout)
+- [x] Research and plan native payment flow (Mobile Money: MVola, Orange Money, Airtel Money + CyberSource Visa)
+- [ ] Implement native checkout screen within the app (WebView modal for payment, stays in-app)
