@@ -25,7 +25,8 @@ import * as SplashScreen from "expo-splash-screen";
 import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-runtime";
 import { CustomSplash } from "@/components/splash-screen";
-import { setupNotificationHandler, registerForPushNotificationsAsync, setupAndroidChannel } from "@/lib/notifications";
+import { setupNotificationHandler, registerForPushNotificationsAsync, setupAndroidChannel, registerPushTokenWithBackend } from "@/lib/notifications";
+import { NotificationsProvider } from "@/lib/notifications-provider";
 import * as Notifications from "expo-notifications";
 import { router as expoRouter } from "expo-router";
 
@@ -69,7 +70,18 @@ export default function RootLayout() {
   useEffect(() => {
     if (Platform.OS === "web") return;
     setupAndroidChannel();
-    registerForPushNotificationsAsync();
+    registerForPushNotificationsAsync().then(async (token) => {
+      if (token) {
+        // Register with WordPress backend
+        try {
+          const { getStoredUser } = await import("@/lib/api/auth");
+          const user = await getStoredUser();
+          registerPushTokenWithBackend(user?.id);
+        } catch (e) {
+          console.warn("Push token backend registration failed:", e);
+        }
+      }
+    });
 
     const notificationListener = Notifications.addNotificationReceivedListener(notification => {
       console.log("Notification received:", notification.request.content.title);
@@ -78,6 +90,12 @@ export default function RootLayout() {
     const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
       const data = response.notification.request.content.data;
       if (data?.type === "event_reminder" && data?.eventId) {
+        expoRouter.push(`/event/${data.eventId}` as any);
+      }
+      if (data?.type === "order_update" && data?.orderId) {
+        expoRouter.push(`/order/${data.orderId}` as any);
+      }
+      if (data?.type === "new_event" && data?.eventId) {
         expoRouter.push(`/event/${data.eventId}` as any);
       }
     });
@@ -170,6 +188,7 @@ export default function RootLayout() {
             <Stack.Screen name="favorites" />
             <Stack.Screen name="search" />
             <Stack.Screen name="about" />
+            <Stack.Screen name="notifications" />
             <Stack.Screen name="oauth/callback" />
           </Stack>
           <StatusBar style="auto" />
@@ -187,13 +206,15 @@ export default function RootLayout() {
           <CartProvider>
             <RewardsProvider>
               <FavoritesProvider>
-                <SafeAreaProvider initialMetrics={providerInitialMetrics}>
-                  <SafeAreaFrameContext.Provider value={frame}>
-                    <SafeAreaInsetsContext.Provider value={insets}>
-                      {content}
-                    </SafeAreaInsetsContext.Provider>
-                  </SafeAreaFrameContext.Provider>
-                </SafeAreaProvider>
+                <NotificationsProvider>
+                  <SafeAreaProvider initialMetrics={providerInitialMetrics}>
+                    <SafeAreaFrameContext.Provider value={frame}>
+                      <SafeAreaInsetsContext.Provider value={insets}>
+                        {content}
+                      </SafeAreaInsetsContext.Provider>
+                    </SafeAreaFrameContext.Provider>
+                  </SafeAreaProvider>
+                </NotificationsProvider>
               </FavoritesProvider>
             </RewardsProvider>
           </CartProvider>
@@ -208,7 +229,9 @@ export default function RootLayout() {
         <CartProvider>
             <RewardsProvider>
               <FavoritesProvider>
-                <SafeAreaProvider initialMetrics={providerInitialMetrics}>{content}</SafeAreaProvider>
+                <NotificationsProvider>
+                  <SafeAreaProvider initialMetrics={providerInitialMetrics}>{content}</SafeAreaProvider>
+                </NotificationsProvider>
               </FavoritesProvider>
             </RewardsProvider>
         </CartProvider>

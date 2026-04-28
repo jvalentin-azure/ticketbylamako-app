@@ -6,6 +6,7 @@ import { useColors } from "@/hooks/use-colors";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useAuth } from "@/lib/auth-provider";
 import { useCart } from "@/lib/cart-provider";
+import { useNotifications } from "@/lib/notifications-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Text } from "react-native";
 
@@ -20,6 +21,7 @@ export function AppHeader({ onMenuPress }: AppHeaderProps) {
   const insets = useSafeAreaInsets();
   const { isAuthenticated, user } = useAuth();
   const { itemCount } = useCart();
+  const { unreadCount } = useNotifications();
 
   const topPadding = Platform.OS === "web" ? 8 : Math.max(insets.top, 8);
 
@@ -57,7 +59,7 @@ export function AppHeader({ onMenuPress }: AppHeaderProps) {
           />
         </View>
 
-        {/* Right: Notifications + Profile */}
+        {/* Right: Search + Notifications + Profile */}
         <View style={styles.rightSection}>
           {/* Search */}
           <TouchableOpacity
@@ -70,20 +72,25 @@ export function AppHeader({ onMenuPress }: AppHeaderProps) {
 
           {/* Notification Bell */}
           <TouchableOpacity
-            onPress={() => router.push("/notification-settings" as any)}
+            onPress={() => router.push("/notifications" as any)}
             style={[styles.iconButton, { backgroundColor: colors.surface }]}
             activeOpacity={0.7}
           >
             <IconSymbol name="bell.fill" size={20} color={colors.foreground} />
-            {/* Notification dot */}
-            <View style={[styles.notifDot, { backgroundColor: colors.primary }]} />
+            {/* Notification dot - only show when there are unread notifications */}
+            {unreadCount > 0 && (
+              <View style={[styles.notifDot, { backgroundColor: "#EF4444" }]}>
+                {unreadCount <= 9 && (
+                  <Text style={styles.notifDotText}>{unreadCount}</Text>
+                )}
+              </View>
+            )}
           </TouchableOpacity>
 
           {/* Profile Avatar */}
           <TouchableOpacity
             onPress={() => {
               if (isAuthenticated) {
-                // Navigate to profile screen
                 router.push("/(tabs)/profile" as any);
               } else {
                 router.push("/(auth)/login" as any);
@@ -142,13 +149,21 @@ const styles = StyleSheet.create({
   },
   notifDot: {
     position: "absolute",
-    top: 6,
-    right: 6,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    top: 4,
+    right: 4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
     borderWidth: 1.5,
     borderColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 2,
+  },
+  notifDotText: {
+    color: "#fff",
+    fontSize: 9,
+    fontWeight: "700",
   },
   avatarButton: {
     width: 34,

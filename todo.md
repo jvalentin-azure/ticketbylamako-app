@@ -248,3 +248,33 @@
 - [x] Make "Bonjour, [utilisateur]" greeting text larger (20px, bold, Raleway-Bold)
 - [x] Deduplicate LamakRewards section on home screen (keep compact banner for logged-in, teaser for logged-out)
 - [x] Make notification bell clickable (navigates to /notification-settings)
+
+## V2.8 - Fixes, CGV, Push Notifications
+
+### UI Fixes
+- [ ] Reduce greeting text from 20px to 15px
+- [ ] Fix notification bell: show red dot only when unread notifications exist, hide when none
+- [ ] Notification bell click: show notifications list (not settings)
+- [ ] Fix seating chart "Confirmer ma sélection" button not doing anything on click
+
+### New Features
+- [x] Add CGV link in About screen (opens WordPress CGV page)
+- [x] Push notifications: WordPress plugin sends Expo push notifications on order status change & new event
+- [x] Push token registration: app sends Expo push token to WordPress backend on startup
+- [x] Push notification tap handling: order_update navigates to order detail, new_event to event detail
+
+### Critical Bugs V2.8
+- [x] Checkout WebView shows empty cart → Fixed: WebView import corrected (.default), pay-for-order URL bypasses session
+- [x] Seating chart: Confirmer button redirects to empty cart → Fixed: improved seat extraction JS with multiple selectors
+- [x] Seating chart: cannot select more than one seat → Fixed: removed .tc_in_cart hiding + WC session init in embed
+- [x] Normal checkout (non-seating): same empty cart → Fixed: checkout uses create-order API → pay-for-order URL (no session needed)
+- [x] Checkout WebView shows site header/footer → Already fixed: CSS injection hides all site chrome
+
+### Bug Investigation Results (V2.8)
+- [x] Tested create-order API: works correctly, returns valid pay-for-order URL
+- [x] Tested pay-for-order page: shows order summary + payment methods (Airtel, MVola, Orange, CB)
+- [x] Fix WebView import in checkout.tsx (changed .WebView to .default, added Platform guard)
+- [x] Fix seating chart multi-select: removed CSS hiding .tc_in_cart, now visible at bottom of seating chart
+- [x] Fix seating chart: added WC session initialization in embed template
+- [x] Fix checkout WebView: WebView import fixed, pay-for-order URL should now load correctly
+- [x] Improved seat extraction JS: multiple selectors, deduplication, debug info on failure

@@ -109,6 +109,34 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
 }
 
 /**
+ * Register the Expo push token with the WordPress backend.
+ * Should be called after login or whenever the token changes.
+ */
+export async function registerPushTokenWithBackend(userId?: number): Promise<boolean> {
+  try {
+    const token = await AsyncStorage.getItem(PUSH_TOKEN_KEY);
+    if (!token) {
+      // Try to get a new token first
+      const newToken = await registerForPushNotificationsAsync();
+      if (!newToken) return false;
+    }
+    const storedToken = await AsyncStorage.getItem(PUSH_TOKEN_KEY);
+    if (!storedToken) return false;
+
+    const { registerPushToken } = await import("@/lib/api/woocommerce");
+    const result = await registerPushToken(
+      storedToken,
+      userId,
+      Platform.OS
+    );
+    return result.success;
+  } catch (error) {
+    console.warn("Failed to register push token with backend:", error);
+    return false;
+  }
+}
+
+/**
  * Get stored push token
  */
 export async function getStoredPushToken(): Promise<string | null> {

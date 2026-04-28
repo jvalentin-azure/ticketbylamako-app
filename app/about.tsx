@@ -194,6 +194,19 @@ export default function AboutScreen() {
           <IconSymbol name="chevron.right" size={16} color={colors.muted} />
         </TouchableOpacity>
 
+        <TouchableOpacity
+          onPress={() => openLink("https://www.ticketbylamako.com/conditions-generales-de-vente/")}
+          style={[styles.contactRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
+        >
+          <View style={[styles.contactIcon, { backgroundColor: colors.primary + "15" }]}>
+            <MaterialIcons name="gavel" size={20} color={colors.primary} />
+          </View>
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={[styles.contactLabel, { color: colors.foreground }]}>Conditions Générales de Vente (CGV)</Text>
+          </View>
+          <IconSymbol name="chevron.right" size={16} color={colors.muted} />
+        </TouchableOpacity>
+
         {/* Payment Security */}
         <View style={[styles.securityBadge, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <MaterialIcons name="lock" size={18} color={colors.success} />

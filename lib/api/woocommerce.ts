@@ -1,4 +1,4 @@
-const SITE_URL = process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
+export const SITE_URL = process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
 const CK = process.env.EXPO_PUBLIC_WC_CONSUMER_KEY || "";
 const CS = process.env.EXPO_PUBLIC_WC_CONSUMER_SECRET || "";
 
@@ -40,6 +40,86 @@ async function mobileApiFetch<T>(endpoint: string, params: Record<string, string
   const res = await fetch(mobileApiUrl(endpoint, params));
   if (!res.ok) throw new Error(`Mobile API error: ${res.status}`);
   return res.json();
+}
+
+async function mobileApiPost<T>(endpoint: string, body: any): Promise<T> {
+  const url = mobileApiUrl(endpoint);
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`Mobile API POST error: ${res.status} ${errText}`);
+  }
+  return res.json();
+}
+
+// ---- Create Order (for checkout) ----
+
+export interface CreateOrderItem {
+  product_id: number;
+  quantity: number;
+  variation_id?: number;
+}
+
+export interface CreateOrderBilling {
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string;
+  address_1?: string;
+  city?: string;
+  country?: string;
+}
+
+export interface CreateOrderResponse {
+  order_id: number;
+  order_key: string;
+  checkout_url: string;
+  total: string;
+  item_count: number;
+  errors: string[];
+}
+
+/**
+ * Create a pending WC order from app cart items.
+ * Returns a "pay for order" URL that works without session cookies.
+ */
+export async function createOrder(
+  items: CreateOrderItem[],
+  billing: CreateOrderBilling,
+  customerId?: number
+): Promise<CreateOrderResponse> {
+  return mobileApiPost<CreateOrderResponse>('create-order', {
+    items,
+    billing,
+    customer_id: customerId || 0,
+  });
+}
+
+// ---- Push Token Registration ----
+
+/**
+ * Register an Expo push token with the WordPress backend.
+ * This allows the server to send push notifications for order updates, new events, etc.
+ */
+export async function registerPushToken(
+  token: string,
+  userId?: number,
+  platform?: string
+): Promise<{ success: boolean; message?: string }> {
+  try {
+    return await mobileApiPost<{ success: boolean; message?: string }>('register-push-token', {
+      token,
+      user_id: userId || 0,
+      platform: platform || 'unknown',
+    });
+  } catch (error) {
+    console.warn('Failed to register push token with server:', error);
+    return { success: false, message: String(error) };
+  }
 }
 
 // ---- Ticket Instance Types ----
@@ -524,4 +604,4 @@ export async function getEvents(params: Record<string, string> = {}): Promise<WC
   return products.filter(isTicketProduct);
 }
 
-export { SITE_URL };
+// SITE_URL is exported at top of file

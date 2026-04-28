@@ -315,7 +315,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   loadingText: { marginTop: 12, fontSize: 14, fontFamily: "Raleway-Medium" },
   greetingContainer: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 4 },
-  greetingText: { fontSize: 20, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  greetingText: { fontSize: 15, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
   heroCard: { flex: 1, borderRadius: 16, overflow: "hidden" },
   heroImage: { width: "100%", height: "100%" },
   heroOverlay: { position: "absolute", bottom: 0, left: 0, right: 0, padding: 16, backgroundColor: "rgba(0,0,0,0.5)" },
