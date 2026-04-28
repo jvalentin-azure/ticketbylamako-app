@@ -100,23 +100,76 @@ export default function CheckoutScreen() {
     } catch {}
   };
 
-  // Minimal JS injection - the dedicated checkout page handles its own styling
-  // This is just a safety net for hiding stray WordPress elements
+  // JS injection for checkout WebView:
+  // 1. On dedicated checkout page: just hide stray widgets
+  // 2. On WooCommerce order-received page (after payment gateway redirect): hide full theme, show clean success
+  // 3. On any other WC page: hide theme elements
   const checkoutInjectedJS = `
     (function() {
-      // Hide any WordPress admin bar or floating widgets
+      var url = window.location.href;
+      
+      // Detect order-received / thank-you page (after payment gateway redirect)
+      var isOrderReceived = url.indexOf('order-received') > -1 || url.indexOf('commande-recue') > -1 || url.indexOf('thankyou') > -1;
+      
+      if (isOrderReceived) {
+        // Notify the React Native app immediately
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'payment_success', url: url }));
+        }
+        // Also inject a clean success page style to hide the WordPress theme
+        var style = document.createElement('style');
+        style.textContent = 
+          'header, .site-header, #masthead, .header-wrapper, .header-main, .header-top, .header-bottom,' +
+          'footer, .site-footer, #colophon, .footer-wrapper, .absolute-footer,' +
+          'nav, .navigation, .nav-links, .breadcrumbs, .woocommerce-breadcrumb, #wpadminbar,' +
+          '.sidebar, #sidebar, aside,' +
+          '[class*="whatsapp"], .joinchat, [id*="whatsapp"],' +
+          '[class*="cookie"], [class*="consent"],' +
+          '#fkcart-floating-toggler, .fkcart-main-wrapper, [class*="fkcart"],' +
+          '[class*="tidio"], [id*="tidio"], [class*="chat-widget"],' +
+          '[class*="crisp"], [id*="crisp"],' +
+          '[class*="tawk"], [id*="tawk"],' +
+          '.wc-block-mini-cart, .wp-block-woocommerce-mini-cart,' +
+          '.page-title-inner, .page-title,' +
+          '.comments-area, #comments' +
+          '{ display: none !important; }' +
+          'body { background: #f5f5f5 !important; font-family: -apple-system, BlinkMacSystemFont, sans-serif !important; }' +
+          '.woocommerce-order { max-width: 100% !important; padding: 20px !important; }' +
+          '.woocommerce-thankyou-order-received { font-size: 18px !important; font-weight: 700 !important; color: #22c55e !important; text-align: center !important; padding: 20px 0 !important; }' +
+          '.woocommerce-order-details, .woocommerce-customer-details { margin: 16px 0 !important; padding: 16px !important; background: #fff !important; border-radius: 12px !important; }' +
+          'table.woocommerce-table { font-size: 14px !important; }' +
+          '#content, .site-content, main, .main-content, .entry-content { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }';
+        document.head.appendChild(style);
+        return;
+      }
+      
+      // For all other pages (dedicated checkout, payment gateway pages, etc.)
       function cleanup() {
-        var hide = '#wpadminbar, .qlwapp__container, [class*="qlwapp"], #fkcart-floating-toggler, [class*="fkcart"], [class*="tidio"], [class*="whatsapp"]';
+        var hide = '#wpadminbar, .qlwapp__container, [class*="qlwapp"], #fkcart-floating-toggler, [class*="fkcart"], [class*="tidio"], [class*="whatsapp"], [class*="tawk"], [class*="crisp"]';
         document.querySelectorAll(hide).forEach(function(el) { el.style.display = 'none'; });
-        // Ensure place_order button is visible
+        // Ensure place_order button is visible on checkout page
         var btn = document.getElementById('place_order');
         if (btn) { btn.removeAttribute('hidden'); btn.style.display = 'block'; }
       }
       cleanup();
       setTimeout(cleanup, 500);
       setTimeout(cleanup, 1500);
-      setTimeout(cleanup, 2000);
+      setTimeout(cleanup, 3000);
       setInterval(cleanup, 5000);
+      
+      // Also check for order-received after page loads (in case of client-side redirect)
+      function checkSuccess() {
+        var u = window.location.href;
+        if (u.indexOf('order-received') > -1 || u.indexOf('commande-recue') > -1 || u.indexOf('thankyou') > -1) {
+          if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'payment_success', url: u }));
+          }
+        }
+      }
+      window.addEventListener('load', checkSuccess);
+      // MutationObserver to detect dynamic page changes
+      var obs = new MutationObserver(checkSuccess);
+      obs.observe(document.body, { childList: true, subtree: true });
     })();
     true;
   `;

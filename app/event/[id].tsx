@@ -142,11 +142,8 @@ export default function EventDetailScreen() {
             '{ display: none !important; }' +
             '.tc_in_cart { position: fixed !important; bottom: 0 !important; left: 0 !important; right: 0 !important; z-index: 998 !important; background: rgba(255,255,255,0.97) !important; border-top: 1px solid #e5e7eb !important; padding: 8px 16px !important; font-size: 13px !important; max-height: 100px !important; overflow-y: auto !important; }' +
             '.tc-seatchart-subtotal { font-weight: 600 !important; color: #663d17 !important; }' +
-            /* CRITICAL: Only boost z-index for jQuery UI dialog - let Tickera handle its own layout */
-            '.ui-widget-overlay { z-index: 100000 !important; }' +
-            '.ui-dialog { z-index: 100001 !important; }' +
-            '.tc-seat-dialog .tc_cart_button, .tc-seat-dialog .tickera_button { min-height: 44px !important; font-size: 16px !important; padding: 12px 20px !important; }' +
-            '.tc-seat-dialog .tc_remove_from_cart_button { min-height: 44px !important; font-size: 16px !important; padding: 12px 20px !important; }';
+            /* HIDE jQuery UI dialog entirely - we bypass it with direct AJAX in embed */
+            '.ui-widget-overlay, .ui-dialog, .tc-seat-dialog { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }';
           document.head.appendChild(style);
           // Auto-click the "Pick your seat(s)" button after a short delay (only on seating page)
           if (window.location.href.indexOf('lamako_seat_embed') > -1) {
