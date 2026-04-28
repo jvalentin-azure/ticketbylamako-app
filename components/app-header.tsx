@@ -70,6 +70,7 @@ export function AppHeader({ onMenuPress }: AppHeaderProps) {
 
           {/* Notification Bell */}
           <TouchableOpacity
+            onPress={() => router.push("/notification-settings" as any)}
             style={[styles.iconButton, { backgroundColor: colors.surface }]}
             activeOpacity={0.7}
           >

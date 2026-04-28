@@ -233,3 +233,18 @@
 ### Native Payment Integration (no WebView checkout)
 - [x] Research and plan native payment flow (Mobile Money: MVola, Orange Money, Airtel Money + CyberSource Visa)
 - [ ] Implement native checkout screen within the app (WebView modal for payment, stays in-app)
+
+## V2.7 - Seating Cart Sync, Native Payment, CGV
+
+### Bug Fixes
+- [x] Fix seating chart seat selection not syncing to app cart (seats extracted from DOM and sent to app via postMessage)
+- [x] App cart refreshes after seating chart WebView closes (seats added to local cart via onMessage handler)
+
+### New Features
+- [x] Native payment checkout (same WebView navigates from seating chart to /checkout/ - stays in-app, supports MVola/Orange Money/CyberSource redirects)
+- [ ] CGV page on WordPress + link in About screen
+
+### UI Fixes
+- [x] Make "Bonjour, [utilisateur]" greeting text larger (20px, bold, Raleway-Bold)
+- [x] Deduplicate LamakRewards section on home screen (keep compact banner for logged-in, teaser for logged-out)
+- [x] Make notification bell clickable (navigates to /notification-settings)

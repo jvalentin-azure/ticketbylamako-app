@@ -179,7 +179,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Create confirm button
         var confirmBtn = document.createElement('button');
         confirmBtn.className = 'lamako-confirm-btn';
-        confirmBtn.textContent = 'Confirmer ma sélection';
+        confirmBtn.textContent = 'Confirmer et payer';
         document.body.appendChild(confirmBtn);
         
         // Create seat count display
@@ -187,36 +187,75 @@ document.addEventListener('DOMContentLoaded', function() {
         seatCount.className = 'lamako-seat-count';
         document.body.appendChild(seatCount);
         
-        // When confirm is clicked, post message to WebView
-        confirmBtn.addEventListener('click', function() {
+        // Helper: extract seat data from DOM
+        function extractSeatData() {
             var selectedSeats = [];
+            // Get ticket type info for price lookup
+            var ticketTypes = {};
+            document.querySelectorAll('.tc-ticket-listing').forEach(function(li) {
+                var ttId = li.getAttribute('data-ticket-type-id');
+                if (ttId) {
+                    ticketTypes[ttId] = {
+                        price: li.getAttribute('data-tt-price') || '',
+                        title: li.getAttribute('data-tt-title') || ''
+                    };
+                }
+            });
+            // Collect seats that are in cart
             document.querySelectorAll('.tc_seat_in_cart').forEach(function(seat) {
+                var ttId = seat.getAttribute('data-tt-id') || '';
+                var ttInfo = ticketTypes[ttId] || {};
+                var priceStr = ttInfo.price || '';
+                // Parse price: "Ar 150,000" -> 150000
+                var priceNum = 0;
+                if (priceStr) {
+                    priceNum = parseInt(priceStr.replace(/[^0-9]/g, ''), 10) || 0;
+                }
                 selectedSeats.push({
-                    id: seat.id || seat.getAttribute('data-seat-id') || '',
-                    label: seat.getAttribute('data-seat-label') || seat.textContent.trim() || '',
-                    price: seat.getAttribute('data-price') || '',
-                    ticketTypeId: seat.getAttribute('data-tt-id') || ''
+                    seatId: seat.id || '',
+                    label: seat.textContent.trim() || '',
+                    ticketTypeId: ttId,
+                    ticketTypeName: ttInfo.title || '',
+                    price: priceNum
                 });
             });
-            // Send message to React Native WebView
+            return selectedSeats;
+        }
+        
+        // When confirm is clicked:
+        // 1. Extract seat data and send to app (for local cart display)
+        // 2. Navigate to /checkout/ in the SAME page (WC cart already has seats)
+        confirmBtn.addEventListener('click', function() {
+            var seats = extractSeatData();
+            // Send seat data to React Native app for local cart
             if (window.ReactNativeWebView) {
                 window.ReactNativeWebView.postMessage(JSON.stringify({
                     type: 'seats_confirmed',
-                    seats: selectedSeats,
-                    count: selectedSeats.length
+                    seats: seats,
+                    count: seats.length
                 }));
             }
+            // Small delay to let postMessage process, then navigate to checkout
+            setTimeout(function() {
+                // Notify app we're navigating to checkout
+                if (window.ReactNativeWebView) {
+                    window.ReactNativeWebView.postMessage(JSON.stringify({
+                        type: 'navigating_to_checkout'
+                    }));
+                }
+                window.location.href = '<?php echo home_url('/checkout/'); ?>';
+            }, 300);
         });
         
         // Watch for seat changes using MutationObserver
-        // Tickera uses tc_seat_in_cart class (set by Firebase front.js)
+        // Tickera uses tc_seat_in_cart class (set by Firebase front.js after AJAX add-to-cart)
         function updateSeatCount() {
             var seats = document.querySelectorAll('.tc_seat_in_cart');
             var count = seats.length;
             if (count > 0) {
                 seatCount.textContent = count + (count === 1 ? ' siège sélectionné' : ' sièges sélectionnés');
                 seatCount.classList.add('visible');
-                confirmBtn.textContent = 'Confirmer ma sélection (' + count + ')';
+                confirmBtn.textContent = 'Confirmer et payer (' + count + ')';
                 confirmBtn.classList.add('visible');
             } else {
                 seatCount.classList.remove('visible');

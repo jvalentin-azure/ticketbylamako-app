@@ -25,7 +25,7 @@ export default function EventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useColors();
   const router = useRouter();
-  const { addItem } = useCart();
+  const { addItem, clearCart } = useCart();
   const [event, setEvent] = useState<TCEvent | null>(null);
   const [tickets, setTickets] = useState<TicketType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,6 +34,7 @@ export default function EventDetailScreen() {
   const [showSeatingChart, setShowSeatingChart] = useState(false);
   const [seatingChartUrl, setSeatingChartUrl] = useState<string | null>(null);
   const [seatingLoading, setSeatingLoading] = useState(false);
+  const [webviewPhase, setWebviewPhase] = useState<'seating' | 'checkout' | 'confirmation'>('seating');
   const [galleryIndex, setGalleryIndex] = useState(0);
   const { isFavorite, toggleFavorite } = useFavorites();
 
@@ -118,8 +119,7 @@ export default function EventDetailScreen() {
 
   // Seating Chart WebView - loads the tc_seat_charts page directly (same approach as POS plugin)
   if (showSeatingChart && event && seatingChartUrl) {
-    // Minimal injected JS: only hide remaining theme chrome and auto-click the seat picker button.
-    // DO NOT override .tc_seating_map or .tc-wrapper positioning - let Tickera handle its own layout.
+    // JS injected on every page load in the WebView - hides site chrome
     const injectedJS = `
       (function() {
         function cleanup() {
@@ -139,17 +139,47 @@ export default function EventDetailScreen() {
             '.tc-seatchart-subtotal, .tc-checkout-bar' +
             '{ display: none !important; }';
           document.head.appendChild(style);
-          // Auto-click the "Pick your seat(s)" button after a short delay
-          setTimeout(function() {
-            var btn = document.querySelector('.tc_seating_map_button');
-            if (btn) btn.click();
-          }, 2000);
+          // Auto-click the "Pick your seat(s)" button after a short delay (only on seating page)
+          if (window.location.href.indexOf('lamako_seat_embed') > -1) {
+            setTimeout(function() {
+              var btn = document.querySelector('.tc_seating_map_button');
+              if (btn) btn.click();
+            }, 2000);
+          }
+          // On checkout page, add mobile-friendly styles
+          if (window.location.href.indexOf('/checkout') > -1 || window.location.href.indexOf('/commande') > -1) {
+            var checkoutStyle = document.createElement('style');
+            checkoutStyle.textContent = 
+              'body { font-family: -apple-system, BlinkMacSystemFont, sans-serif !important; font-size: 15px !important; }' +
+              '.woocommerce-checkout { padding: 12px !important; }' +
+              '.woocommerce-form-coupon-toggle, .woocommerce-form-login-toggle { display: none !important; }' +
+              'table.shop_table { font-size: 14px !important; }' +
+              '#payment { margin-top: 16px !important; }' +
+              '#place_order { font-size: 17px !important; padding: 14px !important; border-radius: 12px !important; }';
+            document.head.appendChild(checkoutStyle);
+            // Notify app that checkout page loaded
+            if (window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'checkout_loaded' }));
+            }
+          }
+          // On order confirmation page
+          if (window.location.href.indexOf('order-received') > -1 || window.location.href.indexOf('commande-recue') > -1) {
+            if (window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'order_confirmed' }));
+            }
+          }
         }
         if (document.readyState === 'complete') setTimeout(cleanup, 500);
         else window.addEventListener('load', function() { setTimeout(cleanup, 500); });
       })();
       true;
     `;
+
+    // Header title and icon based on current phase
+    const headerTitle = webviewPhase === 'seating' ? 'Plan de salle' 
+      : webviewPhase === 'checkout' ? 'Paiement sécurisé' 
+      : 'Confirmation';
+    const headerIcon = webviewPhase === 'checkout' ? 'lock.fill' : webviewPhase === 'confirmation' ? 'checkmark.circle.fill' : undefined;
     
     if (Platform.OS === "web") {
       return (
@@ -190,11 +220,26 @@ export default function EventDetailScreen() {
     return (
       <ScreenContainer edges={["top", "left", "right", "bottom"]}>
         <View style={[styles.seatingHeader, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={() => setShowSeatingChart(false)} style={styles.seatingBackBtn}>
+          <TouchableOpacity onPress={() => {
+            if (webviewPhase === 'confirmation') {
+              // After order confirmation, go to tickets
+              setShowSeatingChart(false);
+              setWebviewPhase('seating');
+              router.replace("/(tabs)/tickets");
+            } else {
+              setShowSeatingChart(false);
+              setWebviewPhase('seating');
+            }
+          }} style={styles.seatingBackBtn}>
             <IconSymbol name="chevron.left" size={20} color={colors.foreground} />
-            <Text style={[styles.seatingBackText, { color: colors.foreground }]}>Retour</Text>
+            <Text style={[styles.seatingBackText, { color: colors.foreground }]}>
+              {webviewPhase === 'confirmation' ? 'Mes billets' : 'Retour'}
+            </Text>
           </TouchableOpacity>
-          <Text style={[styles.seatingTitle, { color: colors.foreground }]}>Plan de salle</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            {headerIcon && <IconSymbol name={headerIcon as any} size={16} color={webviewPhase === 'checkout' ? colors.success : colors.primary} />}
+            <Text style={[styles.seatingTitle, { color: colors.foreground }]}>{headerTitle}</Text>
+          </View>
           <View style={{ width: 80 }} />
         </View>
         <WebViewComponent
@@ -215,33 +260,56 @@ export default function EventDetailScreen() {
           renderLoading={() => (
             <View style={{ flex: 1, alignItems: "center", justifyContent: "center", position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "#fff" }}>
               <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={{ marginTop: 12, color: colors.muted, fontFamily: "Raleway-Medium", textAlign: "center" }}>{"Chargement du plan de salle...\nAppuyez sur le bouton pour choisir votre siège"}</Text>
+              <Text style={{ marginTop: 12, color: colors.muted, fontFamily: "Raleway-Medium", textAlign: "center" }}>
+                {webviewPhase === 'checkout' ? "Chargement du paiement..." : "Chargement du plan de salle..."}
+              </Text>
             </View>
           )}
           onMessage={(e: any) => {
             try {
               const data = JSON.parse(e.nativeEvent.data);
-              if (data.type === 'seats_confirmed' && data.seats) {
-                // Seats confirmed - close WebView and return to event detail
-                // The seats are now in the WooCommerce cart server-side
-                setShowSeatingChart(false);
-                // TODO: refresh cart or show confirmation
+              if (data.type === 'seats_confirmed' && data.seats && Array.isArray(data.seats)) {
+                // Add each seat to the local cart for display
+                data.seats.forEach((seat: any) => {
+                  if (seat.ticketTypeId && seat.price) {
+                    addItem({
+                      productId: Number(seat.ticketTypeId),
+                      name: `${name} - ${seat.ticketTypeName || 'Siège'} (${seat.label || 'Siège'})`,
+                      price: Number(seat.price) || 0,
+                      image: event.featuredImage || "",
+                      isEvent: true,
+                      seatLabel: seat.label || seat.seatId || '',
+                    });
+                  }
+                });
+              }
+              if (data.type === 'navigating_to_checkout' || data.type === 'checkout_loaded') {
+                setWebviewPhase('checkout');
+              }
+              if (data.type === 'order_confirmed') {
+                setWebviewPhase('confirmation');
+                clearCart();
               }
             } catch {}
           }}
           onNavigationStateChange={(navState: any) => {
             const url = navState.url || "";
-            // If user completes checkout, go to tickets
+            // Detect checkout page
+            if (url.includes('/checkout') || url.includes('/commande')) {
+              setWebviewPhase('checkout');
+            }
+            // Detect order confirmation page
             if (url.includes("order-received") || url.includes("commande-recue")) {
-              setShowSeatingChart(false);
-              router.replace("/(tabs)/tickets");
+              setWebviewPhase('confirmation');
             }
           }}
           onShouldStartLoadWithRequest={(request: any) => {
-            // Allow all navigation within the site
+            // Allow all navigation within the site (including checkout)
             const url = request.url || "";
             if (url.startsWith(SITE_URL) || url.startsWith("about:") || url.startsWith("data:")) return true;
-            // Block external navigation
+            // Allow payment gateway redirects (some payment gateways redirect to external URLs)
+            if (url.includes('mvola') || url.includes('orange') || url.includes('airtel') || url.includes('cybersource') || url.includes('visa')) return true;
+            // Block other external navigation
             return false;
           }}
         />

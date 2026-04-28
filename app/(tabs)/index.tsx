@@ -265,69 +265,32 @@ export default function HomeScreen() {
           </TouchableOpacity>
         )}
 
-        {/* LAMAKO REWARDS INFO SECTION (for all users) */}
-        <View style={{ marginHorizontal: 16, marginTop: 28 }}>
-          <View style={styles.sectionHeaderInline}>
-            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>LamakoRewards</Text>
-          </View>
-          <LinearGradient
-            colors={["#663d17", "#8B5E34"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.rewardsInfoCard}
+        {/* LAMAKO REWARDS TEASER (for non-authenticated users) */}
+        {!isAuthenticated && (
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => router.push("/(auth)/login" as any)}
+            style={{ marginHorizontal: 16, marginTop: 24 }}
           >
-            <View style={styles.rewardsInfoHeader}>
-              <RNImage source={require("@/assets/images/lamako-rewards-white.png")} style={{ width: 100, height: 36 }} resizeMode="contain" />
-              <Text style={styles.rewardsInfoBadge}>Programme de fidélité</Text>
-            </View>
-            <Text style={styles.rewardsInfoDesc}>
-              Gagnez des points à chaque achat de billets et de goodies. Échangez-les contre des réductions, des accès VIP et des cadeaux exclusifs.
-            </Text>
-            <View style={styles.rewardsInfoGrid}>
-              <View style={styles.rewardsInfoItem}>
-                <Text style={styles.rewardsInfoEmoji}>🎫</Text>
-                <Text style={styles.rewardsInfoItemTitle}>Achetez</Text>
-                <Text style={styles.rewardsInfoItemSub}>1 Ar = 1 point</Text>
-              </View>
-              <View style={styles.rewardsInfoItem}>
-                <Text style={styles.rewardsInfoEmoji}>⭐</Text>
-                <Text style={styles.rewardsInfoItemTitle}>Cumulez</Text>
-                <Text style={styles.rewardsInfoItemSub}>Montez en niveau</Text>
-              </View>
-              <View style={styles.rewardsInfoItem}>
-                <Text style={styles.rewardsInfoEmoji}>🎁</Text>
-                <Text style={styles.rewardsInfoItemTitle}>Profitez</Text>
-                <Text style={styles.rewardsInfoItemSub}>Réductions & VIP</Text>
-              </View>
-            </View>
-            <View style={styles.rewardsTiers}>
-              {["Bronze", "Argent", "Or", "Platine"].map((tier, i) => (
-                <View key={tier} style={[styles.rewardsTierPill, { backgroundColor: "rgba(255,255,255," + (0.1 + i * 0.05) + ")" }]}>
-                  <Text style={styles.rewardsTierText}>{tier}</Text>
-                </View>
-              ))}
-            </View>
-          </LinearGradient>
-          {isAuthenticated ? (
-            <TouchableOpacity
-              onPress={() => router.push("/rewards" as any)}
-              style={[styles.rewardsCtaBtn, { backgroundColor: "#663d17" }]}
-              activeOpacity={0.8}
+            <LinearGradient
+              colors={["#663d17", "#8B5E34", "#c79f6c"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.rewardsBanner}
             >
-              <Text style={styles.rewardsCtaBtnText}>Voir mes récompenses</Text>
-              <IconSymbol name="chevron.right" size={14} color="#fff" />
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              onPress={() => router.push("/(auth)/login" as any)}
-              style={[styles.rewardsCtaBtn, { backgroundColor: "#663d17" }]}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.rewardsCtaBtnText}>Connectez-vous pour commencer</Text>
-              <IconSymbol name="chevron.right" size={14} color="#fff" />
-            </TouchableOpacity>
-          )}
-        </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rewardsBannerTitle}>LamakoRewards</Text>
+                <Text style={styles.rewardsBannerSub}>
+                  Gagnez des points à chaque achat
+                </Text>
+              </View>
+              <View style={styles.rewardsBannerIcon}>
+                <RNImage source={require("@/assets/images/lamako-rewards-white.png")} style={{ width: 80, height: 30 }} resizeMode="contain" />
+              </View>
+              <IconSymbol name="chevron.right" size={16} color="rgba(255,255,255,0.7)" />
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
 
         {/* LOGIN CTA */}
         {!isAuthenticated && (
@@ -352,7 +315,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   loadingText: { marginTop: 12, fontSize: 14, fontFamily: "Raleway-Medium" },
   greetingContainer: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 4 },
-  greetingText: { fontSize: 13, fontFamily: "Raleway-Medium" },
+  greetingText: { fontSize: 20, fontWeight: "700", fontFamily: "Raleway-Bold" },
   heroCard: { flex: 1, borderRadius: 16, overflow: "hidden" },
   heroImage: { width: "100%", height: "100%" },
   heroOverlay: { position: "absolute", bottom: 0, left: 0, right: 0, padding: 16, backgroundColor: "rgba(0,0,0,0.5)" },
