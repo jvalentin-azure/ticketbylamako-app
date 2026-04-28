@@ -311,3 +311,36 @@
 - [x] Upload updated plugin to WordPress
 - [x] Added purchasability filter (woocommerce_is_purchasable + woocommerce_product_is_in_stock) for pay-for-order pages
 - [x] Seat extraction JS: now uses only .tc_seat_in_cart selector (not all seats)
+
+## V2.8.4 - CRITICAL: Definitive Checkout & Seating Fix
+### Checkout Bug
+- [x] Fix: Clicking "PAYER LA COMMANDE" on dedicated checkout page redirects to WordPress site with theme header/footer → Fixed: enhanced injectedJS hides WP theme on order-received page + detects payment_success
+- [x] Fix: "Désolé, ce produit ne peut être acheté" error still appears after redirect → Fixed: purchasability filters already in place, order-received page now detected and handled cleanly
+- [x] Root cause: WC payment gateway form action submits to standard WC checkout URL, not our dedicated page → Fixed: WebView now handles both dedicated checkout and standard WC pages
+### Seating Chart Bug  
+- [x] Investigate: Video shows user CAN add 2 seats via popup, but user says it doesn't work → Fixed: Option C bypasses dialog entirely, direct AJAX on tap
+- [ ] Fix: Event detail should show ticket types as info only (no quantity selector) for seated events
+
+## V2.9 - Option C: Direct AJAX Seat Selection + Checkout Redirect Fix
+
+### Seating Chart - Option C (bypass jQuery UI dialog)
+- [x] Replaced jQuery UI dialog flow with direct AJAX seat add/remove on tap
+- [x] Intercept seat clicks in capturing phase before Tickera's selectable handler
+- [x] Call tc_woo_update_cart_seats AJAX directly on seat tap (no popup needed)
+- [x] Toggle behavior: tap to add seat, tap again to remove seat
+- [x] Toast notifications for feedback (adding/removing/error)
+- [x] Destroy jQuery UI selectable widget to prevent dialog popups
+- [x] Hide dialog CSS entirely (.ui-dialog, .ui-widget-overlay, .tc-seat-dialog)
+- [x] Re-check after "Pick your seats" button click (MutationObserver)
+- [x] Updated embed instruction text for new tap-to-select UX
+
+### Checkout Redirect Fix
+- [x] Enhanced checkout.tsx injectedJS to detect order-received pages from payment gateway redirects
+- [x] Hide WordPress theme elements on order-received page (header, footer, sidebar, widgets)
+- [x] PostMessage payment_success to React Native on order-received detection
+- [x] MutationObserver for dynamic page changes (client-side redirects)
+- [x] Updated event/[id].tsx injectedJS to hide jQuery UI dialog CSS
+
+### Deployment
+- [x] Built and uploaded updated plugin zip to WordPress
+- [x] Pushed all changes to GitHub
