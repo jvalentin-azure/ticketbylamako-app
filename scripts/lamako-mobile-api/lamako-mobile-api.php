@@ -19,6 +19,39 @@
 if ( ! defined( 'ABSPATH' ) ) exit; // Exit if accessed directly
 
 // ============================================================
+// 0. ALLOW PAY-FOR-ORDER WITHOUT LOGIN (for mobile app checkout)
+// ============================================================
+
+/**
+ * Allow guests to pay for orders without logging in.
+ * The pay-for-order URL includes the order key for security.
+ * This is essential for the mobile app checkout flow where users
+ * are not logged into WordPress.
+ */
+add_filter( 'user_has_cap', 'lamako_mobile_allow_pay_without_login', 9999, 3 );
+
+function lamako_mobile_allow_pay_without_login( $allcaps, $caps, $args ) {
+    if ( isset( $caps[0], $_GET['key'] ) ) {
+        if ( $caps[0] === 'pay_for_order' ) {
+            $order_id = isset( $args[2] ) ? $args[2] : null;
+            if ( $order_id ) {
+                $order = wc_get_order( $order_id );
+                if ( $order && $order->get_order_key() === sanitize_text_field( $_GET['key'] ) ) {
+                    $allcaps['pay_for_order'] = true;
+                }
+            }
+        }
+    }
+    return $allcaps;
+}
+
+/**
+ * Disable WooCommerce email verification requirement for order-pay pages.
+ * This prevents the "verify your email" screen from appearing.
+ */
+add_filter( 'woocommerce_order_email_verification_required', '__return_false', 9999 );
+
+// ============================================================
 // 1. SEATING CHART EMBED TEMPLATE (template_redirect hook)
 // ============================================================
 
@@ -645,14 +678,10 @@ function lamako_mobile_create_order( $request ) {
     $order->save();
     
     // Build the "pay for order" URL
+    // Always construct manually to avoid WP nonce issues in mobile WebView
     $order_id  = $order->get_id();
     $order_key = $order->get_order_key();
-    $pay_url   = $order->get_checkout_payment_url();
-    
-    // Fallback: construct URL manually if get_checkout_payment_url() fails
-    if ( empty( $pay_url ) || strpos( $pay_url, 'pay_for_order' ) === false ) {
-        $pay_url = home_url( '/checkout/order-pay/' . $order_id . '/?pay_for_order=true&key=' . $order_key );
-    }
+    $pay_url   = home_url( '/checkout/order-pay/' . $order_id . '/?pay_for_order=true&key=' . $order_key );
     
     return [
         'order_id'     => $order_id,

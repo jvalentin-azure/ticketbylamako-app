@@ -381,16 +381,9 @@ export default function EventDetailScreen() {
                         var seen = {};
                         
                         // Find all seats that are selected/in-cart using multiple selectors
-                        // Tickera uses various class names depending on version
-                        var seatSelectors = [
-                          '.tc_seat_in_cart',
-                          '.tc_set_seat[data-tt-id]',
-                          '.tc_seat.tc_seat_selected',
-                          '.tc_seat[style*="opacity: 0.5"]',
-                          '.tc_seat.selected',
-                          'div.tc_seat[data-tt-id][class*="cart"]'
-                        ];
-                        var seats = document.querySelectorAll(seatSelectors.join(', '));
+                        // ONLY select seats that Tickera has added to its WC cart
+                        // tc_seat_in_cart is the class Tickera adds when user confirms via the popup
+                        var seats = document.querySelectorAll('.tc_seat_in_cart');
                         
                         seats.forEach(function(seat) {
                           var ttId = seat.getAttribute('data-tt-id');

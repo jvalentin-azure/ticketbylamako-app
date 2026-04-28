@@ -278,3 +278,16 @@
 - [x] Fix seating chart: added WC session initialization in embed template
 - [x] Fix checkout WebView: WebView import fixed, pay-for-order URL should now load correctly
 - [x] Improved seat extraction JS: multiple selectors, deduplication, debug info on failure
+
+## V2.8.1 - Critical Bug Fixes (from video testing)
+
+### Seating Chart Bugs
+- [x] Fix: Confirmer button adds ALL seats → now uses only `.tc_seat_in_cart` selector
+- [x] Fix: Seats visual feedback → removed CSS hiding `.tc_in_cart`, Tickera now colors seats normally
+- [x] Fix: Seat extraction JS → only grabs `.tc_seat_in_cart` (seats user added via Tickera popup)
+
+### Checkout Bugs
+- [x] Fix: Checkout login redirect → added `user_has_cap` filter to allow pay-for-order without login
+- [x] Fix: Email verification bypass → added `woocommerce_order_email_verification_required` filter
+- [x] Fix: Pay URL → always constructed manually (no WP nonce dependency)
+- [x] Fix: Non-seating event checkout → same fix applies (all orders use create-order API)
