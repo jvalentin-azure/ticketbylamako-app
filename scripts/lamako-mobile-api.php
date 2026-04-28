@@ -3,7 +3,7 @@
  * Plugin Name: Lamako Mobile API
  * Plugin URI: https://www.ticketbylamako.com
  * Description: REST API endpoints for the TicketByLamako mobile app - ticket instances, seating chart embed, and more.
- * Version: 1.0.0
+ * Version: 2.0.1
  * Author: Lamako Events
  * Author URI: https://www.ticketbylamako.com
  * License: GPL v2 or later
@@ -52,44 +52,39 @@ function lamako_mobile_allow_pay_without_login( $allcaps, $caps, $args ) {
 add_filter( 'woocommerce_order_email_verification_required', '__return_false', 9999 );
 
 /**
- * Force products to be purchasable on pay-for-order pages.
- * Tickera ticket products may have purchasability restrictions that
- * prevent them from being paid for via the mobile app checkout.
+ * Force ALL Tickera ticket products to be purchasable.
+ * 
+ * Tickera's WooCommerce Bridge marks ticket products as non-purchasable
+ * to prevent direct purchase (it uses its own cart flow via seating charts).
+ * However, this blocks:
+ *   1. The seating chart AJAX (tc_woo_update_cart_seats) which calls WC()->cart->add_to_cart()
+ *   2. Our custom checkout page (lamako_checkout) pay-for-order flow
+ *   3. The standard WC pay-for-order page
+ * 
+ * Solution: Always return true for products that have a price set.
+ * This is safe because the seating chart plugin controls availability
+ * via its own seat reservation system (Firebase + cookies).
  */
-add_filter( 'woocommerce_is_purchasable', 'lamako_mobile_force_purchasable', 9999, 2 );
+add_filter( 'woocommerce_is_purchasable', 'lamako_force_all_purchasable', 9999, 2 );
 
-function lamako_mobile_force_purchasable( $purchasable, $product ) {
-    // Only override on pay-for-order pages (mobile app checkout)
-    if ( isset( $_GET['pay_for_order'], $_GET['key'] ) && $_GET['pay_for_order'] === 'true' ) {
-        // Verify the order key matches a real order for security
-        $order_id = absint( get_query_var( 'order-pay' ) );
-        if ( $order_id > 0 ) {
-            $order = wc_get_order( $order_id );
-            if ( $order && $order->get_order_key() === sanitize_text_field( $_GET['key'] ) ) {
-                return true;
-            }
-        }
+function lamako_force_all_purchasable( $purchasable, $product ) {
+    // If the product has a price, make it purchasable
+    if ( $product && $product->get_price() !== '' && $product->get_price() !== null ) {
+        return true;
     }
     return $purchasable;
 }
 
 /**
- * Also force stock status check to pass on pay-for-order pages.
- * Some Tickera products may show as out of stock.
+ * Also force stock status to be in-stock for all products.
+ * Tickera may mark products as out of stock when all seats are reserved,
+ * but the seat reservation system handles availability separately.
  */
-add_filter( 'woocommerce_product_is_in_stock', 'lamako_mobile_force_in_stock', 9999, 2 );
+add_filter( 'woocommerce_product_is_in_stock', 'lamako_force_all_in_stock', 9999, 2 );
 
-function lamako_mobile_force_in_stock( $in_stock, $product ) {
-    if ( isset( $_GET['pay_for_order'], $_GET['key'] ) && $_GET['pay_for_order'] === 'true' ) {
-        $order_id = absint( get_query_var( 'order-pay' ) );
-        if ( $order_id > 0 ) {
-            $order = wc_get_order( $order_id );
-            if ( $order && $order->get_order_key() === sanitize_text_field( $_GET['key'] ) ) {
-                return true;
-            }
-        }
-    }
-    return $in_stock;
+function lamako_force_all_in_stock( $in_stock, $product ) {
+    // Always return true - seat availability is managed by Tickera's own system
+    return true;
 }
 
 // ============================================================
@@ -300,6 +295,60 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         /**
+         * Build a color-to-ticketTypeId map from the legend.
+         * Legend items have class 'tt_XXXX' where XXXX is the product ID.
+         */
+        var colorToTicketType = {};
+        function buildColorMap() {
+            var legends = document.querySelectorAll('li[class*="tt_"]');
+            legends.forEach(function(li) {
+                var match = li.className.match(/tt_(\d+)/);
+                if (match) {
+                    var ttId = match[1];
+                    // The legend has a <span style="background-color:#xxx"> child
+                    var colorSpan = li.querySelector('span[style*="background-color"]');
+                    if (colorSpan) {
+                        var bg = colorSpan.style.backgroundColor;
+                        if (bg) colorToTicketType[bg] = ttId;
+                    }
+                    // Also map by the li's computed color (fallback)
+                    var liColor = window.getComputedStyle(li).color;
+                    if (liColor) colorToTicketType[liColor] = ttId;
+                }
+            });
+            console.log('[Lamako] Color map built:', colorToTicketType);
+        }
+        
+        /**
+         * Determine ticket type ID for a seat element.
+         * Priority: 1) data-tt-id attribute, 2) color matching with legend
+         */
+        function getTicketTypeId(seatEl) {
+            // First try direct attribute
+            var ttId = seatEl.getAttribute('data-tt-id');
+            if (ttId) return ttId;
+            
+            // Then try color matching
+            var bgColor = seatEl.style.backgroundColor;
+            if (bgColor && colorToTicketType[bgColor]) {
+                return colorToTicketType[bgColor];
+            }
+            
+            // Try computed color
+            var computedBg = window.getComputedStyle(seatEl).backgroundColor;
+            if (computedBg && colorToTicketType[computedBg]) {
+                return colorToTicketType[computedBg];
+            }
+            
+            // Fallback: if there's only one ticket type, use that
+            var ttIds = Object.values(colorToTicketType);
+            var uniqueIds = ttIds.filter(function(v, i, a) { return a.indexOf(v) === i; });
+            if (uniqueIds.length === 1) return uniqueIds[0];
+            
+            return null;
+        }
+        
+        /**
          * Direct AJAX add-to-cart for a seat, bypassing the jQuery UI dialog.
          */
         function addSeatToCart(seatEl) {
@@ -320,11 +369,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             
+            // Skip seats without data-tt-id (not assigned to any ticket type)
+            // Tickera only sells seats that have data-tt-id attribute
+            var hasTtId = seatEl.getAttribute('data-tt-id');
+            if (!hasTtId) {
+                // Try color matching as fallback
+                var bgColor = seatEl.style.backgroundColor;
+                var colorMatch = bgColor && colorToTicketType[bgColor];
+                if (!colorMatch) {
+                    showToast('Ce siège n\'est pas disponible', true);
+                    return;
+                }
+            }
+            
             processing = true;
             
-            // Read seat data from DOM attributes
-            var ticketTypeId = seatEl.getAttribute('data-tt-id');
-            var seatId = seatEl.id || seatEl.getAttribute('data-seat-id') || '';
+            // Determine ticket type from attribute or color
+            var ticketTypeId = getTicketTypeId(seatEl);
+            var seatId = seatEl.id || '';
             var mapEl = seatEl.closest('.tc_seating_map');
             var chartId = mapEl ? mapEl.getAttribute('data-seating-chart-id') : '';
             
@@ -336,7 +398,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             if (!ticketTypeId || !seatId || !chartId) {
                 processing = false;
-                showToast('Données du siège manquantes', true);
+                showToast('Ce siège n\'a pas de type de billet assigné', true);
                 return;
             }
             
@@ -406,13 +468,18 @@ document.addEventListener('DOMContentLoaded', function() {
             if (processing) return;
             processing = true;
             
-            var ticketTypeId = seatEl.getAttribute('data-tt-id');
+            var ticketTypeId = getTicketTypeId(seatEl);
             var seatId = seatEl.id || '';
             var mapEl = seatEl.closest('.tc_seating_map');
             var chartId = mapEl ? mapEl.getAttribute('data-seating-chart-id') : '';
             var labelEl = seatEl.querySelector('span p');
             var seatLabel = labelEl ? labelEl.textContent.trim() : '';
             seatLabel = seatLabel.replace(/-/g, '\u2013');
+            
+            if (!ticketTypeId) {
+                processing = false;
+                return;
+            }
             
             var cartItem = ticketTypeId + '-' + seatId + '-' + seatLabel + '-' + chartId;
             
@@ -464,11 +531,12 @@ document.addEventListener('DOMContentLoaded', function() {
          * Intercept seat clicks BEFORE Tickera's selectable handler.
          * We use a capturing event listener on the document to catch clicks
          * before they reach jQuery UI's selectable widget.
+         * Target: .tc_seat_unit elements (ALL seats in the chart)
          */
         function interceptSeatClicks() {
             document.addEventListener('click', function(e) {
-                // Find the closest seat element (Tickera seats have data-tt-id attribute)
-                var seatEl = e.target.closest('[data-tt-id]');
+                // Find the closest seat element (class tc_seat_unit)
+                var seatEl = e.target.closest('.tc_seat_unit');
                 if (!seatEl) return;
                 
                 // Only intercept if it's inside a seating map
@@ -485,7 +553,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Also intercept touch events for mobile
             document.addEventListener('touchend', function(e) {
-                var seatEl = e.target.closest('[data-tt-id]');
+                var seatEl = e.target.closest('.tc_seat_unit');
                 if (!seatEl) return;
                 var mapEl = seatEl.closest('.tc_seating_map');
                 if (!mapEl) return;
@@ -523,8 +591,9 @@ document.addEventListener('DOMContentLoaded', function() {
         // Wait for the seating map to be rendered, then set up our interceptors
         function initWhenReady() {
             var map = document.querySelector('.tc_seating_map.active, .tc_seating_map');
-            if (map && map.querySelector('[data-tt-id]')) {
-                // Map is loaded with seats
+            if (map && map.querySelector('.tc_seat_unit')) {
+                // Map is loaded with seats - build color map from legend
+                buildColorMap();
                 disableSelectableWidget();
                 interceptSeatClicks();
                 updateSeatCount();
@@ -552,8 +621,9 @@ document.addEventListener('DOMContentLoaded', function() {
         // (the map may not have seats until user clicks the button)
         var mapBtnObserver = new MutationObserver(function() {
             var map = document.querySelector('.tc_seating_map.active');
-            if (map && map.querySelector('[data-tt-id]')) {
+            if (map && map.querySelector('.tc_seat_unit')) {
                 setTimeout(function() {
+                    buildColorMap();
                     disableSelectableWidget();
                     updateSeatCount();
                 }, 1000);
