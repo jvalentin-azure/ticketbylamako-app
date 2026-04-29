@@ -5,7 +5,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useCart } from "@/lib/cart-provider";
 import { getStoredUser } from "@/lib/api/auth";
-import { createOrder, SITE_URL } from "@/lib/api/woocommerce";
+import { createOrder, SITE_URL, clearServerCart } from "@/lib/api/woocommerce";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { formatAriary } from "@/lib/format";
 
@@ -90,6 +90,7 @@ export default function CheckoutScreen() {
     if (url.includes("order-received") || url.includes("commande-recue") || url.includes("thankyou")) {
       setPhase("success");
       clearCart();
+      clearServerCart(); // Also clear WC server-side cart
       return;
     }
     
@@ -122,12 +123,15 @@ export default function CheckoutScreen() {
       if (data.type === "payment_success") {
         setPhase("success");
         clearCart();
+        clearServerCart(); // Also clear WC server-side cart
       } else if (data.type === "payment_error") {
         setPaymentErrorMsg(data.error || data.message || "Erreur de paiement");
         setPhase("payment_error");
       } else if (data.type === "payment_cancelled") {
-        setPaymentErrorMsg("Le paiement a \u00e9t\u00e9 annul\u00e9 ou n'a pas abouti.");
+        setPaymentErrorMsg("Le paiement a été annulé ou n'a pas abouti.");
         setPhase("payment_error");
+      } else if (data.type === "go_back") {
+        router.back();
       }
     } catch {}
   };

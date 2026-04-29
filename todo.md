@@ -387,3 +387,21 @@
 ### Deployment
 - [x] Plugin updated to v2.0.2 on WordPress
 - [x] Committed to git
+
+## V2.9.3 - Checkout & Seating Chart UX Improvements
+
+### Checkout Page
+- [ ] Fix: Terms checkbox required before "Payer" button is clickable
+- [ ] Fix: Back button on payment page is at top, inaccessible → reposition
+- [ ] Fix: Terms checkbox/text hidden behind the pay button → fix z-index/layout
+- [ ] Add: Phone number field for MVola/Airtel Money (gateway needs it to send payment request)
+
+### Seating Chart UX
+- [ ] Fix: Toast should show seat name/number (e.g., "Siège A11 ajouté" not just "Siège ajouté")
+- [ ] Fix: Alert colors → green for added, red for removed
+- [ ] Add: List of selected seats visible on screen so user can see what they picked and tap to remove
+- [ ] Fix: Layout improvements for better visibility of alerts and selected seats
+
+### Cart/Order Cleanup
+- [ ] Fix: Clear WooCommerce cart server-side after successful payment (seats from previous order still in cart)
+- [ ] Fix: Previously ordered seats should not reappear in cart for new orders
