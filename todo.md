@@ -419,16 +419,16 @@
 
 ### Seating Chart Layout
 - [ ] Fix: Too much empty space at bottom (see screenshot)
-- [ ] Fix: +/- zoom buttons too big and wrong color (mauve) → make smaller and Lamako brown/gold
-- [ ] Fix: Ensure selected seats recap panel is visible
+- [x] Fix: +/- zoom buttons → native React Native buttons on same line as Confirmer (left side)
+- [x] Fix: Ensure selected seats recap panel is visible (already working in v2.0.3)
 
 ### Order Tracking
-- [ ] Add: Meta "source: mobile_app" on orders created from the app
+- [x] Add: Meta "source: mobile_app" on orders created from the app (set_created_via + _lamako_mobile_order meta)
 - [ ] Fix: POS Guichet plugin should show "App" instead of "POS" for app orders
-- [ ] Add: Dashboard plugin should show app orders KPI (count, revenue)
+- [x] Add: Dashboard plugin should show app orders KPI (count, revenue) - v1.0.6 deployed
 
 ### Mobile App Bugs (reported)
-- [ ] Fix: Vider le panier dans l'app ne vide pas le panier WooCommerce côté serveur
-- [ ] Fix: Seating chart - retirer un siège en bas → il reste sélectionné visuellement sur le plan
-- [ ] Fix: Seating chart - ajouter un 2ème siège → le 1er siège disparaît du panneau récap en bas
-- [ ] Fix: Boutons + et - (quantité tickets) ont disparu
+- [x] Fix: Vider le panier dans l'app ne vide pas le panier WooCommerce côté serveur (clearServerCart added)
+- [x] Fix: Seating chart - retirer un siège → removeSeatFromCart removes tc_seat_in_cart class + updateSeatCount
+- [x] Fix: Seating chart - MutationObserver debounced (300ms) to avoid intermediate seat_count_update
+- [x] Fix: Boutons +/- zoom → native React Native buttons in overlay, Tickera buttons hidden but JS-clickable
