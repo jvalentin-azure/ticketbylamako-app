@@ -17,7 +17,7 @@ if (Platform.OS !== "web") {
   } catch {}
 }
 
-type CheckoutPhase = "creating" | "paying" | "success" | "error";
+type CheckoutPhase = "creating" | "paying" | "success" | "error" | "payment_error";
 
 export default function CheckoutScreen() {
   const colors = useColors();
@@ -27,7 +27,9 @@ export default function CheckoutScreen() {
   const [phase, setPhase] = useState<CheckoutPhase>("creating");
   const [checkoutUrl, setCheckoutUrl] = useState<string>("");
   const [orderId, setOrderId] = useState<number>(0);
+  const [orderKey, setOrderKey] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string>("");
+  const [paymentErrorMsg, setPaymentErrorMsg] = useState<string>("");
   const [webviewLoading, setWebviewLoading] = useState(true);
 
   // Create WC order on mount
@@ -63,6 +65,7 @@ export default function CheckoutScreen() {
 
         if (result.checkout_url) {
           setOrderId(result.order_id);
+          setOrderKey(result.order_key || "");
           setCheckoutUrl(result.checkout_url);
           setPhase("paying");
         } else {
@@ -82,28 +85,54 @@ export default function CheckoutScreen() {
 
   const handleNavChange = (navState: any) => {
     const url = navState.url || "";
-    // Detect order confirmation page
+    
+    // Detect order confirmation page (successful payment)
     if (url.includes("order-received") || url.includes("commande-recue") || url.includes("thankyou")) {
       setPhase("success");
       clearCart();
+      return;
+    }
+    
+    // Detect payment error/cancelled in our custom checkout page URL
+    if (url.includes("lamako_checkout") && url.includes("error=")) {
+      try {
+        const urlObj = new URL(url);
+        const errorParam = urlObj.searchParams.get("error") || "";
+        if (errorParam) {
+          setPaymentErrorMsg(decodeURIComponent(errorParam));
+          setPhase("payment_error");
+          return;
+        }
+      } catch {}
+    }
+    
+    // Detect payment cancelled/failed patterns from gateways
+    if (url.includes("cancel") || url.includes("failed") || url.includes("declined") || url.includes("annule")) {
+      // Don't clear cart - show payment error phase
+      setPaymentErrorMsg("Le paiement a été annulé ou n'a pas abouti.");
+      setPhase("payment_error");
+      return;
     }
   };
 
-  // Handle messages from the checkout WebView (e.g. payment success)
+  // Handle messages from the checkout WebView (e.g. payment success or error)
   const handleWebViewMessage = (event: any) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
       if (data.type === "payment_success") {
         setPhase("success");
         clearCart();
+      } else if (data.type === "payment_error") {
+        setPaymentErrorMsg(data.error || data.message || "Erreur de paiement");
+        setPhase("payment_error");
+      } else if (data.type === "payment_cancelled") {
+        setPaymentErrorMsg("Le paiement a \u00e9t\u00e9 annul\u00e9 ou n'a pas abouti.");
+        setPhase("payment_error");
       }
     } catch {}
   };
 
-  // JS injection for checkout WebView:
-  // 1. On dedicated checkout page: just hide stray widgets
-  // 2. On WooCommerce order-received page (after payment gateway redirect): hide full theme, show clean success
-  // 3. On any other WC page: hide theme elements
+  // JS injection for checkout WebView
   const checkoutInjectedJS = `
     (function() {
       var url = window.location.href;
@@ -140,6 +169,32 @@ export default function CheckoutScreen() {
           'table.woocommerce-table { font-size: 14px !important; }' +
           '#content, .site-content, main, .main-content, .entry-content { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }';
         document.head.appendChild(style);
+        return;
+      }
+      
+      // Detect error parameter in our custom checkout page
+      if (url.indexOf('lamako_checkout') > -1 && url.indexOf('error=') > -1) {
+        var params = new URLSearchParams(window.location.search);
+        var errorMsg = params.get('error');
+        if (errorMsg && window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'payment_error', message: errorMsg }));
+        }
+        return;
+      }
+      
+      // Detect cancelled/failed payment pages from gateways
+      if (url.indexOf('cancel') > -1 || url.indexOf('failed') > -1 || url.indexOf('declined') > -1 || url.indexOf('annule') > -1) {
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'payment_cancelled', message: 'Le paiement a \u00e9t\u00e9 annul\u00e9 ou n\\'a pas abouti.' }));
+        }
+        return;
+      }
+      
+      // Detect redirect to WooCommerce cart/shop page (happens when payment is cancelled on some gateways)
+      if ((url.indexOf('/cart') > -1 || url.indexOf('/panier') > -1) && url.indexOf('lamako_checkout') === -1 && url.indexOf('order-received') === -1) {
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'payment_cancelled', message: 'Le paiement a \u00e9t\u00e9 annul\u00e9. Votre commande est conserv\u00e9e.' }));
+        }
         return;
       }
       
@@ -196,7 +251,7 @@ export default function CheckoutScreen() {
     );
   }
 
-  // ---- ERROR phase ----
+  // ---- ERROR phase (order creation failed) ----
   if (phase === "error") {
     return (
       <ScreenContainer edges={["top", "bottom", "left", "right"]}>
@@ -216,6 +271,46 @@ export default function CheckoutScreen() {
             style={[styles.retryBtn, { backgroundColor: colors.primary }]}
           >
             <Text style={styles.retryBtnText}>Réessayer</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backLink}>
+            <Text style={[styles.backLinkText, { color: colors.muted }]}>Retour au panier</Text>
+          </TouchableOpacity>
+        </View>
+      </ScreenContainer>
+    );
+  }
+
+  // ---- PAYMENT ERROR phase (gateway error or cancelled payment) ----
+  if (phase === "payment_error") {
+    return (
+      <ScreenContainer edges={["top", "bottom", "left", "right"]}>
+        <View style={[styles.header, { borderBottomColor: colors.border }]}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Paiement échoué</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={styles.centerContent}>
+          <IconSymbol name="exclamationmark.triangle.fill" size={56} color={colors.warning} />
+          <Text style={[styles.errorTitle, { color: colors.foreground }]}>Paiement non abouti</Text>
+          <Text style={[styles.errorMsg, { color: colors.muted }]}>{paymentErrorMsg}</Text>
+          <Text style={[styles.errorHint, { color: colors.muted }]}>
+            Votre commande est conservée. Vous pouvez réessayer avec un autre mode de paiement.
+          </Text>
+          <TouchableOpacity
+            onPress={() => {
+              // Return to the checkout WebView to try another payment method
+              setPaymentErrorMsg("");
+              setPhase("paying");
+              setWebviewLoading(true);
+              // Reload the checkout URL (fresh page without error param)
+              const baseUrl = checkoutUrl.split("&error=")[0];
+              setCheckoutUrl(baseUrl);
+            }}
+            style={[styles.retryBtn, { backgroundColor: colors.primary }]}
+          >
+            <Text style={styles.retryBtnText}>Essayer un autre mode de paiement</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => router.back()} style={styles.backLink}>
             <Text style={[styles.backLinkText, { color: colors.muted }]}>Retour au panier</Text>
@@ -318,7 +413,9 @@ export default function CheckoutScreen() {
           if (url.includes("mvola") || url.includes("orange") || url.includes("airtel")) return true;
           if (url.includes("cybersource") || url.includes("visa") || url.includes("mastercard")) return true;
           if (url.includes("paypal") || url.includes("stripe")) return true;
-          // Block external navigation
+          // Allow any https URL (payment gateways can have various domains)
+          if (url.startsWith("https://")) return true;
+          // Block non-https
           return false;
         }}
         injectedJavaScript={checkoutInjectedJS}
@@ -344,8 +441,9 @@ const styles = StyleSheet.create({
   loadingSubtext: { fontSize: 14, marginTop: 6, fontFamily: "Raleway-Regular" },
   errorTitle: { fontSize: 18, fontWeight: "700", marginTop: 16, textAlign: "center", fontFamily: "Raleway-Bold" },
   errorMsg: { fontSize: 14, marginTop: 8, textAlign: "center", fontFamily: "Raleway-Regular" },
+  errorHint: { fontSize: 13, marginTop: 12, textAlign: "center", fontFamily: "Raleway-Regular", lineHeight: 18 },
   retryBtn: { borderRadius: 14, paddingVertical: 14, paddingHorizontal: 32, marginTop: 20 },
-  retryBtnText: { color: "#fff", fontSize: 15, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  retryBtnText: { color: "#fff", fontSize: 15, fontWeight: "700", fontFamily: "Raleway-Bold", textAlign: "center" },
   backLink: { marginTop: 16 },
   backLinkText: { fontSize: 14, fontFamily: "Raleway-Medium" },
   successTitle: { fontSize: 20, fontWeight: "700", marginTop: 16, textAlign: "center", fontFamily: "Raleway-Bold" },

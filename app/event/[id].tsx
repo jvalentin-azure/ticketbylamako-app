@@ -99,7 +99,7 @@ export default function EventDetailScreen() {
   };
 
   const handleOpenSeatingChart = async () => {
-    if (!selectedTicket?.usesSeating || !event) return;
+    if (!hasSeating || !event) return;
     setSeatingLoading(true);
     try {
       const url = await getSeatingChartUrl(Number(id), event.slug, event.link);
@@ -578,9 +578,39 @@ export default function EventDetailScreen() {
           {/* Ticket Types */}
           {tickets.length > 0 && (
             <View style={{ marginTop: 20 }}>
-              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Types de billets</Text>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+                {hasSeating ? "Types de billets disponibles" : "Types de billets"}
+              </Text>
+              {hasSeating && (
+                <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 10, fontFamily: "Raleway-Regular" }}>
+                  La sélection se fait directement sur le plan de salle ci-dessous
+                </Text>
+              )}
               {tickets.map(ticket => {
                 const isSelected = selectedTicket?.id === ticket.id;
+                // For seated events: info-only display (no selection)
+                if (hasSeating) {
+                  return (
+                    <View
+                      key={ticket.id}
+                      style={[styles.ticketOption, {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      }]}
+                    >
+                      <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: ticket.usesSeating ? "#c79f6c" : colors.primary, marginRight: 10 }} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.ticketName, { color: colors.foreground }]}>{decodeHtmlEntities(ticket.name)}</Text>
+                        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}>
+                          <IconSymbol name="mappin" size={10} color="#c79f6c" />
+                          <Text style={{ color: "#c79f6c", fontSize: 11, marginLeft: 4, fontFamily: "Raleway-Medium" }}>Sélection sur le plan</Text>
+                        </View>
+                      </View>
+                      <Text style={[styles.ticketPrice, { color: colors.primary }]}>{formatAriary(ticket.price)}</Text>
+                    </View>
+                  );
+                }
+                // For non-seated events: normal selection with radio
                 return (
                   <TouchableOpacity
                     key={ticket.id}
@@ -595,12 +625,6 @@ export default function EventDetailScreen() {
                     </View>
                     <View style={{ flex: 1, marginLeft: 10 }}>
                       <Text style={[styles.ticketName, { color: colors.foreground }]}>{decodeHtmlEntities(ticket.name)}</Text>
-                      {ticket.usesSeating && (
-                        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}>
-                          <IconSymbol name="mappin" size={10} color="#c79f6c" />
-                          <Text style={{ color: "#c79f6c", fontSize: 11, marginLeft: 4, fontFamily: "Raleway-Medium" }}>Siège assigné</Text>
-                        </View>
-                      )}
                     </View>
                     <Text style={[styles.ticketPrice, { color: colors.primary }]}>{formatAriary(ticket.price)}</Text>
                   </TouchableOpacity>
@@ -610,7 +634,7 @@ export default function EventDetailScreen() {
           )}
 
           {/* Seating Chart Button */}
-          {selectedTicket?.usesSeating && (
+          {hasSeating && (
             <TouchableOpacity
               onPress={handleOpenSeatingChart}
               disabled={seatingLoading}
@@ -621,12 +645,12 @@ export default function EventDetailScreen() {
               ) : (
                 <IconSymbol name="mappin" size={18} color="#fff" />
               )}
-              <Text style={styles.seatingChartBtnText}>{seatingLoading ? "Chargement..." : "Voir le plan de salle & choisir mon siège"}</Text>
+              <Text style={styles.seatingChartBtnText}>{seatingLoading ? "Chargement..." : "Voir le plan de salle & choisir mon si\u00e8ge"}</Text>
             </TouchableOpacity>
           )}
 
-          {/* Quantity (for non-seating tickets) */}
-          {selectedTicket && !selectedTicket.usesSeating && (
+          {/* Quantity (for non-seating tickets only) */}
+          {selectedTicket && !hasSeating && (
             <View style={[styles.qtyRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <Text style={[styles.qtyLabel, { color: colors.foreground }]}>Quantité</Text>
               <View style={styles.qtyControls}>
@@ -653,7 +677,7 @@ export default function EventDetailScreen() {
 
       {/* Bottom CTA */}
       <View style={[styles.bottomCta, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
-        {selectedTicket?.usesSeating ? (
+        {hasSeating ? (
           <TouchableOpacity
             onPress={handleOpenSeatingChart}
             disabled={seatingLoading}
@@ -664,7 +688,7 @@ export default function EventDetailScreen() {
             ) : (
               <IconSymbol name="mappin" size={20} color="#fff" />
             )}
-            <Text style={styles.ctaButtonText}>{seatingLoading ? "Chargement du plan..." : "Choisir mon siège"}</Text>
+            <Text style={styles.ctaButtonText}>{seatingLoading ? "Chargement du plan..." : "Choisir mon si\u00e8ge"}</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
@@ -676,7 +700,7 @@ export default function EventDetailScreen() {
             <Text style={styles.ctaButtonText}>
               {selectedTicket
                 ? `Ajouter au panier - ${formatAriary(Number(selectedTicket.price) * qty)}`
-                : "Sélectionnez un billet"}
+                : "S\u00e9lectionnez un billet"}
             </Text>
           </TouchableOpacity>
         )}

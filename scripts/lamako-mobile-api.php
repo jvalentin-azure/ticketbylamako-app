@@ -3,7 +3,7 @@
  * Plugin Name: Lamako Mobile API
  * Plugin URI: https://www.ticketbylamako.com
  * Description: REST API endpoints for the TicketByLamako mobile app - ticket instances, seating chart embed, and more.
- * Version: 2.0.1
+ * Version: 2.0.2
  * Author: Lamako Events
  * Author URI: https://www.ticketbylamako.com
  * License: GPL v2 or later
@@ -258,10 +258,15 @@ document.addEventListener('DOMContentLoaded', function() {
         // Track if we're currently processing a seat click
         var processing = false;
         
-        // Create a toast notification element
+        // Create a toast notification element - positioned at TOP to avoid being hidden by Confirmer button overlay
         var toast = document.createElement('div');
-        toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:999999;background:#663d17;color:#fff;padding:10px 20px;border-radius:10px;font-size:14px;font-weight:600;font-family:-apple-system,BlinkMacSystemFont,sans-serif;box-shadow:0 4px 12px rgba(0,0,0,0.3);display:none;text-align:center;max-width:90%;transition:opacity 0.3s;';
+        toast.style.cssText = 'position:fixed;top:50px;left:50%;transform:translateX(-50%);z-index:999999;background:#663d17;color:#fff;padding:10px 20px;border-radius:10px;font-size:14px;font-weight:600;font-family:-apple-system,BlinkMacSystemFont,sans-serif;box-shadow:0 4px 12px rgba(0,0,0,0.3);display:none;text-align:center;max-width:90%;transition:opacity 0.3s;';
         document.body.appendChild(toast);
+        
+        // Add CSS spinner animation for seat loading
+        var spinnerStyle = document.createElement('style');
+        spinnerStyle.textContent = '@keyframes lamako-pulse { 0%,100% { opacity:0.3; transform:scale(0.9); } 50% { opacity:1; transform:scale(1.1); } } .lamako-seat-loading { animation: lamako-pulse 0.6s ease-in-out infinite !important; }';
+        document.head.appendChild(spinnerStyle);
         
         function showToast(msg, isError) {
             toast.textContent = msg;
@@ -407,8 +412,8 @@ document.addEventListener('DOMContentLoaded', function() {
             
             showToast('Ajout en cours...');
             
-            // Visual feedback - briefly highlight the seat
-            seatEl.style.opacity = '0.5';
+            // Visual feedback - animate the seat while loading
+            seatEl.classList.add('lamako-seat-loading');
             
             // Call Tickera AJAX directly
             jQuery.post(
@@ -421,7 +426,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 },
                 function(response) {
                     processing = false;
-                    seatEl.style.opacity = '1';
+                    seatEl.classList.remove('lamako-seat-loading');
                     
                     if (response && !response.error) {
                         // Success - mark seat as in cart
@@ -484,7 +489,7 @@ document.addEventListener('DOMContentLoaded', function() {
             var cartItem = ticketTypeId + '-' + seatId + '-' + seatLabel + '-' + chartId;
             
             showToast('Retrait en cours...');
-            seatEl.style.opacity = '0.5';
+            seatEl.classList.add('lamako-seat-loading');
             
             jQuery.post(
                 (typeof tc_seat_chart_ajax !== 'undefined' ? tc_seat_chart_ajax.ajaxUrl : '/wp-admin/admin-ajax.php'),
@@ -496,7 +501,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 },
                 function(response) {
                     processing = false;
-                    seatEl.style.opacity = '1';
+                    seatEl.classList.remove('lamako-seat-loading');
                     
                     if (response && !response.error) {
                         seatEl.classList.remove('tc_seat_in_cart');
@@ -998,8 +1003,18 @@ $checkout_error = isset( $_GET['error'] ) ? sanitize_text_field( urldecode( $_GE
 if ( $checkout_error ) :
 ?>
 <div style="background: #fef2f2; border-bottom: 2px solid #dc2626; padding: 12px 20px; font-size: 14px; color: #dc2626; font-weight: 500;">
-    ⚠️ <?php echo esc_html( $checkout_error ); ?>
+    <div style="font-weight:700;margin-bottom:4px;">⚠️ <?php echo esc_html( $checkout_error ); ?></div>
+    <div style="font-size:12px;color:#6b7280;">Veuillez essayer un autre mode de paiement ou réessayer.</div>
 </div>
+<script>
+// Notify the app that a payment error occurred so it doesn't show empty cart
+if (window.ReactNativeWebView) {
+    window.ReactNativeWebView.postMessage(JSON.stringify({
+        type: 'payment_error',
+        error: <?php echo json_encode( $checkout_error ); ?>
+    }));
+}
+</script>
 <?php endif; ?>
 
 <div class="lamako-checkout-header">
@@ -1146,6 +1161,32 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Also check on navigation
     window.addEventListener('load', checkPaymentSuccess);
+    
+    // Detect if we landed on a cancel/failure page from payment gateway
+    // (e.g., Orange Money cancel, CyberSource cancel)
+    function checkPaymentCancelled() {
+        var url = window.location.href;
+        // Common cancel/failure indicators in URLs
+        if (url.indexOf('cancel') !== -1 || url.indexOf('failed') !== -1 || url.indexOf('declined') !== -1) {
+            window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({
+                type: 'payment_cancelled',
+                url: url
+            }));
+        }
+        // If we're on a WC page that's not our checkout and not order-received, it's a redirect back
+        if (url.indexOf('lamako_checkout') === -1 && url.indexOf('order-received') === -1 && url.indexOf('lamako_seat_embed') === -1) {
+            // We've been redirected away from our checkout - likely a gateway return
+            // Check if it's a cart/shop page (empty cart scenario)
+            if (url.indexOf('/cart') !== -1 || url.indexOf('/panier') !== -1 || url.indexOf('wc-empty-cart') !== -1) {
+                window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({
+                    type: 'payment_cancelled',
+                    url: url,
+                    reason: 'redirected_to_cart'
+                }));
+            }
+        }
+    }
+    checkPaymentCancelled();
     
     // Hide any WordPress elements that leak through
     var hideSelectors = '#wpadminbar, .qlwapp__container, [class*="qlwapp"], #fkcart-floating-toggler, [class*="fkcart"]';

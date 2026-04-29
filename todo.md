@@ -367,3 +367,19 @@
 ### Deployment
 - [x] Plugin updated to v2.0.1 on WordPress
 - [x] Committed to git
+
+## V2.9.2 - UX Fixes: Toast, Payment Errors, Cancelled Payment, Info-Only Tickets, Spinner
+
+### Seating Chart UX
+- [ ] Fix: Toast/indicator hidden behind Confirmer button → reposition above the button
+- [ ] Add: Spinner/animation on seat during AJAX call for better visual feedback
+
+### Checkout UX
+- [ ] Fix: Payment errors (MVola indisponible, etc.) not shown to user → display error message on page
+- [ ] Add: Suggest trying another payment method when error occurs
+- [ ] Fix: Cancelled/failed payment (Orange Money non abouti) returns to empty cart → should return to checkout
+- [ ] Fix: Cart not cleared after successful payment → clearCart only on payment_success detection
+- [ ] Fix: Cart stays filled with old seats after payment (successful or not) → clear only on success
+
+### Event Detail UX
+- [ ] Fix: Show ticket types as info-only (no quantity selector) for events with seating chart
