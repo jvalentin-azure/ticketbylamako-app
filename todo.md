@@ -391,17 +391,21 @@
 ## V2.9.3 - Checkout & Seating Chart UX Improvements
 
 ### Checkout Page
-- [ ] Fix: Terms checkbox required before "Payer" button is clickable
-- [ ] Fix: Back button on payment page is at top, inaccessible → reposition
-- [ ] Fix: Terms checkbox/text hidden behind the pay button → fix z-index/layout
-- [ ] Add: Phone number field for MVola/Airtel Money (gateway needs it to send payment request)
+- [x] Fix: Terms checkbox required before "Payer" button is clickable → JS validation blocks submit, button disabled until checked
+- [x] Fix: Back button on payment page → added back arrow in header, sends go_back to app
+- [x] Fix: Terms checkbox/text hidden behind pay button → terms section above fixed pay button with padding-bottom
+- [x] Add: Phone number field for MVola/Airtel Money → shown when Mobile Money gateway selected, saved to order billing
 
 ### Seating Chart UX
-- [ ] Fix: Toast should show seat name/number (e.g., "Siège A11 ajouté" not just "Siège ajouté")
-- [ ] Fix: Alert colors → green for added, red for removed
-- [ ] Add: List of selected seats visible on screen so user can see what they picked and tap to remove
-- [ ] Fix: Layout improvements for better visibility of alerts and selected seats
+- [x] Fix: Toast shows seat name (e.g., "A11 ajouté ✓") with getSeatDisplayName()
+- [x] Fix: Alert colors → green (#16a34a) for add, orange (#f59e0b) for remove, red for error
+- [x] Add: Selected seats panel at bottom with seat chips and × remove buttons
+- [x] Fix: Layout → fixed bottom panel with flex-wrap, max-height 35vh, scrollable
 
 ### Cart/Order Cleanup
-- [ ] Fix: Clear WooCommerce cart server-side after successful payment (seats from previous order still in cart)
-- [ ] Fix: Previously ordered seats should not reappear in cart for new orders
+- [x] Fix: Clear WC cart server-side → POST /lamako-mobile/v1/clear-cart endpoint + clearServerCart() in app
+- [x] Fix: Previously ordered seats cleared from WC session (tc_seat_cart_items)
+
+### Deployment
+- [x] Plugin updated to v2.0.3 on WordPress
+- [x] Committed to git
