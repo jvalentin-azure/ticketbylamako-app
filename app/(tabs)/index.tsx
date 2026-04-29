@@ -238,7 +238,13 @@ export default function HomeScreen() {
           {["Tous", "Spectacles", "Conférences", "Sport", "Foires"].map(cat => (
             <TouchableOpacity
               key={cat}
-              onPress={() => router.push("/(tabs)/events" as any)}
+              onPress={() => {
+                if (cat === "Tous") {
+                  router.push("/(tabs)/events" as any);
+                } else {
+                  router.push({ pathname: "/(tabs)/events", params: { category: cat } } as any);
+                }
+              }}
               style={[styles.chip, {
                 backgroundColor: cat === "Tous" ? colors.primary : colors.surface,
                 borderColor: cat === "Tous" ? colors.primary : colors.border,

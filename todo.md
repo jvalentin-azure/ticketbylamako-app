@@ -501,3 +501,18 @@
 ### P2 - New Features
 - [x] MVola timeout: increase delay before "paiement non abouti", handle NSURL -1005 error with auto-retry (3 retries)
 - [x] Push notifications: new event alerts, event reminders (24h + 1h before), payment confirmation
+
+## V2.9.7 - Critical Fixes Round 2 (User Testing 30 Apr)
+
+### P0 - Must Fix Now
+- [x] Fix: Splash/onboarding shows when user is NOT logged in, skips to home when logged in
+- [x] Fix: LamakoRewards popup shows 30s after app mount (simplified trigger)
+- [x] Fix: Seating chart - clearServerCart now cancels pending orders and releases seat transients
+- [x] Fix: Phone field - WordPress plugin already handles this (hidden by default, shown on Airtel/MVola selection)
+- [x] Fix: Conditions générales link uses postMessage to open in-app browser
+- [x] Fix: Event summary on payment page now compact (60px thumbnail, smaller text)
+- [x] Fix: Home page filter chips redirect to Events tab with category param applied
+- [x] Fix: Burger menu Navigation section removed (tab bar handles it)
+- [x] Fix: Boutique page spacing reduced between search, filters, and products
+- [x] Fix: App icon regenerated - white TicketByLamako logo on dark brown (#3d2314)
+- [x] Fix: MVola NSURL -1005 - WebView onError handler reloads URL automatically (3 retries)

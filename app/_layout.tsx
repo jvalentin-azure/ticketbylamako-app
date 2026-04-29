@@ -60,7 +60,7 @@ export default function RootLayout() {
     "Raleway-ExtraBold": require("@/assets/fonts/Raleway-ExtraBold.ttf"),
   });
 
-  const [showSplash, setShowSplash] = useState(true);
+  const [showSplash, setShowSplash] = useState<boolean | null>(null); // null = checking auth state
 
   // Initialize Manus runtime for cookie injection from parent container
   useEffect(() => {
@@ -107,15 +107,29 @@ export default function RootLayout() {
     };
   }, []);
 
-  // Hide native splash screen once fonts are loaded AND custom splash is ready
+  // Check if user is already logged in to decide whether to show onboarding
   useEffect(() => {
-    if ((fontsLoaded || fontError) && showSplash) {
-      // Delay hiding native splash slightly so CustomSplash renders first
-      setTimeout(() => SplashScreen.hideAsync(), 50);
-    } else if ((fontsLoaded || fontError) && !showSplash) {
-      SplashScreen.hideAsync();
-    }
-  }, [fontsLoaded, fontError, showSplash]);
+    if (!fontsLoaded && !fontError) return;
+    (async () => {
+      try {
+        const { getStoredUser } = await import("@/lib/api/auth");
+        const user = await getStoredUser();
+        if (user) {
+          // User is logged in, skip onboarding
+          setShowSplash(false);
+          SplashScreen.hideAsync();
+        } else {
+          // Not logged in, show onboarding
+          setShowSplash(true);
+          setTimeout(() => SplashScreen.hideAsync(), 50);
+        }
+      } catch {
+        // On error, show onboarding
+        setShowSplash(true);
+        setTimeout(() => SplashScreen.hideAsync(), 50);
+      }
+    })();
+  }, [fontsLoaded, fontError]);
 
   const handleSafeAreaUpdate = useCallback((metrics: Metrics) => {
     setInsets(metrics.insets);
@@ -157,8 +171,13 @@ export default function RootLayout() {
     };
   }, [initialInsets, initialFrame]);
 
-  // Don't render until fonts are loaded
+  // Don't render until fonts are loaded and auth check is done
   if (!fontsLoaded && !fontError) {
+    return null;
+  }
+
+  // Still checking auth state - keep native splash visible
+  if (showSplash === null) {
     return null;
   }
 

@@ -49,16 +49,6 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
 
   const menuSections = [
     {
-      title: "Navigation",
-      items: [
-        { icon: "house.fill" as const, label: "Accueil", onPress: () => { onClose?.(); router.push("/(tabs)/" as any); } },
-        { icon: "calendar" as const, label: "Événements", onPress: () => { onClose?.(); router.push("/(tabs)/events" as any); } },
-        { icon: "storefront.fill" as const, label: "Boutique", onPress: () => { onClose?.(); router.push("/(tabs)/shop" as any); } },
-        { icon: "ticket.fill" as const, label: "Mes Billets", onPress: () => { onClose?.(); router.push("/(tabs)/tickets" as any); } },
-        { icon: "cart.fill" as const, label: "Panier", onPress: () => { onClose?.(); router.push("/(tabs)/cart" as any); } },
-      ],
-    },
-    {
       title: "Mon Compte",
       items: [
         ...(isAuthenticated

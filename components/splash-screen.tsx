@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { View, Text, Animated, StyleSheet, Dimensions, TouchableOpacity, Platform } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -6,83 +6,49 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 
 const { width, height } = Dimensions.get("window");
-const ONBOARDING_KEY = "@lamako_onboarding_seen";
 
 interface CustomSplashProps {
   onFinish: () => void;
 }
 
+/**
+ * CustomSplash - ALWAYS shows the onboarding screen on every app launch.
+ * This is the intro/landing page of the app with Sign Up / Login / Explorer buttons.
+ */
 export function CustomSplash({ onFinish }: CustomSplashProps) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
-  const [phase, setPhase] = useState<"splash" | "onboarding">("splash");
 
-  useEffect(() => {
-    // Check if user has seen onboarding before
-    AsyncStorage.getItem(ONBOARDING_KEY).then((val) => {
-      if (val === "true") {
-        // Already seen - show quick splash then finish
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 400,
-          useNativeDriver: true,
-        }).start(() => {
-          setTimeout(() => onFinish(), 800);
-        });
-      } else {
-        // First time - show onboarding
-        setPhase("onboarding");
-        Animated.parallel([
-          Animated.timing(fadeAnim, {
-            toValue: 1,
-            duration: 600,
-            useNativeDriver: true,
-          }),
-          Animated.timing(slideAnim, {
-            toValue: 0,
-            duration: 600,
-            useNativeDriver: true,
-          }),
-        ]).start();
-      }
-    });
-  }, []);
+  // Start animation immediately on mount
+  useState(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  });
 
   const handleSignUp = () => {
-    AsyncStorage.setItem(ONBOARDING_KEY, "true");
     onFinish();
     setTimeout(() => router.push("/(auth)/register" as any), 100);
   };
 
   const handleLogin = () => {
-    AsyncStorage.setItem(ONBOARDING_KEY, "true");
     onFinish();
     setTimeout(() => router.push("/(auth)/login" as any), 100);
   };
 
   const handleExplore = () => {
-    AsyncStorage.setItem(ONBOARDING_KEY, "true");
     AsyncStorage.setItem("@lamako_explore_mode", "true");
     onFinish();
   };
-
-  if (phase === "splash") {
-    return (
-      <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
-        <Image
-          source={require("@/assets/images/concert-bg.jpg")}
-          style={StyleSheet.absoluteFillObject}
-          contentFit="cover"
-        />
-        <View style={styles.overlay} />
-        <Image
-          source={require("@/assets/images/logo-white.png")}
-          style={styles.splashLogo}
-          contentFit="contain"
-        />
-      </Animated.View>
-    );
-  }
 
   return (
     <View style={styles.container}>
@@ -155,17 +121,6 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "#1a0a00",
     zIndex: 999,
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
-  splashLogo: {
-    width: 260,
-    height: 90,
-    alignSelf: "center",
-    position: "absolute",
-    top: "45%",
   },
   content: {
     flex: 1,

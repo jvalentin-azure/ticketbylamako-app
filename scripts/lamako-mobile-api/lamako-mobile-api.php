@@ -1259,9 +1259,9 @@ if (window.ReactNativeWebView) {
     }
     if ( $event_name ) :
     ?>
-    <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;">
-        <div style="font-weight:700;color:#92400e;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Evenement</div>
-        <div style="color:#78350f;font-weight:600;margin-top:2px;"><?php echo esc_html( $event_name ); ?></div>
+    <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:6px 10px;margin-bottom:8px;font-size:11px;display:flex;align-items:center;gap:6px;">
+        <span style="font-weight:700;color:#92400e;font-size:10px;text-transform:uppercase;letter-spacing:0.3px;">Evenement:</span>
+        <span style="color:#78350f;font-weight:600;font-size:11px;"><?php echo esc_html( $event_name ); ?></span>
     </div>
     <?php endif; ?>
     <?php foreach ( $items as $item ) : ?>
@@ -1607,6 +1607,30 @@ function lamako_mobile_clear_cart( $request ) {
     // Also clear any Tickera seating chart session data
     if ( WC()->session ) {
         WC()->session->set( 'tc_seat_cart_items', null );
+        WC()->session->set( 'tc_cart_seats', null );
+        WC()->session->set( 'chosen_payment_method', null );
+    }
+    
+    // Release Tickera seat reservations from transients
+    // Tickera stores seat reservations in transients like 'tc_seat_{seat_id}_reserved'
+    // Also try to clear the WC session cookie seats
+    $order_id = $request->get_param( 'order_id' );
+    if ( $order_id ) {
+        $order = wc_get_order( (int) $order_id );
+        if ( $order && $order->get_status() !== 'completed' && $order->get_status() !== 'processing' ) {
+            // Get items from the order and release their seat reservations
+            foreach ( $order->get_items() as $item ) {
+                $seat_id = $item->get_meta( '_tc_seat_id' );
+                if ( $seat_id ) {
+                    delete_transient( 'tc_seat_' . $seat_id . '_reserved' );
+                    delete_transient( 'tc_seat_reserved_' . $seat_id );
+                }
+            }
+            // Cancel the order so seats are fully released
+            if ( $order->get_status() === 'pending' ) {
+                $order->update_status( 'cancelled', 'Annulé depuis l\'app mobile (paiement non abouti).' );
+            }
+        }
     }
     
     return new WP_REST_Response( [ 'success' => true, 'message' => 'Cart cleared' ], 200 );

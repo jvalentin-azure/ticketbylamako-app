@@ -377,7 +377,7 @@ export default function CheckoutScreen() {
           >
             <Text style={styles.retryBtnText}>Essayer un autre mode de paiement</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => { clearCart(); router.back(); }} style={styles.backLink}>
+          <TouchableOpacity onPress={() => { clearCart(); clearServerCart(orderId); router.back(); }} style={styles.backLink}>
             <Text style={[styles.backLinkText, { color: colors.muted }]}>Abandonner et vider le panier</Text>
           </TouchableOpacity>
         </View>

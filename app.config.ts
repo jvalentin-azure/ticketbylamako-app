@@ -32,7 +32,7 @@ const env = {
   appSlug: "ticketbylamako-app",
   // S3 URL of the app logo - set this to the URL returned by generate_image when creating custom logo
   // Leave empty to use the default icon from assets/images/icon.png
-  logoUrl: "https://d2xsxph8kpxj0f.cloudfront.net/310519663365168618/n2zWG5X9zMBeh2ZNVAg7B7/lamako-app-icon-6vd4hKATBHrW4XRi8UqWGu.png",
+  logoUrl: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663365168618/JRJGgJaBkkGJgNIg.png",
   scheme: schemeFromBundleId,
   iosBundleId: bundleId,
   androidPackage: bundleId,

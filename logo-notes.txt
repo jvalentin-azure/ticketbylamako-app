@@ -1,0 +1,7 @@
+Logo design: "Ticket by LAMAKO" 
+- "Ticket" in script/cursive font with a ticket stub icon
+- "by" in small script
+- "LAMAKO" in bold uppercase block letters
+- The "O" in LAMAKO has a ticket/admit-one stub design
+- Colors: gold/tan (#c79f6c) for "Ticket by" and white for "LAMAKO"
+- Need: white version of this logo centered on dark brown (#3d2314) background as app icon

@@ -3,51 +3,61 @@ import { View, Text, Animated, StyleSheet, TouchableOpacity, Dimensions, Modal }
 import { Image } from "expo-image";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useAuth } from "@/lib/auth-provider";
 
 const { width } = Dimensions.get("window");
-const REWARDS_POPUP_KEY = "@lamako_rewards_popup_shown";
+const REWARDS_POPUP_KEY = "@lamako_rewards_popup_shown_session";
 
 interface RewardsPopupProps {
   delay?: number; // ms before showing (default 30000 = 30s)
 }
 
+/**
+ * LamakoRewards popup - shows 30s after the user enters the app
+ * if they are NOT logged in (i.e. they chose "Explorer").
+ * Only shows once per app session.
+ */
 export function RewardsPopup({ delay = 30000 }: RewardsPopupProps) {
   const [visible, setVisible] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
+  const { isAuthenticated } = useAuth();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    // Only show if user is in explore mode and hasn't seen it yet
-    // Delay the check slightly to ensure AsyncStorage has been written by splash-screen
-    const initTimer = setTimeout(() => {
-      const check = async () => {
-        const exploreMode = await AsyncStorage.getItem("@lamako_explore_mode");
-        const alreadyShown = await AsyncStorage.getItem(REWARDS_POPUP_KEY);
-        if (exploreMode === "true" && alreadyShown !== "true") {
-          const timer = setTimeout(() => {
-            setVisible(true);
-            AsyncStorage.setItem(REWARDS_POPUP_KEY, "true");
-            Animated.parallel([
-              Animated.timing(fadeAnim, {
-                toValue: 1,
-                duration: 300,
-                useNativeDriver: true,
-              }),
-              Animated.spring(scaleAnim, {
-                toValue: 1,
-                tension: 60,
-                friction: 8,
-                useNativeDriver: true,
-              }),
-            ]).start();
-          }, delay);
-          return () => clearTimeout(timer);
-        }
-      };
-      check();
-    }, 500); // Wait 500ms for AsyncStorage to be written
-    return () => clearTimeout(initTimer);
-  }, []);
+    // Don't show if user is already logged in
+    if (isAuthenticated) return;
+
+    // Start the 30s timer
+    timerRef.current = setTimeout(async () => {
+      // Check if already shown this session
+      const alreadyShown = await AsyncStorage.getItem(REWARDS_POPUP_KEY);
+      if (alreadyShown === "true") return;
+
+      // Mark as shown
+      await AsyncStorage.setItem(REWARDS_POPUP_KEY, "true");
+
+      // Show popup
+      setVisible(true);
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          tension: 60,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }, delay);
+
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [isAuthenticated, delay]);
 
   const handleClose = () => {
     Animated.timing(fadeAnim, {
