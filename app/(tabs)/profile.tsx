@@ -14,6 +14,7 @@ export default function ProfileScreen() {
 
   const menuItems = [
     ...(isAuthenticated ? [
+      { icon: "person.fill" as const, label: "Modifier le profil", onPress: () => router.push("/edit-profile" as any) },
       { icon: "clipboard.fill" as const, label: "Mes Commandes", onPress: () => router.push("/orders" as any) },
       { icon: "ticket.fill" as const, label: "Mes Billets", onPress: () => router.push("/(tabs)/tickets" as any) },
     ] : []),

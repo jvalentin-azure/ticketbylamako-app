@@ -23,14 +23,30 @@ export default function EventsScreen() {
   const [dateFilter, setDateFilter] = useState<"all" | "today" | "week" | "month" | "upcoming">("all");
   const { isFavorite, toggleFavorite } = useFavorites();
 
+  const [pastEvents, setPastEvents] = useState<TCEvent[]>([]);
+
   const load = useCallback(async () => {
     try {
       const [ev, cats] = await Promise.all([
         getEventsWithTickets(),
         getEventCategories(),
       ]);
-      setEvents(ev);
-      setFiltered(ev);
+      // Separate active (upcoming) from past events
+      const now = new Date();
+      const upcoming: TCEvent[] = [];
+      const past: TCEvent[] = [];
+      ev.forEach(e => {
+        const dateStr = e.mobileFields?.event_date_time || e.date;
+        const eventDate = new Date(dateStr);
+        if (eventDate >= now) {
+          upcoming.push(e);
+        } else {
+          past.push(e);
+        }
+      });
+      setEvents(upcoming);
+      setFiltered(upcoming);
+      setPastEvents(past);
       setCategories(cats);
     } catch (e) {
       console.warn("Events load error:", e);
@@ -267,10 +283,42 @@ export default function EventsScreen() {
           keyExtractor={item => String(item.id)}
           renderItem={renderEvent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.primary} />}
+          ListFooterComponent={
+            pastEvents.length > 0 ? (
+              <View style={{ marginTop: 24, marginBottom: 40 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, marginBottom: 12 }}>
+                  <Text style={[styles.headerTitle, { color: colors.foreground, fontSize: 18 }]}>Événements passés</Text>
+                </View>
+                <FlatList
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  data={pastEvents}
+                  keyExtractor={item => String(item.id)}
+                  contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}
+                  renderItem={({ item }) => {
+                    const name = decodeHtmlEntities(item.title.rendered);
+                    return (
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => router.push(`/event/${item.id}` as any)}
+                        style={{ width: 220, borderRadius: 14, overflow: "hidden", backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}
+                      >
+                        <Image source={{ uri: item.featuredImage }} style={{ width: 220, height: 120 }} contentFit="cover" />
+                        <View style={{ padding: 10 }}>
+                          <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" }} numberOfLines={2}>{name}</Text>
+                          <Text style={{ color: colors.muted, fontSize: 11, marginTop: 4, fontFamily: "Raleway-Regular" }}>{formatDateShort(item.mobileFields?.event_date_time || item.date)}</Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  }}
+                />
+              </View>
+            ) : null
+          }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <IconSymbol name="calendar" size={48} color={colors.muted} />
-              <Text style={[styles.emptyText, { color: colors.muted }]}>Aucun événement trouvé</Text>
+              <Text style={[styles.emptyText, { color: colors.muted }]}>Aucun événement à venir</Text>
               {(selectedCat || dateFilter !== "all" || search) && (
                 <TouchableOpacity
                   onPress={() => { setSelectedCat(null); setDateFilter("all"); setSearch(""); }}

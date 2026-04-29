@@ -6,9 +6,10 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useCart } from "@/lib/cart-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { getTCEvent, getEventTickets, getSeatingChartUrl, type TCEvent, type TicketType } from "@/lib/api/woocommerce";
+import { getTCEvent, getEventTickets, getSeatingChartUrl, getEventsWithTickets, type TCEvent, type TicketType } from "@/lib/api/woocommerce";
 import { useFavorites } from "@/lib/favorites-provider";
-import { formatAriary, formatDate, stripHtml, decodeHtmlEntities } from "@/lib/format";
+import { formatAriary, formatDate, formatDateShort, stripHtml, decodeHtmlEntities } from "@/lib/format";
+import { LinearGradient } from "expo-linear-gradient";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const SITE_URL = process.env.EXPO_PUBLIC_WC_SITE_URL || "https://www.ticketbylamako.com";
@@ -40,19 +41,53 @@ export default function EventDetailScreen() {
   const [galleryIndex, setGalleryIndex] = useState(0);
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const { isFavorite, toggleFavorite } = useFavorites();
+  const [upcomingEvents, setUpcomingEvents] = useState<TCEvent[]>([]);
+  const [countdown, setCountdown] = useState<{days: number; hours: number; mins: number} | null>(null);
+  const [showFullTerms, setShowFullTerms] = useState(false);
 
   useEffect(() => {
     if (!id) return;
     Promise.all([
       getTCEvent(Number(id)),
       getEventTickets(Number(id)),
-    ]).then(([ev, tix]) => {
+      getEventsWithTickets(),
+    ]).then(([ev, tix, allEvents]) => {
       setEvent(ev);
       setTickets(tix);
       if (tix.length === 1) setSelectedTicket(tix[0]);
+      // Filter upcoming events (exclude current)
+      const now = Date.now();
+      const upcoming = allEvents.filter(e => {
+        if (e.id === Number(id)) return false;
+        const dt = e.mobileFields?.event_date_time;
+        if (!dt) return true;
+        return new Date(dt.replace(' ', 'T')).getTime() > now;
+      }).slice(0, 8);
+      setUpcomingEvents(upcoming);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [id]);
+
+  // Countdown timer
+  useEffect(() => {
+    if (!event) return;
+    const dateStr = event.mobileFields?.event_date_time;
+    if (!dateStr) return;
+    const eventTime = new Date(dateStr.replace(' ', 'T')).getTime();
+    if (eventTime <= Date.now()) { setCountdown(null); return; }
+    const update = () => {
+      const diff = eventTime - Date.now();
+      if (diff <= 0) { setCountdown(null); return; }
+      setCountdown({
+        days: Math.floor(diff / 86400000),
+        hours: Math.floor((diff % 86400000) / 3600000),
+        mins: Math.floor((diff % 3600000) / 60000),
+      });
+    };
+    update();
+    const interval = setInterval(update, 60000);
+    return () => clearInterval(interval);
+  }, [event]);
 
   if (loading) {
     return (
@@ -395,8 +430,21 @@ export default function EventDetailScreen() {
                   if (webviewRef.current) {
                     webviewRef.current.injectJavaScript(`
                       (function() {
-                        var btn = document.querySelector('.tc_zoom_out, .tc-zoom-out, [class*="zoom_out"], .tc_seating_chart_zoom_out');
-                        if (btn) btn.click();
+                        // Try jQuery trigger first (Tickera uses jQuery events)
+                        if (typeof jQuery !== 'undefined') {
+                          var btn = jQuery('.tc_zoom_out, .tc-zoom-out, [class*="zoom_out"], .tc_seating_chart_zoom_out').first();
+                          if (btn.length) { btn.trigger('click'); return; }
+                        }
+                        // Fallback: manual zoom via CSS transform
+                        var chart = document.querySelector('.tc_seat_chart_wrap, .tc_seating_chart, .tc_seat_chart_inner, svg, .tc_chart_wrap');
+                        if (chart) {
+                          var current = chart.style.transform || '';
+                          var match = current.match(/scale\\(([\\d.]+)\\)/);
+                          var scale = match ? parseFloat(match[1]) : 1;
+                          scale = Math.max(0.3, scale - 0.2);
+                          chart.style.transform = 'scale(' + scale + ')';
+                          chart.style.transformOrigin = 'center center';
+                        }
                       })(); true;
                     `);
                   }
@@ -411,8 +459,21 @@ export default function EventDetailScreen() {
                   if (webviewRef.current) {
                     webviewRef.current.injectJavaScript(`
                       (function() {
-                        var btn = document.querySelector('.tc_zoom_in, .tc-zoom-in, [class*="zoom_in"], .tc_seating_chart_zoom_in');
-                        if (btn) btn.click();
+                        // Try jQuery trigger first (Tickera uses jQuery events)
+                        if (typeof jQuery !== 'undefined') {
+                          var btn = jQuery('.tc_zoom_in, .tc-zoom-in, [class*="zoom_in"], .tc_seating_chart_zoom_in').first();
+                          if (btn.length) { btn.trigger('click'); return; }
+                        }
+                        // Fallback: manual zoom via CSS transform
+                        var chart = document.querySelector('.tc_seat_chart_wrap, .tc_seating_chart, .tc_seat_chart_inner, svg, .tc_chart_wrap');
+                        if (chart) {
+                          var current = chart.style.transform || '';
+                          var match = current.match(/scale\\(([\\d.]+)\\)/);
+                          var scale = match ? parseFloat(match[1]) : 1;
+                          scale = Math.min(3, scale + 0.2);
+                          chart.style.transform = 'scale(' + scale + ')';
+                          chart.style.transformOrigin = 'center center';
+                        }
                       })(); true;
                     `);
                   }
@@ -756,6 +817,124 @@ export default function EventDetailScreen() {
               <Text style={[styles.descText, { color: colors.muted }]}>{desc}</Text>
             </View>
           ) : null}
+
+          {/* COUNTDOWN */}
+          {countdown && (
+            <View style={[styles.countdownBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.countdownLabel, { color: colors.muted }]}>L'événement commence dans</Text>
+              <View style={styles.countdownRow}>
+                <View style={styles.countdownItem}>
+                  <Text style={[styles.countdownValue, { color: colors.primary }]}>{countdown.days}</Text>
+                  <Text style={[styles.countdownUnit, { color: colors.muted }]}>jours</Text>
+                </View>
+                <Text style={[styles.countdownSep, { color: colors.muted }]}>:</Text>
+                <View style={styles.countdownItem}>
+                  <Text style={[styles.countdownValue, { color: colors.primary }]}>{countdown.hours}</Text>
+                  <Text style={[styles.countdownUnit, { color: colors.muted }]}>heures</Text>
+                </View>
+                <Text style={[styles.countdownSep, { color: colors.muted }]}>:</Text>
+                <View style={styles.countdownItem}>
+                  <Text style={[styles.countdownValue, { color: colors.primary }]}>{countdown.mins}</Text>
+                  <Text style={[styles.countdownUnit, { color: colors.muted }]}>min</Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* CONDITIONS */}
+          {event.mobileFields?.event_terms ? (
+            <View style={[styles.conditionsBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Conditions</Text>
+              <Text style={[styles.conditionsTitle, { color: colors.primary }]}>Termes et conditions :</Text>
+              <Text style={[styles.descText, { color: colors.muted }]} numberOfLines={showFullTerms ? undefined : 3}>
+                {event.mobileFields.event_terms}
+              </Text>
+              {event.mobileFields.event_terms.length > 150 && (
+                <TouchableOpacity onPress={() => setShowFullTerms(!showFullTerms)}>
+                  <Text style={[styles.showMoreText, { color: colors.primary }]}>{showFullTerms ? 'Voir moins' : 'Voir plus'}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : null}
+
+          {/* LOCATION ON MAP */}
+          {event.mobileFields?.event_location ? (
+            <View style={[styles.locationBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={styles.locationHeader}>
+                <Text style={[styles.sectionTitle, { color: colors.foreground, marginBottom: 0 }]}>Lieu</Text>
+                <TouchableOpacity onPress={() => {
+                  const q = encodeURIComponent(event.mobileFields!.event_location!);
+                  Linking.openURL(Platform.OS === 'ios' ? `maps:?q=${q}` : `geo:0,0?q=${q}`);
+                }}>
+                  <Text style={[styles.getDirections, { color: colors.primary }]}>Itinéraire</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.locationRow}>
+                <IconSymbol name="mappin" size={16} color={colors.primary} />
+                <Text style={[styles.locationText, { color: colors.foreground }]}>{event.mobileFields.event_location}</Text>
+              </View>
+              {/* Static map preview */}
+              <TouchableOpacity
+                onPress={() => {
+                  const q = encodeURIComponent(event.mobileFields!.event_location!);
+                  Linking.openURL(Platform.OS === 'ios' ? `maps:?q=${q}` : `geo:0,0?q=${q}`);
+                }}
+                style={styles.mapPreview}
+              >
+                <Image
+                  source={{ uri: `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(event.mobileFields.event_location)}&zoom=15&size=600x200&markers=color:red%7C${encodeURIComponent(event.mobileFields.event_location)}&key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8` }}
+                  style={styles.mapImage}
+                  contentFit="cover"
+                />
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
+          {/* UPCOMING EVENTS */}
+          {upcomingEvents.length > 0 && (
+            <View style={{ marginTop: 24 }}>
+              <View style={styles.upcomingHeader}>
+                <Text style={[styles.sectionTitle, { color: colors.foreground, marginBottom: 0 }]}>Événements à venir</Text>
+                <TouchableOpacity onPress={() => router.push('/(tabs)/events' as any)}>
+                  <Text style={[styles.getDirections, { color: colors.primary }]}>Voir tout</Text>
+                </TouchableOpacity>
+              </View>
+              <FlatList
+                data={upcomingEvents}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingRight: 16, gap: 12, marginTop: 12 }}
+                keyExtractor={item => String(item.id)}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => router.push(`/event/${item.id}` as any)}
+                    style={[styles.upcomingCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                  >
+                    <Image source={{ uri: item.featuredImage }} style={styles.upcomingCardImage} contentFit="cover" />
+                    <View style={styles.upcomingCardBody}>
+                      <Text style={[styles.upcomingCardTitle, { color: colors.foreground }]} numberOfLines={2}>
+                        {decodeHtmlEntities(item.title.rendered)}
+                      </Text>
+                      {item.mobileFields?.event_location && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                          <IconSymbol name="mappin" size={11} color={colors.muted} />
+                          <Text style={{ color: colors.muted, fontSize: 11, fontFamily: 'Raleway-Regular' }} numberOfLines={1}>
+                            {item.mobileFields.event_location}
+                          </Text>
+                        </View>
+                      )}
+                      {item.minPrice != null && (
+                        <Text style={[styles.upcomingCardPrice, { color: colors.primary }]}>
+                          Dès {formatAriary(item.minPrice)}
+                        </Text>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                )}
+              />
+            </View>
+          )}
         </View>
       </ScrollView>
 
@@ -844,4 +1023,31 @@ const styles = StyleSheet.create({
   confirmBtn: { width: "100%", paddingVertical: 16, borderRadius: 14, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 4 },
   confirmBtnText: { color: "#fff", fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold" },
   confirmHint: { marginTop: 6, fontSize: 12, fontFamily: "Raleway-Regular", textAlign: "center" },
+  // Countdown
+  countdownBox: { marginTop: 24, padding: 16, borderRadius: 14, borderWidth: 1, alignItems: "center" },
+  countdownLabel: { fontSize: 13, fontFamily: "Raleway-Medium", marginBottom: 10 },
+  countdownRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  countdownItem: { alignItems: "center" },
+  countdownValue: { fontSize: 28, fontWeight: "800", fontFamily: "Raleway-Bold" },
+  countdownUnit: { fontSize: 11, fontFamily: "Raleway-Regular", marginTop: 2 },
+  countdownSep: { fontSize: 24, fontWeight: "700", marginTop: -8 },
+  // Conditions
+  conditionsBox: { marginTop: 20, padding: 16, borderRadius: 14, borderWidth: 1 },
+  conditionsTitle: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold", marginBottom: 6 },
+  showMoreText: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold", marginTop: 8 },
+  // Location
+  locationBox: { marginTop: 20, padding: 16, borderRadius: 14, borderWidth: 1 },
+  locationHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
+  getDirections: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  locationRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
+  locationText: { fontSize: 14, fontFamily: "Raleway-Medium", flex: 1 },
+  mapPreview: { borderRadius: 10, overflow: "hidden" },
+  mapImage: { width: "100%", height: 140, borderRadius: 10 },
+  // Upcoming events
+  upcomingHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
+  upcomingCard: { width: 200, borderRadius: 14, overflow: "hidden", borderWidth: 1 },
+  upcomingCardImage: { width: 200, height: 110 },
+  upcomingCardBody: { padding: 10 },
+  upcomingCardTitle: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  upcomingCardPrice: { fontSize: 13, fontWeight: "700", fontFamily: "Raleway-Bold", marginTop: 6 },
 });

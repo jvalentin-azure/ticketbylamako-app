@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from "react";
-import { Text, View, TouchableOpacity, ActivityIndicator, Platform, Alert, StyleSheet } from "react-native";
+import { useState, useEffect, useRef } from "react";
+import { Text, View, TouchableOpacity, ActivityIndicator, Platform, Alert, StyleSheet, TextInput, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
@@ -17,14 +17,16 @@ if (Platform.OS !== "web") {
   } catch {}
 }
 
-type CheckoutPhase = "creating" | "paying" | "success" | "error" | "payment_error";
+type CheckoutPhase = "address" | "creating" | "paying" | "success" | "error" | "payment_error";
 
 export default function CheckoutScreen() {
   const colors = useColors();
   const router = useRouter();
   const { items, clearCart, total } = useCart();
   const webviewRef = useRef<any>(null);
-  const [phase, setPhase] = useState<CheckoutPhase>("creating");
+
+  const hasPhysicalProducts = items.some(i => !i.isEvent);
+  const [phase, setPhase] = useState<CheckoutPhase>(hasPhysicalProducts ? "address" : "creating");
   const [checkoutUrl, setCheckoutUrl] = useState<string>("");
   const [orderId, setOrderId] = useState<number>(0);
   const [orderKey, setOrderKey] = useState<string>("");
@@ -32,69 +34,72 @@ export default function CheckoutScreen() {
   const [paymentErrorMsg, setPaymentErrorMsg] = useState<string>("");
   const [webviewLoading, setWebviewLoading] = useState(true);
 
-  // Create WC order on mount
-  useEffect(() => {
-    let cancelled = false;
-    async function initOrder() {
-      try {
-        if (items.length === 0) {
-          setErrorMsg("Votre panier est vide");
-          setPhase("error");
-          return;
-        }
+  // Shipping address state
+  const [shippingAddress, setShippingAddress] = useState("");
+  const [shippingCity, setShippingCity] = useState("");
+  const [shippingPhone, setShippingPhone] = useState("");
 
-        // Get user info for billing
-        const user = await getStoredUser();
-        const billing = {
-          first_name: user?.firstName || "Client",
-          last_name: user?.lastName || "Mobile",
-          email: user?.email || "",
-          phone: "",
-        };
+  // Create WC order
+  const startOrderCreation = async () => {
+    try {
+      if (items.length === 0) {
+        setErrorMsg("Votre panier est vide");
+        setPhase("error");
+        return;
+      }
+      setPhase("creating");
 
-        // Map cart items to order items
-        const orderItems = items.map(item => ({
-          product_id: item.productId,
-          quantity: item.quantity,
-        }));
+      const user = await getStoredUser();
+      const billing: any = {
+        first_name: user?.firstName || "Client",
+        last_name: user?.lastName || "Mobile",
+        email: user?.email || "",
+        phone: shippingPhone || "",
+      };
+      if (hasPhysicalProducts) {
+        billing.address_1 = shippingAddress;
+        billing.city = shippingCity;
+        billing.country = "MG";
+      }
 
-        // Create the order via our WordPress API
-        const result = await createOrder(orderItems, billing, user?.id);
+      const orderItems = items.map(item => ({
+        product_id: item.productId,
+        quantity: item.quantity,
+      }));
 
-        if (cancelled) return;
+      const result = await createOrder(orderItems, billing, user?.id);
 
-        if (result.checkout_url) {
-          setOrderId(result.order_id);
-          setOrderKey(result.order_key || "");
-          setCheckoutUrl(result.checkout_url);
-          setPhase("paying");
-        } else {
-          setErrorMsg("Impossible de créer la commande. Veuillez réessayer.");
-          setPhase("error");
-        }
-      } catch (err: any) {
-        if (cancelled) return;
-        console.error("Create order error:", err);
-        setErrorMsg(err?.message || "Erreur lors de la création de la commande");
+      if (result.checkout_url) {
+        setOrderId(result.order_id);
+        setOrderKey(result.order_key || "");
+        setCheckoutUrl(result.checkout_url);
+        setPhase("paying");
+      } else {
+        setErrorMsg("Impossible de créer la commande. Veuillez réessayer.");
         setPhase("error");
       }
+    } catch (err: any) {
+      console.error("Create order error:", err);
+      setErrorMsg(err?.message || "Erreur lors de la création de la commande");
+      setPhase("error");
     }
-    initOrder();
-    return () => { cancelled = true; };
+  };
+
+  // Auto-start order creation for events-only carts
+  useEffect(() => {
+    if (!hasPhysicalProducts) {
+      startOrderCreation();
+    }
   }, []);
 
   const handleNavChange = (navState: any) => {
     const url = navState.url || "";
-    
-    // Detect order confirmation page (successful payment)
     if (url.includes("order-received") || url.includes("commande-recue") || url.includes("thankyou")) {
       setPhase("success");
       clearCart();
-      clearServerCart(); // Also clear WC server-side cart
+      clearServerCart();
       return;
     }
-    
-    // Detect payment error/cancelled in our custom checkout page URL
     if (url.includes("lamako_checkout") && url.includes("error=")) {
       try {
         const urlObj = new URL(url);
@@ -106,50 +111,46 @@ export default function CheckoutScreen() {
         }
       } catch {}
     }
-    
-    // Detect payment cancelled/failed patterns from gateways
     if (url.includes("cancel") || url.includes("failed") || url.includes("declined") || url.includes("annule")) {
-      // Don't clear cart - show payment error phase
       setPaymentErrorMsg("Le paiement a été annulé ou n'a pas abouti.");
       setPhase("payment_error");
       return;
     }
   };
 
-  // Handle messages from the checkout WebView (e.g. payment success or error)
   const handleWebViewMessage = (event: any) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
       if (data.type === "payment_success") {
         setPhase("success");
         clearCart();
-        clearServerCart(); // Also clear WC server-side cart
+        clearServerCart();
       } else if (data.type === "payment_error") {
         setPaymentErrorMsg(data.error || data.message || "Erreur de paiement");
         setPhase("payment_error");
       } else if (data.type === "payment_cancelled") {
         setPaymentErrorMsg("Le paiement a été annulé ou n'a pas abouti.");
         setPhase("payment_error");
+      } else if (data.type === "open_terms") {
+        if (data.url) {
+          import('expo-web-browser').then(mod => {
+            mod.openBrowserAsync(data.url);
+          }).catch(() => {});
+        }
       } else if (data.type === "go_back") {
         router.back();
       }
     } catch {}
   };
 
-  // JS injection for checkout WebView
   const checkoutInjectedJS = `
     (function() {
       var url = window.location.href;
-      
-      // Detect order-received / thank-you page (after payment gateway redirect)
       var isOrderReceived = url.indexOf('order-received') > -1 || url.indexOf('commande-recue') > -1 || url.indexOf('thankyou') > -1;
-      
       if (isOrderReceived) {
-        // Notify the React Native app immediately
         if (window.ReactNativeWebView) {
           window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'payment_success', url: url }));
         }
-        // Also inject a clean success page style to hide the WordPress theme
         var style = document.createElement('style');
         style.textContent = 
           'header, .site-header, #masthead, .header-wrapper, .header-main, .header-top, .header-bottom,' +
@@ -168,15 +169,10 @@ export default function CheckoutScreen() {
           '{ display: none !important; }' +
           'body { background: #f5f5f5 !important; font-family: -apple-system, BlinkMacSystemFont, sans-serif !important; }' +
           '.woocommerce-order { max-width: 100% !important; padding: 20px !important; }' +
-          '.woocommerce-thankyou-order-received { font-size: 18px !important; font-weight: 700 !important; color: #22c55e !important; text-align: center !important; padding: 20px 0 !important; }' +
-          '.woocommerce-order-details, .woocommerce-customer-details { margin: 16px 0 !important; padding: 16px !important; background: #fff !important; border-radius: 12px !important; }' +
-          'table.woocommerce-table { font-size: 14px !important; }' +
-          '#content, .site-content, main, .main-content, .entry-content { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }';
+          '.woocommerce-thankyou-order-received { font-size: 18px !important; font-weight: 700 !important; color: #22c55e !important; text-align: center !important; padding: 20px 0 !important; }';
         document.head.appendChild(style);
         return;
       }
-      
-      // Detect error parameter in our custom checkout page
       if (url.indexOf('lamako_checkout') > -1 && url.indexOf('error=') > -1) {
         var params = new URLSearchParams(window.location.search);
         var errorMsg = params.get('error');
@@ -185,28 +181,15 @@ export default function CheckoutScreen() {
         }
         return;
       }
-      
-      // Detect cancelled/failed payment pages from gateways
-      if (url.indexOf('cancel') > -1 || url.indexOf('failed') > -1 || url.indexOf('declined') > -1 || url.indexOf('annule') > -1) {
-        if (window.ReactNativeWebView) {
-          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'payment_cancelled', message: 'Le paiement a \u00e9t\u00e9 annul\u00e9 ou n\\'a pas abouti.' }));
-        }
-        return;
-      }
-      
-      // Detect redirect to WooCommerce cart/shop page (happens when payment is cancelled on some gateways)
       if ((url.indexOf('/cart') > -1 || url.indexOf('/panier') > -1) && url.indexOf('lamako_checkout') === -1 && url.indexOf('order-received') === -1) {
         if (window.ReactNativeWebView) {
-          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'payment_cancelled', message: 'Le paiement a \u00e9t\u00e9 annul\u00e9. Votre commande est conserv\u00e9e.' }));
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'payment_cancelled', message: 'Le paiement a \\u00e9t\\u00e9 annul\\u00e9. Votre commande est conserv\\u00e9e.' }));
         }
         return;
       }
-      
-      // For all other pages (dedicated checkout, payment gateway pages, etc.)
       function cleanup() {
         var hide = '#wpadminbar, .qlwapp__container, [class*="qlwapp"], #fkcart-floating-toggler, [class*="fkcart"], [class*="tidio"], [class*="whatsapp"], [class*="tawk"], [class*="crisp"]';
         document.querySelectorAll(hide).forEach(function(el) { el.style.display = 'none'; });
-        // Ensure place_order button is visible on checkout page
         var btn = document.getElementById('place_order');
         if (btn) { btn.removeAttribute('hidden'); btn.style.display = 'block'; }
       }
@@ -215,8 +198,6 @@ export default function CheckoutScreen() {
       setTimeout(cleanup, 1500);
       setTimeout(cleanup, 3000);
       setInterval(cleanup, 5000);
-      
-      // Also check for order-received after page loads (in case of client-side redirect)
       function checkSuccess() {
         var u = window.location.href;
         if (u.indexOf('order-received') > -1 || u.indexOf('commande-recue') > -1 || u.indexOf('thankyou') > -1) {
@@ -226,12 +207,88 @@ export default function CheckoutScreen() {
         }
       }
       window.addEventListener('load', checkSuccess);
-      // MutationObserver to detect dynamic page changes
       var obs = new MutationObserver(checkSuccess);
       obs.observe(document.body, { childList: true, subtree: true });
     })();
     true;
   `;
+
+  // ---- ADDRESS phase (for physical products) ----
+  if (phase === "address") {
+    return (
+      <ScreenContainer edges={["top", "bottom", "left", "right"]}>
+        <View style={[styles.header, { borderBottomColor: colors.border }]}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Adresse de livraison</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <ScrollView contentContainerStyle={{ padding: 20, gap: 16 }}>
+          <Text style={{ color: colors.muted, fontSize: 14, fontFamily: "Raleway-Regular", marginBottom: 4 }}>
+            Veuillez renseigner votre adresse pour la livraison de vos produits.
+          </Text>
+
+          <View style={{ gap: 4 }}>
+            <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" }}>Téléphone *</Text>
+            <TextInput
+              value={shippingPhone}
+              onChangeText={setShippingPhone}
+              keyboardType="phone-pad"
+              placeholder="034 XX XXX XX"
+              style={{ backgroundColor: colors.surface, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, color: colors.foreground, fontSize: 15, borderWidth: 1, borderColor: colors.border }}
+              placeholderTextColor={colors.muted}
+            />
+          </View>
+
+          <View style={{ gap: 4 }}>
+            <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" }}>Adresse *</Text>
+            <TextInput
+              value={shippingAddress}
+              onChangeText={setShippingAddress}
+              placeholder="Rue, numéro, quartier..."
+              style={{ backgroundColor: colors.surface, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, color: colors.foreground, fontSize: 15, borderWidth: 1, borderColor: colors.border }}
+              placeholderTextColor={colors.muted}
+            />
+          </View>
+
+          <View style={{ gap: 4 }}>
+            <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" }}>Ville *</Text>
+            <TextInput
+              value={shippingCity}
+              onChangeText={setShippingCity}
+              placeholder="Antananarivo"
+              style={{ backgroundColor: colors.surface, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, color: colors.foreground, fontSize: 15, borderWidth: 1, borderColor: colors.border }}
+              placeholderTextColor={colors.muted}
+            />
+          </View>
+
+          <View style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: colors.border, marginTop: 8 }}>
+            <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "600", fontFamily: "Raleway-SemiBold" }}>Récapitulatif</Text>
+            <Text style={{ color: colors.muted, fontSize: 13, marginTop: 6, fontFamily: "Raleway-Regular" }}>
+              {items.length} article{items.length > 1 ? "s" : ""} · Sous-total: {formatAriary(total)}
+            </Text>
+            <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4, fontFamily: "Raleway-Regular" }}>
+              Les frais d'expédition seront calculés à l'étape suivante.
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            onPress={() => {
+              if (!shippingAddress.trim() || !shippingCity.trim() || !shippingPhone.trim()) {
+                Alert.alert("Champs requis", "Veuillez remplir tous les champs obligatoires.");
+                return;
+              }
+              startOrderCreation();
+            }}
+            style={{ backgroundColor: colors.primary, borderRadius: 14, paddingVertical: 16, alignItems: "center", marginTop: 12 }}
+          >
+            <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold" }}>Continuer vers le paiement</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </ScreenContainer>
+    );
+  }
 
   // ---- CREATING phase ----
   if (phase === "creating") {
@@ -255,7 +312,7 @@ export default function CheckoutScreen() {
     );
   }
 
-  // ---- ERROR phase (order creation failed) ----
+  // ---- ERROR phase ----
   if (phase === "error") {
     return (
       <ScreenContainer edges={["top", "bottom", "left", "right"]}>
@@ -271,7 +328,7 @@ export default function CheckoutScreen() {
           <Text style={[styles.errorTitle, { color: colors.foreground }]}>Impossible de procéder au paiement</Text>
           <Text style={[styles.errorMsg, { color: colors.muted }]}>{errorMsg}</Text>
           <TouchableOpacity
-            onPress={() => { setPhase("creating"); setErrorMsg(""); }}
+            onPress={() => startOrderCreation()}
             style={[styles.retryBtn, { backgroundColor: colors.primary }]}
           >
             <Text style={styles.retryBtnText}>Réessayer</Text>
@@ -284,7 +341,7 @@ export default function CheckoutScreen() {
     );
   }
 
-  // ---- PAYMENT ERROR phase (gateway error or cancelled payment) ----
+  // ---- PAYMENT ERROR phase ----
   if (phase === "payment_error") {
     return (
       <ScreenContainer edges={["top", "bottom", "left", "right"]}>
@@ -304,11 +361,9 @@ export default function CheckoutScreen() {
           </Text>
           <TouchableOpacity
             onPress={() => {
-              // Return to the checkout WebView to try another payment method
               setPaymentErrorMsg("");
               setPhase("paying");
               setWebviewLoading(true);
-              // Reload the checkout URL (fresh page without error param)
               const baseUrl = checkoutUrl.split("&error=")[0];
               setCheckoutUrl(baseUrl);
             }}
@@ -412,14 +467,11 @@ export default function CheckoutScreen() {
         onNavigationStateChange={handleNavChange}
         onShouldStartLoadWithRequest={(request: any) => {
           const url = request.url || "";
-          // Allow same site, payment gateways, and common payment providers
           if (url.startsWith(SITE_URL)) return true;
           if (url.includes("mvola") || url.includes("orange") || url.includes("airtel")) return true;
           if (url.includes("cybersource") || url.includes("visa") || url.includes("mastercard")) return true;
           if (url.includes("paypal") || url.includes("stripe")) return true;
-          // Allow any https URL (payment gateways can have various domains)
           if (url.startsWith("https://")) return true;
-          // Block non-https
           return false;
         }}
         injectedJavaScript={checkoutInjectedJS}

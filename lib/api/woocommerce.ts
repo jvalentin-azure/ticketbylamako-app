@@ -320,6 +320,12 @@ export interface MobileFields {
   description: string | null;
   gallery: string[] | null;
   practical_info: { label: string; value: string }[] | null;
+  event_date_time?: string | null;
+  event_end_date_time?: string | null;
+  event_location?: string | null;
+  event_terms?: string | null;
+  event_logo?: string | null;
+  sponsors_logo?: string | null;
 }
 
 export interface TCEvent {

@@ -432,3 +432,50 @@
 - [x] Fix: Seating chart - retirer un siège → removeSeatFromCart removes tc_seat_in_cart class + updateSeatCount
 - [x] Fix: Seating chart - MutationObserver debounced (300ms) to avoid intermediate seat_count_update
 - [x] Fix: Boutons +/- zoom → native React Native buttons in overlay, Tickera buttons hidden but JS-clickable
+
+## V2.9.5 - Pre-Launch Fixes & Features (URGENT - Delivery Tomorrow)
+
+### Critical Bugs
+- [x] Fix: Mobile orders now show as "App Mobile" in WooCommerce (added source filter in plugin)
+- [x] Fix: Zoom +/- buttons → jQuery trigger + CSS transform fallback
+- [x] Fix: Vider panier → clearServerCart() called in clearCart()
+- [x] Fix: Checkout conditions → opens in system browser (expo-web-browser) via open_terms message
+- [x] Fix: Phone field already conditional (updatePhoneVisibility called on init + gateway change)
+- [ ] Fix: MVola payment error NSURL.ErrorDomain -1005 after entering code
+- [ ] Fix: MVola takes too long → module passes to "paiement non abouti" too fast
+
+### Home Page Redesign
+- [x] Filter is now AFTER "événements à venir" section
+- [x] Show only active upcoming events (filtered by event_date_time)
+- [x] Events as stacked cards (vertical FlatList)
+- [x] Add past events module at bottom (horizontal scroller)
+
+### Event Detail Page
+- [x] Add countdown timer for event (days:hours:min)
+- [x] Add conditions/terms field (collapsible with Show More)
+- [x] Add location on map (Google Maps static image + Get Directions)
+- [x] Add upcoming events carousel at bottom (horizontal FlatList)
+
+### Events Tab
+- [x] Show only active upcoming events at top (filtered by event_date_time)
+- [x] Add past events section below (horizontal scroller in ListFooter)
+
+### Splash/Onboarding
+- [x] Create splash/onboarding screen (concert bg, logo, Sign Up/Login/Explore buttons)
+- [x] After "Explorer l'application", show LamakoRewards popup after 30s (modal overlay)
+
+### Profile
+- [x] Edit personal details (name, email, phone) → edit-profile.tsx
+- [x] Change password → edit-profile.tsx
+- [x] Edit default shipping address → edit-profile.tsx
+
+### Cart/Checkout
+- [x] Auto-clear cart after 15min inactivity + Alert notification
+- [x] Clear cart on app background (AppState listener) + notification
+- [x] Checkout products: shipping address form before order creation
+
+### Branding
+- [x] App icon: white Lamako logo on dark brown background (generated + deployed)
+
+### Order Tracking
+- [x] Verify mobile orders appear as "lamako_mobile" source in WooCommerce (confirmed via DB check)

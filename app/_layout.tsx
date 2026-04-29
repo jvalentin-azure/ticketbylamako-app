@@ -25,6 +25,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-runtime";
 import { CustomSplash } from "@/components/splash-screen";
+import { RewardsPopup } from "@/components/rewards-popup";
 import { setupNotificationHandler, registerForPushNotificationsAsync, setupAndroidChannel, registerPushTokenWithBackend } from "@/lib/notifications";
 import { NotificationsProvider } from "@/lib/notifications-provider";
 import * as Notifications from "expo-notifications";
@@ -189,9 +190,11 @@ export default function RootLayout() {
             <Stack.Screen name="search" />
             <Stack.Screen name="about" />
             <Stack.Screen name="notifications" />
+            <Stack.Screen name="edit-profile" />
             <Stack.Screen name="oauth/callback" />
           </Stack>
           <StatusBar style="auto" />
+          <RewardsPopup delay={30000} />
         </QueryClientProvider>
       </trpc.Provider>
     </GestureHandlerRootView>

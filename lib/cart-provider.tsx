@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useCallback } from "react";
+import { createContext, useContext, useState, useCallback, useRef, useEffect } from "react";
+import { Alert, AppState, AppStateStatus } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { clearServerCart } from "./api/woocommerce";
 
@@ -25,19 +26,114 @@ interface CartContextType {
 
 const CartContext = createContext<CartContextType | null>(null);
 const CART_KEY = "cart_items";
+const CART_TIMESTAMP_KEY = "cart_last_activity";
+const CART_EXPIRY_MS = 15 * 60 * 1000; // 15 minutes
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const appState = useRef(AppState.currentState);
 
-  React.useEffect(() => {
-    AsyncStorage.getItem(CART_KEY).then(data => {
-      if (data) setItems(JSON.parse(data));
-    });
+  // Load cart and check expiry on mount
+  useEffect(() => {
+    (async () => {
+      const data = await AsyncStorage.getItem(CART_KEY);
+      const timestamp = await AsyncStorage.getItem(CART_TIMESTAMP_KEY);
+      if (data) {
+        const parsed = JSON.parse(data) as CartItem[];
+        if (parsed.length > 0 && timestamp) {
+          const elapsed = Date.now() - parseInt(timestamp, 10);
+          if (elapsed >= CART_EXPIRY_MS) {
+            // Cart expired while app was closed
+            persist([]);
+            clearServerCart().catch(() => {});
+            Alert.alert(
+              "Panier expiré",
+              "Votre panier a été vidé car il est resté inactif trop longtemps. Les places ont été libérées.",
+              [{ text: "OK" }]
+            );
+            return;
+          }
+        }
+        setItems(parsed);
+        if (parsed.length > 0) startTimer();
+      }
+    })();
   }, []);
+
+  // Listen for app going to background/foreground
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", handleAppStateChange);
+    return () => sub.remove();
+  }, []);
+
+  const handleAppStateChange = (nextState: AppStateStatus) => {
+    if (appState.current.match(/active/) && nextState.match(/inactive|background/)) {
+      // App going to background - record timestamp
+      AsyncStorage.setItem(CART_TIMESTAMP_KEY, String(Date.now()));
+    } else if (nextState === "active") {
+      // App coming back - check if cart expired
+      checkExpiry();
+    }
+    appState.current = nextState;
+  };
+
+  const checkExpiry = async () => {
+    const timestamp = await AsyncStorage.getItem(CART_TIMESTAMP_KEY);
+    const data = await AsyncStorage.getItem(CART_KEY);
+    if (timestamp && data) {
+      const parsed = JSON.parse(data) as CartItem[];
+      if (parsed.length > 0) {
+        const elapsed = Date.now() - parseInt(timestamp, 10);
+        if (elapsed >= CART_EXPIRY_MS) {
+          persist([]);
+          clearServerCart().catch(() => {});
+          Alert.alert(
+            "Panier expiré",
+            "Votre panier a été vidé car il est resté inactif trop longtemps. Les places ont été libérées.",
+            [{ text: "OK" }]
+          );
+        } else {
+          startTimer(CART_EXPIRY_MS - elapsed);
+        }
+      }
+    }
+  };
+
+  const startTimer = (ms: number = CART_EXPIRY_MS) => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      setItems(prev => {
+        if (prev.length > 0) {
+          AsyncStorage.setItem(CART_KEY, JSON.stringify([]));
+          AsyncStorage.removeItem(CART_TIMESTAMP_KEY);
+          clearServerCart().catch(() => {});
+          Alert.alert(
+            "Panier expiré",
+            "Votre panier a été vidé automatiquement après 15 minutes d'inactivité. Les places ont été libérées.",
+            [{ text: "OK" }]
+          );
+          return [];
+        }
+        return prev;
+      });
+    }, ms);
+  };
+
+  const resetTimer = () => {
+    AsyncStorage.setItem(CART_TIMESTAMP_KEY, String(Date.now()));
+    startTimer();
+  };
 
   const persist = (newItems: CartItem[]) => {
     setItems(newItems);
     AsyncStorage.setItem(CART_KEY, JSON.stringify(newItems));
+    if (newItems.length > 0) {
+      resetTimer();
+    } else {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      AsyncStorage.removeItem(CART_TIMESTAMP_KEY);
+    }
   };
 
   const addItem = useCallback((item: Omit<CartItem, "quantity"> & { quantity?: number }) => {
@@ -55,6 +151,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         next = [...prev, { ...item, quantity: item.quantity || 1 }];
       }
       AsyncStorage.setItem(CART_KEY, JSON.stringify(next));
+      AsyncStorage.setItem(CART_TIMESTAMP_KEY, String(Date.now()));
+      startTimer();
       return next;
     });
   }, []);
@@ -63,6 +161,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setItems(prev => {
       const next = prev.filter(i => !(i.productId === productId && i.seatLabel === seatLabel));
       AsyncStorage.setItem(CART_KEY, JSON.stringify(next));
+      if (next.length > 0) {
+        resetTimer();
+      } else {
+        if (timerRef.current) clearTimeout(timerRef.current);
+        AsyncStorage.removeItem(CART_TIMESTAMP_KEY);
+      }
       return next;
     });
   }, []);
@@ -73,13 +177,18 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         ? prev.filter(i => !(i.productId === productId && i.seatLabel === seatLabel))
         : prev.map(i => (i.productId === productId && i.seatLabel === seatLabel) ? { ...i, quantity } : i);
       AsyncStorage.setItem(CART_KEY, JSON.stringify(next));
+      if (next.length > 0) {
+        resetTimer();
+      } else {
+        if (timerRef.current) clearTimeout(timerRef.current);
+        AsyncStorage.removeItem(CART_TIMESTAMP_KEY);
+      }
       return next;
     });
   }, []);
 
   const clearCart = useCallback(() => {
     persist([]);
-    // Also clear WooCommerce server-side cart
     clearServerCart().catch(() => {});
   }, []);
 

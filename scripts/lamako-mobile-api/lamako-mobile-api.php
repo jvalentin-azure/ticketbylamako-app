@@ -88,6 +88,56 @@ function lamako_force_all_in_stock( $in_stock, $product ) {
 }
 
 // ============================================================
+// 0b. DISPLAY "App Mobile" SOURCE IN WOOCOMMERCE ORDERS LIST
+// ============================================================
+
+/**
+ * Register 'lamako_mobile' as a known order source so WooCommerce
+ * displays "App Mobile" instead of generic "Web" in the orders list.
+ */
+add_filter( 'wc_order_statuses', function( $statuses ) { return $statuses; } ); // ensure WC loaded
+
+add_filter( 'woocommerce_valid_order_statuses_for_payment', function( $s ) { return $s; } );
+
+// For HPOS (High-Performance Order Storage) - WC 8.x+
+add_filter( 'woocommerce_shop_order_list_table_columns', function( $columns ) {
+    return $columns; // just ensure filter is registered
+} );
+
+// Override the "origin" / source display in WC admin orders list
+add_filter( 'woocommerce_order_get_created_via', function( $created_via, $order ) {
+    return $created_via; // keep raw value, we handle display below
+}, 10, 2 );
+
+// Add custom source label for admin display
+add_action( 'admin_init', function() {
+    // Register our custom source with WooCommerce's internal attribution system
+    add_filter( 'wc_order_attribution_source_type_label', function( $label, $source_type ) {
+        if ( $source_type === 'lamako_mobile' ) {
+            return '📱 App Mobile';
+        }
+        return $label;
+    }, 10, 2 );
+});
+
+// For the orders list table, add a column or modify the existing source display
+add_action( 'manage_woocommerce_page_wc-orders_custom_column', function( $column_name, $order ) {
+    if ( $column_name === 'origin' && $order->get_created_via() === 'lamako_mobile' ) {
+        echo '<span style="color:#8B5E3C;font-weight:bold;">📱 App Mobile</span>';
+    }
+}, 10, 2 );
+
+// Also handle legacy post-type orders list
+add_action( 'manage_shop_order_posts_custom_column', function( $column, $post_id ) {
+    if ( $column === 'order_source' || $column === 'origin' ) {
+        $order = wc_get_order( $post_id );
+        if ( $order && $order->get_created_via() === 'lamako_mobile' ) {
+            echo '<span style="color:#8B5E3C;font-weight:bold;">📱 App Mobile</span>';
+        }
+    }
+}, 10, 2 );
+
+// ============================================================
 // 1. SEATING CHART EMBED TEMPLATE (template_redirect hook)
 // ============================================================
 
@@ -1266,7 +1316,7 @@ if (window.ReactNativeWebView) {
             echo '<div class="lamako-terms" id="lamako-terms-section">';
             echo '<label>';
             echo '<input type="checkbox" name="terms" id="terms" value="1" />';
-            echo ' J\'ai lu et j\'accepte les <a href="' . esc_url( get_permalink( $terms_page_id ) ) . '" target="_blank">conditions generales</a>';
+            echo ' J\'ai lu et j\'accepte les <a href="#" onclick="event.preventDefault(); window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({type: \'open_terms\', url: \'' . esc_url( get_permalink( $terms_page_id ) ) . '\'}))">conditions generales</a>';
             echo '</label>';
             echo '</div>';
         } else {
