@@ -42,7 +42,7 @@ export default function EventDetailScreen() {
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const { isFavorite, toggleFavorite } = useFavorites();
   const [upcomingEvents, setUpcomingEvents] = useState<TCEvent[]>([]);
-  const [countdown, setCountdown] = useState<{days: number; hours: number; mins: number} | null>(null);
+  const [countdown, setCountdown] = useState<{days: number; hours: number; mins: number; secs: number} | null>(null);
   const [showFullTerms, setShowFullTerms] = useState(false);
 
   useEffect(() => {
@@ -68,7 +68,7 @@ export default function EventDetailScreen() {
     }).catch(() => setLoading(false));
   }, [id]);
 
-  // Countdown timer
+  // Countdown timer (updates every second)
   useEffect(() => {
     if (!event) return;
     const dateStr = event.mobileFields?.event_date_time;
@@ -82,10 +82,11 @@ export default function EventDetailScreen() {
         days: Math.floor(diff / 86400000),
         hours: Math.floor((diff % 86400000) / 3600000),
         mins: Math.floor((diff % 3600000) / 60000),
+        secs: Math.floor((diff % 60000) / 1000),
       });
     };
     update();
-    const interval = setInterval(update, 60000);
+    const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
   }, [event]);
 
@@ -268,7 +269,14 @@ export default function EventDetailScreen() {
               setShowSeatingChart(false);
               setWebviewPhase('seating');
               router.replace("/(tabs)/tickets");
+            } else if (webviewPhase === 'checkout') {
+              // User is leaving during checkout - clear cart to release seats
+              clearCart();
+              setShowSeatingChart(false);
+              setWebviewPhase('seating');
             } else {
+              // User is leaving seating chart before confirming - clear any selected seats from cart
+              clearCart();
               setShowSeatingChart(false);
               setWebviewPhase('seating');
             }
@@ -424,65 +432,6 @@ export default function EventDetailScreen() {
               </View>
             )}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, width: '100%' }}>
-              {/* Zoom buttons */}
-              <TouchableOpacity
-                onPress={() => {
-                  if (webviewRef.current) {
-                    webviewRef.current.injectJavaScript(`
-                      (function() {
-                        // Try jQuery trigger first (Tickera uses jQuery events)
-                        if (typeof jQuery !== 'undefined') {
-                          var btn = jQuery('.tc_zoom_out, .tc-zoom-out, [class*="zoom_out"], .tc_seating_chart_zoom_out').first();
-                          if (btn.length) { btn.trigger('click'); return; }
-                        }
-                        // Fallback: manual zoom via CSS transform
-                        var chart = document.querySelector('.tc_seat_chart_wrap, .tc_seating_chart, .tc_seat_chart_inner, svg, .tc_chart_wrap');
-                        if (chart) {
-                          var current = chart.style.transform || '';
-                          var match = current.match(/scale\\(([\\d.]+)\\)/);
-                          var scale = match ? parseFloat(match[1]) : 1;
-                          scale = Math.max(0.3, scale - 0.2);
-                          chart.style.transform = 'scale(' + scale + ')';
-                          chart.style.transformOrigin = 'center center';
-                        }
-                      })(); true;
-                    `);
-                  }
-                }}
-                style={{ width: 40, height: 48, borderRadius: 10, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center' }}
-                activeOpacity={0.7}
-              >
-                <Text style={{ fontSize: 22, fontWeight: '700', color: '#663d17', lineHeight: 24 }}>−</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => {
-                  if (webviewRef.current) {
-                    webviewRef.current.injectJavaScript(`
-                      (function() {
-                        // Try jQuery trigger first (Tickera uses jQuery events)
-                        if (typeof jQuery !== 'undefined') {
-                          var btn = jQuery('.tc_zoom_in, .tc-zoom-in, [class*="zoom_in"], .tc_seating_chart_zoom_in').first();
-                          if (btn.length) { btn.trigger('click'); return; }
-                        }
-                        // Fallback: manual zoom via CSS transform
-                        var chart = document.querySelector('.tc_seat_chart_wrap, .tc_seating_chart, .tc_seat_chart_inner, svg, .tc_chart_wrap');
-                        if (chart) {
-                          var current = chart.style.transform || '';
-                          var match = current.match(/scale\\(([\\d.]+)\\)/);
-                          var scale = match ? parseFloat(match[1]) : 1;
-                          scale = Math.min(3, scale + 0.2);
-                          chart.style.transform = 'scale(' + scale + ')';
-                          chart.style.transformOrigin = 'center center';
-                        }
-                      })(); true;
-                    `);
-                  }
-                }}
-                style={{ width: 40, height: 48, borderRadius: 10, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center' }}
-                activeOpacity={0.7}
-              >
-                <Text style={{ fontSize: 22, fontWeight: '700', color: '#663d17', lineHeight: 24 }}>+</Text>
-              </TouchableOpacity>
               {/* Confirm button */}
               <TouchableOpacity
                 style={[styles.confirmBtn, { flex: 1, backgroundColor: selectedSeats.length > 0 ? '#663d17' : '#a0a0a0' }]}
@@ -666,6 +615,16 @@ export default function EventDetailScreen() {
         </View>
 
         <View style={{ padding: 20 }}>
+          {/* COUNTDOWN - compact at top */}
+          {countdown && (
+            <View style={styles.countdownCompact}>
+              <Text style={styles.countdownCompactText}>
+                {countdown.days}j {String(countdown.hours).padStart(2,'0')}h {String(countdown.mins).padStart(2,'0')}m {String(countdown.secs).padStart(2,'0')}s
+              </Text>
+              <Text style={styles.countdownCompactLabel}>avant l'événement</Text>
+            </View>
+          )}
+
           {/* Title */}
           <Text style={[styles.title, { color: colors.foreground }]}>{name}</Text>
 
@@ -818,28 +777,7 @@ export default function EventDetailScreen() {
             </View>
           ) : null}
 
-          {/* COUNTDOWN */}
-          {countdown && (
-            <View style={[styles.countdownBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.countdownLabel, { color: colors.muted }]}>L'événement commence dans</Text>
-              <View style={styles.countdownRow}>
-                <View style={styles.countdownItem}>
-                  <Text style={[styles.countdownValue, { color: colors.primary }]}>{countdown.days}</Text>
-                  <Text style={[styles.countdownUnit, { color: colors.muted }]}>jours</Text>
-                </View>
-                <Text style={[styles.countdownSep, { color: colors.muted }]}>:</Text>
-                <View style={styles.countdownItem}>
-                  <Text style={[styles.countdownValue, { color: colors.primary }]}>{countdown.hours}</Text>
-                  <Text style={[styles.countdownUnit, { color: colors.muted }]}>heures</Text>
-                </View>
-                <Text style={[styles.countdownSep, { color: colors.muted }]}>:</Text>
-                <View style={styles.countdownItem}>
-                  <Text style={[styles.countdownValue, { color: colors.primary }]}>{countdown.mins}</Text>
-                  <Text style={[styles.countdownUnit, { color: colors.muted }]}>min</Text>
-                </View>
-              </View>
-            </View>
-          )}
+          {/* Old countdown removed - now at top */}
 
           {/* CONDITIONS */}
           {event.mobileFields?.event_terms ? (
@@ -1023,14 +961,10 @@ const styles = StyleSheet.create({
   confirmBtn: { width: "100%", paddingVertical: 16, borderRadius: 14, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 4 },
   confirmBtnText: { color: "#fff", fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold" },
   confirmHint: { marginTop: 6, fontSize: 12, fontFamily: "Raleway-Regular", textAlign: "center" },
-  // Countdown
-  countdownBox: { marginTop: 24, padding: 16, borderRadius: 14, borderWidth: 1, alignItems: "center" },
-  countdownLabel: { fontSize: 13, fontFamily: "Raleway-Medium", marginBottom: 10 },
-  countdownRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  countdownItem: { alignItems: "center" },
-  countdownValue: { fontSize: 28, fontWeight: "800", fontFamily: "Raleway-Bold" },
-  countdownUnit: { fontSize: 11, fontFamily: "Raleway-Regular", marginTop: 2 },
-  countdownSep: { fontSize: 24, fontWeight: "700", marginTop: -8 },
+  // Countdown (compact at top)
+  countdownCompact: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: "#663d17" },
+  countdownCompactText: { fontSize: 14, fontWeight: "700", fontFamily: "Raleway-Bold", color: "#fff", letterSpacing: 0.5 },
+  countdownCompactLabel: { fontSize: 12, fontFamily: "Raleway-Regular", color: "rgba(255,255,255,0.75)" },
   // Conditions
   conditionsBox: { marginTop: 20, padding: 16, borderRadius: 14, borderWidth: 1 },
   conditionsTitle: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold", marginBottom: 6 },

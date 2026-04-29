@@ -162,33 +162,97 @@ export async function saveNotificationPreferences(prefs: NotificationPreferences
 }
 
 /**
- * Schedule a local notification (e.g., event reminder)
+ * Schedule event reminders (24h before AND 1h before)
  */
 export async function scheduleEventReminder(eventId: number, eventName: string, eventDate: Date): Promise<string | null> {
   try {
+    const now = new Date();
+    let lastId: string | null = null;
+
+    // Schedule reminder 24 hours before event
+    const reminder24h = new Date(eventDate.getTime() - 24 * 60 * 60 * 1000);
+    if (reminder24h > now) {
+      lastId = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "Rappel : demain !",
+          body: `${eventName} a lieu demain. Préparez-vous !`,
+          data: { type: "event_reminder", eventId },
+          ...(Platform.OS === "android" ? { channelId: "events" } : {}),
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: reminder24h,
+        },
+      });
+    }
+
     // Schedule reminder 1 hour before event
-    const reminderDate = new Date(eventDate.getTime() - 60 * 60 * 1000);
-    
-    // Don't schedule if reminder time has already passed
-    if (reminderDate <= new Date()) return null;
+    const reminder1h = new Date(eventDate.getTime() - 60 * 60 * 1000);
+    if (reminder1h > now) {
+      lastId = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "Rappel d'événement",
+          body: `${eventName} commence dans 1 heure !`,
+          data: { type: "event_reminder", eventId },
+          ...(Platform.OS === "android" ? { channelId: "events" } : {}),
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: reminder1h,
+        },
+      });
+    }
 
-    const id = await Notifications.scheduleNotificationAsync({
-      content: {
-        title: "Rappel d'événement",
-        body: `${eventName} commence dans 1 heure !`,
-        data: { type: "event_reminder", eventId },
-        ...(Platform.OS === "android" ? { channelId: "events" } : {}),
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.DATE,
-        date: reminderDate,
-      },
-    });
-
-    return id;
+    return lastId;
   } catch (error) {
     console.warn("Failed to schedule event reminder:", error);
     return null;
+  }
+}
+
+/**
+ * Send a local notification for a new event
+ */
+export async function notifyNewEvent(eventName: string, eventId: number): Promise<void> {
+  try {
+    const prefs = await getNotificationPreferences();
+    if (!prefs.newEvents) return;
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: "Nouvel événement 🎉",
+        body: `${eventName} vient d'être ajouté ! Découvrez-le maintenant.`,
+        data: { type: "new_event", eventId },
+        ...(Platform.OS === "android" ? { channelId: "events" } : {}),
+      },
+      trigger: null, // immediate
+    });
+  } catch (error) {
+    console.warn("Failed to send new event notification:", error);
+  }
+}
+
+/**
+ * Send a local notification for payment confirmation
+ */
+export async function notifyPaymentConfirmed(orderId: number, amount?: string): Promise<void> {
+  try {
+    const prefs = await getNotificationPreferences();
+    if (!prefs.orderUpdates) return;
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: "Paiement confirmé ✅",
+        body: amount
+          ? `Votre commande #${orderId} (${amount}) a été payée avec succès.`
+          : `Votre commande #${orderId} a été payée avec succès.`,
+        data: { type: "order_update", orderId },
+        ...(Platform.OS === "android" ? { channelId: "orders" } : {}),
+      },
+      trigger: null, // immediate
+    });
+  } catch (error) {
+    console.warn("Failed to send payment confirmation notification:", error);
   }
 }
 

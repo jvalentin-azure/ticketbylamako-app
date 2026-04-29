@@ -15,6 +15,8 @@ import { formatAriary, formatDateShort, decodeHtmlEntities } from "@/lib/format"
 import { useRewards } from "@/lib/rewards-provider";
 import { useFavorites } from "@/lib/favorites-provider";
 import { LinearGradient } from "expo-linear-gradient";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { notifyNewEvent } from "@/lib/notifications";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const HERO_H = 220;
@@ -51,6 +53,20 @@ export default function HomeScreen() {
       const [ev, pr] = await Promise.all([getEventsWithTickets(), getShopProducts({ per_page: "6" })]);
       setEvents(ev);
       setProducts(pr);
+
+      // Check for new events and notify
+      try {
+        const knownIdsStr = await AsyncStorage.getItem("tbl_known_event_ids");
+        const knownIds: number[] = knownIdsStr ? JSON.parse(knownIdsStr) : [];
+        const currentIds = ev.map(e => e.id);
+        if (knownIds.length > 0) {
+          const newEvents = ev.filter(e => !knownIds.includes(e.id));
+          for (const ne of newEvents.slice(0, 3)) {
+            await notifyNewEvent(decodeHtmlEntities(ne.title.rendered), ne.id);
+          }
+        }
+        await AsyncStorage.setItem("tbl_known_event_ids", JSON.stringify(currentIds));
+      } catch {}
     } catch (e) {
       console.warn("Load error:", e);
     } finally {
@@ -151,7 +167,7 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* UPCOMING EVENTS - STACKED CARDS */}
+        {/* UPCOMING EVENTS - FULL CARDS (same style as Events tab) */}
         <View style={styles.sectionHeader}>
           <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Événements à venir</Text>
           <TouchableOpacity onPress={() => router.push("/(tabs)/events" as any)}>
@@ -159,52 +175,62 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        <View style={{ paddingHorizontal: 16, gap: 14 }}>
-          {upcomingEvents.slice(0, 6).map(item => (
-            <TouchableOpacity
-              key={item.id}
-              activeOpacity={0.85}
-              onPress={() => router.push(`/event/${item.id}` as any)}
-              style={[styles.stackedCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
-            >
-              <Image source={{ uri: item.featuredImage }} style={styles.stackedCardImage} contentFit="cover" />
-              <View style={styles.stackedCardBody}>
-                <Text style={[styles.stackedCardTitle, { color: colors.foreground }]} numberOfLines={2}>
-                  {decodeHtmlEntities(item.title.rendered)}
-                </Text>
-                <View style={styles.stackedCardMeta}>
-                  <IconSymbol name="clock" size={13} color={colors.muted} />
-                  <Text style={[styles.stackedCardDate, { color: colors.muted }]}>
-                    {item.mobileFields?.event_date_time
-                      ? formatDateShort(item.mobileFields.event_date_time)
-                      : formatDateShort(item.date)}
-                  </Text>
-                </View>
-                {item.mobileFields?.event_location && (
-                  <View style={styles.stackedCardMeta}>
-                    <IconSymbol name="mappin" size={13} color={colors.muted} />
-                    <Text style={[styles.stackedCardDate, { color: colors.muted }]} numberOfLines={1}>
-                      {item.mobileFields.event_location}
-                    </Text>
-                  </View>
-                )}
-                {item.minPrice != null && (
-                  <Text style={[styles.stackedCardPrice, { color: colors.primary }]}>
-                    {item.minPrice === item.maxPrice
-                      ? formatAriary(item.minPrice)
-                      : `Dès ${formatAriary(item.minPrice)}`}
-                  </Text>
-                )}
-              </View>
-              {/* Favorite button */}
+        <View style={{ gap: 14 }}>
+          {upcomingEvents.slice(0, 6).map(item => {
+            const itemName = decodeHtmlEntities(item.title.rendered);
+            const itemCats = item.categoryNames?.join(", ") || "";
+            return (
               <TouchableOpacity
-                onPress={() => toggleFavorite({ id: item.id, type: "event", name: decodeHtmlEntities(item.title.rendered), image: item.featuredImage })}
-                style={styles.stackedFavBtn}
+                key={item.id}
+                activeOpacity={0.8}
+                onPress={() => router.push(`/event/${item.id}` as any)}
+                style={[styles.eventCardFull, { backgroundColor: colors.surface, borderColor: colors.border }]}
               >
-                <IconSymbol name={isFavorite(item.id, "event") ? "heart.fill" : "heart"} size={18} color={isFavorite(item.id, "event") ? "#EF4444" : colors.muted} />
+                <View style={{ position: "relative" }}>
+                  <Image source={{ uri: item.featuredImage }} style={styles.eventCardFullImage} contentFit="cover" />
+                  <TouchableOpacity
+                    onPress={() => toggleFavorite({ id: item.id, type: "event", name: itemName, image: item.featuredImage })}
+                    style={styles.favBtn}
+                  >
+                    <IconSymbol name={isFavorite(item.id, "event") ? "heart.fill" : "heart"} size={18} color={isFavorite(item.id, "event") ? "#EF4444" : "#fff"} />
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.eventCardFullBody}>
+                  <Text style={[styles.eventCardFullTitle, { color: colors.foreground }]} numberOfLines={2}>{itemName}</Text>
+                  <View style={styles.eventCardFullMeta}>
+                    <View style={{ flexDirection: "row", alignItems: "center" }}>
+                      <IconSymbol name="clock" size={14} color={colors.muted} />
+                      <Text style={[styles.eventCardFullMetaText, { color: colors.muted }]}>
+                        {item.mobileFields?.event_date_time
+                          ? formatDateShort(item.mobileFields.event_date_time)
+                          : formatDateShort(item.date)}
+                      </Text>
+                    </View>
+                    {itemCats ? (
+                      <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+                        <IconSymbol name="tag.fill" size={14} color={colors.muted} />
+                        <Text style={[styles.eventCardFullMetaText, { color: colors.muted }]} numberOfLines={1}>{itemCats}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <View style={styles.eventCardFullPriceRow}>
+                    {item.minPrice != null ? (
+                      <Text style={[styles.eventCardFullPrice, { color: colors.primary }]}>
+                        {item.minPrice === item.maxPrice
+                          ? formatAriary(item.minPrice)
+                          : `Dès ${formatAriary(item.minPrice)}`}
+                      </Text>
+                    ) : (
+                      <Text style={[styles.eventCardFullPrice, { color: colors.muted }]}>Prix non défini</Text>
+                    )}
+                    <View style={[styles.eventCardFullBtn, { backgroundColor: colors.primary }]}>
+                      <Text style={styles.eventCardFullBtnText}>Voir</Text>
+                    </View>
+                  </View>
+                </View>
               </TouchableOpacity>
-            </TouchableOpacity>
-          ))}
+            );
+          })}
         </View>
 
         {/* CATEGORY FILTER - AFTER EVENTS */}
@@ -223,7 +249,7 @@ export default function HomeScreen() {
           ))}
         </ScrollView>
 
-        {/* PAST EVENTS - HORIZONTAL SCROLLER */}
+        {/* PAST EVENTS - HORIZONTAL SCROLLER (same size as events tab: 220x120) */}
         {pastEvents.length > 0 && (
           <>
             <View style={styles.sectionHeader}>
@@ -390,18 +416,20 @@ const styles = StyleSheet.create({
   sectionHeaderInline: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
   sectionTitle: { fontSize: 18, fontWeight: "700", fontFamily: "Raleway-Bold" },
   seeAll: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
-  // Stacked event cards (vertical)
-  stackedCard: { flexDirection: "row", borderRadius: 14, overflow: "hidden", borderWidth: 1 },
-  stackedCardImage: { width: 110, height: 120 },
-  stackedCardBody: { flex: 1, padding: 12, justifyContent: "center" },
-  stackedCardTitle: { fontSize: 14, fontWeight: "700", fontFamily: "Raleway-Bold", marginBottom: 6 },
-  stackedCardMeta: { flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 3 },
-  stackedCardDate: { fontSize: 12, fontFamily: "Raleway-Regular" },
-  stackedCardPrice: { fontSize: 14, fontWeight: "700", marginTop: 4, fontFamily: "Raleway-Bold" },
-  stackedFavBtn: { position: "absolute", top: 10, right: 10 },
-  // Past events (horizontal scroller)
-  pastEventCard: { width: 180, borderRadius: 14, overflow: "hidden", borderWidth: 1 },
-  pastEventImage: { width: 180, height: 100 },
+  // Full event cards (same as Events tab)
+  eventCardFull: { marginHorizontal: 16, borderRadius: 16, overflow: "hidden", borderWidth: 1 },
+  eventCardFullImage: { width: "100%", height: 160 },
+  eventCardFullBody: { padding: 14 },
+  eventCardFullTitle: { fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  eventCardFullMeta: { flexDirection: "row", alignItems: "center", marginTop: 6, gap: 12 },
+  eventCardFullMetaText: { fontSize: 12, marginLeft: 4, fontFamily: "Raleway-Regular" },
+  eventCardFullPriceRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8 },
+  eventCardFullPrice: { fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  eventCardFullBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8 },
+  eventCardFullBtnText: { color: "#fff", fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  // Past events (horizontal scroller - same size as events tab: 220x120)
+  pastEventCard: { width: 220, borderRadius: 14, overflow: "hidden", borderWidth: 1 },
+  pastEventImage: { width: 220, height: 120 },
   pastEventBody: { padding: 10 },
   pastEventTitle: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
   pastEventDate: { fontSize: 11, marginTop: 4, fontFamily: "Raleway-Regular" },

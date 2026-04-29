@@ -107,12 +107,15 @@ export default function RootLayout() {
     };
   }, []);
 
-  // Hide splash screen once fonts are loaded
+  // Hide native splash screen once fonts are loaded AND custom splash is ready
   useEffect(() => {
-    if (fontsLoaded || fontError) {
+    if ((fontsLoaded || fontError) && showSplash) {
+      // Delay hiding native splash slightly so CustomSplash renders first
+      setTimeout(() => SplashScreen.hideAsync(), 50);
+    } else if ((fontsLoaded || fontError) && !showSplash) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded, fontError]);
+  }, [fontsLoaded, fontError, showSplash]);
 
   const handleSafeAreaUpdate = useCallback((metrics: Metrics) => {
     setInsets(metrics.insets);
@@ -161,9 +164,11 @@ export default function RootLayout() {
 
   if (showSplash && fontsLoaded) {
     return (
-      <ThemeProvider>
-        <CustomSplash onFinish={() => setShowSplash(false)} />
-      </ThemeProvider>
+      <SafeAreaProvider initialMetrics={providerInitialMetrics}>
+        <ThemeProvider>
+          <CustomSplash onFinish={() => setShowSplash(false)} />
+        </ThemeProvider>
+      </SafeAreaProvider>
     );
   }
 

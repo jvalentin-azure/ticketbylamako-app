@@ -441,8 +441,8 @@
 - [x] Fix: Vider panier → clearServerCart() called in clearCart()
 - [x] Fix: Checkout conditions → opens in system browser (expo-web-browser) via open_terms message
 - [x] Fix: Phone field already conditional (updatePhoneVisibility called on init + gateway change)
-- [ ] Fix: MVola payment error NSURL.ErrorDomain -1005 after entering code
-- [ ] Fix: MVola takes too long → module passes to "paiement non abouti" too fast
+- [x] Fix: MVola payment error NSURL.ErrorDomain -1005 after entering code (auto-retry with 3 attempts)
+- [x] Fix: MVola takes too long → module passes to "paiement non abouti" too fast (increased timeout + retry)
 
 ### Home Page Redesign
 - [x] Filter is now AFTER "événements à venir" section
@@ -479,3 +479,25 @@
 
 ### Order Tracking
 - [x] Verify mobile orders appear as "lamako_mobile" source in WooCommerce (confirmed via DB check)
+
+## V2.9.6 - Critical Bug Fixes (User Testing Feedback)
+
+### P0 - Critical Bugs
+- [x] Fix: Onboarding splash NOT visible in Expo Go (show as overlay after app loads, not replace native splash)
+- [x] Fix: Seating chart cart NOT cleared after failed/abandoned payment (Firebase seats + WC cart must reset)
+- [x] Fix: Remove zoom +/- buttons entirely (jQuery trigger doesn't work, restore Tickera native zoom)
+- [x] Fix: Mobile order source still shows "WEB" in WooCommerce (deploy correct hook via woocommerce_order_list_table_column_origin_content filter + wc_order_attribution meta)
+- [x] Fix: LamakoRewards popup NOT activating after 30s of Explorer mode
+
+### P1 - UI Fixes
+- [x] Fix: Countdown must be at TOP of event page (after header/image), add SECONDS, make SMALLER (compact: Xj Xh Xm Xs)
+- [x] Fix: Conditions section visible on event page (uses mobileFields.conditions from WordPress)
+- [x] Fix: Location/Map visible on event page (uses mobileFields.location from WordPress)
+- [x] Fix: Upcoming events carousel showing on event page
+- [x] Fix: Home page event cards use same larger card size as events tab
+- [x] Fix: Home page filter label says "Événements à venir"
+- [x] Fix: Past events scroller on home uses same card size as events tab past events section
+
+### P2 - New Features
+- [x] MVola timeout: increase delay before "paiement non abouti", handle NSURL -1005 error with auto-retry (3 retries)
+- [x] Push notifications: new event alerts, event reminders (24h + 1h before), payment confirmation

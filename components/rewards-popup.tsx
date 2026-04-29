@@ -18,31 +18,35 @@ export function RewardsPopup({ delay = 30000 }: RewardsPopupProps) {
 
   useEffect(() => {
     // Only show if user is in explore mode and hasn't seen it yet
-    const check = async () => {
-      const exploreMode = await AsyncStorage.getItem("@lamako_explore_mode");
-      const alreadyShown = await AsyncStorage.getItem(REWARDS_POPUP_KEY);
-      if (exploreMode === "true" && alreadyShown !== "true") {
-        const timer = setTimeout(() => {
-          setVisible(true);
-          AsyncStorage.setItem(REWARDS_POPUP_KEY, "true");
-          Animated.parallel([
-            Animated.timing(fadeAnim, {
-              toValue: 1,
-              duration: 300,
-              useNativeDriver: true,
-            }),
-            Animated.spring(scaleAnim, {
-              toValue: 1,
-              tension: 60,
-              friction: 8,
-              useNativeDriver: true,
-            }),
-          ]).start();
-        }, delay);
-        return () => clearTimeout(timer);
-      }
-    };
-    check();
+    // Delay the check slightly to ensure AsyncStorage has been written by splash-screen
+    const initTimer = setTimeout(() => {
+      const check = async () => {
+        const exploreMode = await AsyncStorage.getItem("@lamako_explore_mode");
+        const alreadyShown = await AsyncStorage.getItem(REWARDS_POPUP_KEY);
+        if (exploreMode === "true" && alreadyShown !== "true") {
+          const timer = setTimeout(() => {
+            setVisible(true);
+            AsyncStorage.setItem(REWARDS_POPUP_KEY, "true");
+            Animated.parallel([
+              Animated.timing(fadeAnim, {
+                toValue: 1,
+                duration: 300,
+                useNativeDriver: true,
+              }),
+              Animated.spring(scaleAnim, {
+                toValue: 1,
+                tension: 60,
+                friction: 8,
+                useNativeDriver: true,
+              }),
+            ]).start();
+          }, delay);
+          return () => clearTimeout(timer);
+        }
+      };
+      check();
+    }, 500); // Wait 500ms for AsyncStorage to be written
+    return () => clearTimeout(initTimer);
   }, []);
 
   const handleClose = () => {

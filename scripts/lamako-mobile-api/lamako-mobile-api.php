@@ -94,35 +94,23 @@ function lamako_force_all_in_stock( $in_stock, $product ) {
 /**
  * Register 'lamako_mobile' as a known order source so WooCommerce
  * displays "App Mobile" instead of generic "Web" in the orders list.
+ * 
+ * WooCommerce 8.x+ with HPOS uses Order Attribution to track source.
+ * The "origin" column reads from _wc_order_attribution_source_type meta.
+ * We must set this meta when creating orders AND override the display label.
  */
-add_filter( 'wc_order_statuses', function( $statuses ) { return $statuses; } ); // ensure WC loaded
 
-add_filter( 'woocommerce_valid_order_statuses_for_payment', function( $s ) { return $s; } );
-
-// For HPOS (High-Performance Order Storage) - WC 8.x+
-add_filter( 'woocommerce_shop_order_list_table_columns', function( $columns ) {
-    return $columns; // just ensure filter is registered
-} );
-
-// Override the "origin" / source display in WC admin orders list
-add_filter( 'woocommerce_order_get_created_via', function( $created_via, $order ) {
-    return $created_via; // keep raw value, we handle display below
+// Override the origin column display for HPOS orders list
+add_filter( 'woocommerce_order_list_table_column_origin_content', function( $content, $order ) {
+    if ( $order->get_created_via() === 'lamako_mobile' || $order->get_meta('_lamako_mobile_order') === 'yes' ) {
+        return '<span style="color:#8B5E3C;font-weight:bold;">📱 App Mobile</span>';
+    }
+    return $content;
 }, 10, 2 );
 
-// Add custom source label for admin display
-add_action( 'admin_init', function() {
-    // Register our custom source with WooCommerce's internal attribution system
-    add_filter( 'wc_order_attribution_source_type_label', function( $label, $source_type ) {
-        if ( $source_type === 'lamako_mobile' ) {
-            return '📱 App Mobile';
-        }
-        return $label;
-    }, 10, 2 );
-});
-
-// For the orders list table, add a column or modify the existing source display
+// For the orders list table custom column (fallback for older WC)
 add_action( 'manage_woocommerce_page_wc-orders_custom_column', function( $column_name, $order ) {
-    if ( $column_name === 'origin' && $order->get_created_via() === 'lamako_mobile' ) {
+    if ( $column_name === 'origin' && ( $order->get_created_via() === 'lamako_mobile' || $order->get_meta('_lamako_mobile_order') === 'yes' ) ) {
         echo '<span style="color:#8B5E3C;font-weight:bold;">📱 App Mobile</span>';
     }
 }, 10, 2 );
@@ -131,9 +119,35 @@ add_action( 'manage_woocommerce_page_wc-orders_custom_column', function( $column
 add_action( 'manage_shop_order_posts_custom_column', function( $column, $post_id ) {
     if ( $column === 'order_source' || $column === 'origin' ) {
         $order = wc_get_order( $post_id );
-        if ( $order && $order->get_created_via() === 'lamako_mobile' ) {
+        if ( $order && ( $order->get_created_via() === 'lamako_mobile' || $order->get_meta('_lamako_mobile_order') === 'yes' ) ) {
             echo '<span style="color:#8B5E3C;font-weight:bold;">📱 App Mobile</span>';
         }
+    }
+}, 10, 2 );
+
+// Register source type label for WC attribution system
+add_filter( 'wc_order_attribution_source_type_label', function( $label, $source_type ) {
+    if ( $source_type === 'lamako_mobile' || $source_type === 'mobile_app' ) {
+        return '📱 App Mobile';
+    }
+    return $label;
+}, 10, 2 );
+
+// Override the created_via display label in order details
+add_filter( 'woocommerce_order_get_created_via', function( $created_via, $order ) {
+    return $created_via;
+}, 10, 2 );
+
+// Set WC Order Attribution meta when order is created via mobile
+add_action( 'woocommerce_new_order', function( $order_id, $order ) {
+    if ( ! is_a( $order, 'WC_Order' ) ) {
+        $order = wc_get_order( $order_id );
+    }
+    if ( $order && $order->get_created_via() === 'lamako_mobile' ) {
+        // Set the attribution meta that WC uses for the origin column
+        $order->update_meta_data( '_wc_order_attribution_source_type', 'lamako_mobile' );
+        $order->update_meta_data( '_wc_order_attribution_utm_source', 'lamako_mobile_app' );
+        $order->save();
     }
 }, 10, 2 );
 

@@ -8,6 +8,7 @@ import { getStoredUser } from "@/lib/api/auth";
 import { createOrder, SITE_URL, clearServerCart } from "@/lib/api/woocommerce";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { formatAriary } from "@/lib/format";
+import { notifyPaymentConfirmed } from "@/lib/notifications";
 
 // WebView for checkout - loads WooCommerce pay-for-order page
 let WebViewComponent: any = null;
@@ -33,6 +34,9 @@ export default function CheckoutScreen() {
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [paymentErrorMsg, setPaymentErrorMsg] = useState<string>("");
   const [webviewLoading, setWebviewLoading] = useState(true);
+  const [retryCount, setRetryCount] = useState(0);
+  const MAX_RETRIES = 3;
+  const paymentTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Shipping address state
   const [shippingAddress, setShippingAddress] = useState("");
@@ -98,6 +102,7 @@ export default function CheckoutScreen() {
       setPhase("success");
       clearCart();
       clearServerCart();
+      notifyPaymentConfirmed(orderId, formatAriary(total)).catch(() => {});
       return;
     }
     if (url.includes("lamako_checkout") && url.includes("error=")) {
@@ -125,6 +130,7 @@ export default function CheckoutScreen() {
         setPhase("success");
         clearCart();
         clearServerCart();
+        notifyPaymentConfirmed(orderId, formatAriary(total)).catch(() => {});
       } else if (data.type === "payment_error") {
         setPaymentErrorMsg(data.error || data.message || "Erreur de paiement");
         setPhase("payment_error");
@@ -371,8 +377,8 @@ export default function CheckoutScreen() {
           >
             <Text style={styles.retryBtnText}>Essayer un autre mode de paiement</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backLink}>
-            <Text style={[styles.backLinkText, { color: colors.muted }]}>Retour au panier</Text>
+          <TouchableOpacity onPress={() => { clearCart(); router.back(); }} style={styles.backLink}>
+            <Text style={[styles.backLinkText, { color: colors.muted }]}>Abandonner et vider le panier</Text>
           </TouchableOpacity>
         </View>
       </ScreenContainer>
@@ -473,6 +479,39 @@ export default function CheckoutScreen() {
           if (url.includes("paypal") || url.includes("stripe")) return true;
           if (url.startsWith("https://")) return true;
           return false;
+        }}
+        onError={(syntheticEvent: any) => {
+          const { nativeEvent } = syntheticEvent;
+          const errorCode = nativeEvent?.code || 0;
+          const errorDescription = nativeEvent?.description || "";
+          // NSURL error -1005 = network connection lost - auto retry
+          if (errorCode === -1005 || errorDescription.includes("-1005") || errorDescription.includes("connection was lost")) {
+            if (retryCount < MAX_RETRIES) {
+              setRetryCount(prev => prev + 1);
+              // Auto-retry after 2 seconds
+              setTimeout(() => {
+                if (webviewRef.current) {
+                  webviewRef.current.reload();
+                }
+              }, 2000);
+              return;
+            }
+          }
+          // For MVola timeouts - wait longer before declaring failure (45s)
+          if (checkoutUrl.includes("mvola") || errorDescription.includes("timeout")) {
+            if (retryCount < MAX_RETRIES) {
+              setRetryCount(prev => prev + 1);
+              setTimeout(() => {
+                if (webviewRef.current) {
+                  webviewRef.current.reload();
+                }
+              }, 3000);
+              return;
+            }
+          }
+          // Only show error after retries exhausted
+          setPaymentErrorMsg(`Erreur réseau (${errorCode}): ${errorDescription}. Veuillez vérifier votre connexion et réessayer.`);
+          setPhase("payment_error");
         }}
         injectedJavaScript={checkoutInjectedJS}
         onMessage={handleWebViewMessage}
