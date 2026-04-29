@@ -409,3 +409,26 @@
 ### Deployment
 - [x] Plugin updated to v2.0.3 on WordPress
 - [x] Committed to git
+
+## V2.9.4 - Checkout Polish, Seating Chart Layout, App Orders Tracking
+
+### Checkout Page
+- [ ] Fix: Phone field should only appear when MVola or Airtel is selected (not for CyberSource/Orange)
+- [ ] Add: Loading spinner on Pay button during payment processing
+- [ ] Add: Event name linked to the product on the checkout page
+
+### Seating Chart Layout
+- [ ] Fix: Too much empty space at bottom (see screenshot)
+- [ ] Fix: +/- zoom buttons too big and wrong color (mauve) → make smaller and Lamako brown/gold
+- [ ] Fix: Ensure selected seats recap panel is visible
+
+### Order Tracking
+- [ ] Add: Meta "source: mobile_app" on orders created from the app
+- [ ] Fix: POS Guichet plugin should show "App" instead of "POS" for app orders
+- [ ] Add: Dashboard plugin should show app orders KPI (count, revenue)
+
+### Mobile App Bugs (reported)
+- [ ] Fix: Vider le panier dans l'app ne vide pas le panier WooCommerce côté serveur
+- [ ] Fix: Seating chart - retirer un siège en bas → il reste sélectionné visuellement sur le plan
+- [ ] Fix: Seating chart - ajouter un 2ème siège → le 1er siège disparaît du panneau récap en bas
+- [ ] Fix: Boutons + et - (quantité tickets) ont disparu

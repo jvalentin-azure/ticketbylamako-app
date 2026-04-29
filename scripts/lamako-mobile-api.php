@@ -3,7 +3,7 @@
  * Plugin Name: Lamako Mobile API
  * Plugin URI: https://www.ticketbylamako.com
  * Description: REST API endpoints for the TicketByLamako mobile app - ticket instances, seating chart embed, and more.
- * Version: 2.0.3
+ * Version: 2.0.4
  * Author: Lamako Events
  * Author URI: https://www.ticketbylamako.com
  * License: GPL v2 or later
@@ -208,6 +208,25 @@ function lamako_mobile_maybe_serve_seat_embed() {
         visibility: hidden !important;
         opacity: 0 !important;
         pointer-events: none !important;
+    }
+    
+    /* Hide the in-WebView selected seats panel - shown in React Native overlay instead */
+    #lamako-selected-seats {
+        display: none !important;
+    }
+    
+    /* Hide Tickera zoom buttons visually - controlled from native React Native overlay via JS click */
+    .tc_zoom_in, .tc_zoom_out,
+    .tc-zoom-in, .tc-zoom-out,
+    [class*="zoom_in"], [class*="zoom_out"],
+    .tc_seating_chart_zoom_in, .tc_seating_chart_zoom_out {
+        position: fixed !important;
+        top: -9999px !important;
+        left: -9999px !important;
+        opacity: 0 !important;
+        width: 36px !important;
+        height: 36px !important;
+        pointer-events: auto !important;
     }
     
     /* Seat count badge at top */
@@ -657,9 +676,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     jQuery('.ui-widget-overlay').hide();
                 }
                 
-                // Observe DOM changes for seat count updates
+                // Observe DOM changes for seat count updates (debounced to avoid intermediate states)
+                var seatUpdateTimer = null;
                 var observer = new MutationObserver(function() {
-                    updateSeatCount();
+                    clearTimeout(seatUpdateTimer);
+                    seatUpdateTimer = setTimeout(updateSeatCount, 300);
                 });
                 observer.observe(map, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
                 
@@ -1095,6 +1116,21 @@ function lamako_mobile_maybe_serve_checkout() {
         background: rgba(255,255,255,0.7) !important;
     }
     .shop_table { display: none; }
+    /* Loading spinner */
+    .lamako-spinner {
+        display: inline-block;
+        width: 18px;
+        height: 18px;
+        border: 3px solid rgba(255,255,255,0.3);
+        border-top-color: #fff;
+        border-radius: 50%;
+        animation: lamako-spin 0.6s linear infinite;
+        vertical-align: middle;
+        margin-right: 8px;
+    }
+    @keyframes lamako-spin {
+        to { transform: rotate(360deg); }
+    }
     @media (max-width: 400px) {
         .lamako-section { margin: 8px 12px; padding: 16px; }
         .lamako-checkout-header { padding: 12px 16px; }
@@ -1138,6 +1174,32 @@ if (window.ReactNativeWebView) {
 <!-- Order Summary -->
 <div class="lamako-section">
     <div class="lamako-section-title">Resume de la commande</div>
+    <?php
+    // Get event name from order items (Tickera stores event info in product meta)
+    $event_name = '';
+    foreach ( $items as $item ) {
+        $product_id = $item['product_id'] ?? 0;
+        if ( $product_id ) {
+            $ev = get_post_meta( $product_id, '_event_name', true );
+            if ( ! $ev ) {
+                // Try Tickera event relation
+                $ev_id = get_post_meta( $product_id, 'event_name', true );
+                if ( $ev_id ) {
+                    $ev = get_the_title( $ev_id );
+                }
+            }
+            if ( $ev && ! $event_name ) {
+                $event_name = $ev;
+            }
+        }
+    }
+    if ( $event_name ) :
+    ?>
+    <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;">
+        <div style="font-weight:700;color:#92400e;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Evenement</div>
+        <div style="color:#78350f;font-weight:600;margin-top:2px;"><?php echo esc_html( $event_name ); ?></div>
+    </div>
+    <?php endif; ?>
     <?php foreach ( $items as $item ) : ?>
     <div class="lamako-order-item">
         <span class="item-name"><?php echo esc_html( $item['name'] ); ?></span>
@@ -1239,15 +1301,15 @@ document.addEventListener('DOMContentLoaded', function() {
     var phoneSection = document.getElementById('lamako-phone-section');
     var phoneInput = document.getElementById('billing_phone');
     
-    // Mobile Money gateway IDs that require phone
-    var mobileMoneyGateways = ['mvola', 'orange_money', 'airtel_money', 'vanilla_pay', 'mvola_gateway', 'wc_mvola', 'wc_orange_money', 'wc_airtel_money'];
+    // Mobile Money gateway IDs that require phone (MVola and Airtel only - Orange has its own flow)
+    var mobileMoneyGateways = ['mvola', 'airtel_money', 'mvola_gateway', 'wc_mvola', 'wc_airtel_money'];
     
-    // Check if selected gateway needs phone
+    // Check if selected gateway needs phone (MVola and Airtel only)
     function selectedGatewayNeedsPhone() {
         var selected = document.querySelector('input[name="payment_method"]:checked');
         if (!selected) return false;
         var val = selected.value.toLowerCase();
-        return mobileMoneyGateways.some(function(gw) { return val.indexOf(gw) !== -1; }) || val.indexOf('mvola') !== -1 || val.indexOf('orange') !== -1 || val.indexOf('airtel') !== -1;
+        return mobileMoneyGateways.some(function(gw) { return val.indexOf(gw) !== -1; }) || val.indexOf('mvola') !== -1 || val.indexOf('airtel') !== -1;
     }
     
     // Update phone field visibility
@@ -1294,7 +1356,7 @@ document.addEventListener('DOMContentLoaded', function() {
         phoneInput.addEventListener('input', updatePayButton);
     }
     
-    // Form submission validation
+    // Form submission validation + loading spinner
     var form = document.getElementById('order_review');
     if (form) {
         form.addEventListener('submit', function(e) {
@@ -1311,6 +1373,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     phoneInput.focus();
                     return false;
                 }
+            }
+            // Show loading spinner on button
+            if (btn) {
+                btn.innerHTML = '<span class="lamako-spinner"></span> Traitement en cours...';
+                btn.classList.add('disabled');
+                btn.style.pointerEvents = 'none';
             }
         });
     }
@@ -1829,6 +1897,7 @@ function lamako_mobile_create_order( $request ) {
     $order->set_status( 'pending' );
     
     // Add meta to identify this as a mobile app order
+    $order->set_created_via( 'lamako_mobile' );
     $order->update_meta_data( '_lamako_mobile_order', 'yes' );
     $order->update_meta_data( '_lamako_order_source', 'mobile_app' );
     

@@ -38,6 +38,7 @@ export default function EventDetailScreen() {
   const webviewRef = useRef<any>(null);
   const [seatingReady, setSeatingReady] = useState(false);
   const [galleryIndex, setGalleryIndex] = useState(0);
+  const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const { isFavorite, toggleFavorite } = useFavorites();
 
   useEffect(() => {
@@ -310,6 +311,9 @@ export default function EventDetailScreen() {
                   Alert.alert('Erreur', 'Impossible d\'extraire les sièges sélectionnés. Veuillez réessayer.');
                 }
               }
+              if (data.type === 'seat_count_update') {
+                setSelectedSeats(data.seats || []);
+              }
               if (data.type === 'navigating_to_checkout' || data.type === 'checkout_loaded') {
                 setWebviewPhase('checkout');
               }
@@ -342,10 +346,87 @@ export default function EventDetailScreen() {
         />
         {/* Native confirm button overlay - always visible during seating phase */}
         {webviewPhase === 'seating' && (
-          <View style={[styles.confirmOverlay]}>
-            <TouchableOpacity
-              style={[styles.confirmBtn, { backgroundColor: '#663d17' }]}
-              onPress={() => {
+          <View style={[styles.confirmOverlay, { bottom: 0 }]}>
+            {/* Selected seats display */}
+            {selectedSeats.length > 0 && (
+              <View style={{ width: '100%', marginBottom: 10 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#374151', marginBottom: 6, fontFamily: 'Raleway-Bold' }}>
+                  {selectedSeats.length} {selectedSeats.length === 1 ? 'siège sélectionné' : 'sièges sélectionnés'} :
+                </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxHeight: 36 }}>
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    {selectedSeats.map((seat, idx) => (
+                      <View key={idx} style={{ backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: '#374151', fontFamily: 'Raleway-SemiBold' }}>{seat}</Text>
+                        <TouchableOpacity
+                          onPress={() => {
+                            // Remove this seat from the WebView cart
+                            if (webviewRef.current) {
+                              webviewRef.current.injectJavaScript(`
+                                (function() {
+                                  var seats = document.querySelectorAll('.tc_seat_in_cart');
+                                  seats.forEach(function(s) {
+                                    var labelEl = s.querySelector('span p');
+                                    var name = labelEl ? labelEl.textContent.trim() : (s.id || '');
+                                    if (name === '${seat}') {
+                                      // Trigger click to remove
+                                      s.click();
+                                    }
+                                  });
+                                })();
+                                true;
+                              `);
+                            }
+                          }}
+                          style={{ padding: 2 }}
+                        >
+                          <Text style={{ color: '#dc2626', fontSize: 16, fontWeight: 'bold', lineHeight: 16 }}>×</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                </ScrollView>
+              </View>
+            )}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, width: '100%' }}>
+              {/* Zoom buttons */}
+              <TouchableOpacity
+                onPress={() => {
+                  if (webviewRef.current) {
+                    webviewRef.current.injectJavaScript(`
+                      (function() {
+                        var btn = document.querySelector('.tc_zoom_out, .tc-zoom-out, [class*="zoom_out"], .tc_seating_chart_zoom_out');
+                        if (btn) btn.click();
+                      })(); true;
+                    `);
+                  }
+                }}
+                style={{ width: 40, height: 48, borderRadius: 10, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center' }}
+                activeOpacity={0.7}
+              >
+                <Text style={{ fontSize: 22, fontWeight: '700', color: '#663d17', lineHeight: 24 }}>−</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  if (webviewRef.current) {
+                    webviewRef.current.injectJavaScript(`
+                      (function() {
+                        var btn = document.querySelector('.tc_zoom_in, .tc-zoom-in, [class*="zoom_in"], .tc_seating_chart_zoom_in');
+                        if (btn) btn.click();
+                      })(); true;
+                    `);
+                  }
+                }}
+                style={{ width: 40, height: 48, borderRadius: 10, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center' }}
+                activeOpacity={0.7}
+              >
+                <Text style={{ fontSize: 22, fontWeight: '700', color: '#663d17', lineHeight: 24 }}>+</Text>
+              </TouchableOpacity>
+              {/* Confirm button */}
+              <TouchableOpacity
+                style={[styles.confirmBtn, { flex: 1, backgroundColor: selectedSeats.length > 0 ? '#663d17' : '#a0a0a0' }]}
+                disabled={selectedSeats.length === 0}
+                onPress={() => {
                 // Inject JS to extract selected seats from the Tickera DOM
                 if (webviewRef.current) {
                   webviewRef.current.injectJavaScript(`
@@ -441,8 +522,11 @@ export default function EventDetailScreen() {
               activeOpacity={0.8}
             >
               <Text style={styles.confirmBtnText}>Confirmer ma sélection</Text>
-            </TouchableOpacity>
-            <Text style={[styles.confirmHint, { color: colors.muted }]}>Sélectionnez vos sièges puis appuyez sur ce bouton</Text>
+              </TouchableOpacity>
+            </View>
+            {selectedSeats.length === 0 && (
+              <Text style={[styles.confirmHint, { color: colors.muted }]}>Appuyez sur un siège coloré pour le sélectionner</Text>
+            )}
           </View>
         )}
       </ScreenContainer>
@@ -756,7 +840,7 @@ const styles = StyleSheet.create({
   webFallbackBtnText: { color: "#fff", fontSize: 14, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
   topRightActions: { position: "absolute", top: 12, right: 16, flexDirection: "row", gap: 8 },
   topActionBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center" },
-  confirmOverlay: { position: "absolute", bottom: 100, left: 0, right: 0, paddingHorizontal: 20, paddingBottom: 16, paddingTop: 12, backgroundColor: "rgba(255,255,255,0.95)", borderTopWidth: 1, borderTopColor: "#E5E7EB", alignItems: "center", borderRadius: 16 },
+  confirmOverlay: { position: "absolute", bottom: 0, left: 0, right: 0, paddingHorizontal: 16, paddingBottom: 24, paddingTop: 10, backgroundColor: "rgba(255,255,255,0.97)", borderTopWidth: 1, borderTopColor: "#E5E7EB", alignItems: "center" },
   confirmBtn: { width: "100%", paddingVertical: 16, borderRadius: 14, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 4 },
   confirmBtnText: { color: "#fff", fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold" },
   confirmHint: { marginTop: 6, fontSize: 12, fontFamily: "Raleway-Regular", textAlign: "center" },

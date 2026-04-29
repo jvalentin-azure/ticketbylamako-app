@@ -3,7 +3,7 @@
  * Plugin Name: Lamako Mobile API
  * Plugin URI: https://www.ticketbylamako.com
  * Description: REST API endpoints for the TicketByLamako mobile app - ticket instances, seating chart embed, and more.
- * Version: 1.0.0
+ * Version: 2.0.4
  * Author: Lamako Events
  * Author URI: https://www.ticketbylamako.com
  * License: GPL v2 or later
@@ -52,44 +52,39 @@ function lamako_mobile_allow_pay_without_login( $allcaps, $caps, $args ) {
 add_filter( 'woocommerce_order_email_verification_required', '__return_false', 9999 );
 
 /**
- * Force products to be purchasable on pay-for-order pages.
- * Tickera ticket products may have purchasability restrictions that
- * prevent them from being paid for via the mobile app checkout.
+ * Force ALL Tickera ticket products to be purchasable.
+ * 
+ * Tickera's WooCommerce Bridge marks ticket products as non-purchasable
+ * to prevent direct purchase (it uses its own cart flow via seating charts).
+ * However, this blocks:
+ *   1. The seating chart AJAX (tc_woo_update_cart_seats) which calls WC()->cart->add_to_cart()
+ *   2. Our custom checkout page (lamako_checkout) pay-for-order flow
+ *   3. The standard WC pay-for-order page
+ * 
+ * Solution: Always return true for products that have a price set.
+ * This is safe because the seating chart plugin controls availability
+ * via its own seat reservation system (Firebase + cookies).
  */
-add_filter( 'woocommerce_is_purchasable', 'lamako_mobile_force_purchasable', 9999, 2 );
+add_filter( 'woocommerce_is_purchasable', 'lamako_force_all_purchasable', 9999, 2 );
 
-function lamako_mobile_force_purchasable( $purchasable, $product ) {
-    // Only override on pay-for-order pages (mobile app checkout)
-    if ( isset( $_GET['pay_for_order'], $_GET['key'] ) && $_GET['pay_for_order'] === 'true' ) {
-        // Verify the order key matches a real order for security
-        $order_id = absint( get_query_var( 'order-pay' ) );
-        if ( $order_id > 0 ) {
-            $order = wc_get_order( $order_id );
-            if ( $order && $order->get_order_key() === sanitize_text_field( $_GET['key'] ) ) {
-                return true;
-            }
-        }
+function lamako_force_all_purchasable( $purchasable, $product ) {
+    // If the product has a price, make it purchasable
+    if ( $product && $product->get_price() !== '' && $product->get_price() !== null ) {
+        return true;
     }
     return $purchasable;
 }
 
 /**
- * Also force stock status check to pass on pay-for-order pages.
- * Some Tickera products may show as out of stock.
+ * Also force stock status to be in-stock for all products.
+ * Tickera may mark products as out of stock when all seats are reserved,
+ * but the seat reservation system handles availability separately.
  */
-add_filter( 'woocommerce_product_is_in_stock', 'lamako_mobile_force_in_stock', 9999, 2 );
+add_filter( 'woocommerce_product_is_in_stock', 'lamako_force_all_in_stock', 9999, 2 );
 
-function lamako_mobile_force_in_stock( $in_stock, $product ) {
-    if ( isset( $_GET['pay_for_order'], $_GET['key'] ) && $_GET['pay_for_order'] === 'true' ) {
-        $order_id = absint( get_query_var( 'order-pay' ) );
-        if ( $order_id > 0 ) {
-            $order = wc_get_order( $order_id );
-            if ( $order && $order->get_order_key() === sanitize_text_field( $_GET['key'] ) ) {
-                return true;
-            }
-        }
-    }
-    return $in_stock;
+function lamako_force_all_in_stock( $in_stock, $product ) {
+    // Always return true - seat availability is managed by Tickera's own system
+    return true;
 }
 
 // ============================================================
@@ -215,6 +210,25 @@ function lamako_mobile_maybe_serve_seat_embed() {
         pointer-events: none !important;
     }
     
+    /* Hide the in-WebView selected seats panel - shown in React Native overlay instead */
+    #lamako-selected-seats {
+        display: none !important;
+    }
+    
+    /* Hide Tickera zoom buttons visually - controlled from native React Native overlay via JS click */
+    .tc_zoom_in, .tc_zoom_out,
+    .tc-zoom-in, .tc-zoom-out,
+    [class*="zoom_in"], [class*="zoom_out"],
+    .tc_seating_chart_zoom_in, .tc_seating_chart_zoom_out {
+        position: fixed !important;
+        top: -9999px !important;
+        left: -9999px !important;
+        opacity: 0 !important;
+        width: 36px !important;
+        height: 36px !important;
+        pointer-events: auto !important;
+    }
+    
     /* Seat count badge at top */
     .lamako-seat-count {
         display: none;
@@ -263,21 +277,43 @@ document.addEventListener('DOMContentLoaded', function() {
         // Track if we're currently processing a seat click
         var processing = false;
         
-        // Create a toast notification element
+        // Create a toast notification element - positioned at TOP to avoid being hidden by Confirmer button overlay
         var toast = document.createElement('div');
-        toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:999999;background:#663d17;color:#fff;padding:10px 20px;border-radius:10px;font-size:14px;font-weight:600;font-family:-apple-system,BlinkMacSystemFont,sans-serif;box-shadow:0 4px 12px rgba(0,0,0,0.3);display:none;text-align:center;max-width:90%;transition:opacity 0.3s;';
+        toast.style.cssText = 'position:fixed;top:50px;left:50%;transform:translateX(-50%);z-index:999999;background:#663d17;color:#fff;padding:10px 20px;border-radius:10px;font-size:14px;font-weight:600;font-family:-apple-system,BlinkMacSystemFont,sans-serif;box-shadow:0 4px 12px rgba(0,0,0,0.3);display:none;text-align:center;max-width:90%;transition:opacity 0.3s;';
         document.body.appendChild(toast);
         
-        function showToast(msg, isError) {
+        // Add CSS spinner animation for seat loading
+        var spinnerStyle = document.createElement('style');
+        spinnerStyle.textContent = '@keyframes lamako-pulse { 0%,100% { opacity:0.3; transform:scale(0.9); } 50% { opacity:1; transform:scale(1.1); } } .lamako-seat-loading { animation: lamako-pulse 0.6s ease-in-out infinite !important; }';
+        document.head.appendChild(spinnerStyle);
+        
+        function showToast(msg, isError, isRemove) {
             toast.textContent = msg;
-            toast.style.background = isError ? '#dc2626' : '#663d17';
+            if (isError) {
+                toast.style.background = '#dc2626';
+            } else if (isRemove) {
+                toast.style.background = '#f59e0b';
+            } else {
+                toast.style.background = '#16a34a';
+            }
             toast.style.display = 'block';
             toast.style.opacity = '1';
             clearTimeout(toast._timer);
             toast._timer = setTimeout(function() {
                 toast.style.opacity = '0';
                 setTimeout(function() { toast.style.display = 'none'; }, 300);
-            }, 2000);
+            }, 2500);
+        }
+        
+        // Selected seats panel
+        var selectedPanel = document.createElement('div');
+        selectedPanel.id = 'lamako-selected-seats';
+        selectedPanel.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:2px solid #e5e7eb;padding:8px 12px;z-index:99998;max-height:35vh;overflow-y:auto;display:none;font-family:-apple-system,BlinkMacSystemFont,sans-serif;box-shadow:0 -4px 12px rgba(0,0,0,0.1);';
+        document.body.appendChild(selectedPanel);
+        
+        function getSeatDisplayName(seatEl) {
+            var labelEl = seatEl.querySelector('span p');
+            return labelEl ? labelEl.textContent.trim() : (seatEl.id || 'Siège');
         }
         
         function updateSeatCount() {
@@ -286,17 +322,100 @@ document.addEventListener('DOMContentLoaded', function() {
             if (count > 0) {
                 seatCount.textContent = count + (count === 1 ? ' siège sélectionné' : ' sièges sélectionnés');
                 seatCount.classList.add('visible');
+                
+                // Build selected seats list
+                var html = '<div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:6px;">Sièges sélectionnés (' + count + ') :</div>';
+                html += '<div style="display:flex;flex-wrap:wrap;gap:6px;">';
+                seats.forEach(function(s) {
+                    var name = getSeatDisplayName(s);
+                    var sId = s.id || '';
+                    html += '<div style="display:inline-flex;align-items:center;gap:4px;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600;">';
+                    html += '<span>' + name + '</span>';
+                    html += '<button data-seat-id="' + sId + '" style="background:none;border:none;color:#dc2626;font-size:16px;font-weight:bold;cursor:pointer;padding:0 2px;line-height:1;">×</button>';
+                    html += '</div>';
+                });
+                html += '</div>';
+                selectedPanel.innerHTML = html;
+                selectedPanel.style.display = 'block';
+                
+                // Add click handlers for remove buttons
+                selectedPanel.querySelectorAll('button[data-seat-id]').forEach(function(btn) {
+                    btn.addEventListener('click', function() {
+                        var seatId = this.getAttribute('data-seat-id');
+                        var seatEl = document.getElementById(seatId);
+                        if (seatEl) removeSeatFromCart(seatEl);
+                    });
+                });
+                
                 try {
                     if (window.ReactNativeWebView) {
+                        var seatNames = [];
+                        seats.forEach(function(s) { seatNames.push(getSeatDisplayName(s)); });
                         window.ReactNativeWebView.postMessage(JSON.stringify({
                             type: 'seat_count_update',
-                            count: count
+                            count: count,
+                            seats: seatNames
                         }));
                     }
                 } catch(e) {}
             } else {
                 seatCount.classList.remove('visible');
+                selectedPanel.style.display = 'none';
             }
+        }
+        
+        /**
+         * Build a color-to-ticketTypeId map from the legend.
+         * Legend items have class 'tt_XXXX' where XXXX is the product ID.
+         */
+        var colorToTicketType = {};
+        function buildColorMap() {
+            var legends = document.querySelectorAll('li[class*="tt_"]');
+            legends.forEach(function(li) {
+                var match = li.className.match(/tt_(\d+)/);
+                if (match) {
+                    var ttId = match[1];
+                    // The legend has a <span style="background-color:#xxx"> child
+                    var colorSpan = li.querySelector('span[style*="background-color"]');
+                    if (colorSpan) {
+                        var bg = colorSpan.style.backgroundColor;
+                        if (bg) colorToTicketType[bg] = ttId;
+                    }
+                    // Also map by the li's computed color (fallback)
+                    var liColor = window.getComputedStyle(li).color;
+                    if (liColor) colorToTicketType[liColor] = ttId;
+                }
+            });
+            console.log('[Lamako] Color map built:', colorToTicketType);
+        }
+        
+        /**
+         * Determine ticket type ID for a seat element.
+         * Priority: 1) data-tt-id attribute, 2) color matching with legend
+         */
+        function getTicketTypeId(seatEl) {
+            // First try direct attribute
+            var ttId = seatEl.getAttribute('data-tt-id');
+            if (ttId) return ttId;
+            
+            // Then try color matching
+            var bgColor = seatEl.style.backgroundColor;
+            if (bgColor && colorToTicketType[bgColor]) {
+                return colorToTicketType[bgColor];
+            }
+            
+            // Try computed color
+            var computedBg = window.getComputedStyle(seatEl).backgroundColor;
+            if (computedBg && colorToTicketType[computedBg]) {
+                return colorToTicketType[computedBg];
+            }
+            
+            // Fallback: if there's only one ticket type, use that
+            var ttIds = Object.values(colorToTicketType);
+            var uniqueIds = ttIds.filter(function(v, i, a) { return a.indexOf(v) === i; });
+            if (uniqueIds.length === 1) return uniqueIds[0];
+            
+            return null;
         }
         
         /**
@@ -320,11 +439,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             
+            // Skip seats without data-tt-id (not assigned to any ticket type)
+            // Tickera only sells seats that have data-tt-id attribute
+            var hasTtId = seatEl.getAttribute('data-tt-id');
+            if (!hasTtId) {
+                // Try color matching as fallback
+                var bgColor = seatEl.style.backgroundColor;
+                var colorMatch = bgColor && colorToTicketType[bgColor];
+                if (!colorMatch) {
+                    showToast('Ce siège n\'est pas disponible', true);
+                    return;
+                }
+            }
+            
             processing = true;
             
-            // Read seat data from DOM attributes
-            var ticketTypeId = seatEl.getAttribute('data-tt-id');
-            var seatId = seatEl.id || seatEl.getAttribute('data-seat-id') || '';
+            // Determine ticket type from attribute or color
+            var ticketTypeId = getTicketTypeId(seatEl);
+            var seatId = seatEl.id || '';
             var mapEl = seatEl.closest('.tc_seating_map');
             var chartId = mapEl ? mapEl.getAttribute('data-seating-chart-id') : '';
             
@@ -336,7 +468,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             if (!ticketTypeId || !seatId || !chartId) {
                 processing = false;
-                showToast('Données du siège manquantes', true);
+                showToast('Ce siège n\'a pas de type de billet assigné', true);
                 return;
             }
             
@@ -345,8 +477,8 @@ document.addEventListener('DOMContentLoaded', function() {
             
             showToast('Ajout en cours...');
             
-            // Visual feedback - briefly highlight the seat
-            seatEl.style.opacity = '0.5';
+            // Visual feedback - animate the seat while loading
+            seatEl.classList.add('lamako-seat-loading');
             
             // Call Tickera AJAX directly
             jQuery.post(
@@ -359,7 +491,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 },
                 function(response) {
                     processing = false;
-                    seatEl.style.opacity = '1';
+                    seatEl.classList.remove('lamako-seat-loading');
                     
                     if (response && !response.error) {
                         // Success - mark seat as in cart
@@ -385,7 +517,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         // Refresh WC fragments
                         jQuery(document.body).trigger('wc_fragment_refresh');
                         
-                        showToast('Siège ajouté ✓');
+                        var seatName = getSeatDisplayName(seatEl);
+                        showToast(seatName + ' ajouté ✓');
                         updateSeatCount();
                     } else {
                         showToast(response.error_message || 'Erreur lors de l\'ajout', true);
@@ -406,7 +539,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (processing) return;
             processing = true;
             
-            var ticketTypeId = seatEl.getAttribute('data-tt-id');
+            var ticketTypeId = getTicketTypeId(seatEl);
             var seatId = seatEl.id || '';
             var mapEl = seatEl.closest('.tc_seating_map');
             var chartId = mapEl ? mapEl.getAttribute('data-seating-chart-id') : '';
@@ -414,10 +547,15 @@ document.addEventListener('DOMContentLoaded', function() {
             var seatLabel = labelEl ? labelEl.textContent.trim() : '';
             seatLabel = seatLabel.replace(/-/g, '\u2013');
             
+            if (!ticketTypeId) {
+                processing = false;
+                return;
+            }
+            
             var cartItem = ticketTypeId + '-' + seatId + '-' + seatLabel + '-' + chartId;
             
             showToast('Retrait en cours...');
-            seatEl.style.opacity = '0.5';
+            seatEl.classList.add('lamako-seat-loading');
             
             jQuery.post(
                 (typeof tc_seat_chart_ajax !== 'undefined' ? tc_seat_chart_ajax.ajaxUrl : '/wp-admin/admin-ajax.php'),
@@ -429,7 +567,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 },
                 function(response) {
                     processing = false;
-                    seatEl.style.opacity = '1';
+                    seatEl.classList.remove('lamako-seat-loading');
                     
                     if (response && !response.error) {
                         seatEl.classList.remove('tc_seat_in_cart');
@@ -447,7 +585,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         }
                         
                         jQuery(document.body).trigger('wc_fragment_refresh');
-                        showToast('Siège retiré');
+                        var removedName = getSeatDisplayName(seatEl);
+                        showToast(removedName + ' retiré', false, true);
                         updateSeatCount();
                     } else {
                         showToast(response.error_message || 'Erreur lors du retrait', true);
@@ -464,11 +603,12 @@ document.addEventListener('DOMContentLoaded', function() {
          * Intercept seat clicks BEFORE Tickera's selectable handler.
          * We use a capturing event listener on the document to catch clicks
          * before they reach jQuery UI's selectable widget.
+         * Target: .tc_seat_unit elements (ALL seats in the chart)
          */
         function interceptSeatClicks() {
             document.addEventListener('click', function(e) {
-                // Find the closest seat element (Tickera seats have data-tt-id attribute)
-                var seatEl = e.target.closest('[data-tt-id]');
+                // Find the closest seat element (class tc_seat_unit)
+                var seatEl = e.target.closest('.tc_seat_unit');
                 if (!seatEl) return;
                 
                 // Only intercept if it's inside a seating map
@@ -485,7 +625,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Also intercept touch events for mobile
             document.addEventListener('touchend', function(e) {
-                var seatEl = e.target.closest('[data-tt-id]');
+                var seatEl = e.target.closest('.tc_seat_unit');
                 if (!seatEl) return;
                 var mapEl = seatEl.closest('.tc_seating_map');
                 if (!mapEl) return;
@@ -523,8 +663,9 @@ document.addEventListener('DOMContentLoaded', function() {
         // Wait for the seating map to be rendered, then set up our interceptors
         function initWhenReady() {
             var map = document.querySelector('.tc_seating_map.active, .tc_seating_map');
-            if (map && map.querySelector('[data-tt-id]')) {
-                // Map is loaded with seats
+            if (map && map.querySelector('.tc_seat_unit')) {
+                // Map is loaded with seats - build color map from legend
+                buildColorMap();
                 disableSelectableWidget();
                 interceptSeatClicks();
                 updateSeatCount();
@@ -535,9 +676,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     jQuery('.ui-widget-overlay').hide();
                 }
                 
-                // Observe DOM changes for seat count updates
+                // Observe DOM changes for seat count updates (debounced to avoid intermediate states)
+                var seatUpdateTimer = null;
                 var observer = new MutationObserver(function() {
-                    updateSeatCount();
+                    clearTimeout(seatUpdateTimer);
+                    seatUpdateTimer = setTimeout(updateSeatCount, 300);
                 });
                 observer.observe(map, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
                 
@@ -552,8 +695,9 @@ document.addEventListener('DOMContentLoaded', function() {
         // (the map may not have seats until user clicks the button)
         var mapBtnObserver = new MutationObserver(function() {
             var map = document.querySelector('.tc_seating_map.active');
-            if (map && map.querySelector('[data-tt-id]')) {
+            if (map && map.querySelector('.tc_seat_unit')) {
                 setTimeout(function() {
+                    buildColorMap();
                     disableSelectableWidget();
                     updateSeatCount();
                 }, 1000);
@@ -631,9 +775,15 @@ function lamako_mobile_maybe_serve_checkout() {
         $payment_method = isset( $_POST['payment_method'] ) ? sanitize_text_field( $_POST['payment_method'] ) : '';
         
         if ( empty( $payment_method ) ) {
-            // Redirect back with error
             wp_redirect( home_url( '/?lamako_checkout=1&order_id=' . $order_id . '&order_key=' . $order_key . '&error=no_payment_method' ) );
             exit;
+        }
+        
+        // Update billing phone if provided (needed for Mobile Money gateways)
+        if ( ! empty( $_POST['billing_phone'] ) ) {
+            $phone = sanitize_text_field( $_POST['billing_phone'] );
+            $order->set_billing_phone( $phone );
+            $order->save();
         }
         
         // Set the payment method on the order
@@ -729,6 +879,19 @@ function lamako_mobile_maybe_serve_checkout() {
         top: 0;
         z-index: 100;
     }
+    .lamako-back-btn {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: #f3f4f6;
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        flex-shrink: 0;
+    }
+    .lamako-back-btn:active { background: #e5e7eb; }
     .lamako-checkout-header h1 {
         font-size: 18px;
         font-weight: 600;
@@ -837,12 +1000,46 @@ function lamako_mobile_maybe_serve_checkout() {
         font-size: 13px;
         color: #6b7280;
     }
-    /* Terms */
+
+    /* Phone field for Mobile Money */
+    .lamako-phone-section {
+        margin-top: 16px;
+        padding: 16px;
+        background: #fffbeb;
+        border: 1px solid #fbbf24;
+        border-radius: 10px;
+        display: none;
+    }
+    .lamako-phone-section.visible { display: block; }
+    .lamako-phone-section label {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+        color: #92400e;
+        margin-bottom: 8px;
+    }
+    .lamako-phone-section input {
+        width: 100%;
+        padding: 12px 14px;
+        border: 2px solid #e5e7eb;
+        border-radius: 8px;
+        font-size: 16px;
+        outline: none;
+        transition: border-color 0.2s;
+    }
+    .lamako-phone-section input:focus { border-color: #dc2626; }
+    .lamako-phone-hint {
+        font-size: 11px;
+        color: #6b7280;
+        margin-top: 4px;
+    }
+    /* Terms section - above pay button */
     .lamako-terms {
         padding: 16px 0 0;
         font-size: 13px;
         color: #6b7280;
         line-height: 1.5;
+        margin-bottom: 80px;
     }
     .lamako-terms label {
         display: flex;
@@ -883,6 +1080,7 @@ function lamako_mobile_maybe_serve_checkout() {
         z-index: 999 !important;
         box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4) !important;
         -webkit-appearance: none !important;
+        transition: opacity 0.2s, background 0.2s;
     }
     #place_order:active {
         transform: scale(0.98) !important;
@@ -890,6 +1088,11 @@ function lamako_mobile_maybe_serve_checkout() {
     }
     #place_order[hidden] {
         display: block !important;
+    }
+    #place_order.disabled {
+        background: #9ca3af !important;
+        box-shadow: none !important;
+        pointer-events: none !important;
     }
     /* Hide WC default elements */
     .wc-block-components-notice-banner,
@@ -913,6 +1116,21 @@ function lamako_mobile_maybe_serve_checkout() {
         background: rgba(255,255,255,0.7) !important;
     }
     .shop_table { display: none; }
+    /* Loading spinner */
+    .lamako-spinner {
+        display: inline-block;
+        width: 18px;
+        height: 18px;
+        border: 3px solid rgba(255,255,255,0.3);
+        border-top-color: #fff;
+        border-radius: 50%;
+        animation: lamako-spin 0.6s linear infinite;
+        vertical-align: middle;
+        margin-right: 8px;
+    }
+    @keyframes lamako-spin {
+        to { transform: rotate(360deg); }
+    }
     @media (max-width: 400px) {
         .lamako-section { margin: 8px 12px; padding: 16px; }
         .lamako-checkout-header { padding: 12px 16px; }
@@ -928,11 +1146,24 @@ $checkout_error = isset( $_GET['error'] ) ? sanitize_text_field( urldecode( $_GE
 if ( $checkout_error ) :
 ?>
 <div style="background: #fef2f2; border-bottom: 2px solid #dc2626; padding: 12px 20px; font-size: 14px; color: #dc2626; font-weight: 500;">
-    ⚠️ <?php echo esc_html( $checkout_error ); ?>
+    <div style="font-weight:700;margin-bottom:4px;">⚠️ <?php echo esc_html( $checkout_error ); ?></div>
+    <div style="font-size:12px;color:#6b7280;">Veuillez essayer un autre mode de paiement ou réessayer.</div>
 </div>
+<script>
+// Notify the app that a payment error occurred so it doesn't show empty cart
+if (window.ReactNativeWebView) {
+    window.ReactNativeWebView.postMessage(JSON.stringify({
+        type: 'payment_error',
+        error: <?php echo json_encode( $checkout_error ); ?>
+    }));
+}
+</script>
 <?php endif; ?>
 
 <div class="lamako-checkout-header">
+    <button class="lamako-back-btn" onclick="if(window.ReactNativeWebView){window.ReactNativeWebView.postMessage(JSON.stringify({type:'go_back'}))}else{history.back()}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#374151" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
     <h1>Paiement</h1>
     <span class="lamako-secure">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
@@ -943,6 +1174,32 @@ if ( $checkout_error ) :
 <!-- Order Summary -->
 <div class="lamako-section">
     <div class="lamako-section-title">Resume de la commande</div>
+    <?php
+    // Get event name from order items (Tickera stores event info in product meta)
+    $event_name = '';
+    foreach ( $items as $item ) {
+        $product_id = $item['product_id'] ?? 0;
+        if ( $product_id ) {
+            $ev = get_post_meta( $product_id, '_event_name', true );
+            if ( ! $ev ) {
+                // Try Tickera event relation
+                $ev_id = get_post_meta( $product_id, 'event_name', true );
+                if ( $ev_id ) {
+                    $ev = get_the_title( $ev_id );
+                }
+            }
+            if ( $ev && ! $event_name ) {
+                $event_name = $ev;
+            }
+        }
+    }
+    if ( $event_name ) :
+    ?>
+    <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;">
+        <div style="font-weight:700;color:#92400e;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Evenement</div>
+        <div style="color:#78350f;font-weight:600;margin-top:2px;"><?php echo esc_html( $event_name ); ?></div>
+    </div>
+    <?php endif; ?>
     <?php foreach ( $items as $item ) : ?>
     <div class="lamako-order-item">
         <span class="item-name"><?php echo esc_html( $item['name'] ); ?></span>
@@ -996,13 +1253,28 @@ if ( $checkout_error ) :
         
         echo '</ul>';
         
+        // Phone number field for Mobile Money gateways
+        echo '<div class="lamako-phone-section" id="lamako-phone-section">';
+        echo '<label for="billing_phone">Numero de telephone Mobile Money</label>';
+        echo '<input type="tel" name="billing_phone" id="billing_phone" placeholder="034 XX XXX XX" pattern="[0-9]{10}" inputmode="numeric" />';
+        echo '<div class="lamako-phone-hint">Le numero sur lequel la demande de paiement sera envoyee</div>';
+        echo '</div>';
+        
         // Terms checkbox
         $terms_page_id = wc_terms_and_conditions_page_id();
         if ( $terms_page_id > 0 && apply_filters( 'woocommerce_checkout_show_terms', true ) ) {
-            echo '<div class="lamako-terms">';
+            echo '<div class="lamako-terms" id="lamako-terms-section">';
             echo '<label>';
             echo '<input type="checkbox" name="terms" id="terms" value="1" />';
             echo ' J\'ai lu et j\'accepte les <a href="' . esc_url( get_permalink( $terms_page_id ) ) . '" target="_blank">conditions generales</a>';
+            echo '</label>';
+            echo '</div>';
+        } else {
+            // Always show terms even if no page configured
+            echo '<div class="lamako-terms" id="lamako-terms-section">';
+            echo '<label>';
+            echo '<input type="checkbox" name="terms" id="terms" value="1" />';
+            echo ' J\'ai lu et j\'accepte les conditions generales de vente';
             echo '</label>';
             echo '</div>';
         }
@@ -1011,7 +1283,7 @@ if ( $checkout_error ) :
         echo '<noscript>JavaScript est requis pour le paiement.</noscript>';
         wp_nonce_field( 'woocommerce-pay', 'woocommerce-pay-nonce' );
         echo '<input type="hidden" name="woocommerce_pay" value="1" />';
-        echo '<button type="submit" class="button alt wp-element-button" id="place_order" value="Payer la commande">PAYER LA COMMANDE</button>';
+        echo '<button type="submit" class="button alt wp-element-button disabled" id="place_order" value="Payer la commande">PAYER LA COMMANDE</button>';
         echo '</div>';
         
         echo '</div>';
@@ -1024,11 +1296,91 @@ if ( $checkout_error ) :
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Ensure place_order button is always visible
     var btn = document.getElementById('place_order');
+    var termsCheckbox = document.getElementById('terms');
+    var phoneSection = document.getElementById('lamako-phone-section');
+    var phoneInput = document.getElementById('billing_phone');
+    
+    // Mobile Money gateway IDs that require phone (MVola and Airtel only - Orange has its own flow)
+    var mobileMoneyGateways = ['mvola', 'airtel_money', 'mvola_gateway', 'wc_mvola', 'wc_airtel_money'];
+    
+    // Check if selected gateway needs phone (MVola and Airtel only)
+    function selectedGatewayNeedsPhone() {
+        var selected = document.querySelector('input[name="payment_method"]:checked');
+        if (!selected) return false;
+        var val = selected.value.toLowerCase();
+        return mobileMoneyGateways.some(function(gw) { return val.indexOf(gw) !== -1; }) || val.indexOf('mvola') !== -1 || val.indexOf('airtel') !== -1;
+    }
+    
+    // Update phone field visibility
+    function updatePhoneVisibility() {
+        if (phoneSection) {
+            if (selectedGatewayNeedsPhone()) {
+                phoneSection.classList.add('visible');
+            } else {
+                phoneSection.classList.remove('visible');
+            }
+        }
+        updatePayButton();
+    }
+    
+    // Update pay button state based on terms + phone
+    function updatePayButton() {
+        if (!btn) return;
+        var termsOk = termsCheckbox ? termsCheckbox.checked : true;
+        var phoneOk = true;
+        if (selectedGatewayNeedsPhone() && phoneInput) {
+            var phone = phoneInput.value.replace(/\s/g, '');
+            phoneOk = phone.length >= 10;
+        }
+        if (termsOk && phoneOk) {
+            btn.classList.remove('disabled');
+        } else {
+            btn.classList.add('disabled');
+        }
+    }
+    
+    // Ensure place_order button is always visible
     if (btn) {
         btn.removeAttribute('hidden');
         btn.style.display = 'block';
+    }
+    
+    // Terms checkbox listener
+    if (termsCheckbox) {
+        termsCheckbox.addEventListener('change', updatePayButton);
+    }
+    
+    // Phone input listener
+    if (phoneInput) {
+        phoneInput.addEventListener('input', updatePayButton);
+    }
+    
+    // Form submission validation + loading spinner
+    var form = document.getElementById('order_review');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            if (termsCheckbox && !termsCheckbox.checked) {
+                e.preventDefault();
+                alert('Veuillez accepter les conditions generales pour continuer.');
+                return false;
+            }
+            if (selectedGatewayNeedsPhone() && phoneInput) {
+                var phone = phoneInput.value.replace(/\s/g, '');
+                if (phone.length < 10) {
+                    e.preventDefault();
+                    alert('Veuillez entrer votre numero de telephone Mobile Money.');
+                    phoneInput.focus();
+                    return false;
+                }
+            }
+            // Show loading spinner on button
+            if (btn) {
+                btn.innerHTML = '<span class="lamako-spinner"></span> Traitement en cours...';
+                btn.classList.add('disabled');
+                btn.style.pointerEvents = 'none';
+            }
+        });
     }
     
     // Handle payment method selection
@@ -1040,6 +1392,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             var box = document.querySelector('.payment_method_' + this.value + ' .payment_box');
             if (box) box.style.display = 'block';
+            updatePhoneVisibility();
         });
     });
     
@@ -1055,6 +1408,10 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
+    
+    // Initial state
+    updatePhoneVisibility();
+    updatePayButton();
     
     // Notify app of successful payment
     function checkPaymentSuccess() {
@@ -1076,6 +1433,32 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Also check on navigation
     window.addEventListener('load', checkPaymentSuccess);
+    
+    // Detect if we landed on a cancel/failure page from payment gateway
+    // (e.g., Orange Money cancel, CyberSource cancel)
+    function checkPaymentCancelled() {
+        var url = window.location.href;
+        // Common cancel/failure indicators in URLs
+        if (url.indexOf('cancel') !== -1 || url.indexOf('failed') !== -1 || url.indexOf('declined') !== -1) {
+            window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({
+                type: 'payment_cancelled',
+                url: url
+            }));
+        }
+        // If we're on a WC page that's not our checkout and not order-received, it's a redirect back
+        if (url.indexOf('lamako_checkout') === -1 && url.indexOf('order-received') === -1 && url.indexOf('lamako_seat_embed') === -1) {
+            // We've been redirected away from our checkout - likely a gateway return
+            // Check if it's a cart/shop page (empty cart scenario)
+            if (url.indexOf('/cart') !== -1 || url.indexOf('/panier') !== -1 || url.indexOf('wc-empty-cart') !== -1) {
+                window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({
+                    type: 'payment_cancelled',
+                    url: url,
+                    reason: 'redirected_to_cart'
+                }));
+            }
+        }
+    }
+    checkPaymentCancelled();
     
     // Hide any WordPress elements that leak through
     var hideSelectors = '#wpadminbar, .qlwapp__container, [class*="qlwapp"], #fkcart-floating-toggler, [class*="fkcart"]';
@@ -1138,7 +1521,32 @@ add_action( 'rest_api_init', function () {
             ],
         ],
     ] );
+    
+    // Clear WooCommerce cart/session after successful payment
+    register_rest_route( 'lamako-mobile/v1', '/clear-cart', [
+        'methods'  => 'POST',
+        'callback' => 'lamako_mobile_clear_cart',
+        'permission_callback' => 'lamako_mobile_check_wc_auth',
+    ] );
 } );
+
+/**
+ * Clear WooCommerce cart for the session.
+ * Called after successful payment to prevent old items from reappearing.
+ */
+function lamako_mobile_clear_cart( $request ) {
+    // Clear WC cart if available
+    if ( function_exists( 'WC' ) && WC()->cart ) {
+        WC()->cart->empty_cart();
+    }
+    
+    // Also clear any Tickera seating chart session data
+    if ( WC()->session ) {
+        WC()->session->set( 'tc_seat_cart_items', null );
+    }
+    
+    return new WP_REST_Response( [ 'success' => true, 'message' => 'Cart cleared' ], 200 );
+}
 
 /**
  * Authenticate using WooCommerce consumer key/secret
@@ -1489,6 +1897,7 @@ function lamako_mobile_create_order( $request ) {
     $order->set_status( 'pending' );
     
     // Add meta to identify this as a mobile app order
+    $order->set_created_via( 'lamako_mobile' );
     $order->update_meta_data( '_lamako_mobile_order', 'yes' );
     $order->update_meta_data( '_lamako_order_source', 'mobile_app' );
     

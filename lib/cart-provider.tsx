@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { clearServerCart } from "./api/woocommerce";
 
 export interface CartItem {
   productId: number;
@@ -78,6 +79,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const clearCart = useCallback(() => {
     persist([]);
+    // Also clear WooCommerce server-side cart
+    clearServerCart().catch(() => {});
   }, []);
 
   const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
