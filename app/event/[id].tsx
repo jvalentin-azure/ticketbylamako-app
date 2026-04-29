@@ -6,7 +6,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useCart } from "@/lib/cart-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { getTCEvent, getEventTickets, getSeatingChartUrl, getEventsWithTickets, type TCEvent, type TicketType } from "@/lib/api/woocommerce";
+import { getTCEvent, getEventTickets, getSeatingChartUrl, getEventsWithTickets, clearServerCart, type TCEvent, type TicketType } from "@/lib/api/woocommerce";
 import { useFavorites } from "@/lib/favorites-provider";
 import { formatAriary, formatDate, formatDateShort, stripHtml, decodeHtmlEntities } from "@/lib/format";
 import { LinearGradient } from "expo-linear-gradient";
@@ -228,7 +228,7 @@ export default function EventDetailScreen() {
       return (
         <ScreenContainer edges={["top", "left", "right", "bottom"]}>
           <View style={[styles.seatingHeader, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
-            <TouchableOpacity onPress={() => setShowSeatingChart(false)} style={styles.seatingBackBtn}>
+            <TouchableOpacity onPress={() => { clearServerCart(); setShowSeatingChart(false); }} style={styles.seatingBackBtn}>
               <IconSymbol name="chevron.left" size={20} color={colors.foreground} />
               <Text style={[styles.seatingBackText, { color: colors.foreground }]}>Retour</Text>
             </TouchableOpacity>
@@ -270,13 +270,15 @@ export default function EventDetailScreen() {
               setWebviewPhase('seating');
               router.replace("/(tabs)/tickets");
             } else if (webviewPhase === 'checkout') {
-              // User is leaving during checkout - clear cart to release seats
+              // User is leaving during checkout - clear cart AND server-side seats
               clearCart();
+              clearServerCart(); // Release Tickera seat transients on server
               setShowSeatingChart(false);
               setWebviewPhase('seating');
             } else {
-              // User is leaving seating chart before confirming - clear any selected seats from cart
+              // User is leaving seating chart - clear local cart AND server-side seat reservations
               clearCart();
+              clearServerCart(); // Release Tickera seat transients on server
               setShowSeatingChart(false);
               setWebviewPhase('seating');
             }

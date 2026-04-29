@@ -1548,23 +1548,38 @@ function lamako_mobile_clear_cart( $request ) {
     }
     
     // Release Tickera seat reservations from transients
+    // Tickera uses multiple transient patterns for seat reservations
     $order_id = $request->get_param( 'order_id' );
+    
+    // Method 1: Clear seats from a specific order
     if ( $order_id ) {
         $order = wc_get_order( (int) $order_id );
         if ( $order && $order->get_status() !== 'completed' && $order->get_status() !== 'processing' ) {
-            // Get items from the order and release their seat reservations
             foreach ( $order->get_items() as $item ) {
                 $seat_id = $item->get_meta( '_tc_seat_id' );
                 if ( $seat_id ) {
                     delete_transient( 'tc_seat_' . $seat_id . '_reserved' );
                     delete_transient( 'tc_seat_reserved_' . $seat_id );
+                    delete_transient( 'tc_cart_seat_' . $seat_id );
                 }
             }
             // Cancel the order so seats are fully released
             if ( $order->get_status() === 'pending' ) {
-                $order->update_status( 'cancelled', 'Annul\u00e9 depuis l\'app mobile (paiement non abouti).' );
+                $order->update_status( 'cancelled', 'Annulé depuis l\'app mobile (paiement non abouti).' );
             }
         }
+    }
+    
+    // Method 2: Clear ALL Tickera seat-related transients from the database
+    global $wpdb;
+    $wpdb->query(
+        "DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_tc_seat_%' OR option_name LIKE '_transient_timeout_tc_seat_%' OR option_name LIKE '_transient_tc_cart_seat_%' OR option_name LIKE '_transient_timeout_tc_cart_seat_%'"
+    );
+    
+    // Also clear Tickera's session-based cart cookies if available
+    if ( isset( $_COOKIE['tc_cart_cookie'] ) ) {
+        $cookie_id = sanitize_text_field( $_COOKIE['tc_cart_cookie'] );
+        delete_transient( 'tc_cart_' . $cookie_id );
     }
     
     return new WP_REST_Response( [ 'success' => true, 'message' => 'Cart cleared' ], 200 );

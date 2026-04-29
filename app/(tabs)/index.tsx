@@ -17,6 +17,7 @@ import { useFavorites } from "@/lib/favorites-provider";
 import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { notifyNewEvent } from "@/lib/notifications";
+import { setPendingCategory } from "@/lib/filter-state";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const HERO_H = 220;
@@ -239,11 +240,9 @@ export default function HomeScreen() {
             <TouchableOpacity
               key={cat}
               onPress={() => {
-                if (cat === "Tous") {
-                  router.push("/(tabs)/events" as any);
-                } else {
-                  router.push({ pathname: "/(tabs)/events", params: { category: cat } } as any);
-                }
+                // Set global filter state BEFORE navigating
+                setPendingCategory(cat === "Tous" ? null : cat);
+                router.push("/(tabs)/events" as any);
               }}
               style={[styles.chip, {
                 backgroundColor: cat === "Tous" ? colors.primary : colors.surface,

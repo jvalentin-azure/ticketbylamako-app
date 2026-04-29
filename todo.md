@@ -516,3 +516,12 @@
 - [x] Fix: Boutique page spacing reduced between search, filters, and products
 - [x] Fix: App icon regenerated - white TicketByLamako logo on dark brown (#3d2314)
 - [x] Fix: MVola NSURL -1005 - WebView onError handler reloads URL automatically (3 retries)
+
+## V2.9.8 - FINAL Critical Fixes (30 Apr - MUST WORK)
+
+### P0 - BROKEN - Must Fix
+- [x] Fix: Onboarding - now validates token server-side (validateToken), shows when token invalid/missing
+- [x] Fix: Filter chips use global state module (lib/filter-state.ts) - events tab subscribes & applies
+- [x] Fix: Boutique spacing - headerRow paddingBottom:2, chipsContainer paddingTop:0, gap:4
+- [x] Fix: Seating chart - clearServerCart() called on every back/close + SQL DELETE all tc_seat transients
+- [x] Fix: New concert-bg.jpg (warm orange crowd) and rewards-bg.jpg (red concert hands)

@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { View, Text, Animated, StyleSheet, TouchableOpacity, Dimensions, Modal } from "react-native";
 import { Image } from "expo-image";
 import { router } from "expo-router";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "@/lib/auth-provider";
 
 const { width } = Dimensions.get("window");
-const REWARDS_POPUP_KEY = "@lamako_rewards_popup_shown_session";
+// In-memory flag - resets every app launch (no AsyncStorage persistence)
+let rewardsPopupShownThisSession = false;
 
 interface RewardsPopupProps {
   delay?: number; // ms before showing (default 30000 = 30s)
@@ -30,12 +30,11 @@ export function RewardsPopup({ delay = 30000 }: RewardsPopupProps) {
 
     // Start the 30s timer
     timerRef.current = setTimeout(async () => {
-      // Check if already shown this session
-      const alreadyShown = await AsyncStorage.getItem(REWARDS_POPUP_KEY);
-      if (alreadyShown === "true") return;
+      // Check if already shown this session (in-memory only)
+      if (rewardsPopupShownThisSession) return;
 
-      // Mark as shown
-      await AsyncStorage.setItem(REWARDS_POPUP_KEY, "true");
+      // Mark as shown for this session
+      rewardsPopupShownThisSession = true;
 
       // Show popup
       setVisible(true);
@@ -92,7 +91,7 @@ export function RewardsPopup({ delay = 30000 }: RewardsPopupProps) {
 
           {/* Background image */}
           <Image
-            source={require("@/assets/images/concert-bg.jpg")}
+            source={require("@/assets/images/rewards-bg.jpg")}
             style={StyleSheet.absoluteFillObject}
             contentFit="cover"
           />

@@ -108,23 +108,33 @@ export default function RootLayout() {
   }, []);
 
   // Check if user is already logged in to decide whether to show onboarding
+  // Must validate token server-side, not just check if user_data exists in storage
   useEffect(() => {
     if (!fontsLoaded && !fontError) return;
     (async () => {
       try {
-        const { getStoredUser } = await import("@/lib/api/auth");
+        const { getStoredUser, getStoredToken, validateToken } = await import("@/lib/api/auth");
         const user = await getStoredUser();
-        if (user) {
-          // User is logged in, skip onboarding
-          setShowSplash(false);
-          SplashScreen.hideAsync();
+        const token = await getStoredToken();
+        if (user && token) {
+          // User data exists AND token exists - validate token is still valid
+          const isValid = await validateToken();
+          if (isValid) {
+            // Token is valid, user is truly logged in - skip onboarding
+            setShowSplash(false);
+            SplashScreen.hideAsync();
+          } else {
+            // Token expired/invalid - show onboarding
+            setShowSplash(true);
+            setTimeout(() => SplashScreen.hideAsync(), 50);
+          }
         } else {
-          // Not logged in, show onboarding
+          // No user or no token - show onboarding
           setShowSplash(true);
           setTimeout(() => SplashScreen.hideAsync(), 50);
         }
       } catch {
-        // On error, show onboarding
+        // On error (network etc), show onboarding to be safe
         setShowSplash(true);
         setTimeout(() => SplashScreen.hideAsync(), 50);
       }

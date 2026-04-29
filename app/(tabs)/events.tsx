@@ -1,18 +1,18 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { Text, View, FlatList, TouchableOpacity, TextInput, ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Platform, Modal } from "react-native";
 import { Image } from "expo-image";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { getEventsWithTickets, getEventCategories, type TCEvent, type EventCategory } from "@/lib/api/woocommerce";
 import { useFavorites } from "@/lib/favorites-provider";
 import { formatAriary, formatDateShort, decodeHtmlEntities } from "@/lib/format";
+import { consumePendingCategory, subscribeToPendingCategory } from "@/lib/filter-state";
 
 export default function EventsScreen() {
   const colors = useColors();
   const router = useRouter();
-  const params = useLocalSearchParams<{ category?: string }>();
   const [events, setEvents] = useState<TCEvent[]>([]);
   const [filtered, setFiltered] = useState<TCEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -20,7 +20,6 @@ export default function EventsScreen() {
   const [search, setSearch] = useState("");
   const [categories, setCategories] = useState<EventCategory[]>([]);
   const [selectedCat, setSelectedCat] = useState<number | null>(null);
-  const [initialCatApplied, setInitialCatApplied] = useState(false);
   const [showDateFilter, setShowDateFilter] = useState(false);
   const [dateFilter, setDateFilter] = useState<"all" | "today" | "week" | "month" | "upcoming">("all");
   const { isFavorite, toggleFavorite } = useFavorites();
@@ -60,19 +59,35 @@ export default function EventsScreen() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Apply initial category from route params (when navigating from home page filter)
+  // Apply category from global filter state (when navigating from home page filter chips)
   useEffect(() => {
-    if (initialCatApplied || !params.category || categories.length === 0) return;
-    const catName = params.category.toLowerCase();
-    const found = categories.find(c => 
-      c.name.toLowerCase().includes(catName) || 
-      c.slug?.toLowerCase().includes(catName)
+    if (categories.length === 0) return;
+    // Check for pending category on mount
+    const pending = consumePendingCategory();
+    if (pending) {
+      applyCategory(pending);
+    }
+    // Subscribe to future changes (if user navigates back and taps another chip)
+    const unsub = subscribeToPendingCategory((cat) => {
+      if (cat && categories.length > 0) {
+        applyCategory(cat);
+      } else {
+        setSelectedCat(null);
+      }
+    });
+    return unsub;
+  }, [categories]);
+
+  const applyCategory = (catName: string) => {
+    const lower = catName.toLowerCase();
+    const found = categories.find(c =>
+      c.name.toLowerCase().includes(lower) ||
+      c.slug?.toLowerCase().includes(lower)
     );
     if (found) {
       setSelectedCat(found.id);
     }
-    setInitialCatApplied(true);
-  }, [categories, params.category, initialCatApplied]);
+  };
 
   // Get only parent categories (parent === 0) for the filter chips
   const parentCategories = useMemo(() => {

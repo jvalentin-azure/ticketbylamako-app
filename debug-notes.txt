@@ -1,0 +1,44 @@
+DEBUG NOTES V2.9.8
+==================
+
+1. ONBOARDING NOT SHOWING ON EXPO GO:
+   - _layout.tsx checks getStoredUser() from SecureStore
+   - If user_data exists in SecureStore (from a previous session), showSplash=false
+   - Problem: Even after logout, the user_data may persist or the check is wrong
+   - The issue is that on Expo Go, SecureStore persists across app restarts
+   - FIX: The onboarding should show when isAuthenticated is FALSE (from auth-provider)
+   - But auth-provider takes time to validate token, so we need to wait for isLoading=false
+   - Current code uses getStoredUser() which only checks if data EXISTS, not if it's valid
+
+2. FILTER REDIRECT:
+   - Home page passes { pathname: "/(tabs)/events", params: { category: cat } }
+   - events.tsx reads useLocalSearchParams<{ category?: string }>()
+   - events.tsx has useEffect that applies initial category when categories load
+   - PROBLEM: Tab navigation may not pass params correctly in Expo Router
+   - FIX: Use router.navigate instead of router.push, or use a global state/context
+
+3. BOUTIQUE SPACING:
+   - Current styles show: searchBar marginBottom: 4, chipsContainer paddingTop: 2, paddingBottom: 6
+   - These are already small values - the issue might be the headerRow paddingBottom: 6
+   - Need to check if there's a gap between header and search that's too large
+
+4. SEATING CHART SEATS STILL SELECTED:
+   - The seats A17/A18 are still showing as selected in the Tickera seating chart
+   - This is a SERVER-SIDE issue - the seats are reserved in WordPress/Tickera transients
+   - clearServerCart() calls lamako-mobile/v1/clear-cart which should release them
+   - But the clear-cart is only called in checkout.tsx (on payment error/abandon)
+   - If user closes the seating chart WebView directly (back button), clearCart() is called
+   - But clearCart() only clears the LOCAL cart, NOT the server-side Tickera reservations!
+   - FIX: When closing seating chart, also call clearServerCart() to release server seats
+   - Also: The WordPress plugin clear-cart needs to properly delete Tickera seat transients
+
+5. CONCERT-BG:
+   - Current image looks fine (red concert stage with crowd)
+   - User says it has "lines" - might be compression artifacts or the neon lines on stage
+   - Need a cleaner concert background image
+
+6. REWARDS POPUP:
+   - Uses concert-bg.jpg as background - same "lines" issue
+   - Logic seems correct: shows after 30s if not authenticated and not shown this session
+   - But REWARDS_POPUP_KEY persists in AsyncStorage across app restarts on Expo Go
+   - FIX: Use a different key that includes a session identifier, or clear it on app start
