@@ -621,3 +621,18 @@
 - [x] Remove header banner LamakoRewards (trop intrusif)
 - [x] Add real-time points counter as floating widget (top-right, expandable dropdown)
 - [x] Convert product page + event page badges to stacked layout (matching mobile app PointsBadge)
+
+## V3.2.8 - Tickera Event Badge Premium Redesign
+- [x] Redesign Tickera event badge to match mobile app RewardsPopup style
+- [x] Dark gradient background (linear-gradient #1a0f0a → #2d1810 → #3d2314)
+- [x] White LamakoRewards logo (120px) prominently displayed
+- [x] Gold "REWARDS" label with letter-spacing
+- [x] Dynamic points display (large gold number) with tier bonus info
+- [x] White text: "Profitez de reductions et recompenses en gagnant des points !"
+- [x] Features line: "Billets gratuits • Cashback • Evenements exclusifs"
+- [x] Gold CTA button "Rejoindre maintenant !" for non-logged-in users
+- [x] "Deja un compte ? Se connecter" link for non-logged-in users
+- [x] Logged-in users: gold-bordered balance card + "Voir mes recompenses" link
+- [x] Subtle radial gold glow decorative background
+- [x] Border-radius 20px, premium box-shadow
+- [x] Deploy via WP File Manager and verify on live test event page
