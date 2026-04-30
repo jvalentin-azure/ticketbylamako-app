@@ -576,3 +576,13 @@
 - [x] Fix rewrite rule conflict (EP_ROOT → EP_PAGES) and flush permalinks
 - [x] Create LamakoRewards communication document (French, professional, for clients/partners)
 - [x] Update technical/functional documentation v3.2.0 with deployment status
+
+## V3.2.2 - WordPress Page Enhancements
+- [x] Add LamakoRewards to main navigation menu (hamburger + footer)
+- [x] Test checkout popup for non-logged-in visitors (works on /cart/ page, 3s delay)
+- [x] Upload LamakoRewards logos to WordPress media library (dark + white)
+- [x] Redesign page: real logos, Raleway font, gradient badges, progress bar, professional design
+- [x] Add FAQ section with 8 questions/answers (accordion style)
+- [x] Fix checkout popup: use is_page() with cart/checkout IDs for block-based checkout
+- [x] Fix unicode encoding (surrogate pairs + BMP escapes → proper UTF-8)
+- [x] Verify all changes on live site - all working correctly

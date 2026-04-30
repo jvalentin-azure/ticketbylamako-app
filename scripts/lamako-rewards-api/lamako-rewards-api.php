@@ -188,6 +188,22 @@ function lr_get_points_to_next_tier( $lifetime_points ) {
     return LR_TIER_SILVER - $lifetime_points;
 }
 
+function lr_get_next_tier_threshold( $lifetime_points ) {
+    if ( $lifetime_points >= LR_TIER_DIAMOND ) return LR_TIER_DIAMOND;
+    if ( $lifetime_points >= LR_TIER_PLATINUM ) return LR_TIER_DIAMOND;
+    if ( $lifetime_points >= LR_TIER_GOLD ) return LR_TIER_PLATINUM;
+    if ( $lifetime_points >= LR_TIER_SILVER ) return LR_TIER_GOLD;
+    return LR_TIER_SILVER;
+}
+
+function lr_get_current_tier_threshold( $lifetime_points ) {
+    if ( $lifetime_points >= LR_TIER_DIAMOND ) return LR_TIER_DIAMOND;
+    if ( $lifetime_points >= LR_TIER_PLATINUM ) return LR_TIER_PLATINUM;
+    if ( $lifetime_points >= LR_TIER_GOLD ) return LR_TIER_GOLD;
+    if ( $lifetime_points >= LR_TIER_SILVER ) return LR_TIER_SILVER;
+    return 0;
+}
+
 function lr_get_multiplier( $tier ) {
     $multipliers = array(
         'fan' => LR_MULTIPLIER_FAN,
@@ -807,71 +823,122 @@ function lr_api_get_tiers( $request ) {
 add_shortcode( 'lamako_rewards_page', 'lr_shortcode_rewards_page' );
 
 function lr_shortcode_rewards_page() {
+    $logo_dark = 'https://www.ticketbylamako.com/wp-content/uploads/2026/04/LamakoRewards_Dark.png';
+    $logo_white = 'https://www.ticketbylamako.com/wp-content/uploads/2026/04/LamakoRewards_white.png';
     ob_start();
     ?>
+    <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <div id="lamako-rewards-page" class="lr-page">
         <style>
-            .lr-page { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }
-            .lr-hero { background: linear-gradient(135deg, #3d2314 0%, #6b3a1f 100%); color: white; border-radius: 16px; padding: 60px 40px; text-align: center; margin-bottom: 40px; }
-            .lr-hero h1 { font-size: 2.5em; margin-bottom: 10px; }
-            .lr-hero p { font-size: 1.2em; opacity: 0.9; }
-            .lr-tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 24px; margin-bottom: 40px; }
-            .lr-tier-card { border: 2px solid #e5e7eb; border-radius: 12px; padding: 24px; text-align: center; transition: transform 0.2s, box-shadow 0.2s; }
-            .lr-tier-card:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.1); }
-            .lr-tier-card.fan { border-color: #8B6914; }
-            .lr-tier-card.silver { border-color: #C0C0C0; background: linear-gradient(to bottom, #fafafa, #fff); }
-            .lr-tier-card.gold { border-color: #FFD700; background: linear-gradient(to bottom, #fffdf0, #fff); }
-            .lr-tier-card.platinum { border-color: #E5E4E2; background: linear-gradient(to bottom, #f8f8f8, #fff); }
-            .lr-tier-card.diamond { border-color: #B9F2FF; background: linear-gradient(to bottom, #f0feff, #fff); }
-            .lr-tier-icon { font-size: 3em; margin-bottom: 10px; }
-            .lr-tier-name { font-size: 1.4em; font-weight: 700; margin-bottom: 8px; }
-            .lr-tier-threshold { font-size: 0.9em; color: #666; margin-bottom: 16px; }
-            .lr-tier-benefits { list-style: none; padding: 0; text-align: left; }
-            .lr-tier-benefits li { padding: 6px 0; border-bottom: 1px solid #f0f0f0; font-size: 0.9em; }
-            .lr-tier-benefits li:before { content: "✓ "; color: #22c55e; font-weight: bold; }
-            .lr-earn-section { background: #f9fafb; border-radius: 12px; padding: 40px; margin-bottom: 40px; }
-            .lr-earn-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 24px; }
-            .lr-earn-item { background: white; border-radius: 8px; padding: 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-            .lr-earn-item .points { font-size: 1.5em; font-weight: 700; color: #3d2314; }
-            .lr-earn-item .action { font-size: 0.85em; color: #666; margin-top: 4px; }
-            .lr-redeem-section { margin-bottom: 40px; }
-            .lr-redeem-table { width: 100%; border-collapse: collapse; }
-            .lr-redeem-table th, .lr-redeem-table td { padding: 12px 16px; border-bottom: 1px solid #e5e7eb; text-align: center; }
-            .lr-redeem-table th { background: #3d2314; color: white; }
-            .lr-redeem-table tr:hover { background: #f9fafb; }
-            .lr-cta { background: #3d2314; color: white; border: none; padding: 16px 32px; border-radius: 8px; font-size: 1.1em; cursor: pointer; display: inline-block; text-decoration: none; margin-top: 20px; }
-            .lr-cta:hover { background: #5a3520; color: white; }
-            .lr-referral-section { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-radius: 12px; padding: 40px; margin-bottom: 40px; text-align: center; }
-            @media (max-width: 768px) { .lr-hero { padding: 30px 20px; } .lr-hero h1 { font-size: 1.8em; } .lr-tiers { grid-template-columns: 1fr; } }
+            .lr-page { font-family: 'Raleway', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; color: #1a1a1a; }
+            .lr-page h2 { font-family: 'Raleway', sans-serif; font-weight: 700; }
+            .lr-hero { background: linear-gradient(135deg, #3d2314 0%, #663d17 50%, #8B5E34 100%); color: white; border-radius: 20px; padding: 60px 40px; text-align: center; margin-bottom: 48px; position: relative; overflow: hidden; }
+            .lr-hero::before { content: ''; position: absolute; top: -50%; right: -20%; width: 60%; height: 200%; background: radial-gradient(circle, rgba(199,159,108,0.15) 0%, transparent 70%); }
+            .lr-hero-logo { max-width: 320px; height: auto; margin-bottom: 16px; }
+            .lr-hero p { font-size: 1.2em; opacity: 0.9; font-weight: 400; max-width: 600px; margin: 0 auto; }
+            .lr-section-title { text-align: center; margin-bottom: 8px; font-size: 1.6em; color: #3d2314; }
+            .lr-section-subtitle { text-align: center; color: #666; margin-bottom: 32px; font-weight: 400; }
+            .lr-tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 48px; }
+            .lr-tier-card { border: 2px solid #e5e7eb; border-radius: 16px; padding: 28px 20px; text-align: center; transition: transform 0.3s ease, box-shadow 0.3s ease; background: white; }
+            .lr-tier-card:hover { transform: translateY(-6px); box-shadow: 0 12px 32px rgba(61,35,20,0.12); }
+            .lr-tier-card.fan { border-color: #c79f6c; border-top: 4px solid #c79f6c; }
+            .lr-tier-card.silver { border-color: #C0C0C0; border-top: 4px solid #C0C0C0; }
+            .lr-tier-card.gold { border-color: #FFD700; border-top: 4px solid #FFD700; background: linear-gradient(to bottom, #fffdf5, #fff); }
+            .lr-tier-card.platinum { border-color: #a8a8a8; border-top: 4px solid #a8a8a8; background: linear-gradient(to bottom, #f8f8fa, #fff); }
+            .lr-tier-card.diamond { border-color: #7dd3fc; border-top: 4px solid #7dd3fc; background: linear-gradient(to bottom, #f0f9ff, #fff); }
+            .lr-tier-badge { width: 56px; height: 56px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 1.6em; margin-bottom: 12px; }
+            .lr-tier-card.fan .lr-tier-badge { background: linear-gradient(135deg, #c79f6c, #a67c52); }
+            .lr-tier-card.silver .lr-tier-badge { background: linear-gradient(135deg, #e8e8e8, #c0c0c0); }
+            .lr-tier-card.gold .lr-tier-badge { background: linear-gradient(135deg, #FFD700, #f0c000); }
+            .lr-tier-card.platinum .lr-tier-badge { background: linear-gradient(135deg, #d4d4d8, #a1a1aa); }
+            .lr-tier-card.diamond .lr-tier-badge { background: linear-gradient(135deg, #7dd3fc, #38bdf8); }
+            .lr-tier-name { font-size: 1.3em; font-weight: 700; margin-bottom: 6px; color: #3d2314; }
+            .lr-tier-threshold { font-size: 0.85em; color: #888; margin-bottom: 16px; font-weight: 500; }
+            .lr-tier-mult { display: inline-block; background: #f0f0f0; padding: 4px 12px; border-radius: 20px; font-size: 0.8em; font-weight: 600; color: #3d2314; margin-bottom: 14px; }
+            .lr-tier-benefits { list-style: none; padding: 0; text-align: left; margin: 0; }
+            .lr-tier-benefits li { padding: 7px 0; border-bottom: 1px solid #f5f5f5; font-size: 0.88em; color: #444; }
+            .lr-tier-benefits li:last-child { border-bottom: none; }
+            .lr-tier-benefits li::before { content: "\2713"; color: #22c55e; font-weight: bold; margin-right: 8px; }
+            .lr-earn-section { background: linear-gradient(135deg, #faf8f5 0%, #f5f0eb 100%); border-radius: 16px; padding: 48px 40px; margin-bottom: 48px; }
+            .lr-earn-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-top: 28px; }
+            .lr-earn-item { background: white; border-radius: 12px; padding: 20px 16px; text-align: center; box-shadow: 0 2px 12px rgba(0,0,0,0.04); border: 1px solid #f0ebe5; transition: transform 0.2s; }
+            .lr-earn-item:hover { transform: translateY(-2px); }
+            .lr-earn-item .points { font-size: 1.4em; font-weight: 800; color: #663d17; }
+            .lr-earn-item .action { font-size: 0.85em; color: #666; margin-top: 6px; font-weight: 500; }
+            .lr-redeem-section { margin-bottom: 48px; }
+            .lr-redeem-note { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px 20px; border-radius: 0 8px 8px 0; margin-bottom: 24px; font-size: 0.95em; color: #92400e; }
+            .lr-redeem-table { width: 100%; border-collapse: separate; border-spacing: 0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+            .lr-redeem-table th { padding: 16px; background: linear-gradient(135deg, #3d2314, #663d17); color: white; font-weight: 600; text-align: center; }
+            .lr-redeem-table td { padding: 14px 16px; border-bottom: 1px solid #f0f0f0; text-align: center; font-weight: 500; }
+            .lr-redeem-table tbody tr:last-child td { border-bottom: none; }
+            .lr-redeem-table tbody tr:hover { background: #faf8f5; }
+            .lr-cta { background: linear-gradient(135deg, #663d17, #3d2314); color: white; border: none; padding: 16px 36px; border-radius: 50px; font-size: 1.05em; font-weight: 600; cursor: pointer; display: inline-block; text-decoration: none; margin-top: 20px; transition: all 0.3s; font-family: 'Raleway', sans-serif; letter-spacing: 0.5px; }
+            .lr-cta:hover { background: linear-gradient(135deg, #8B5E34, #663d17); color: white; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(61,35,20,0.25); }
+            .lr-referral-section { background: linear-gradient(135deg, #663d17 0%, #3d2314 100%); border-radius: 16px; padding: 48px 40px; margin-bottom: 48px; text-align: center; color: white; position: relative; overflow: hidden; }
+            .lr-referral-section::before { content: ''; position: absolute; top: -30%; left: -10%; width: 50%; height: 160%; background: radial-gradient(circle, rgba(199,159,108,0.2) 0%, transparent 70%); }
+            .lr-referral-section h2 { color: white; position: relative; }
+            .lr-referral-section p { position: relative; }
+            .lr-faq-section { margin-bottom: 48px; }
+            .lr-faq-item { border: 1px solid #e5e7eb; border-radius: 12px; margin-bottom: 12px; overflow: hidden; background: white; }
+            .lr-faq-question { padding: 18px 24px; font-weight: 600; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 1em; color: #3d2314; transition: background 0.2s; }
+            .lr-faq-question:hover { background: #faf8f5; }
+            .lr-faq-arrow { transition: transform 0.3s; font-size: 1.2em; color: #c79f6c; }
+            .lr-faq-item.open .lr-faq-arrow { transform: rotate(180deg); }
+            .lr-faq-answer { max-height: 0; overflow: hidden; transition: max-height 0.4s ease, padding 0.3s ease; padding: 0 24px; }
+            .lr-faq-item.open .lr-faq-answer { max-height: 500px; padding: 0 24px 20px; }
+            .lr-faq-answer p { color: #555; font-size: 0.95em; line-height: 1.7; margin: 0; }
+            .lr-profile-section { background: white; border: 2px solid #c79f6c; border-radius: 16px; padding: 36px; margin-bottom: 48px; box-shadow: 0 4px 20px rgba(199,159,108,0.1); }
+            .lr-profile-section h2 { text-align: center; color: #3d2314; }
+            .lr-profile-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 20px; margin-top: 24px; text-align: center; }
+            .lr-profile-stat { font-size: 2.2em; font-weight: 800; color: #663d17; }
+            .lr-profile-label { color: #888; font-size: 0.9em; font-weight: 500; margin-top: 4px; }
+            .lr-progress-bar { height: 8px; background: #f0ebe5; border-radius: 4px; margin-top: 20px; overflow: hidden; }
+            .lr-progress-fill { height: 100%; background: linear-gradient(90deg, #c79f6c, #663d17); border-radius: 4px; transition: width 0.5s ease; }
+            @media (max-width: 768px) {
+                .lr-hero { padding: 36px 20px; }
+                .lr-hero-logo { max-width: 240px; }
+                .lr-tiers { grid-template-columns: 1fr 1fr; gap: 12px; }
+                .lr-tier-card { padding: 20px 14px; }
+                .lr-earn-section, .lr-referral-section { padding: 28px 20px; }
+                .lr-earn-grid { grid-template-columns: 1fr 1fr; }
+                .lr-section-title { font-size: 1.3em; }
+            }
+            @media (max-width: 480px) {
+                .lr-tiers { grid-template-columns: 1fr; }
+                .lr-earn-grid { grid-template-columns: 1fr; }
+            }
         </style>
 
         <!-- Hero -->
         <div class="lr-hero">
-            <h1>🎵 LamakoRewards</h1>
+            <img src="<?php echo esc_url( $logo_white ); ?>" alt="LamakoRewards" class="lr-hero-logo">
             <p>Gagnez des points à chaque achat et débloquez des avantages exclusifs</p>
             <?php if ( ! is_user_logged_in() ) : ?>
-                <a href="<?php echo wp_registration_url(); ?>" class="lr-cta" style="margin-top:20px;">Rejoindre gratuitement</a>
+                <a href="<?php echo wp_registration_url(); ?>" class="lr-cta" style="margin-top:24px; background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.3);">Rejoindre gratuitement</a>
             <?php endif; ?>
         </div>
 
         <!-- Tiers -->
-        <h2 style="text-align:center; margin-bottom:24px;">Nos niveaux de fidélité</h2>
+        <h2 class="lr-section-title">Nos niveaux de fidélité</h2>
+        <p class="lr-section-subtitle">Montez en niveau et débloquez des avantages de plus en plus exclusifs</p>
         <div class="lr-tiers">
             <div class="lr-tier-card fan">
-                <div class="lr-tier-icon">🎵</div>
+                <div class="lr-tier-badge">🎵</div>
                 <div class="lr-tier-name">Fan</div>
                 <div class="lr-tier-threshold">Inscription gratuite</div>
+                <div class="lr-tier-mult">x1 points</div>
                 <ul class="lr-tier-benefits">
                     <li>1 point par 1 000 Ar dépensé</li>
                     <li>Code de parrainage personnel</li>
                     <li>Historique des transactions</li>
-                    <li>50 pts bonus à l'inscription</li>
+                    <li>100 pts bonus à l'inscription</li>
                 </ul>
             </div>
             <div class="lr-tier-card silver">
-                <div class="lr-tier-icon">⭐</div>
+                <div class="lr-tier-badge">⭐</div>
                 <div class="lr-tier-name">Silver</div>
-                <div class="lr-tier-threshold">500 points (≈ 3-5 événements)</div>
+                <div class="lr-tier-threshold">500 pts (≈ 3-5 événements)</div>
+                <div class="lr-tier-mult">x1 points</div>
                 <ul class="lr-tier-benefits">
                     <li>Réductions membres exclusives</li>
                     <li>Accès prioritaire aux préventes</li>
@@ -880,33 +947,33 @@ function lr_shortcode_rewards_page() {
                 </ul>
             </div>
             <div class="lr-tier-card gold">
-                <div class="lr-tier-icon">🌟</div>
+                <div class="lr-tier-badge">🌟</div>
                 <div class="lr-tier-name">Gold</div>
-                <div class="lr-tier-threshold">2 000 points (≈ 10-15 événements)</div>
+                <div class="lr-tier-threshold">2 000 pts (≈ 10-15 événements)</div>
+                <div class="lr-tier-mult">x1.25 points</div>
                 <ul class="lr-tier-benefits">
-                    <li>x1.25 points sur chaque achat</li>
                     <li>Invitations aux événements exclusifs</li>
                     <li>Early access aux nouvelles ventes</li>
                     <li>Cadeaux surprises aux événements</li>
                 </ul>
             </div>
             <div class="lr-tier-card platinum">
-                <div class="lr-tier-icon">💎</div>
+                <div class="lr-tier-badge">💎</div>
                 <div class="lr-tier-name">Platinum</div>
-                <div class="lr-tier-threshold">5 000 points (≈ 30+ événements)</div>
+                <div class="lr-tier-threshold">5 000 pts (≈ 30+ événements)</div>
+                <div class="lr-tier-mult">x1.5 points</div>
                 <ul class="lr-tier-benefits">
-                    <li>x1.5 points sur chaque achat</li>
                     <li>Surclassement de billets</li>
                     <li>Accès VIP aux événements</li>
-                    <li>Support dédié</li>
+                    <li>Support dédié par téléphone</li>
                 </ul>
             </div>
             <div class="lr-tier-card diamond">
-                <div class="lr-tier-icon">💠</div>
+                <div class="lr-tier-badge">👑</div>
                 <div class="lr-tier-name">Diamond</div>
-                <div class="lr-tier-threshold">10 000 points (top 1%)</div>
+                <div class="lr-tier-threshold">10 000 pts (top 1%)</div>
+                <div class="lr-tier-mult">x2 points</div>
                 <ul class="lr-tier-benefits">
-                    <li>x2 points sur chaque achat</li>
                     <li>Accès backstage</li>
                     <li>Meet & greet artistes</li>
                     <li>Conciergerie événementielle</li>
@@ -918,8 +985,8 @@ function lr_shortcode_rewards_page() {
 
         <!-- How to earn -->
         <div class="lr-earn-section">
-            <h2 style="text-align:center; margin-bottom:8px;">Comment gagner des points</h2>
-            <p style="text-align:center; color:#666;">Chaque interaction vous rapproche du niveau supérieur</p>
+            <h2 class="lr-section-title" style="color:#3d2314;">Comment gagner des points</h2>
+            <p class="lr-section-subtitle">Chaque interaction vous rapproche du niveau supérieur</p>
             <div class="lr-earn-grid">
                 <div class="lr-earn-item">
                     <div class="points">1 pt / 1 000 Ar</div>
@@ -939,11 +1006,11 @@ function lr_shortcode_rewards_page() {
                 </div>
                 <div class="lr-earn-item">
                     <div class="points">+75 pts</div>
-                    <div class="action">Parrainer un ami (1er achat)</div>
+                    <div class="action">Parrainer un ami</div>
                 </div>
                 <div class="lr-earn-item">
                     <div class="points">+25 pts</div>
-                    <div class="action">Être parrainé (bonus filleul)</div>
+                    <div class="action">Être parrainé</div>
                 </div>
                 <div class="lr-earn-item">
                     <div class="points">+20 pts</div>
@@ -955,7 +1022,7 @@ function lr_shortcode_rewards_page() {
                 </div>
                 <div class="lr-earn-item">
                     <div class="points">+200 pts</div>
-                    <div class="action">Bonus anniversaire 🎂</div>
+                    <div class="action">Bonus anniversaire</div>
                 </div>
                 <div class="lr-earn-item">
                     <div class="points">+2 pts</div>
@@ -966,36 +1033,126 @@ function lr_shortcode_rewards_page() {
 
         <!-- Redemption -->
         <div class="lr-redeem-section">
-            <h2 style="text-align:center; margin-bottom:24px;">Échanger vos points</h2>
-            <p style="text-align:center; color:#666; margin-bottom:24px;">Plus vous échangez de points d'un coup, meilleur est le taux !</p>
+            <h2 class="lr-section-title">Échanger vos points</h2>
+            <p class="lr-section-subtitle">Convertissez vos points en réductions sur vos prochains achats</p>
+            <div class="lr-redeem-note">
+                <strong>Condition :</strong> Le cashback est débloqué dès 750 000 Ar dépensés au total (= 750 points cumulés). Taux fixe : 20 Ar par point (2% de retour).
+            </div>
             <table class="lr-redeem-table">
                 <thead>
-                    <tr><th>Points</th><th>Réduction</th><th>Taux</th></tr>
+                    <tr><th>Points échangés</th><th>Réduction obtenue</th><th>Taux</th></tr>
                 </thead>
                 <tbody>
-                    <tr><td>500 pts</td><td>10 000 Ar</td><td>20 Ar/pt</td></tr>
-                    <tr><td>1 000 pts</td><td>20 000 Ar</td><td>20 Ar/pt</td></tr>
-                    <tr><td>2 000 pts</td><td>40 000 Ar</td><td>20 Ar/pt</td></tr>
-                    <tr><td>5 000 pts</td><td>100 000 Ar</td><td>20 Ar/pt</td></tr>
+                    <tr><td><strong>500 pts</strong></td><td>10 000 Ar</td><td>20 Ar/pt</td></tr>
+                    <tr><td><strong>1 000 pts</strong></td><td>20 000 Ar</td><td>20 Ar/pt</td></tr>
+                    <tr><td><strong>2 000 pts</strong></td><td>40 000 Ar</td><td>20 Ar/pt</td></tr>
+                    <tr><td><strong>5 000 pts</strong></td><td>100 000 Ar</td><td>20 Ar/pt</td></tr>
                 </tbody>
             </table>
         </div>
 
         <!-- Referral -->
         <div class="lr-referral-section">
-            <h2>🤝 Parrainez vos amis</h2>
-            <p>Partagez votre code et gagnez <strong>75 points</strong> quand votre filleul effectue son premier achat.<br>Votre filleul reçoit aussi <strong>25 points bonus</strong> à l'inscription !</p>
+            <img src="<?php echo esc_url( $logo_white ); ?>" alt="LamakoRewards" style="max-width:200px; height:auto; margin-bottom:16px; position:relative;">
+            <h2 style="font-size:1.5em; margin-bottom:12px;">Parrainez vos amis</h2>
+            <p style="position:relative; max-width:500px; margin:0 auto;">Partagez votre code et gagnez <strong>75 points</strong> quand votre filleul effectue son premier achat.<br>Votre filleul reçoit aussi <strong>25 points bonus</strong> à l'inscription !</p>
             <?php if ( is_user_logged_in() ) : 
                 $code = lr_generate_referral_code( get_current_user_id() );
                 $count = (int) get_user_meta( get_current_user_id(), '_lamako_referral_count', true );
             ?>
-                <div style="background:white; display:inline-block; padding:16px 32px; border-radius:8px; margin-top:16px;">
-                    <strong style="font-size:1.3em; letter-spacing:2px;"><?php echo esc_html( $code ); ?></strong>
+                <div style="background:rgba(255,255,255,0.15); backdrop-filter:blur(10px); display:inline-block; padding:16px 40px; border-radius:12px; margin-top:20px; border:1px solid rgba(255,255,255,0.3); position:relative;">
+                    <strong style="font-size:1.5em; letter-spacing:3px; font-family:'Raleway',sans-serif;"><?php echo esc_html( $code ); ?></strong>
                 </div>
-                <p style="margin-top:12px; font-size:0.9em;">Vous avez parrainé <strong><?php echo $count; ?></strong> personne(s)</p>
+                <p style="margin-top:12px; font-size:0.9em; opacity:0.8; position:relative;">Vous avez parrainé <strong><?php echo $count; ?></strong> personne(s)</p>
             <?php else : ?>
-                <a href="<?php echo wp_registration_url(); ?>" class="lr-cta">S'inscrire pour obtenir mon code</a>
+                <a href="<?php echo wp_registration_url(); ?>" class="lr-cta" style="background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3); position:relative;">S'inscrire pour obtenir mon code</a>
             <?php endif; ?>
+        </div>
+
+        <!-- FAQ -->
+        <div class="lr-faq-section">
+            <h2 class="lr-section-title">Questions fréquentes</h2>
+            <p class="lr-section-subtitle">Tout ce que vous devez savoir sur LamakoRewards</p>
+
+            <div class="lr-faq-item">
+                <div class="lr-faq-question" onclick="this.parentElement.classList.toggle('open')">
+                    <span>Comment rejoindre le programme LamakoRewards ?</span>
+                    <span class="lr-faq-arrow">▼</span>
+                </div>
+                <div class="lr-faq-answer">
+                    <p>C'est gratuit et automatique ! Il suffit de créer un compte sur TicketByLamako (site web ou application mobile). Vous recevez immédiatement <strong>100 points bonus</strong> à l'inscription et commencez au niveau Fan.</p>
+                </div>
+            </div>
+
+            <div class="lr-faq-item">
+                <div class="lr-faq-question" onclick="this.parentElement.classList.toggle('open')">
+                    <span>Comment gagner des points ?</span>
+                    <span class="lr-faq-arrow">▼</span>
+                </div>
+                <div class="lr-faq-answer">
+                    <p>Vous gagnez <strong>1 point par 1 000 Ar dépensés</strong> sur vos achats de billets et produits. Des bonus supplémentaires sont offerts pour le parrainage (+75 pts), le premier achat (+200 pts), l'anniversaire (+200 pts), et bien d'autres actions. Les membres Gold et au-dessus bénéficient d'un multiplicateur sur leurs achats.</p>
+                </div>
+            </div>
+
+            <div class="lr-faq-item">
+                <div class="lr-faq-question" onclick="this.parentElement.classList.toggle('open')">
+                    <span>Quand puis-je échanger mes points contre des réductions ?</span>
+                    <span class="lr-faq-arrow">▼</span>
+                </div>
+                <div class="lr-faq-answer">
+                    <p>Le cashback est débloqué dès que vous avez dépensé <strong>750 000 Ar au total</strong> sur la plateforme (soit 750 points cumulés à vie). Cela correspond à environ 5 à 7 événements. Une fois ce seuil atteint, vous pouvez échanger vos points à tout moment au taux de 20 Ar par point.</p>
+                </div>
+            </div>
+
+            <div class="lr-faq-item">
+                <div class="lr-faq-question" onclick="this.parentElement.classList.toggle('open')">
+                    <span>Mes points expirent-ils ?</span>
+                    <span class="lr-faq-arrow">▼</span>
+                </div>
+                <div class="lr-faq-answer">
+                    <p>Non, vos points n'expirent jamais ! Ils restent sur votre compte tant que celui-ci est actif. Vous pouvez accumuler vos points à votre rythme et les échanger quand vous le souhaitez.</p>
+                </div>
+            </div>
+
+            <div class="lr-faq-item">
+                <div class="lr-faq-question" onclick="this.parentElement.classList.toggle('open')">
+                    <span>Comment fonctionne le parrainage ?</span>
+                    <span class="lr-faq-arrow">▼</span>
+                </div>
+                <div class="lr-faq-answer">
+                    <p>Chaque membre reçoit un code de parrainage unique (ex: TBL-XXXXXXXX). Partagez-le avec vos amis. Quand un ami s'inscrit avec votre code et effectue son premier achat, vous recevez <strong>75 points</strong> et votre ami reçoit <strong>25 points bonus</strong>. Il n'y a pas de limite au nombre de parrainages !</p>
+                </div>
+            </div>
+
+            <div class="lr-faq-item">
+                <div class="lr-faq-question" onclick="this.parentElement.classList.toggle('open')">
+                    <span>Comment utiliser ma réduction après l'échange de points ?</span>
+                    <span class="lr-faq-arrow">▼</span>
+                </div>
+                <div class="lr-faq-answer">
+                    <p>Lorsque vous échangez vos points, un <strong>code promo unique</strong> est généré automatiquement. Vous pouvez l'appliquer lors de votre prochain achat sur le site ou l'application. Le code est à usage unique et s'applique sur le montant total de votre commande.</p>
+                </div>
+            </div>
+
+            <div class="lr-faq-item">
+                <div class="lr-faq-question" onclick="this.parentElement.classList.toggle('open')">
+                    <span>Puis-je perdre mon niveau ?</span>
+                    <span class="lr-faq-arrow">▼</span>
+                </div>
+                <div class="lr-faq-answer">
+                    <p>Non ! Votre niveau est basé sur vos points <strong>cumulés à vie</strong> (total de tous les points gagnés depuis l'inscription). Même si vous échangez des points, votre niveau ne baisse pas. Une fois Gold, toujours Gold (ou mieux) !</p>
+                </div>
+            </div>
+
+            <div class="lr-faq-item">
+                <div class="lr-faq-question" onclick="this.parentElement.classList.toggle('open')">
+                    <span>Où puis-je voir mon solde de points ?</span>
+                    <span class="lr-faq-arrow">▼</span>
+                </div>
+                <div class="lr-faq-answer">
+                    <p>Vous pouvez consulter votre solde de plusieurs façons : sur l'<strong>application mobile</strong> TicketByLamako (écran Récompenses), sur cette page si vous êtes connecté(e), ou dans l'onglet <strong>"Mes Récompenses"</strong> de votre espace Mon Compte sur le site web.</p>
+                </div>
+            </div>
         </div>
 
         <!-- User Profile Section (logged in only) -->
@@ -1007,26 +1164,43 @@ function lr_shortcode_rewards_page() {
             $tier_name = lr_get_tier_name( $tier );
             $next = lr_get_next_tier( $tier );
             $to_next = lr_get_points_to_next_tier( $total_earned );
+            $next_threshold = lr_get_next_tier_threshold( $total_earned );
+            $current_threshold = lr_get_current_tier_threshold( $total_earned );
+            $progress = $next_threshold > $current_threshold ? min(100, (($total_earned - $current_threshold) / ($next_threshold - $current_threshold)) * 100) : 100;
         ?>
-        <div style="background:#fff; border:2px solid #3d2314; border-radius:12px; padding:32px; margin-bottom:40px;">
-            <h2 style="text-align:center;">Mon compte LamakoRewards</h2>
-            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:16px; margin-top:24px; text-align:center;">
-                <div><div style="font-size:2em; font-weight:700; color:#3d2314;"><?php echo number_format( $balance, 0, ',', ' ' ); ?></div><div style="color:#666;">Points disponibles</div></div>
-                <div><div style="font-size:2em; font-weight:700; color:#3d2314;"><?php echo esc_html( $tier_name ); ?></div><div style="color:#666;">Niveau actuel</div></div>
-                <div><div style="font-size:2em; font-weight:700; color:#3d2314;"><?php echo number_format( $total_earned, 0, ',', ' ' ); ?></div><div style="color:#666;">Points totaux gagnés</div></div>
+        <div class="lr-profile-section">
+            <img src="<?php echo esc_url( $logo_dark ); ?>" alt="LamakoRewards" style="max-width:180px; height:auto; display:block; margin:0 auto 16px;">
+            <h2>Mon compte</h2>
+            <div class="lr-profile-grid">
+                <div>
+                    <div class="lr-profile-stat"><?php echo number_format( $balance, 0, ',', ' ' ); ?></div>
+                    <div class="lr-profile-label">Points disponibles</div>
+                </div>
+                <div>
+                    <div class="lr-profile-stat"><?php echo esc_html( $tier_name ); ?></div>
+                    <div class="lr-profile-label">Niveau actuel</div>
+                </div>
+                <div>
+                    <div class="lr-profile-stat"><?php echo number_format( $total_earned, 0, ',', ' ' ); ?></div>
+                    <div class="lr-profile-label">Points totaux gagnés</div>
+                </div>
             </div>
             <?php if ( $next ) : ?>
-            <p style="text-align:center; margin-top:16px; color:#666;">
-                Plus que <strong><?php echo $to_next; ?> points</strong> pour atteindre le niveau <strong><?php echo esc_html( $next ); ?></strong>
+            <div class="lr-progress-bar" style="margin-top:24px;">
+                <div class="lr-progress-fill" style="width:<?php echo $progress; ?>%;"></div>
+            </div>
+            <p style="text-align:center; margin-top:12px; color:#888; font-size:0.9em;">
+                Plus que <strong style="color:#663d17;"><?php echo number_format($to_next, 0, ',', ' '); ?> points</strong> pour atteindre <strong style="color:#663d17;"><?php echo esc_html( $next ); ?></strong>
             </p>
             <?php endif; ?>
         </div>
         <?php endif; ?>
 
         <!-- CTA -->
-        <div style="text-align:center; padding:40px 0;">
-            <h2>Prêt à commencer ?</h2>
-            <p style="color:#666; margin-bottom:20px;">Téléchargez l'app TicketByLamako pour gérer vos points en temps réel</p>
+        <div style="text-align:center; padding:48px 0; background:linear-gradient(135deg, #faf8f5 0%, #f5f0eb 100%); border-radius:16px; margin-bottom:20px;">
+            <img src="<?php echo esc_url( $logo_dark ); ?>" alt="LamakoRewards" style="max-width:200px; height:auto; margin-bottom:16px;">
+            <h2 style="color:#3d2314; margin-bottom:8px;">Prêt à commencer ?</h2>
+            <p style="color:#666; margin-bottom:24px; max-width:400px; margin-left:auto; margin-right:auto;">Téléchargez l'app TicketByLamako pour gérer vos points en temps réel</p>
             <a href="https://www.ticketbylamako.com/app" class="lr-cta">Télécharger l'application</a>
         </div>
     </div>
@@ -1101,11 +1275,20 @@ function lr_product_page_cta() {
     }
 }
 
-// Auto-insert checkout popup for guests
-add_action( 'woocommerce_before_checkout_form', 'lr_checkout_page_popup' );
+// Auto-insert checkout popup for guests (uses wp_footer for block checkout compatibility)
+add_action( 'wp_footer', 'lr_checkout_page_popup' );
 
 function lr_checkout_page_popup() {
     if ( is_user_logged_in() ) return;
+    // Support both classic and block checkout: check by page slug or WC functions
+    $is_target = false;
+    if ( function_exists( 'is_checkout' ) && is_checkout() ) $is_target = true;
+    if ( function_exists( 'is_cart' ) && is_cart() ) $is_target = true;
+    if ( is_page( 'checkout' ) || is_page( 'cart' ) || is_page( 'panier' ) ) $is_target = true;
+    // Fallback: check page ID directly
+    $page_id = get_queried_object_id();
+    if ( $page_id == wc_get_page_id( 'checkout' ) || $page_id == wc_get_page_id( 'cart' ) ) $is_target = true;
+    if ( ! $is_target ) return;
     echo do_shortcode( '[lamako_rewards_checkout_popup]' );
 }
 
