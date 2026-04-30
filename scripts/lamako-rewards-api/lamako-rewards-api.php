@@ -39,6 +39,9 @@ define( 'LR_TIER_GOLD', 2000 );
 define( 'LR_TIER_PLATINUM', 5000 );
 define( 'LR_TIER_DIAMOND', 10000 );
 
+// Redemption minimum: 750 pts lifetime = 750 000 Ar spent (independent of tier)
+define( 'LR_REDEMPTION_MIN_LIFETIME', 750 );
+
 // Points configuration
 define( 'LR_POINTS_PER_1000AR', 1 );
 define( 'LR_REGISTRATION_BONUS', 100 );
@@ -595,10 +598,23 @@ function lr_api_redeem_points( $request ) {
         return new WP_Error( 'missing_params', 'user_id and points are required.', array( 'status' => 400 ) );
     }
     
-    // Validate redemption tiers
-    $valid_tiers = array( 50, 100, 200, 500, 1000 );
+    // Check minimum lifetime points for redemption (750 pts = 750 000 Ar spent)
+    $total_earned = lr_get_total_earned( $user_id );
+    if ( $total_earned < LR_REDEMPTION_MIN_LIFETIME ) {
+        return new WP_Error( 'tier_too_low', 
+            sprintf( 'L\'échange de points est disponible à partir de %d pts cumulés (= %s Ar dépensés). Il vous manque %d pts.', 
+                LR_REDEMPTION_MIN_LIFETIME, 
+                number_format( LR_REDEMPTION_MIN_LIFETIME * 1000, 0, ',', ' ' ),
+                LR_REDEMPTION_MIN_LIFETIME - $total_earned 
+            ),
+            array( 'status' => 403 ) 
+        );
+    }
+    
+    // Validate redemption tiers (fixed rate: 20 Ar/pt = 2% cashback)
+    $valid_tiers = array( 500, 1000, 2000, 5000 );
     if ( ! in_array( $points, $valid_tiers ) ) {
-        return new WP_Error( 'invalid_points', 'Points must be one of: 50, 100, 200, 500, 1000.', array( 'status' => 400 ) );
+        return new WP_Error( 'invalid_points', 'Points must be one of: 500, 1000, 2000, 5000.', array( 'status' => 400 ) );
     }
     
     // Check balance
@@ -611,8 +627,8 @@ function lr_api_redeem_points( $request ) {
         return new WP_Error( 'insufficient_points', 'Solde insuffisant.', array( 'status' => 400 ) );
     }
     
-    // Calculate discount value
-    $values = array( 50 => 5000, 100 => 12000, 200 => 30000, 500 => 80000, 1000 => 180000 );
+    // Calculate discount value (fixed rate: 20 Ar per point = 2% cashback)
+    $values = array( 500 => 10000, 1000 => 20000, 2000 => 40000, 5000 => 100000 );
     $discount_value = $values[ $points ];
     
     // Deduct points

@@ -133,6 +133,9 @@ export const EARN_RULES = {
 // ===== REDEMPTION RULES =====
 // Fixed rate: 500 pts = 10,000 Ar (20 Ar/pt = 2% cashback equivalent)
 // This is conservative and industry-standard (AMC = 2%, airlines = 1-2%)
+// IMPORTANT: Redemption is available after 750 000 Ar spent (= 750 lifetime pts)
+// This is independent of tier level - users accumulate points but can only redeem after reaching 750 pts
+export const REDEMPTION_MIN_POINTS_LIFETIME = 750; // 750 pts = 750 000 Ar spent
 export const REDEMPTION_TIERS = [
   { points: 500, value: 10000, label: "500 pts = 10 000 Ar" },
   { points: 1000, value: 20000, label: "1 000 pts = 20 000 Ar" },
@@ -184,6 +187,8 @@ interface RewardsContextType {
   nextTier: TierInfo | null;
   progressToNextTier: number; // 0-1
   pointsToNextTier: number;
+  canRedeem: boolean; // true only if lifetimePoints >= 750 (= 750 000 Ar spent)
+  pointsUntilRedemption: number; // 0 if can redeem, otherwise pts needed to reach 750
   syncRewards: () => Promise<void>;
   getDiscountValue: (points: number) => number;
   getBestRedemption: (points: number) => { points: number; value: number } | null;
@@ -410,13 +415,19 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
     }
   }, [user?.email, state.wpUserId, isSyncing, saveState]);
 
+  // Check if user can redeem (must have 750+ lifetime pts = 750 000 Ar spent)
+  const canRedeem = state.lifetimePoints >= REDEMPTION_MIN_POINTS_LIFETIME;
+  const pointsUntilRedemption = canRedeem ? 0 : REDEMPTION_MIN_POINTS_LIFETIME - state.lifetimePoints;
+
   // Get the best redemption tier for a given number of points
   const getBestRedemption = useCallback((points: number): { points: number; value: number } | null => {
+    // Block redemption if user hasn't reached 750 lifetime pts (750 000 Ar spent)
+    if (state.lifetimePoints < REDEMPTION_MIN_POINTS_LIFETIME) return null;
     // Find the highest redemption tier the user can afford
     const affordable = REDEMPTION_TIERS.filter(t => t.points <= points);
     if (affordable.length === 0) return null;
     return affordable[affordable.length - 1];
-  }, []);
+  }, [state.lifetimePoints]);
 
   // Legacy discount calculation (backward compat)
   const getDiscountValue = useCallback((points: number): number => {
@@ -445,6 +456,8 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
         nextTier: nextTierInfo,
         progressToNextTier,
         pointsToNextTier,
+        canRedeem,
+        pointsUntilRedemption,
         syncRewards,
         getDiscountValue,
         getBestRedemption,

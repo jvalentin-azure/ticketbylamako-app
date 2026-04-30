@@ -102,6 +102,8 @@ Les multiplicateurs s'appliquent UNIQUEMENT aux points d'achat (pas aux bonus fi
 
 > **Pourquoi un taux fixe ?** Plus simple à comprendre pour le client, plus prévisible pour l'entreprise. Le taux de 2% est le standard dans la billetterie et le divertissement. Pas de taux progressif qui encourage l'accumulation excessive.
 
+> **Seuil minimum :** L'échange de points est disponible à partir de **750 pts cumulés** (= 750 000 Ar dépensés, soit environ 5-7 événements). En dessous de ce seuil, l'utilisateur accumule ses points mais ne peut pas encore les échanger.
+
 > **Note :** L'échange de points génère un coupon WooCommerce à usage unique, applicable sur la prochaine commande.
 
 ---
@@ -183,6 +185,7 @@ define( 'LR_TIER_SILVER', 500 );
 define( 'LR_TIER_GOLD', 2000 );
 define( 'LR_TIER_PLATINUM', 5000 );
 define( 'LR_TIER_DIAMOND', 10000 );
+define( 'LR_REDEMPTION_MIN_LIFETIME', 750 ); // Seuil cashback = 750 000 Ar dépensés
 
 // Multiplicateurs
 define( 'LR_MULTIPLIER_FAN', 1.0 );
@@ -356,7 +359,7 @@ Fan: 0 | Silver: 500 | Gold: 2 000 | Platinum: 5 000 | Diamond: 10 000
 // Multiplicateurs
 Fan: x1 | Silver: x1 | Gold: x1.25 | Platinum: x1.5 | Diamond: x2
 
-// Échange (taux fixe 2%)
+// Échange (taux fixe 2%) - Seuil minimum : 750 pts cumulés (= 750 000 Ar dépensés)
 500 pts = 10 000 Ar | 1000 pts = 20 000 Ar | 2000 pts = 40 000 Ar | 5000 pts = 100 000 Ar
 
 // Accumulation

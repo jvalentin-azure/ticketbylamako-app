@@ -18,7 +18,7 @@ export default function RewardsScreen() {
   const colorScheme = useColorScheme();
   const router = useRouter();
   const { isAuthenticated } = useAuth();
-  const { state, currentTier, nextTier, progressToNextTier, pointsToNextTier, getDiscountValue, syncRewards, isSyncing } = useRewards();
+  const { state, currentTier, nextTier, progressToNextTier, pointsToNextTier, canRedeem, pointsUntilRedemption, getDiscountValue, syncRewards, isSyncing } = useRewards();
 
   const formatDate = (iso: string) => {
     const d = new Date(iso);
@@ -63,9 +63,18 @@ export default function RewardsScreen() {
             </View>
           </View>
           <Text style={styles.pointsValue}>{state.availablePoints.toLocaleString("fr-FR")}</Text>
-          <Text style={styles.pointsSub}>
-            = {getDiscountValue(state.availablePoints).toLocaleString("fr-FR")} Ar de réduction
-          </Text>
+          {canRedeem ? (
+            <Text style={styles.pointsSub}>
+              = {getDiscountValue(state.availablePoints).toLocaleString("fr-FR")} Ar de réduction
+            </Text>
+          ) : (
+            <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4 }}>
+              <Text style={{ fontSize: 16, marginRight: 6 }}>🔒</Text>
+              <Text style={[styles.pointsSub, { color: "rgba(255,255,255,0.9)", fontFamily: "Raleway-SemiBold" }]}>
+                Encore {pointsUntilRedemption.toLocaleString("fr-FR")} pts pour débloquer l'échange
+              </Text>
+            </View>
+          )}
           {state.lastSynced && (
             <Text style={{ color: "rgba(255,255,255,0.5)", fontSize: 10, fontFamily: "Raleway-Regular", marginTop: 4 }}>
               Dernière sync: {new Date(state.lastSynced).toLocaleString("fr-FR")}
@@ -126,7 +135,7 @@ export default function RewardsScreen() {
                 <IconSymbol name="gift.fill" size={20} color={colors.success} />
               </View>
               <Text style={[styles.howTitle, { color: colors.foreground }]}>Échangez</Text>
-              <Text style={[styles.howDesc, { color: colors.muted }]}>500 pts = 10 000 Ar</Text>
+              <Text style={[styles.howDesc, { color: colors.muted }]}>Dès 750 000 Ar dépensés{"\n"}500 pts = 10 000 Ar</Text>
             </View>
           </View>
         </View>

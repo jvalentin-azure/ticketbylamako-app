@@ -553,3 +553,17 @@
 
 ### Documentation
 - [x] Update LamakoRewards-Documentation.md with all changes (V3.0)
+
+## V3.1 - Conservative Tier Benchmarks
+- [x] Update tiers based on Otayo/Ticketmaster research: Fan(0)/Silver(500)/Gold(2000)/Platinum(5000)/Diamond(10000)
+- [x] Fixed 2% cashback rate (500pts = 10,000Ar, 20Ar/pt)
+- [x] Update documentation with benchmark analysis
+
+## V3.2 - Cashback Minimum 750 pts (= 750 000 Ar dépensés)
+- [x] Enforce cashback redemption at 750+ lifetime pts (= 750 000 Ar spent)
+- [x] Update rewards-provider.tsx: REDEMPTION_MIN_POINTS_LIFETIME = 750, canRedeem check
+- [x] Update rewards screen UI: show 🔒 lock icon with pts remaining when below 750
+- [x] Update rewards screen: "Dès 750 000 Ar dépensés" in how-it-works section
+- [x] Update WordPress plugin: LR_REDEMPTION_MIN_LIFETIME = 750, reject redemption if below
+- [x] Update valid redemption tiers: 500/1000/2000/5000 pts at fixed 20Ar/pt rate
+- [x] Update LamakoRewards documentation with 750 pts threshold
