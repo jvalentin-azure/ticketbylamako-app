@@ -838,7 +838,7 @@ function lr_shortcode_rewards_page() {
             .lr-hero p { font-size: 1.2em; opacity: 0.9; font-weight: 400; max-width: 600px; margin: 0 auto; }
             .lr-section-title { text-align: center; margin-bottom: 8px; font-size: 1.6em; color: #3d2314; }
             .lr-section-subtitle { text-align: center; color: #666; margin-bottom: 32px; font-weight: 400; }
-            .lr-tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 48px; }
+            .lr-tiers { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 48px; }
             .lr-tier-card { border: 2px solid #e5e7eb; border-radius: 16px; padding: 28px 20px; text-align: center; transition: transform 0.3s ease, box-shadow 0.3s ease; background: white; }
             .lr-tier-card:hover { transform: translateY(-6px); box-shadow: 0 12px 32px rgba(61,35,20,0.12); }
             .lr-tier-card.fan { border-color: #c79f6c; border-top: 4px solid #c79f6c; }
@@ -897,14 +897,14 @@ function lr_shortcode_rewards_page() {
             @media (max-width: 768px) {
                 .lr-hero { padding: 36px 20px; }
                 .lr-hero-logo { max-width: 240px; }
-                .lr-tiers { grid-template-columns: 1fr 1fr; gap: 12px; }
+                .lr-tiers { grid-template-columns: repeat(3, 1fr); gap: 12px; }
                 .lr-tier-card { padding: 20px 14px; }
                 .lr-earn-section, .lr-referral-section { padding: 28px 20px; }
                 .lr-earn-grid { grid-template-columns: 1fr 1fr; }
                 .lr-section-title { font-size: 1.3em; }
             }
             @media (max-width: 480px) {
-                .lr-tiers { grid-template-columns: 1fr; }
+                .lr-tiers { grid-template-columns: 1fr 1fr; }
                 .lr-earn-grid { grid-template-columns: 1fr; }
             }
         </style>
@@ -1201,7 +1201,11 @@ function lr_shortcode_rewards_page() {
             <img src="<?php echo esc_url( $logo_dark ); ?>" alt="LamakoRewards" style="max-width:200px; height:auto; margin-bottom:16px;">
             <h2 style="color:#3d2314; margin-bottom:8px;">Prêt à commencer ?</h2>
             <p style="color:#666; margin-bottom:24px; max-width:400px; margin-left:auto; margin-right:auto;">Téléchargez l'app TicketByLamako pour gérer vos points en temps réel</p>
-            <a href="https://www.ticketbylamako.com/app" class="lr-cta">Télécharger l'application</a>
+            <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
+                <a href="https://apps.apple.com/app/ticketbylamako" class="lr-cta" style="display:inline-flex; align-items:center; gap:8px;">🍎 App Store</a>
+                <a href="https://play.google.com/store/apps/details?id=space.manus.ticketbylamako.app" class="lr-cta" style="display:inline-flex; align-items:center; gap:8px; background:linear-gradient(135deg, #3d2314, #663d17);">▶ Google Play</a>
+            </div>
+            <p style="color:#999; font-size:0.8em; margin-top:12px;">Application bientôt disponible</p>
         </div>
     </div>
     <?php
@@ -1324,49 +1328,168 @@ function lr_account_rewards_content() {
     $total_earned = lr_get_total_earned( $user_id );
     $tier = lr_get_tier( $total_earned );
     $tier_name = lr_get_tier_name( $tier );
+    $multiplier = lr_get_multiplier( $tier );
     $code = lr_generate_referral_code( $user_id );
     $referral_count = (int) get_user_meta( $user_id, '_lamako_referral_count', true );
     $next = lr_get_next_tier( $tier );
     $to_next = lr_get_points_to_next_tier( $total_earned );
+    $can_redeem = $total_earned >= LR_REDEMPTION_MIN_LIFETIME;
+    $logo_dark = 'https://www.ticketbylamako.com/wp-content/uploads/2026/04/LamakoRewards_Dark.png';
+    
+    // Tier colors
+    $tier_colors = array( 'fan' => '#c79f6c', 'silver' => '#C0C0C0', 'gold' => '#FFD700', 'platinum' => '#a8a8a8', 'diamond' => '#7dd3fc' );
+    $tier_color = $tier_colors[ $tier ] ?? '#c79f6c';
+    $tier_emojis = array( 'fan' => '🎵', 'silver' => '⭐', 'gold' => '🌟', 'platinum' => '💎', 'diamond' => '👑' );
+    $tier_emoji = $tier_emojis[ $tier ] ?? '';
+    
+    // Progress calculation
+    $next_threshold = lr_get_next_tier_threshold( $total_earned );
+    $current_threshold = lr_get_current_tier_threshold( $total_earned );
+    $range = max( 1, $next_threshold - $current_threshold );
+    $progress = $tier === 'diamond' ? 100 : min( 100, ( ( $total_earned - $current_threshold ) / $range ) * 100 );
     
     ?>
-    <div style="max-width:600px;">
-        <h2>🎵 LamakoRewards</h2>
+    <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <div style="max-width:680px; font-family:'Raleway', -apple-system, sans-serif;">
         
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:24px 0;">
-            <div style="background:#f9fafb; padding:20px; border-radius:8px; text-align:center;">
-                <div style="font-size:2em; font-weight:700; color:#3d2314;"><?php echo number_format( $balance, 0, ',', ' ' ); ?></div>
-                <div style="color:#666; font-size:0.9em;">Points disponibles</div>
+        <!-- Header with logo -->
+        <div style="text-align:center; margin-bottom:32px;">
+            <img src="<?php echo esc_url( $logo_dark ); ?>" alt="LamakoRewards" style="max-width:220px; height:auto; margin-bottom:12px;">
+        </div>
+        
+        <!-- Stats cards -->
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:28px;">
+            <div style="background:linear-gradient(135deg, #3d2314, #663d17); padding:24px 16px; border-radius:12px; text-align:center; color:white;">
+                <div style="font-size:2.2em; font-weight:800;"><?php echo number_format( $balance, 0, ',', ' ' ); ?></div>
+                <div style="font-size:0.85em; opacity:0.85; margin-top:4px;">Points disponibles</div>
             </div>
-            <div style="background:#f9fafb; padding:20px; border-radius:8px; text-align:center;">
-                <div style="font-size:2em; font-weight:700; color:#3d2314;"><?php echo esc_html( $tier_name ); ?></div>
-                <div style="color:#666; font-size:0.9em;">Niveau actuel</div>
+            <div style="background:white; padding:24px 16px; border-radius:12px; text-align:center; border:2px solid <?php echo $tier_color; ?>;">
+                <div style="font-size:1.2em; margin-bottom:4px;"><?php echo $tier_emoji; ?></div>
+                <div style="font-size:1.6em; font-weight:800; color:#3d2314;"><?php echo esc_html( $tier_name ); ?></div>
+                <div style="font-size:0.85em; color:#888; margin-top:4px;">x<?php echo $multiplier; ?> points</div>
+            </div>
+            <div style="background:#f9fafb; padding:24px 16px; border-radius:12px; text-align:center;">
+                <div style="font-size:2.2em; font-weight:800; color:#663d17;"><?php echo number_format( $total_earned, 0, ',', ' ' ); ?></div>
+                <div style="font-size:0.85em; color:#888; margin-top:4px;">Points cumulés</div>
             </div>
         </div>
         
+        <!-- Progress bar -->
         <?php if ( $next ) : ?>
-        <div style="background:#fef3c7; padding:12px 16px; border-radius:8px; margin-bottom:24px;">
-            <strong><?php echo $to_next; ?> points</strong> pour atteindre le niveau <strong><?php echo esc_html( $next ); ?></strong>
-            <div style="background:#e5e7eb; border-radius:4px; height:8px; margin-top:8px; overflow:hidden;">
-                <?php 
-                $current_min = constant( 'LR_TIER_' . strtoupper( $tier ) );
-                $next_min = $tier === 'fan' ? LR_TIER_VIP : ( $tier === 'vip' ? LR_TIER_SUPERVIP : LR_TIER_ELITE );
-                $progress = min( 100, ( ( $total_earned - $current_min ) / ( $next_min - $current_min ) ) * 100 );
-                ?>
-                <div style="background:#3d2314; height:100%; width:<?php echo $progress; ?>%; border-radius:4px;"></div>
+        <div style="background:#faf8f5; padding:20px 24px; border-radius:12px; margin-bottom:28px; border:1px solid #f0ebe5;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <span style="font-weight:600; color:#3d2314;">Progression vers <?php echo esc_html( $next ); ?></span>
+                <span style="font-weight:700; color:#663d17;"><?php echo round( $progress ); ?>%</span>
             </div>
+            <div style="background:#e5e0d8; border-radius:6px; height:10px; overflow:hidden;">
+                <div style="background:linear-gradient(90deg, #c79f6c, #663d17); height:100%; width:<?php echo $progress; ?>%; border-radius:6px; transition:width 0.5s ease;"></div>
+            </div>
+            <div style="font-size:0.85em; color:#888; margin-top:8px;">Plus que <strong style="color:#3d2314;"><?php echo number_format( $to_next, 0, ',', ' ' ); ?> points</strong> pour atteindre <strong><?php echo esc_html( $next ); ?></strong></div>
+        </div>
+        <?php elseif ( $tier === 'diamond' ) : ?>
+        <div style="background:linear-gradient(135deg, #f0f9ff, #e0f2fe); padding:20px 24px; border-radius:12px; margin-bottom:28px; border:1px solid #7dd3fc; text-align:center;">
+            <div style="font-size:1.1em; font-weight:700; color:#0369a1;">👑 Niveau maximum atteint ! Vous êtes au sommet.</div>
         </div>
         <?php endif; ?>
         
-        <h3>Mon code de parrainage</h3>
-        <div style="background:#f0f0f0; padding:16px; border-radius:8px; text-align:center; margin-bottom:24px;">
-            <code style="font-size:1.3em; letter-spacing:2px; font-weight:700;"><?php echo esc_html( $code ); ?></code>
-            <p style="color:#666; font-size:0.85em; margin-top:8px;">Partagez ce code - gagnez 100 pts quand votre filleul achète !</p>
-            <p style="font-size:0.85em;">Filleuls parrainés : <strong><?php echo $referral_count; ?></strong></p>
+        <!-- Cashback status -->
+        <div style="background:<?php echo $can_redeem ? '#f0fdf4' : '#fef3c7'; ?>; padding:20px 24px; border-radius:12px; margin-bottom:28px; border:1px solid <?php echo $can_redeem ? '#bbf7d0' : '#fde68a'; ?>;">
+            <?php if ( $can_redeem ) : ?>
+                <div style="font-weight:700; color:#166534; margin-bottom:4px;">✅ Cashback débloqué</div>
+                <div style="font-size:0.9em; color:#15803d;">Vous pouvez échanger vos points contre des réductions. Taux : 20 Ar par point.</div>
+            <?php else : ?>
+                <div style="font-weight:700; color:#92400e; margin-bottom:4px;">🔒 Cashback verrouillé</div>
+                <div style="font-size:0.9em; color:#a16207;">Débloqué dès <?php echo number_format( LR_REDEMPTION_MIN_LIFETIME, 0, ',', ' ' ); ?> pts cumulés (= <?php echo number_format( LR_REDEMPTION_MIN_LIFETIME * 1000, 0, ',', ' ' ); ?> Ar dépensés). Il vous manque <strong><?php echo number_format( LR_REDEMPTION_MIN_LIFETIME - $total_earned, 0, ',', ' ' ); ?> pts</strong>.</div>
+            <?php endif; ?>
         </div>
         
-        <p><a href="/lamako-rewards" style="color:#3d2314; font-weight:600;">Voir tous les avantages →</a></p>
+        <!-- Referral code -->
+        <div style="background:linear-gradient(135deg, #3d2314, #663d17); padding:28px 24px; border-radius:12px; text-align:center; margin-bottom:28px; color:white;">
+            <div style="font-size:1.1em; font-weight:700; margin-bottom:12px;">Mon code de parrainage</div>
+            <div style="background:rgba(255,255,255,0.15); backdrop-filter:blur(10px); padding:14px 24px; border-radius:8px; display:inline-block; margin-bottom:12px; border:1px solid rgba(255,255,255,0.2);">
+                <code style="font-size:1.4em; letter-spacing:3px; font-weight:800; color:white;"><?php echo esc_html( $code ); ?></code>
+            </div>
+            <div style="font-size:0.9em; opacity:0.85;">Partagez ce code et gagnez <strong>75 pts</strong> par filleul</div>
+            <div style="font-size:0.85em; opacity:0.7; margin-top:8px;">Filleuls parrainés : <strong><?php echo $referral_count; ?></strong></div>
+        </div>
+        
+        <!-- CTA -->
+        <div style="text-align:center;">
+            <a href="/lamako-rewards" style="display:inline-block; background:linear-gradient(135deg, #c79f6c, #a67c52); color:white; padding:14px 32px; border-radius:8px; text-decoration:none; font-weight:700; font-size:1em; transition:opacity 0.2s;">Voir tous les avantages →</a>
+        </div>
     </div>
+    <?php
+}
+
+// ============================================================
+// HOMEPAGE LAMAKOREWARDS CTA BANNER
+// ============================================================
+
+add_action( 'wp_footer', 'lr_homepage_cta_banner' );
+
+function lr_homepage_cta_banner() {
+    if ( ! is_front_page() ) return;
+    $logo_white = 'https://www.ticketbylamako.com/wp-content/uploads/2026/04/LamakoRewards_white.png';
+    ?>
+    <div id="lr-homepage-banner" style="
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        z-index: 9999;
+        background: linear-gradient(135deg, #3d2314 0%, #663d17 50%, #8B5E34 100%);
+        color: white;
+        padding: 16px 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 20px;
+        flex-wrap: wrap;
+        box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+        font-family: 'Raleway', -apple-system, sans-serif;
+        transform: translateY(100%);
+        transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    ">
+        <img src="<?php echo esc_url( $logo_white ); ?>" alt="LamakoRewards" style="height:36px; width:auto;">
+        <span style="font-size:1em; font-weight:600;">Gagnez des points à chaque achat et profitez de cashback exclusif !</span>
+        <a href="/lamako-rewards" style="
+            background: white;
+            color: #3d2314;
+            padding: 10px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 0.95em;
+            white-space: nowrap;
+            transition: opacity 0.2s;
+        " onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">Découvrir le programme</a>
+        <button onclick="document.getElementById('lr-homepage-banner').style.display='none'" style="
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.4em;
+            cursor: pointer;
+            opacity: 0.7;
+            padding: 0 4px;
+            line-height: 1;
+        " aria-label="Fermer">&times;</button>
+    </div>
+    <script>
+    (function() {
+        // Show banner after 2 seconds with slide-up animation
+        setTimeout(function() {
+            var banner = document.getElementById('lr-homepage-banner');
+            if (banner) banner.style.transform = 'translateY(0)';
+        }, 2000);
+        // Auto-hide after 15 seconds
+        setTimeout(function() {
+            var banner = document.getElementById('lr-homepage-banner');
+            if (banner && banner.style.display !== 'none') {
+                banner.style.transform = 'translateY(100%)';
+            }
+        }, 17000);
+    })();
+    </script>
     <?php
 }
 

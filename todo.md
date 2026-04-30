@@ -586,3 +586,10 @@
 - [x] Fix checkout popup: use is_page() with cart/checkout IDs for block-based checkout
 - [x] Fix unicode encoding (surrogate pairs + BMP escapes → proper UTF-8)
 - [x] Verify all changes on live site - all working correctly
+
+## V3.2.3 - WordPress Page Improvements
+- [x] Fix Diamond tier card: grid-template-columns repeat(5, 1fr) on desktop, 3 on tablet, 2 on mobile
+- [x] Add "Mes Récompenses" tab in WooCommerce Mon Compte (logo, 3 stat cards, progress bar, cashback status, referral code, CTA)
+- [x] Add download app CTA: App Store + Google Play buttons with "bientôt disponible" placeholder
+- [x] Add LamakoRewards CTA banner on homepage (fixed bottom, slide-up animation, auto-hide 15s)
+- [x] Verify all changes on live site - all working correctly
