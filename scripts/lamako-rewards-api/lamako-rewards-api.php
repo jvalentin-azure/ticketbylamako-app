@@ -1130,7 +1130,7 @@ function lr_add_account_tab( $items ) {
 add_action( 'init', 'lr_add_account_endpoint' );
 
 function lr_add_account_endpoint() {
-    add_rewrite_endpoint( 'lamako-rewards', EP_ROOT | EP_PAGES );
+    add_rewrite_endpoint( 'lamako-rewards', EP_PAGES );
 }
 
 add_action( 'woocommerce_account_lamako-rewards_endpoint', 'lr_account_rewards_content' );

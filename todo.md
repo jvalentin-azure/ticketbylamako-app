@@ -567,3 +567,12 @@
 - [x] Update WordPress plugin: LR_REDEMPTION_MIN_LIFETIME = 750, reject redemption if below
 - [x] Update valid redemption tiers: 500/1000/2000/5000 pts at fixed 20Ar/pt rate
 - [x] Update LamakoRewards documentation with 750 pts threshold
+
+## V3.2.1 - Plugin Deployment & Communication
+- [x] Deploy lamako-rewards-api.php v3.0.0 to WordPress server
+- [x] Deploy lamako-mobile-api.php v2.0.4 to WordPress server
+- [x] Verify plugins active and endpoints working (balance, referral, history, redeem all tested)
+- [x] Create /lamako-rewards page on WordPress with [lamako_rewards_page] shortcode
+- [x] Fix rewrite rule conflict (EP_ROOT → EP_PAGES) and flush permalinks
+- [x] Create LamakoRewards communication document (French, professional, for clients/partners)
+- [x] Update technical/functional documentation v3.2.0 with deployment status

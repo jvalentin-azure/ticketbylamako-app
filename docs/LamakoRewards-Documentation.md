@@ -1,8 +1,9 @@
 # LamakoRewards - Documentation Technique Complète
 
-**Version :** 3.1.0  
+**Version :** 3.2.0  
 **Dernière mise à jour :** 30 avril 2026  
-**Modèle :** Conservatif (basé sur Otayo, Live Nation, Ticketmaster, AMC Stubs)
+**Modèle :** Conservatif (basé sur Otayo, Live Nation, Ticketmaster, AMC Stubs)  
+**Statut :** Déployé en production sur ticketbylamako.com
 
 ---
 
@@ -331,18 +332,28 @@ https://www.ticketbylamako.com/wp-json/lamako-rewards/v1
 
 ## 12. Checklist de Déploiement
 
-- [ ] Installer et activer myCred sur WordPress
-- [ ] Uploader `lamako-rewards-api/` dans `/wp-content/plugins/`
-- [ ] Activer le plugin
-- [ ] Ajouter `LAMAKO_REWARDS_API_KEY` dans `wp-config.php`
-- [ ] Créer page `/lamako-rewards` avec shortcode `[lamako_rewards_page]`
-- [ ] Flush permaliens
-- [ ] Configurer `EXPO_PUBLIC_REWARDS_API_KEY` dans l'app
-- [ ] Tester inscription avec code parrain
-- [ ] Vérifier accumulation de points après achat
-- [ ] Vérifier onglet "Mes Récompenses" dans Mon Compte
-- [ ] Vérifier popup checkout pour invités
-- [ ] Vérifier CTA sur pages produits
+- [x] Installer et activer myCred sur WordPress
+- [x] Uploader `lamako-rewards-api.php` dans `/wp-content/plugins/`
+- [x] Activer le plugin (v3.0.0)
+- [x] Ajouter `LAMAKO_REWARDS_API_KEY` dans `wp-config.php`
+- [x] Créer page `/lamako-rewards` avec shortcode `[lamako_rewards_page]`
+- [x] Flush permaliens (fix EP_PAGES au lieu de EP_ROOT)
+- [x] Configurer `EXPO_PUBLIC_REWARDS_API_KEY` dans l'app
+- [ ] Tester inscription avec code parrain (à valider manuellement)
+- [x] Vérifier accumulation de points après achat
+- [x] Vérifier onglet "Mes Récompenses" dans Mon Compte
+- [ ] Vérifier popup checkout pour invités (à valider en mode déconnecté)
+- [x] Vérifier CTA sur pages produits
+
+### Statut de déploiement (30 avril 2026)
+
+| Composant | Version | Statut | URL |
+|-----------|---------|--------|-----|
+| Plugin rewards API | v3.0.0 | Actif | wp-content/plugins/lamako-rewards-api.php |
+| Plugin mobile API | v2.0.4 | Actif | wp-content/plugins/lamako-mobile-api.php |
+| Page LamakoRewards | - | Live | ticketbylamako.com/lamako-rewards/ |
+| CTA produits | - | Actif | Automatique sur tous les produits |
+| App mobile | v3.2 | En dev | Écran rewards + provider |
 
 ---
 
