@@ -601,3 +601,9 @@
 - [x] Add badge to mobile: shop cards, event cards, product detail, event detail, home screen, search
 - [x] Deploy plugin to WordPress via WP File Manager
 - [x] Verify on live product pages - all working correctly
+
+## V3.2.5 - Logo Fix Across All WordPress Elements
+- [x] Replace emoji with real LamakoRewards Dark logo on checkout popup
+- [x] Replace emoji with real LamakoRewards White logo on shortcode CTA banner
+- [x] Keep tier emojis (🎵⭐🌟💎👑) as intentional level icons
+- [x] Deploy and verify on live site - all logos correct

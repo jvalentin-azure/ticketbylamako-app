@@ -1220,7 +1220,7 @@ function lr_shortcode_cta( $atts ) {
     ob_start();
     ?>
     <div style="background:linear-gradient(135deg, #3d2314, #6b3a1f); color:white; padding:12px 20px; border-radius:8px; display:flex; align-items:center; justify-content:space-between; margin:16px 0; flex-wrap:wrap; gap:8px;">
-        <span style="font-weight:600;">🎵 <?php echo esc_html( $atts['text'] ); ?></span>
+        <span style="font-weight:600; display:flex; align-items:center; gap:8px;"><img src="https://www.ticketbylamako.com/wp-content/uploads/2026/04/LamakoRewards_white.png" alt="LamakoRewards" style="height:22px; width:auto;"> <?php echo esc_html( $atts['text'] ); ?></span>
         <a href="/lamako-rewards" style="background:white; color:#3d2314; padding:8px 16px; border-radius:6px; text-decoration:none; font-weight:600; font-size:0.9em;">En savoir plus</a>
     </div>
     <?php
@@ -1237,11 +1237,11 @@ function lr_shortcode_checkout_popup() {
     <div id="lr-checkout-popup" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.6); z-index:99999; align-items:center; justify-content:center;">
         <div style="background:white; border-radius:16px; padding:32px; max-width:400px; width:90%; text-align:center; position:relative;">
             <button onclick="document.getElementById('lr-checkout-popup').style.display='none'" style="position:absolute; top:12px; right:16px; background:none; border:none; font-size:1.5em; cursor:pointer;">&times;</button>
-            <div style="font-size:2.5em; margin-bottom:12px;">🎵</div>
-            <h3 style="margin-bottom:8px;">Rejoignez LamakoRewards !</h3>
-            <p style="color:#666; font-size:0.9em; margin-bottom:16px;">Créez un compte et gagnez <strong>50 points bonus</strong> + des points sur cet achat. Échangez-les contre des réductions !</p>
-            <a href="<?php echo wp_registration_url(); ?>" style="display:block; background:#3d2314; color:white; padding:14px; border-radius:8px; text-decoration:none; font-weight:600; margin-bottom:8px;">S'inscrire gratuitement</a>
-            <button onclick="document.getElementById('lr-checkout-popup').style.display='none'" style="background:none; border:none; color:#666; cursor:pointer; font-size:0.9em;">Non merci, continuer sans compte</button>
+            <img src="https://www.ticketbylamako.com/wp-content/uploads/2026/04/LamakoRewards_Dark.png" alt="LamakoRewards" style="height:40px; width:auto; margin-bottom:16px;">
+            <h3 style="margin-bottom:8px; font-family:Raleway,-apple-system,sans-serif; color:#3d2314;">Rejoignez LamakoRewards !</h3>
+            <p style="color:#666; font-size:0.9em; margin-bottom:16px; font-family:Raleway,-apple-system,sans-serif;">Créez un compte et gagnez <strong>50 points bonus</strong> + des points sur cet achat. Échangez-les contre du <strong>cashback</strong> !</p>
+            <a href="<?php echo wp_registration_url(); ?>" style="display:block; background:linear-gradient(135deg,#3d2314,#663d17); color:white; padding:14px; border-radius:8px; text-decoration:none; font-weight:600; margin-bottom:8px; font-family:Raleway,-apple-system,sans-serif;">S'inscrire gratuitement</a>
+            <button onclick="document.getElementById('lr-checkout-popup').style.display='none'" style="background:none; border:none; color:#666; cursor:pointer; font-size:0.9em; font-family:Raleway,-apple-system,sans-serif;">Non merci, continuer sans compte</button>
         </div>
     </div>
     <script>
