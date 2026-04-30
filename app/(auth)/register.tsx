@@ -7,6 +7,7 @@ import { useColors } from "@/hooks/use-colors";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useAuth } from "@/lib/auth-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
+import { validateReferralCode, registerReferral } from "@/lib/rewards-provider";
 
 export default function RegisterScreen() {
   const colors = useColors();
@@ -20,6 +21,21 @@ export default function RegisterScreen() {
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [referralCode, setReferralCode] = useState("");
+  const [referralStatus, setReferralStatus] = useState<{ valid: boolean; name?: string } | null>(null);
+  const [checkingReferral, setCheckingReferral] = useState(false);
+
+  const handleCheckReferral = async (code: string) => {
+    setReferralCode(code);
+    if (code.length >= 8) {
+      setCheckingReferral(true);
+      const result = await validateReferralCode(code.trim());
+      setReferralStatus(result.valid ? { valid: true, name: result.referrer_name } : { valid: false });
+      setCheckingReferral(false);
+    } else {
+      setReferralStatus(null);
+    }
+  };
 
   const handleRegister = async () => {
     if (!email.trim() || !password.trim() || !firstName.trim()) { setError("Veuillez remplir tous les champs obligatoires"); return; }
@@ -27,6 +43,17 @@ export default function RegisterScreen() {
     setLoading(true);
     try {
       await register(email.trim(), password, firstName.trim(), lastName.trim());
+      // If referral code was provided and valid, register the referral
+      if (referralCode.trim() && referralStatus?.valid) {
+        // We'll register the referral after signup - the server will handle it
+        try {
+          // The WP user ID will be fetched by the rewards provider on first sync
+          await registerReferral(0, referralCode.trim()); // 0 = will be resolved server-side by email
+        } catch (e) {
+          // Non-blocking - referral is a bonus, don't fail registration
+          console.warn("Referral registration failed:", e);
+        }
+      }
       router.replace("/(tabs)/" as any);
     } catch (e: any) {
       setError(e.message || "Erreur lors de l'inscription");
@@ -106,6 +133,28 @@ export default function RegisterScreen() {
                 <IconSymbol name={showPw ? "eye.slash.fill" : "eye.fill"} size={20} color={colors.muted} />
               </TouchableOpacity>
             </View>
+          </View>
+
+          {/* Referral code (optional) */}
+          <View style={{ marginBottom: 20 }}>
+            <Text style={[styles.inputLabel, { color: colors.foreground }]}>Code parrain (optionnel)</Text>
+            <View style={[styles.inputRow, { backgroundColor: colors.surface, borderColor: referralStatus?.valid ? colors.success : referralStatus === null ? colors.border : colors.error }]}>
+              <IconSymbol name="person.2.fill" size={18} color={colors.muted} />
+              <TextInput placeholder="TBL-XXXXXXXX" placeholderTextColor={colors.muted} value={referralCode} onChangeText={handleCheckReferral}
+                autoCapitalize="characters"
+                style={[styles.input, { color: colors.foreground }]} />
+              {checkingReferral && <ActivityIndicator size="small" color={colors.primary} />}
+            </View>
+            {referralStatus?.valid && (
+              <Text style={{ color: colors.success, fontSize: 12, marginTop: 4, fontFamily: "Raleway-Medium" }}>
+                Parrainé par {referralStatus.name} - vous recevrez 25 pts bonus !
+              </Text>
+            )}
+            {referralStatus && !referralStatus.valid && referralCode.length >= 8 && (
+              <Text style={{ color: colors.error, fontSize: 12, marginTop: 4, fontFamily: "Raleway-Medium" }}>
+                Code invalide
+              </Text>
+            )}
           </View>
 
           {/* Register button */}

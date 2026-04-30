@@ -525,3 +525,31 @@
 - [x] Fix: Boutique spacing - headerRow paddingBottom:2, chipsContainer paddingTop:0, gap:4
 - [x] Fix: Seating chart - clearServerCart() called on every back/close + SQL DELETE all tc_seat transients
 - [x] Fix: New concert-bg.jpg (warm orange crowd) and rewards-bg.jpg (red concert hands)
+
+## V3.0 - LamakoRewards Revamp
+
+### Tier System Redesign
+- [x] Research loyalty program benchmarks (Sephora, Ticketmaster, Fnac, Starbucks)
+- [x] Redesign tier thresholds: Fan(0), VIP(150), Super VIP(750), Elite(3000) with multipliers
+- [x] Update rewards-provider.tsx with new tiers + progressive redemption
+- [x] Update rewards screen UI with new tier info
+
+### Referral System (Server-side)
+- [x] Create WordPress plugin endpoint for storing referral codes in user_meta
+- [x] Add referral code field to registration form (app)
+- [x] Create myCred hook to credit referrer when referee makes first purchase
+- [x] Update app rewards-provider to sync referral code with server
+
+### API Security
+- [x] Move API key to environment variable (EXPO_PUBLIC_REWARDS_API_KEY)
+- [x] Implement JWT validation on WordPress endpoints
+- [x] Add rate limiting (60 req/min/IP) to WordPress REST endpoints
+
+### WordPress Web Integration
+- [x] Create dedicated LamakoRewards page ([lamako_rewards_page] shortcode)
+- [x] Add "Mes Récompenses" tab in WooCommerce My Account
+- [x] Add CTAs on product pages (auto-calculated points)
+- [x] Add checkout popup for guests (3s delay)
+
+### Documentation
+- [x] Update LamakoRewards-Documentation.md with all changes (V3.0)

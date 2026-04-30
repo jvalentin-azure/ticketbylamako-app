@@ -5,12 +5,14 @@ import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/lib/auth-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useThemeContext } from "@/lib/theme-provider";
+import { useRewards, TIERS } from "@/lib/rewards-provider";
 
 export default function ProfileScreen() {
   const colors = useColors();
   const router = useRouter();
   const { isAuthenticated, user, portal, logout } = useAuth();
   const { colorScheme: scheme, setColorScheme: setScheme } = useThemeContext();
+  const { state: rewards, currentTier, progressToNextTier, pointsToNextTier, nextTier } = useRewards();
 
   const menuItems = [
     ...(isAuthenticated ? [
@@ -69,6 +71,45 @@ export default function ProfileScreen() {
             </View>
           )}
         </View>
+
+        {/* LamakoRewards Card */}
+        {isAuthenticated && (
+          <TouchableOpacity
+            onPress={() => router.push("/rewards" as any)}
+            style={{ marginHorizontal: 16, marginBottom: 20, padding: 16, borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: currentTier.color + "60", overflow: "hidden" }}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <Text style={{ fontSize: 24 }}>{currentTier.icon}</Text>
+                <View style={{ marginLeft: 10 }}>
+                  <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "700", fontFamily: "Raleway-Bold" }}>LamakoRewards</Text>
+                  <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>Niveau {currentTier.name}</Text>
+                </View>
+              </View>
+              <View style={{ alignItems: "flex-end" }}>
+                <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "700" }}>{rewards.availablePoints}</Text>
+                <Text style={{ color: colors.muted, fontSize: 11 }}>points</Text>
+              </View>
+            </View>
+            {nextTier && (
+              <View style={{ marginTop: 12 }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
+                  <Text style={{ color: colors.muted, fontSize: 11 }}>{pointsToNextTier} pts pour {nextTier.name}</Text>
+                  <Text style={{ color: colors.muted, fontSize: 11 }}>{Math.round(progressToNextTier * 100)}%</Text>
+                </View>
+                <View style={{ height: 4, backgroundColor: colors.border, borderRadius: 2, overflow: "hidden" }}>
+                  <View style={{ height: 4, backgroundColor: currentTier.color, borderRadius: 2, width: `${progressToNextTier * 100}%` }} />
+                </View>
+              </View>
+            )}
+            {rewards.referralCode ? (
+              <View style={{ marginTop: 10, flexDirection: "row", alignItems: "center" }}>
+                <Text style={{ color: colors.muted, fontSize: 11 }}>Code parrainage : </Text>
+                <Text style={{ color: colors.primary, fontSize: 12, fontWeight: "700", letterSpacing: 1 }}>{rewards.referralCode}</Text>
+              </View>
+            ) : null}
+          </TouchableOpacity>
+        )}
 
         {/* Menu Items */}
         <View style={{ marginHorizontal: 16, borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, overflow: "hidden" }}>
