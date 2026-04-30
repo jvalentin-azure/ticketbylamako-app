@@ -126,7 +126,7 @@ export default function RewardsScreen() {
                 <IconSymbol name="gift.fill" size={20} color={colors.success} />
               </View>
               <Text style={[styles.howTitle, { color: colors.foreground }]}>Échangez</Text>
-              <Text style={[styles.howDesc, { color: colors.muted }]}>100 pts = 5000 Ar</Text>
+              <Text style={[styles.howDesc, { color: colors.muted }]}>500 pts = 10 000 Ar</Text>
             </View>
           </View>
         </View>
@@ -176,7 +176,7 @@ export default function RewardsScreen() {
           <View style={[styles.referralCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Parrainage</Text>
             <Text style={[styles.referralDesc, { color: colors.muted }]}>
-              Partagez votre code et gagnez {100} pts quand un ami fait son premier achat !
+              Partagez votre code et gagnez 75 pts quand un ami fait son premier achat !
             </Text>
             <View style={[styles.codeBox, { backgroundColor: colors.background, borderColor: colors.border }]}>
               <Text style={[styles.codeText, { color: colors.primary }]}>{state.referralCode}</Text>

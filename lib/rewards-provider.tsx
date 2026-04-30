@@ -8,15 +8,17 @@ const API_BASE = "https://www.ticketbylamako.com/wp-json/lamako-rewards/v1";
 // API key from environment variable (set via EXPO_PUBLIC_REWARDS_API_KEY)
 const API_KEY = process.env.EXPO_PUBLIC_REWARDS_API_KEY || (Constants.expoConfig?.extra as any)?.rewardsApiKey || "LR_2024_SECURE_KEY_TBL";
 
-// ===== TIERS (based on industry benchmarks: Sephora, Starbucks, Fnac) =====
-// Tiers are based on LIFETIME SPENDING (converted to points at 1pt/1000Ar)
+// ===== TIERS (based on Otayo, Live Nation, Ticketmaster benchmarks) =====
+// Conservative model: high thresholds, low cashback (2%), experiential rewards
+// Earn rate: 1 pt per 1,000 Ar spent
 // Average ticket: 50,000 Ar = 50 pts per event
 // Fan: 0 (free join)
-// VIP: 150 pts (~150,000 Ar = 2-3 events) - achievable quickly to hook users
-// Super VIP: 750 pts (~750,000 Ar = 5-8 events) - regular attendees
-// Elite: 3000 pts (~3,000,000 Ar = 20+ events) - superfans/annual heavy spenders
+// Silver: 500 pts (~500,000 Ar = 3-5 events) - regular attendees
+// Gold: 2,000 pts (~2,000,000 Ar = 10-15 events) - loyal fans
+// Platinum: 5,000 pts (~5,000,000 Ar = 30+ events) - superfans
+// Diamond: 10,000 pts (~10,000,000 Ar = top 1%) - elite status
 
-export type RewardTier = "fan" | "vip" | "supervip" | "elite";
+export type RewardTier = "fan" | "silver" | "gold" | "platinum" | "diamond";
 
 export interface TierInfo {
   id: RewardTier;
@@ -46,56 +48,67 @@ export const TIERS: TierInfo[] = [
     ],
   },
   {
-    id: "vip",
-    name: "VIP",
-    minPoints: 150,
+    id: "silver",
+    name: "Silver",
+    minPoints: 500,
     color: "#C0C0C0",
     icon: "⭐",
-    discountPercent: 5,
-    multiplier: 1.5,
+    discountPercent: 0,
+    multiplier: 1,
     benefits: [
-      "5% de réduction sur les billets",
-      "x1.5 points sur chaque achat",
+      "Réductions membres exclusives",
       "Accès prioritaire aux préventes",
-      "Offres exclusives par notification",
+      "Offres spéciales par notification",
       "Support prioritaire WhatsApp",
     ],
   },
   {
-    id: "supervip",
-    name: "Super VIP",
-    minPoints: 750,
+    id: "gold",
+    name: "Gold",
+    minPoints: 2000,
     color: "#FFD700",
     icon: "🌟",
-    discountPercent: 10,
-    multiplier: 2,
+    discountPercent: 0,
+    multiplier: 1.25,
     benefits: [
-      "10% de réduction sur les billets",
-      "x2 points sur chaque achat",
-      "Accès VIP aux événements",
-      "Places gratuites (loterie mensuelle)",
+      "x1.25 points sur chaque achat",
+      "Invitations aux événements exclusifs",
+      "Early access aux nouvelles ventes",
       "Cadeaux surprises aux événements",
-      "Invitation aux avant-premières",
+    ],
+  },
+  {
+    id: "platinum",
+    name: "Platinum",
+    minPoints: 5000,
+    color: "#E5E4E2",
+    icon: "💎",
+    discountPercent: 0,
+    multiplier: 1.5,
+    benefits: [
+      "x1.5 points sur chaque achat",
+      "Surclassement de billets",
+      "25% de points bonus sur chaque achat",
+      "Accès VIP aux événements",
       "Support dédié",
     ],
   },
   {
-    id: "elite",
-    name: "Elite",
-    minPoints: 3000,
-    color: "#E5E4E2",
-    icon: "💎",
-    discountPercent: 15,
-    multiplier: 3,
+    id: "diamond",
+    name: "Diamond",
+    minPoints: 10000,
+    color: "#B9F2FF",
+    icon: "💠",
+    discountPercent: 0,
+    multiplier: 2,
     benefits: [
-      "15% de réduction sur tous les achats",
-      "x3 points sur chaque achat",
+      "x2 points sur chaque achat",
+      "50% de points bonus sur chaque achat",
       "Accès backstage",
-      "1 billet gratuit par trimestre",
-      "Invitations privées (meet & greet)",
-      "Conciergerie événementielle dédiée",
-      "Surclassement automatique de place",
-      "Livraison gratuite boutique",
+      "Meet & greet artistes",
+      "Conciergerie événementielle",
+      "Surclassement automatique",
+      "Invitations privées",
     ],
   },
 ];
@@ -104,24 +117,27 @@ export const TIERS: TierInfo[] = [
 export const EARN_RULES = {
   purchaseRate: 1, // 1 point per 1000 Ar spent
   purchaseUnit: 1000, // Ar per point
-  registrationBonus: 50,
-  loginBonus: 5, // per day (max 1x/day)
+  registrationBonus: 100, // like Otayo
+  profileCompleteBonus: 100, // complete profile
+  loginBonus: 2, // per day (max 1x/day) - conservative
+  firstPurchaseBonus: 200, // bonus on first purchase (like Otayo)
   eventAttendanceBonus: 10, // scan at entry
   reviewBonus: 15, // leave a review
-  referralBonus: 100, // when referee makes first purchase
+  referralBonus: 75, // when referee makes first purchase
   refereeBonus: 25, // bonus for the new user who used a referral code
-  birthdayBonus: 50, // annual birthday bonus
-  shareBonus: 5, // share event on social media
+  birthdayBonus: 200, // annual birthday bonus (like Otayo)
+  shareBonus: 20, // share event on social media (like Otayo)
+  newsletterBonus: 100, // subscribe to newsletter
 };
 
 // ===== REDEMPTION RULES =====
-// Progressive rate: more points = better value (incentivizes saving)
+// Fixed rate: 500 pts = 10,000 Ar (20 Ar/pt = 2% cashback equivalent)
+// This is conservative and industry-standard (AMC = 2%, airlines = 1-2%)
 export const REDEMPTION_TIERS = [
-  { points: 50, value: 5000, label: "50 pts = 5 000 Ar" },
-  { points: 100, value: 12000, label: "100 pts = 12 000 Ar" },
-  { points: 200, value: 30000, label: "200 pts = 30 000 Ar" },
-  { points: 500, value: 80000, label: "500 pts = 80 000 Ar" },
-  { points: 1000, value: 180000, label: "1000 pts = 180 000 Ar" },
+  { points: 500, value: 10000, label: "500 pts = 10 000 Ar" },
+  { points: 1000, value: 20000, label: "1 000 pts = 20 000 Ar" },
+  { points: 2000, value: 40000, label: "2 000 pts = 40 000 Ar" },
+  { points: 5000, value: 100000, label: "5 000 pts = 100 000 Ar" },
 ];
 
 // ===== HISTORY =====
@@ -154,8 +170,8 @@ const DEFAULT_STATE: RewardsState = {
   availablePoints: 0,
   lifetimePoints: 0,
   tier: "fan",
-  nextTier: "VIP",
-  pointsToNextTier: 150,
+  nextTier: "Silver",
+  pointsToNextTier: 500,
   history: [],
   referralCode: "",
   lastSynced: null,
@@ -180,9 +196,10 @@ const RewardsContext = createContext<RewardsContextType | null>(null);
 const STORAGE_KEY = "@lamako_rewards";
 
 function getTierForPoints(lifetimePoints: number): RewardTier {
-  if (lifetimePoints >= 3000) return "elite";
-  if (lifetimePoints >= 750) return "supervip";
-  if (lifetimePoints >= 150) return "vip";
+  if (lifetimePoints >= 10000) return "diamond";
+  if (lifetimePoints >= 5000) return "platinum";
+  if (lifetimePoints >= 2000) return "gold";
+  if (lifetimePoints >= 500) return "silver";
   return "fan";
 }
 

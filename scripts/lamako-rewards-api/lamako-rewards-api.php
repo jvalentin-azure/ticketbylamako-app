@@ -32,28 +32,33 @@ define( 'LR_API_KEY', defined( 'LAMAKO_REWARDS_API_KEY' ) ? LAMAKO_REWARDS_API_K
 define( 'LR_RATE_LIMIT', 60 ); // requests per minute
 define( 'LR_RATE_WINDOW', 60 ); // seconds
 
-// Tier thresholds (lifetime points)
+// Tier thresholds (lifetime points) - based on Otayo/Ticketmaster benchmarks
 define( 'LR_TIER_FAN', 0 );
-define( 'LR_TIER_VIP', 150 );
-define( 'LR_TIER_SUPERVIP', 750 );
-define( 'LR_TIER_ELITE', 3000 );
+define( 'LR_TIER_SILVER', 500 );
+define( 'LR_TIER_GOLD', 2000 );
+define( 'LR_TIER_PLATINUM', 5000 );
+define( 'LR_TIER_DIAMOND', 10000 );
 
 // Points configuration
 define( 'LR_POINTS_PER_1000AR', 1 );
-define( 'LR_REGISTRATION_BONUS', 50 );
-define( 'LR_LOGIN_BONUS', 5 );
+define( 'LR_REGISTRATION_BONUS', 100 );
+define( 'LR_PROFILE_BONUS', 100 );
+define( 'LR_LOGIN_BONUS', 2 );
+define( 'LR_FIRST_PURCHASE_BONUS', 200 );
 define( 'LR_ATTENDANCE_BONUS', 10 );
 define( 'LR_REVIEW_BONUS', 15 );
-define( 'LR_REFERRAL_BONUS', 100 );
+define( 'LR_REFERRAL_BONUS', 75 );
 define( 'LR_REFEREE_BONUS', 25 );
-define( 'LR_BIRTHDAY_BONUS', 50 );
-define( 'LR_SHARE_BONUS', 5 );
+define( 'LR_BIRTHDAY_BONUS', 200 );
+define( 'LR_SHARE_BONUS', 20 );
+define( 'LR_NEWSLETTER_BONUS', 100 );
 
-// Tier multipliers
+// Tier multipliers (conservative: only high tiers get bonus)
 define( 'LR_MULTIPLIER_FAN', 1.0 );
-define( 'LR_MULTIPLIER_VIP', 1.5 );
-define( 'LR_MULTIPLIER_SUPERVIP', 2.0 );
-define( 'LR_MULTIPLIER_ELITE', 3.0 );
+define( 'LR_MULTIPLIER_SILVER', 1.0 );
+define( 'LR_MULTIPLIER_GOLD', 1.25 );
+define( 'LR_MULTIPLIER_PLATINUM', 1.5 );
+define( 'LR_MULTIPLIER_DIAMOND', 2.0 );
 
 // ============================================================
 // RATE LIMITING
@@ -143,45 +148,50 @@ function lr_validate_jwt( $token ) {
 // ============================================================
 
 function lr_get_tier( $lifetime_points ) {
-    if ( $lifetime_points >= LR_TIER_ELITE ) return 'elite';
-    if ( $lifetime_points >= LR_TIER_SUPERVIP ) return 'supervip';
-    if ( $lifetime_points >= LR_TIER_VIP ) return 'vip';
+    if ( $lifetime_points >= LR_TIER_DIAMOND ) return 'diamond';
+    if ( $lifetime_points >= LR_TIER_PLATINUM ) return 'platinum';
+    if ( $lifetime_points >= LR_TIER_GOLD ) return 'gold';
+    if ( $lifetime_points >= LR_TIER_SILVER ) return 'silver';
     return 'fan';
 }
 
 function lr_get_tier_name( $tier ) {
     $names = array(
         'fan' => 'Fan',
-        'vip' => 'VIP',
-        'supervip' => 'Super VIP',
-        'elite' => 'Elite',
+        'silver' => 'Silver',
+        'gold' => 'Gold',
+        'platinum' => 'Platinum',
+        'diamond' => 'Diamond',
     );
     return $names[ $tier ] ?? 'Fan';
 }
 
 function lr_get_next_tier( $tier ) {
     $next = array(
-        'fan' => 'VIP',
-        'vip' => 'Super VIP',
-        'supervip' => 'Elite',
-        'elite' => '',
+        'fan' => 'Silver',
+        'silver' => 'Gold',
+        'gold' => 'Platinum',
+        'platinum' => 'Diamond',
+        'diamond' => '',
     );
     return $next[ $tier ] ?? '';
 }
 
 function lr_get_points_to_next_tier( $lifetime_points ) {
-    if ( $lifetime_points >= LR_TIER_ELITE ) return 0;
-    if ( $lifetime_points >= LR_TIER_SUPERVIP ) return LR_TIER_ELITE - $lifetime_points;
-    if ( $lifetime_points >= LR_TIER_VIP ) return LR_TIER_SUPERVIP - $lifetime_points;
-    return LR_TIER_VIP - $lifetime_points;
+    if ( $lifetime_points >= LR_TIER_DIAMOND ) return 0;
+    if ( $lifetime_points >= LR_TIER_PLATINUM ) return LR_TIER_DIAMOND - $lifetime_points;
+    if ( $lifetime_points >= LR_TIER_GOLD ) return LR_TIER_PLATINUM - $lifetime_points;
+    if ( $lifetime_points >= LR_TIER_SILVER ) return LR_TIER_GOLD - $lifetime_points;
+    return LR_TIER_SILVER - $lifetime_points;
 }
 
 function lr_get_multiplier( $tier ) {
     $multipliers = array(
         'fan' => LR_MULTIPLIER_FAN,
-        'vip' => LR_MULTIPLIER_VIP,
-        'supervip' => LR_MULTIPLIER_SUPERVIP,
-        'elite' => LR_MULTIPLIER_ELITE,
+        'silver' => LR_MULTIPLIER_SILVER,
+        'gold' => LR_MULTIPLIER_GOLD,
+        'platinum' => LR_MULTIPLIER_PLATINUM,
+        'diamond' => LR_MULTIPLIER_DIAMOND,
     );
     return $multipliers[ $tier ] ?? 1.0;
 }
@@ -507,8 +517,9 @@ function lr_api_get_balance( $request ) {
 }
 
 function lr_get_discount_percent( $tier ) {
-    $discounts = array( 'fan' => 0, 'vip' => 5, 'supervip' => 10, 'elite' => 15 );
-    return $discounts[ $tier ] ?? 0;
+    // No automatic discount - rewards are experiential (early access, upgrades, backstage)
+    // Discounts come from redeeming points only
+    return 0;
 }
 
 // ----- HISTORY -----
@@ -720,28 +731,36 @@ function lr_api_get_tiers( $request ) {
                 'benefits' => array( 'Accès au programme', '1 pt/1000 Ar', 'Code parrainage' ),
             ),
             array(
-                'id' => 'vip',
-                'name' => 'VIP',
-                'min_points' => LR_TIER_VIP,
-                'discount' => 5,
-                'multiplier' => LR_MULTIPLIER_VIP,
-                'benefits' => array( '5% réduction', 'x1.5 points', 'Préventes', 'Support WhatsApp' ),
+                'id' => 'silver',
+                'name' => 'Silver',
+                'min_points' => LR_TIER_SILVER,
+                'discount' => 0,
+                'multiplier' => LR_MULTIPLIER_SILVER,
+                'benefits' => array( 'Réductions membres', 'Préventes', 'Offres spéciales', 'Support WhatsApp' ),
             ),
             array(
-                'id' => 'supervip',
-                'name' => 'Super VIP',
-                'min_points' => LR_TIER_SUPERVIP,
-                'discount' => 10,
-                'multiplier' => LR_MULTIPLIER_SUPERVIP,
-                'benefits' => array( '10% réduction', 'x2 points', 'Accès VIP', 'Loterie places gratuites', 'Avant-premières' ),
+                'id' => 'gold',
+                'name' => 'Gold',
+                'min_points' => LR_TIER_GOLD,
+                'discount' => 0,
+                'multiplier' => LR_MULTIPLIER_GOLD,
+                'benefits' => array( 'x1.25 points', 'Événements exclusifs', 'Early access', 'Cadeaux surprises' ),
             ),
             array(
-                'id' => 'elite',
-                'name' => 'Elite',
-                'min_points' => LR_TIER_ELITE,
-                'discount' => 15,
-                'multiplier' => LR_MULTIPLIER_ELITE,
-                'benefits' => array( '15% réduction', 'x3 points', 'Backstage', '1 billet gratuit/trimestre', 'Meet & greet', 'Conciergerie' ),
+                'id' => 'platinum',
+                'name' => 'Platinum',
+                'min_points' => LR_TIER_PLATINUM,
+                'discount' => 0,
+                'multiplier' => LR_MULTIPLIER_PLATINUM,
+                'benefits' => array( 'x1.5 points', 'Surclassement billets', 'Accès VIP', 'Support dédié' ),
+            ),
+            array(
+                'id' => 'diamond',
+                'name' => 'Diamond',
+                'min_points' => LR_TIER_DIAMOND,
+                'discount' => 0,
+                'multiplier' => LR_MULTIPLIER_DIAMOND,
+                'benefits' => array( 'x2 points', 'Backstage', 'Meet & greet', 'Conciergerie', 'Surclassement auto' ),
             ),
         ),
         'earn_rules' => array(
@@ -756,11 +775,10 @@ function lr_api_get_tiers( $request ) {
             'share' => LR_SHARE_BONUS . ' pts',
         ),
         'redemption' => array(
-            array( 'points' => 50, 'value' => 5000 ),
-            array( 'points' => 100, 'value' => 12000 ),
-            array( 'points' => 200, 'value' => 30000 ),
-            array( 'points' => 500, 'value' => 80000 ),
-            array( 'points' => 1000, 'value' => 180000 ),
+            array( 'points' => 500, 'value' => 10000 ),
+            array( 'points' => 1000, 'value' => 20000 ),
+            array( 'points' => 2000, 'value' => 40000 ),
+            array( 'points' => 5000, 'value' => 100000 ),
         ),
     ) );
 }
@@ -785,9 +803,10 @@ function lr_shortcode_rewards_page() {
             .lr-tier-card { border: 2px solid #e5e7eb; border-radius: 12px; padding: 24px; text-align: center; transition: transform 0.2s, box-shadow 0.2s; }
             .lr-tier-card:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.1); }
             .lr-tier-card.fan { border-color: #8B6914; }
-            .lr-tier-card.vip { border-color: #C0C0C0; background: linear-gradient(to bottom, #fafafa, #fff); }
-            .lr-tier-card.supervip { border-color: #FFD700; background: linear-gradient(to bottom, #fffdf0, #fff); }
-            .lr-tier-card.elite { border-color: #E5E4E2; background: linear-gradient(to bottom, #f8f8f8, #fff); }
+            .lr-tier-card.silver { border-color: #C0C0C0; background: linear-gradient(to bottom, #fafafa, #fff); }
+            .lr-tier-card.gold { border-color: #FFD700; background: linear-gradient(to bottom, #fffdf0, #fff); }
+            .lr-tier-card.platinum { border-color: #E5E4E2; background: linear-gradient(to bottom, #f8f8f8, #fff); }
+            .lr-tier-card.diamond { border-color: #B9F2FF; background: linear-gradient(to bottom, #f0feff, #fff); }
             .lr-tier-icon { font-size: 3em; margin-bottom: 10px; }
             .lr-tier-name { font-size: 1.4em; font-weight: 700; margin-bottom: 8px; }
             .lr-tier-threshold { font-size: 0.9em; color: #666; margin-bottom: 16px; }
@@ -833,43 +852,50 @@ function lr_shortcode_rewards_page() {
                     <li>50 pts bonus à l'inscription</li>
                 </ul>
             </div>
-            <div class="lr-tier-card vip">
+            <div class="lr-tier-card silver">
                 <div class="lr-tier-icon">⭐</div>
-                <div class="lr-tier-name">VIP</div>
-                <div class="lr-tier-threshold">150 points (≈ 2-3 événements)</div>
+                <div class="lr-tier-name">Silver</div>
+                <div class="lr-tier-threshold">500 points (≈ 3-5 événements)</div>
                 <ul class="lr-tier-benefits">
-                    <li>5% de réduction sur les billets</li>
-                    <li>x1.5 points sur chaque achat</li>
+                    <li>Réductions membres exclusives</li>
                     <li>Accès prioritaire aux préventes</li>
-                    <li>Offres exclusives</li>
+                    <li>Offres spéciales par notification</li>
                     <li>Support WhatsApp prioritaire</li>
                 </ul>
             </div>
-            <div class="lr-tier-card supervip">
+            <div class="lr-tier-card gold">
                 <div class="lr-tier-icon">🌟</div>
-                <div class="lr-tier-name">Super VIP</div>
-                <div class="lr-tier-threshold">750 points (≈ 5-8 événements)</div>
+                <div class="lr-tier-name">Gold</div>
+                <div class="lr-tier-threshold">2 000 points (≈ 10-15 événements)</div>
                 <ul class="lr-tier-benefits">
-                    <li>10% de réduction sur les billets</li>
-                    <li>x2 points sur chaque achat</li>
-                    <li>Accès VIP aux événements</li>
-                    <li>Places gratuites (loterie)</li>
-                    <li>Cadeaux surprises</li>
-                    <li>Invitation aux avant-premières</li>
+                    <li>x1.25 points sur chaque achat</li>
+                    <li>Invitations aux événements exclusifs</li>
+                    <li>Early access aux nouvelles ventes</li>
+                    <li>Cadeaux surprises aux événements</li>
                 </ul>
             </div>
-            <div class="lr-tier-card elite">
+            <div class="lr-tier-card platinum">
                 <div class="lr-tier-icon">💎</div>
-                <div class="lr-tier-name">Elite</div>
-                <div class="lr-tier-threshold">3 000 points (≈ 20+ événements)</div>
+                <div class="lr-tier-name">Platinum</div>
+                <div class="lr-tier-threshold">5 000 points (≈ 30+ événements)</div>
                 <ul class="lr-tier-benefits">
-                    <li>15% de réduction sur tout</li>
-                    <li>x3 points sur chaque achat</li>
+                    <li>x1.5 points sur chaque achat</li>
+                    <li>Surclassement de billets</li>
+                    <li>Accès VIP aux événements</li>
+                    <li>Support dédié</li>
+                </ul>
+            </div>
+            <div class="lr-tier-card diamond">
+                <div class="lr-tier-icon">💠</div>
+                <div class="lr-tier-name">Diamond</div>
+                <div class="lr-tier-threshold">10 000 points (top 1%)</div>
+                <ul class="lr-tier-benefits">
+                    <li>x2 points sur chaque achat</li>
                     <li>Accès backstage</li>
-                    <li>1 billet gratuit par trimestre</li>
                     <li>Meet & greet artistes</li>
-                    <li>Conciergerie dédiée</li>
+                    <li>Conciergerie événementielle</li>
                     <li>Surclassement automatique</li>
+                    <li>Invitations privées</li>
                 </ul>
             </div>
         </div>
@@ -884,11 +910,19 @@ function lr_shortcode_rewards_page() {
                     <div class="action">Acheter des billets ou produits</div>
                 </div>
                 <div class="lr-earn-item">
-                    <div class="points">+50 pts</div>
+                    <div class="points">+100 pts</div>
                     <div class="action">S'inscrire au programme</div>
                 </div>
                 <div class="lr-earn-item">
                     <div class="points">+100 pts</div>
+                    <div class="action">Compléter son profil</div>
+                </div>
+                <div class="lr-earn-item">
+                    <div class="points">+200 pts</div>
+                    <div class="action">Premier achat</div>
+                </div>
+                <div class="lr-earn-item">
+                    <div class="points">+75 pts</div>
                     <div class="action">Parrainer un ami (1er achat)</div>
                 </div>
                 <div class="lr-earn-item">
@@ -896,20 +930,20 @@ function lr_shortcode_rewards_page() {
                     <div class="action">Être parrainé (bonus filleul)</div>
                 </div>
                 <div class="lr-earn-item">
-                    <div class="points">+10 pts</div>
-                    <div class="action">Assister à un événement</div>
+                    <div class="points">+20 pts</div>
+                    <div class="action">Partager sur les réseaux</div>
                 </div>
                 <div class="lr-earn-item">
-                    <div class="points">+15 pts</div>
-                    <div class="action">Laisser un avis</div>
+                    <div class="points">+100 pts</div>
+                    <div class="action">S'abonner à la newsletter</div>
                 </div>
                 <div class="lr-earn-item">
-                    <div class="points">+5 pts</div>
-                    <div class="action">Connexion quotidienne</div>
-                </div>
-                <div class="lr-earn-item">
-                    <div class="points">+50 pts</div>
+                    <div class="points">+200 pts</div>
                     <div class="action">Bonus anniversaire 🎂</div>
+                </div>
+                <div class="lr-earn-item">
+                    <div class="points">+2 pts</div>
+                    <div class="action">Connexion quotidienne</div>
                 </div>
             </div>
         </div>
@@ -923,11 +957,10 @@ function lr_shortcode_rewards_page() {
                     <tr><th>Points</th><th>Réduction</th><th>Taux</th></tr>
                 </thead>
                 <tbody>
-                    <tr><td>50 pts</td><td>5 000 Ar</td><td>100 Ar/pt</td></tr>
-                    <tr><td>100 pts</td><td>12 000 Ar</td><td>120 Ar/pt</td></tr>
-                    <tr><td>200 pts</td><td>30 000 Ar</td><td>150 Ar/pt</td></tr>
-                    <tr><td>500 pts</td><td>80 000 Ar</td><td>160 Ar/pt</td></tr>
-                    <tr><td>1 000 pts</td><td>180 000 Ar</td><td>180 Ar/pt</td></tr>
+                    <tr><td>500 pts</td><td>10 000 Ar</td><td>20 Ar/pt</td></tr>
+                    <tr><td>1 000 pts</td><td>20 000 Ar</td><td>20 Ar/pt</td></tr>
+                    <tr><td>2 000 pts</td><td>40 000 Ar</td><td>20 Ar/pt</td></tr>
+                    <tr><td>5 000 pts</td><td>100 000 Ar</td><td>20 Ar/pt</td></tr>
                 </tbody>
             </table>
         </div>
@@ -935,7 +968,7 @@ function lr_shortcode_rewards_page() {
         <!-- Referral -->
         <div class="lr-referral-section">
             <h2>🤝 Parrainez vos amis</h2>
-            <p>Partagez votre code et gagnez <strong>100 points</strong> quand votre filleul effectue son premier achat.<br>Votre filleul reçoit aussi <strong>25 points bonus</strong> à l'inscription !</p>
+            <p>Partagez votre code et gagnez <strong>75 points</strong> quand votre filleul effectue son premier achat.<br>Votre filleul reçoit aussi <strong>25 points bonus</strong> à l'inscription !</p>
             <?php if ( is_user_logged_in() ) : 
                 $code = lr_generate_referral_code( get_current_user_id() );
                 $count = (int) get_user_meta( get_current_user_id(), '_lamako_referral_count', true );
