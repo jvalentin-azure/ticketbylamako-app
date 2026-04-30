@@ -1543,6 +1543,225 @@ function lr_homepage_cta_banner() {
     <?php
 }
 
+// ============================================================
+// WELCOME EMAIL FOR NEW USERS
+// ============================================================
+
+add_action( 'user_register', 'lr_send_welcome_email', 20 );
+
+function lr_send_welcome_email( $user_id ) {
+    $user = get_userdata( $user_id );
+    if ( ! $user ) return;
+    
+    $first_name = $user->first_name ?: $user->display_name;
+    $logo_dark = 'https://www.ticketbylamako.com/wp-content/uploads/2026/04/LamakoRewards_Dark.png';
+    $rewards_url = home_url( '/lamako-rewards/' );
+    
+    $subject = 'Bienvenue chez LamakoRewards ! +100 points offerts';
+    
+    $body = '
+    <html>
+    <head>
+        <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;600;700;800&display=swap" rel="stylesheet">
+    </head>
+    <body style="margin:0; padding:0; background:#f9fafb; font-family:Raleway,-apple-system,BlinkMacSystemFont,sans-serif;">
+        <div style="max-width:600px; margin:0 auto; background:white; border-radius:12px; overflow:hidden; box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+            <!-- Header -->
+            <div style="background:linear-gradient(135deg, #3d2314 0%, #663d17 50%, #8B5E34 100%); padding:40px 32px; text-align:center;">
+                <img src="' . esc_url( $logo_dark ) . '" alt="LamakoRewards" style="height:50px; width:auto; filter:brightness(0) invert(1);">
+                <h1 style="color:white; margin:16px 0 0; font-size:1.6em; font-weight:800;">Bienvenue, ' . esc_html( $first_name ) . ' !</h1>
+            </div>
+            
+            <!-- Content -->
+            <div style="padding:32px;">
+                <div style="background:linear-gradient(135deg, #fdf6ee, #fef3c7); border:1px solid #e8d5a3; border-radius:12px; padding:24px; text-align:center; margin-bottom:24px;">
+                    <div style="font-size:2.5em; font-weight:800; color:#b45309;">+100 pts</div>
+                    <div style="font-size:1em; color:#92400e; font-weight:600; margin-top:4px;">Bonus d\'inscription offert !</div>
+                </div>
+                
+                <p style="color:#333; font-size:1em; line-height:1.6; margin-bottom:16px;">
+                    Vous faites maintenant partie du programme <strong>LamakoRewards</strong> ! Gagnez des points sur chaque achat de billets et produits, et convertissez-les en <strong>cashback</strong>.
+                </p>
+                
+                <h3 style="color:#3d2314; margin:24px 0 12px; font-weight:700;">Comment ca marche :</h3>
+                <table style="width:100%; border-collapse:collapse; font-size:0.9em;">
+                    <tr style="border-bottom:1px solid #f0f0f0;">
+                        <td style="padding:10px 0;">Achat de billets/produits</td>
+                        <td style="padding:10px 0; text-align:right; font-weight:700; color:#b45309;">1 pt / 1 000 Ar</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f0f0f0;">
+                        <td style="padding:10px 0;">Parrainage d\'un ami</td>
+                        <td style="padding:10px 0; text-align:right; font-weight:700; color:#b45309;">+75 pts</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f0f0f0;">
+                        <td style="padding:10px 0;">Presence a un evenement</td>
+                        <td style="padding:10px 0; text-align:right; font-weight:700; color:#b45309;">+10 pts</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:10px 0;">Cashback (des 750 000 Ar depenses)</td>
+                        <td style="padding:10px 0; text-align:right; font-weight:700; color:#b45309;">2% en Ar</td>
+                    </tr>
+                </table>
+                
+                <div style="text-align:center; margin-top:32px;">
+                    <a href="' . esc_url( $rewards_url ) . '" style="display:inline-block; background:linear-gradient(135deg, #3d2314, #663d17); color:white; padding:14px 32px; border-radius:8px; text-decoration:none; font-weight:700; font-size:1em;">Decouvrir mes avantages</a>
+                </div>
+            </div>
+            
+            <!-- Footer -->
+            <div style="background:#f9fafb; padding:20px 32px; text-align:center; border-top:1px solid #f0f0f0;">
+                <p style="color:#888; font-size:0.8em; margin:0;">TicketByLamako - La billetterie #1 a Madagascar</p>
+            </div>
+        </div>
+    </body>
+    </html>';
+    
+    $headers = array(
+        'Content-Type: text/html; charset=UTF-8',
+        'From: LamakoRewards <noreply@ticketbylamako.com>',
+    );
+    
+    wp_mail( $user->user_email, $subject, $body, $headers );
+}
+
+// ============================================================
+// HEADER BANNER (SITE-WIDE, ABOVE MENU)
+// ============================================================
+
+add_action( 'wp_body_open', 'lr_header_banner' );
+
+function lr_header_banner() {
+    // Don't show on the LamakoRewards page itself or in admin
+    if ( is_admin() ) return;
+    if ( is_page( 'lamako-rewards' ) ) return;
+    
+    $logo_white = 'https://www.ticketbylamako.com/wp-content/uploads/2026/04/LamakoRewards_white.png';
+    ?>
+    <div id="lr-header-strip" style="
+        background: linear-gradient(90deg, #3d2314 0%, #663d17 50%, #8B5E34 100%);
+        color: white;
+        padding: 8px 16px;
+        text-align: center;
+        font-family: 'Raleway', -apple-system, sans-serif;
+        font-size: 0.85em;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        position: relative;
+        z-index: 9998;
+    ">
+        <img src="<?php echo esc_url( $logo_white ); ?>" alt="LamakoRewards" style="height:18px; width:auto;">
+        <span style="font-weight:600;">Gagnez des points et du cashback sur chaque achat !</span>
+        <a href="/lamako-rewards" style="
+            background: rgba(255,255,255,0.2);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 4px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.9em;
+            border: 1px solid rgba(255,255,255,0.3);
+            transition: background 0.2s;
+        " onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.2)'">En savoir +</a>
+    </div>
+    <?php
+}
+
+// ============================================================
+// TICKERA EVENT PAGES - POINTS BADGE
+// ============================================================
+
+add_action( 'the_content', 'lr_tickera_event_badge', 5 );
+
+function lr_tickera_event_badge( $content ) {
+    if ( ! is_singular( 'tc_events' ) ) return $content;
+    
+    global $post;
+    
+    // Get the event's ticket price (from linked ticket products)
+    $event_id = $post->ID;
+    $price = 0;
+    
+    // Try to get price from Tickera ticket types linked to this event
+    $ticket_types = get_posts( array(
+        'post_type' => 'tc_tickets',
+        'meta_key' => 'event_name',
+        'meta_value' => $event_id,
+        'posts_per_page' => -1,
+        'fields' => 'ids',
+    ));
+    
+    if ( ! empty( $ticket_types ) ) {
+        // Get the cheapest ticket price for display
+        $min_price = PHP_INT_MAX;
+        foreach ( $ticket_types as $ticket_id ) {
+            $ticket_price = (float) get_post_meta( $ticket_id, 'price_per_ticket', true );
+            if ( $ticket_price > 0 && $ticket_price < $min_price ) {
+                $min_price = $ticket_price;
+            }
+        }
+        if ( $min_price < PHP_INT_MAX ) $price = $min_price;
+    }
+    
+    // Fallback: try WooCommerce product linked to event
+    if ( $price <= 0 ) {
+        $wc_product_id = get_post_meta( $event_id, '_wc_product_id', true );
+        if ( $wc_product_id && function_exists( 'wc_get_product' ) ) {
+            $product = wc_get_product( $wc_product_id );
+            if ( $product ) $price = (float) $product->get_price();
+        }
+    }
+    
+    $base_points = floor( $price / 1000 );
+    if ( $base_points <= 0 ) {
+        // Show generic badge without specific points
+        $badge = '<div style="background:linear-gradient(135deg, #fdf6ee 0%, #fef3c7 50%, #fde68a 100%); padding:14px 18px; border-radius:12px; margin-bottom:20px; font-family:Raleway,-apple-system,sans-serif; border:1px solid #e8d5a3; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">';
+        $badge .= '<img src="https://www.ticketbylamako.com/wp-content/uploads/2026/04/LamakoRewards_Dark.png" alt="LamakoRewards" style="height:28px; width:auto;">';
+        $badge .= '<div style="flex:1; min-width:180px;">';
+        $badge .= '<div style="font-weight:700; color:#3d2314; font-size:0.95em;">Gagnez des <span style="color:#b45309;">points LamakoRewards</span> sur cet evenement !</div>';
+        if ( ! is_user_logged_in() ) {
+            $badge .= '<div style="font-size:0.8em; color:#92400e; margin-top:4px;"><a href="' . wp_registration_url() . '" style="color:#b45309; font-weight:600; text-decoration:underline;">Inscrivez-vous gratuitement</a> pour commencer</div>';
+        }
+        $badge .= '</div>';
+        $badge .= '<a href="/lamako-rewards" style="background:linear-gradient(135deg,#3d2314,#6b3a1f); color:white; padding:8px 16px; border-radius:8px; text-decoration:none; font-weight:600; font-size:0.85em; white-space:nowrap;">En savoir +</a>';
+        $badge .= '</div>';
+        return $badge . $content;
+    }
+    
+    // Get user tier multiplier
+    $multiplier = 1;
+    $tier_info = '';
+    if ( is_user_logged_in() ) {
+        $user_id = get_current_user_id();
+        $lifetime = (int) get_user_meta( $user_id, 'lr_lifetime_points', true );
+        if ( $lifetime >= LR_TIER_DIAMOND ) { $multiplier = 2; $tier_info = ' (x2 Diamond)'; }
+        elseif ( $lifetime >= LR_TIER_PLATINUM ) { $multiplier = 1.5; $tier_info = ' (x1.5 Platinum)'; }
+        elseif ( $lifetime >= LR_TIER_GOLD ) { $multiplier = 1.25; $tier_info = ' (x1.25 Gold)'; }
+    }
+    
+    $final_points = floor( $base_points * $multiplier );
+    
+    $badge = '<div style="background:linear-gradient(135deg, #fdf6ee 0%, #fef3c7 50%, #fde68a 100%); padding:14px 18px; border-radius:12px; margin-bottom:20px; font-family:Raleway,-apple-system,sans-serif; border:1px solid #e8d5a3; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">';
+    $badge .= '<img src="https://www.ticketbylamako.com/wp-content/uploads/2026/04/LamakoRewards_Dark.png" alt="LamakoRewards" style="height:28px; width:auto;">';
+    $badge .= '<div style="flex:1; min-width:180px;">';
+    $badge .= '<div style="font-weight:700; color:#3d2314; font-size:0.95em;">Gagnez <span style="font-size:1.2em; color:#b45309;">' . $final_points . ' points</span> sur cet evenement !' . $tier_info . '</div>';
+    
+    if ( ! is_user_logged_in() ) {
+        $badge .= '<div style="font-size:0.8em; color:#92400e; margin-top:4px;"><a href="' . wp_registration_url() . '" style="color:#b45309; font-weight:600; text-decoration:underline;">Inscrivez-vous gratuitement</a> pour commencer</div>';
+    } else {
+        $balance = (int) get_user_meta( get_current_user_id(), 'lr_points_balance', true );
+        $badge .= '<div style="font-size:0.8em; color:#92400e; margin-top:4px;">Votre solde : <strong>' . $balance . ' pts</strong></div>';
+    }
+    
+    $badge .= '</div>';
+    $badge .= '<a href="/lamako-rewards" style="background:linear-gradient(135deg,#3d2314,#6b3a1f); color:white; padding:8px 16px; border-radius:8px; text-decoration:none; font-weight:600; font-size:0.85em; white-space:nowrap;">En savoir +</a>';
+    $badge .= '</div>';
+    
+    return $badge . $content;
+}
+
 // Flush rewrite rules on activation
 register_activation_hook( __FILE__, function() {
     lr_add_account_endpoint();

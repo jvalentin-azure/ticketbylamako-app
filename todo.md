@@ -607,3 +607,9 @@
 - [x] Replace emoji with real LamakoRewards White logo on shortcode CTA banner
 - [x] Keep tier emojis (🎵⭐🌟💎👑) as intentional level icons
 - [x] Deploy and verify on live site - all logos correct
+
+## V3.2.6 - Welcome Email, Header Banner, Event Badge
+- [x] Add welcome email for new user registration (HTML email with logo, tiers, 100pts bonus, CTA)
+- [x] Add LamakoRewards header strip banner (logo + text + CTA, all pages except /lamako-rewards/)
+- [x] Add points badge on Tickera event pages (the_content filter on tc_events post type)
+- [x] Deploy and verify on live site - header banner confirmed on all pages, product badge working
