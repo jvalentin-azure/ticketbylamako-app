@@ -1260,6 +1260,7 @@ function lr_shortcode_checkout_popup() {
 // AUTO-INSERT CTA ON PRODUCT/EVENT PAGES
 // ============================================================
 
+// Single product page - detailed badge
 add_action( 'woocommerce_before_add_to_cart_form', 'lr_product_page_cta' );
 
 function lr_product_page_cta() {
@@ -1267,14 +1268,63 @@ function lr_product_page_cta() {
     if ( ! $product ) return;
     
     $price = (float) $product->get_price();
+    $base_points = floor( $price / 1000 );
+    
+    if ( $base_points <= 0 ) return;
+    
+    // Get user tier multiplier if logged in
+    $multiplier = 1;
+    $tier_name = '';
+    $tier_emoji = '';
+    if ( is_user_logged_in() ) {
+        $user_id = get_current_user_id();
+        $lifetime = (int) get_user_meta( $user_id, 'lr_lifetime_points', true );
+        if ( $lifetime >= LR_TIER_DIAMOND ) { $multiplier = 2; $tier_name = 'Diamond'; $tier_emoji = '👑'; }
+        elseif ( $lifetime >= LR_TIER_PLATINUM ) { $multiplier = 1.5; $tier_name = 'Platinum'; $tier_emoji = '💎'; }
+        elseif ( $lifetime >= LR_TIER_GOLD ) { $multiplier = 1.25; $tier_name = 'Gold'; $tier_emoji = '🌟'; }
+        else { $multiplier = 1; }
+    }
+    
+    $final_points = floor( $base_points * $multiplier );
+    $logo_dark = 'https://www.ticketbylamako.com/wp-content/uploads/2026/04/LamakoRewards_Dark.png';
+    
+    echo '<div style="background:linear-gradient(135deg, #fdf6ee 0%, #fef3c7 50%, #fde68a 100%); padding:14px 18px; border-radius:12px; margin-bottom:16px; font-family:Raleway,-apple-system,sans-serif; border:1px solid #e8d5a3; position:relative; overflow:hidden;">';
+    echo '<div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">';
+    echo '<img src="' . esc_url( $logo_dark ) . '" alt="LamakoRewards" style="height:28px; width:auto;">';
+    echo '<div style="flex:1; min-width:180px;">';
+    echo '<div style="font-weight:700; color:#3d2314; font-size:0.95em;">Gagnez <span style="font-size:1.2em; color:#b45309;">' . $final_points . ' points</span> sur cet achat !</div>';
+    
+    if ( $multiplier > 1 ) {
+        echo '<div style="font-size:0.8em; color:#92400e; margin-top:2px;">' . $tier_emoji . ' Bonus ' . $tier_name . ' : x' . $multiplier . ' (' . $base_points . ' pts de base)</div>';
+    }
+    
+    if ( ! is_user_logged_in() ) {
+        echo '<div style="font-size:0.8em; color:#92400e; margin-top:4px;"><a href="' . wp_registration_url() . '" style="color:#b45309; font-weight:600; text-decoration:underline;">Inscrivez-vous gratuitement</a> pour commencer à gagner</div>';
+    } else {
+        $balance = (int) get_user_meta( get_current_user_id(), 'lr_points_balance', true );
+        echo '<div style="font-size:0.8em; color:#92400e; margin-top:4px;">Votre solde actuel : <strong>' . $balance . ' pts</strong></div>';
+    }
+    
+    echo '</div>';
+    echo '<a href="/lamako-rewards" style="background:linear-gradient(135deg,#3d2314,#6b3a1f); color:white; padding:8px 16px; border-radius:8px; text-decoration:none; font-weight:600; font-size:0.85em; white-space:nowrap;">En savoir +</a>';
+    echo '</div>';
+    echo '</div>';
+}
+
+// Shop loop / product listing - compact badge
+add_action( 'woocommerce_after_shop_loop_item_title', 'lr_shop_loop_points_badge', 15 );
+
+function lr_shop_loop_points_badge() {
+    global $product;
+    if ( ! $product ) return;
+    
+    $price = (float) $product->get_price();
     $points = floor( $price / 1000 );
     
     if ( $points > 0 ) {
-        echo '<div style="background:linear-gradient(135deg, #fef3c7, #fde68a); padding:10px 16px; border-radius:8px; margin-bottom:16px; font-size:0.9em;">';
-        echo '<strong>🎵 LamakoRewards :</strong> Gagnez <strong>' . $points . ' points</strong> sur cet achat ! ';
-        if ( ! is_user_logged_in() ) {
-            echo '<a href="' . wp_registration_url() . '" style="color:#3d2314; font-weight:600;">S\'inscrire</a>';
-        }
+        echo '<div style="font-family:Raleway,-apple-system,sans-serif; font-size:0.78em; color:#b45309; font-weight:600; margin-top:4px; display:flex; align-items:center; gap:4px;">';
+        echo '<span style="display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; background:linear-gradient(135deg,#f59e0b,#d97706); border-radius:50%; font-size:9px; color:white;">★</span>';
+        echo '+' . $points . ' pts LamakoRewards';
         echo '</div>';
     }
 }

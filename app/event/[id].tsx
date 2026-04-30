@@ -10,6 +10,7 @@ import { getTCEvent, getEventTickets, getSeatingChartUrl, getEventsWithTickets, 
 import { useFavorites } from "@/lib/favorites-provider";
 import { formatAriary, formatDate, formatDateShort, stripHtml, decodeHtmlEntities } from "@/lib/format";
 import { LinearGradient } from "expo-linear-gradient";
+import { PointsBadge } from "@/components/points-badge";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const SITE_URL = process.env.EXPO_PUBLIC_WC_SITE_URL || "https://www.ticketbylamako.com";
@@ -678,6 +679,10 @@ export default function EventDetailScreen() {
                   ? formatAriary(tickets[0].price)
                   : formatAriary(Math.min(...tickets.map(t => parseFloat(t.price) || 0)))}
               </Text>
+              <PointsBadge
+                price={tickets.length === 1 ? tickets[0].price : Math.min(...tickets.map(t => parseFloat(t.price) || 0))}
+                compact={false}
+              />
             </View>
           )}
 

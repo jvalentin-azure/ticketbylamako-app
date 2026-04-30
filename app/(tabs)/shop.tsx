@@ -8,6 +8,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { getShopProducts, getShopCategories, type WCProduct, type WCCategory } from "@/lib/api/woocommerce";
 import { formatAriary, decodeHtmlEntities } from "@/lib/format";
 import { useFavorites } from "@/lib/favorites-provider";
+import { PointsBadge } from "@/components/points-badge";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const CARD_W = (SCREEN_W - 48) / 2;
@@ -82,6 +83,7 @@ export default function ShopScreen() {
           {item.categories?.filter(c => c.slug.startsWith("boutique-")).map(c => decodeHtmlEntities(c.name)).join(", ") || ""}
         </Text>
         <Text style={[styles.productPrice, { color: colors.primary }]}>{formatAriary(item.price)}</Text>
+        <PointsBadge price={item.price} />
       </View>
     </TouchableOpacity>
   );

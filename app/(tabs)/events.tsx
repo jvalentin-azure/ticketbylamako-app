@@ -9,6 +9,7 @@ import { getEventsWithTickets, getEventCategories, type TCEvent, type EventCateg
 import { useFavorites } from "@/lib/favorites-provider";
 import { formatAriary, formatDateShort, decodeHtmlEntities } from "@/lib/format";
 import { consumePendingCategory, subscribeToPendingCategory } from "@/lib/filter-state";
+import { PointsBadge } from "@/components/points-badge";
 
 export default function EventsScreen() {
   const colors = useColors();
@@ -212,15 +213,18 @@ export default function EventsScreen() {
             ) : null}
           </View>
           <View style={styles.priceRow}>
-            {item.minPrice != null ? (
-              <Text style={[styles.price, { color: colors.primary }]}>
-                {item.minPrice === item.maxPrice
-                  ? formatAriary(item.minPrice)
-                  : `${formatAriary(item.minPrice)} – ${formatAriary(item.maxPrice!)}`}
-              </Text>
-            ) : (
-              <Text style={[styles.price, { color: colors.muted }]}>Prix non défini</Text>
-            )}
+            <View style={{ flex: 1 }}>
+              {item.minPrice != null ? (
+                <Text style={[styles.price, { color: colors.primary }]}>
+                  {item.minPrice === item.maxPrice
+                    ? formatAriary(item.minPrice)
+                    : `${formatAriary(item.minPrice)} – ${formatAriary(item.maxPrice!)}`}
+                </Text>
+              ) : (
+                <Text style={[styles.price, { color: colors.muted }]}>Prix non défini</Text>
+              )}
+              {item.minPrice != null && <PointsBadge price={item.minPrice} />}
+            </View>
             <View style={[styles.buyButton, { backgroundColor: colors.primary }]}>
               <Text style={styles.buyButtonText}>Voir</Text>
             </View>

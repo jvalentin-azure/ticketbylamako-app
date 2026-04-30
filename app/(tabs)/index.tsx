@@ -18,6 +18,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { notifyNewEvent } from "@/lib/notifications";
 import { setPendingCategory } from "@/lib/filter-state";
+import { PointsBadge } from "@/components/points-badge";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const HERO_H = 220;
@@ -320,6 +321,7 @@ export default function HomeScreen() {
                       {decodeHtmlEntities(p.name)}
                     </Text>
                     <Text style={[styles.shopCardPrice, { color: colors.primary }]}>{formatAriary(p.price)}</Text>
+                    <PointsBadge price={p.price} />
                   </View>
                 </TouchableOpacity>
               ))}

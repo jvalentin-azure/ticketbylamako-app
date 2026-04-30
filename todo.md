@@ -593,3 +593,11 @@
 - [x] Add download app CTA: App Store + Google Play buttons with "bientôt disponible" placeholder
 - [x] Add LamakoRewards CTA banner on homepage (fixed bottom, slide-up animation, auto-hide 15s)
 - [x] Verify all changes on live site - all working correctly
+
+## V3.2.4 - Dynamic Points Badge on Products
+- [x] Add dynamic points badge on WooCommerce product pages (logo, dynamic pts, user balance, gradient design)
+- [x] Add compact badge on WooCommerce shop listing pages ("★ +X pts LamakoRewards")
+- [x] Add PointsBadge component to mobile app (estimatePointsForPrice utility)
+- [x] Add badge to mobile: shop cards, event cards, product detail, event detail, home screen, search
+- [x] Deploy plugin to WordPress via WP File Manager
+- [x] Verify on live product pages - all working correctly

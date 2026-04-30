@@ -475,3 +475,13 @@ export function useRewards() {
   if (!ctx) throw new Error("useRewards must be used within RewardsProvider");
   return ctx;
 }
+
+/**
+ * Estimate points earned for a given price in Ariary.
+ * Uses the user's current tier multiplier if available.
+ * Can be used outside of RewardsProvider (returns base points only).
+ */
+export function estimatePointsForPrice(priceAr: number, multiplier: number = 1): number {
+  const base = Math.floor(priceAr / EARN_RULES.purchaseUnit);
+  return Math.floor(base * multiplier);
+}

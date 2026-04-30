@@ -8,6 +8,8 @@ import { useCart } from "@/lib/cart-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { getProduct, type WCProduct } from "@/lib/api/woocommerce";
 import { formatAriary, stripHtml, decodeHtmlEntities } from "@/lib/format";
+import { PointsBadge } from "@/components/points-badge";
+import { useRewards } from "@/lib/rewards-provider";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 
@@ -110,6 +112,9 @@ export default function ProductDetailScreen() {
               {product.stock_status === "instock" ? "En stock" : "Rupture de stock"}
             </Text>
           </View>
+
+          {/* LamakoRewards Points Badge */}
+          <PointsBadge price={product.price} compact={false} />
 
           {/* Categories */}
           {product.categories && product.categories.length > 0 && (

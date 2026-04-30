@@ -16,6 +16,7 @@ import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { getTCEvents, getShopProducts, type TCEvent, type WCProduct } from "@/lib/api/woocommerce";
 import { formatAriary, decodeHtmlEntities, formatDateShort } from "@/lib/format";
+import { PointsBadge } from "@/components/points-badge";
 
 type TabType = "all" | "events" | "products";
 
@@ -165,6 +166,7 @@ export default function SearchScreen() {
             <Text style={[styles.cardPrice, { color: colors.primary }]}>{item.price}</Text>
           )}
         </View>
+        {item.price && <PointsBadge price={item.price.replace(/[^0-9]/g, '')} />}
       </View>
     </TouchableOpacity>
   );
