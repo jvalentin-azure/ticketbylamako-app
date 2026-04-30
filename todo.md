@@ -613,3 +613,11 @@
 - [x] Add LamakoRewards header strip banner (logo + text + CTA, all pages except /lamako-rewards/)
 - [x] Add points badge on Tickera event pages (the_content filter on tc_events post type)
 - [x] Deploy and verify on live site - header banner confirmed on all pages, product badge working
+
+## V3.2.7 - Test Event & Header Points Counter
+- [x] Publish test Tickera event on WordPress - badge verified on event page
+- [x] Add real-time points counter as floating widget (replaced header banner)
+- [x] Deploy and verify on live site - all stacked badges working
+- [x] Remove header banner LamakoRewards (trop intrusif)
+- [x] Add real-time points counter as floating widget (top-right, expandable dropdown)
+- [x] Convert product page + event page badges to stacked layout (matching mobile app PointsBadge)
