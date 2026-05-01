@@ -636,3 +636,11 @@
 - [x] Subtle radial gold glow decorative background
 - [x] Border-radius 20px, premium box-shadow
 - [x] Deploy via WP File Manager and verify on live test event page
+
+## V3.3.0 - New Onboarding Flow + Welcome Screen
+- [x] Generate 4 onboarding background images (concert/event themed, African descent people)
+- [x] Generate 1 main/welcome screen background image (crowd at concert)
+- [x] Build 4-slide onboarding screen (swipeable, Skip/Suivant, dot indicators, dark style)
+- [x] Build welcome/main screen (background image, logo, S'inscrire, Se connecter, Explorer l'application)
+- [x] Wire navigation: onboarding → welcome → app (two-step flow in splash-screen.tsx)
+- [x] Replace old splash screen with new two-step onboarding + welcome flow
