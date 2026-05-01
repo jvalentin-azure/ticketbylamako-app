@@ -657,3 +657,7 @@
 - [x] Add "Retour" button on welcome screen to go back to onboarding
 - [x] Add crossfade animation transition between onboarding and welcome screen
 - [x] Research and provide Expo Go alternative for testing (EAS Development Build)
+
+## V3.3.3 - Branded Loading Screen
+- [x] Create branded loading screen component (dark bg, logo, subtle spinner)
+- [x] Replace white screen during token verification with branded loading screen

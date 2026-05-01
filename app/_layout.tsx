@@ -25,6 +25,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-runtime";
 import { CustomSplash } from "@/components/splash-screen";
+import { LoadingScreen } from "@/components/loading-screen";
 import { RewardsPopup } from "@/components/rewards-popup";
 import { setupNotificationHandler, registerForPushNotificationsAsync, setupAndroidChannel, registerPushTokenWithBackend } from "@/lib/notifications";
 import { NotificationsProvider } from "@/lib/notifications-provider";
@@ -187,13 +188,14 @@ export default function RootLayout() {
   }, [initialInsets, initialFrame]);
 
   // Don't render until fonts are loaded and auth check is done
+  // Show branded loading screen instead of blank white screen
   if (!fontsLoaded && !fontError) {
-    return null;
+    return <LoadingScreen />;
   }
 
-  // Still checking auth state - keep native splash visible
+  // Still checking auth state - show branded loading screen
   if (showSplash === null) {
-    return null;
+    return <LoadingScreen />;
   }
 
   if (showSplash && fontsLoaded) {
