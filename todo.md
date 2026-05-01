@@ -652,3 +652,8 @@
 - [x] Ensure "Explorer l'application" button navigates to main home screen
 - [x] Fix onboarding not showing on Expo Go (auth check logic improved)
 - [x] Fix welcome-screen useState hack replaced with proper useEffect
+
+## V3.3.2 - Onboarding Polish & Testing Alternative
+- [x] Add "Retour" button on welcome screen to go back to onboarding
+- [x] Add crossfade animation transition between onboarding and welcome screen
+- [x] Research and provide Expo Go alternative for testing (EAS Development Build)

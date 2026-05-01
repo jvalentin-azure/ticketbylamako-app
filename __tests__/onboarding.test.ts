@@ -8,8 +8,6 @@ import { describe, it, expect } from "vitest";
 
 describe("Onboarding Flow", () => {
   it("should have 4 onboarding slides defined", async () => {
-    // The onboarding screen exports SLIDES data internally
-    // We verify the file structure is correct by importing the module
     const fs = await import("fs");
     const path = await import("path");
     const onboardingPath = path.resolve(__dirname, "../components/onboarding-screen.tsx");
@@ -40,7 +38,7 @@ describe("Onboarding Flow", () => {
     expect(fs.existsSync(path.join(assetsDir, "welcome-bg.jpg"))).toBe(true);
   });
 
-  it("splash-screen should orchestrate onboarding then welcome", async () => {
+  it("splash-screen should orchestrate onboarding then welcome with crossfade", async () => {
     const fs = await import("fs");
     const path = await import("path");
     const splashPath = path.resolve(__dirname, "../components/splash-screen.tsx");
@@ -53,9 +51,17 @@ describe("Onboarding Flow", () => {
     // Should have two steps
     expect(content).toContain('"onboarding"');
     expect(content).toContain('"welcome"');
+
+    // Should have crossfade animation
+    expect(content).toContain("onboardingOpacity");
+    expect(content).toContain("welcomeOpacity");
+    expect(content).toContain("CROSSFADE_DURATION");
+
+    // Should pass onBack prop to WelcomeScreen
+    expect(content).toContain("onBack={handleBackToOnboarding}");
   });
 
-  it("welcome-screen should have sign up, login, and explore actions", async () => {
+  it("welcome-screen should have sign up, login, explore, and back button", async () => {
     const fs = await import("fs");
     const path = await import("path");
     const welcomePath = path.resolve(__dirname, "../components/welcome-screen.tsx");
@@ -69,6 +75,11 @@ describe("Onboarding Flow", () => {
     expect(content).toContain("Explorer l'application");
     // Should use existing logo, not generate a new one
     expect(content).toContain("logo-white.png");
+
+    // Should have onBack prop and Retour button
+    expect(content).toContain("onBack");
+    expect(content).toContain("Retour");
+    expect(content).toContain("arrow-back-ios");
   });
 
   it("onboarding slides should have French text content", async () => {
@@ -87,5 +98,41 @@ describe("Onboarding Flow", () => {
     expect(content).toContain("Passer");
     expect(content).toContain("Suivant");
     expect(content).toContain("Commencer");
+  });
+
+  it("onboarding should have parallax and fade-in animations", async () => {
+    const fs = await import("fs");
+    const path = await import("path");
+    const onboardingPath = path.resolve(__dirname, "../components/onboarding-screen.tsx");
+    const content = fs.readFileSync(onboardingPath, "utf-8");
+
+    // Parallax effect
+    expect(content).toContain("PARALLAX_FACTOR");
+    expect(content).toContain("imageAnimatedStyle");
+
+    // Text fade-in animation
+    expect(content).toContain("textAnimatedStyle");
+
+    // Animated dot indicators
+    expect(content).toContain("DotIndicator");
+    expect(content).toContain("useAnimatedScrollHandler");
+  });
+
+  it("onboarding auth check should show splash for non-logged-in users", async () => {
+    const fs = await import("fs");
+    const path = await import("path");
+    const layoutPath = path.resolve(__dirname, "../app/_layout.tsx");
+    const content = fs.readFileSync(layoutPath, "utf-8");
+
+    // Should check for valid session before deciding
+    expect(content).toContain("getStoredUser");
+    expect(content).toContain("getStoredToken");
+    expect(content).toContain("validateToken");
+
+    // Should show splash when no valid session
+    expect(content).toContain("setShowSplash(true)");
+
+    // Should have debug logging
+    expect(content).toContain("[Onboarding]");
   });
 });

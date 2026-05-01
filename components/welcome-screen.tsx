@@ -6,16 +6,19 @@ import {
   Dimensions,
   TouchableOpacity,
   Animated,
+  Platform,
 } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 
 const { width, height } = Dimensions.get("window");
 
 interface WelcomeScreenProps {
   onExplore: () => void;
+  onBack?: () => void;
 }
 
 /**
@@ -24,14 +27,19 @@ interface WelcomeScreenProps {
  * - S'inscrire (gold button)
  * - Se connecter (white outlined button)
  * - Explorer l'application (text link at bottom → navigates to home)
+ * - Retour (top-left back arrow → goes back to onboarding)
  */
-export function WelcomeScreen({ onExplore }: WelcomeScreenProps) {
+export function WelcomeScreen({ onExplore, onBack }: WelcomeScreenProps) {
   const insets = useSafeAreaInsets();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
 
   // Animate in on mount
   useEffect(() => {
+    // Reset values in case component remounts
+    fadeAnim.setValue(0);
+    slideAnim.setValue(30);
+
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -82,11 +90,27 @@ export function WelcomeScreen({ onExplore }: WelcomeScreenProps) {
         style={StyleSheet.absoluteFillObject}
       />
 
+      {/* Back button - top left */}
+      {onBack && (
+        <TouchableOpacity
+          onPress={onBack}
+          style={[
+            styles.backBtn,
+            { top: Math.max(insets.top, 20) + 8 },
+          ]}
+          activeOpacity={0.7}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <MaterialIcons name="arrow-back-ios" size={18} color="rgba(255,255,255,0.8)" />
+          <Text style={styles.backBtnText}>Retour</Text>
+        </TouchableOpacity>
+      )}
+
       <Animated.View
         style={[
           styles.content,
           {
-            paddingTop: Math.max(insets.top, 20) + 20,
+            paddingTop: Math.max(insets.top, 20) + 56,
             paddingBottom: Math.max(insets.bottom, 20) + 8,
             opacity: fadeAnim,
             transform: [{ translateY: slideAnim }],
@@ -152,6 +176,21 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#0a0500",
   },
+  backBtn: {
+    position: "absolute",
+    left: 20,
+    zIndex: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  backBtnText: {
+    color: "rgba(255,255,255,0.8)",
+    fontSize: 15,
+    fontFamily: "Raleway-Medium",
+    marginLeft: 2,
+  },
   content: {
     flex: 1,
     paddingHorizontal: 28,
@@ -159,7 +198,7 @@ const styles = StyleSheet.create({
   },
   logoSection: {
     alignItems: "center",
-    marginTop: 40,
+    marginTop: 20,
   },
   logo: {
     width: 240,
