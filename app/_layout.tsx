@@ -107,34 +107,39 @@ export default function RootLayout() {
     };
   }, []);
 
-  // Check if user is already logged in to decide whether to show onboarding
-  // Must validate token server-side, not just check if user_data exists in storage
+  // Decide whether to show onboarding intro screens.
+  // The onboarding is shown on EVERY launch unless the user is logged in with a valid token.
+  // This ensures new users always see the intro, and returning logged-in users skip it.
   useEffect(() => {
     if (!fontsLoaded && !fontError) return;
     (async () => {
       try {
+        const AsyncStorageModule = (await import("@react-native-async-storage/async-storage")).default;
         const { getStoredUser, getStoredToken, validateToken } = await import("@/lib/api/auth");
+
+        // Check if user has a valid session
         const user = await getStoredUser();
         const token = await getStoredToken();
+
         if (user && token) {
-          // User data exists AND token exists - validate token is still valid
+          // User data + token exist - validate token is still valid
           const isValid = await validateToken();
           if (isValid) {
             // Token is valid, user is truly logged in - skip onboarding
+            console.log("[Onboarding] User logged in with valid token, skipping onboarding");
             setShowSplash(false);
             SplashScreen.hideAsync();
-          } else {
-            // Token expired/invalid - show onboarding
-            setShowSplash(true);
-            setTimeout(() => SplashScreen.hideAsync(), 50);
+            return;
           }
-        } else {
-          // No user or no token - show onboarding
-          setShowSplash(true);
-          setTimeout(() => SplashScreen.hideAsync(), 50);
         }
-      } catch {
+
+        // No valid session - always show onboarding
+        console.log("[Onboarding] No valid session, showing onboarding");
+        setShowSplash(true);
+        setTimeout(() => SplashScreen.hideAsync(), 50);
+      } catch (err) {
         // On error (network etc), show onboarding to be safe
+        console.log("[Onboarding] Error during auth check, showing onboarding:", err);
         setShowSplash(true);
         setTimeout(() => SplashScreen.hideAsync(), 50);
       }

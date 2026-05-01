@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,7 +11,6 @@ import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const { width, height } = Dimensions.get("window");
 
@@ -24,28 +23,28 @@ interface WelcomeScreenProps {
  * Full-screen concert background with logo, tagline, and 3 actions:
  * - S'inscrire (gold button)
  * - Se connecter (white outlined button)
- * - Explorer l'application (text link at bottom)
+ * - Explorer l'application (text link at bottom → navigates to home)
  */
 export function WelcomeScreen({ onExplore }: WelcomeScreenProps) {
   const insets = useSafeAreaInsets();
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(20)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
 
   // Animate in on mount
-  useState(() => {
+  useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 500,
+        duration: 600,
         useNativeDriver: true,
       }),
       Animated.timing(slideAnim, {
         toValue: 0,
-        duration: 500,
+        duration: 600,
         useNativeDriver: true,
       }),
     ]).start();
-  });
+  }, []);
 
   const handleSignUp = () => {
     onExplore();
@@ -58,7 +57,7 @@ export function WelcomeScreen({ onExplore }: WelcomeScreenProps) {
   };
 
   const handleExplore = () => {
-    AsyncStorage.setItem("@lamako_explore_mode", "true");
+    // Navigate directly to the main app (home screen with events list)
     onExplore();
   };
 
@@ -134,7 +133,7 @@ export function WelcomeScreen({ onExplore }: WelcomeScreenProps) {
             <Text style={styles.loginBtnText}>Se connecter</Text>
           </TouchableOpacity>
 
-          {/* Explorer l'application - text link */}
+          {/* Explorer l'application - navigates to main home screen */}
           <TouchableOpacity
             onPress={handleExplore}
             style={styles.exploreBtn}
@@ -147,9 +146,6 @@ export function WelcomeScreen({ onExplore }: WelcomeScreenProps) {
     </View>
   );
 }
-
-// Need useState for the animation init trick
-import { useState } from "react";
 
 const styles = StyleSheet.create({
   container: {

@@ -644,3 +644,11 @@
 - [x] Build welcome/main screen (background image, logo, S'inscrire, Se connecter, Explorer l'application)
 - [x] Wire navigation: onboarding → welcome → app (two-step flow in splash-screen.tsx)
 - [x] Replace old splash screen with new two-step onboarding + welcome flow
+
+## V3.3.1 - Onboarding Animations & Polish
+- [x] Add fade-in animation on text when each slide becomes active
+- [x] Add parallax effect on background images during swipe
+- [x] Verify dot progress indicators work correctly (animated width + color transition)
+- [x] Ensure "Explorer l'application" button navigates to main home screen
+- [x] Fix onboarding not showing on Expo Go (auth check logic improved)
+- [x] Fix welcome-screen useState hack replaced with proper useEffect
