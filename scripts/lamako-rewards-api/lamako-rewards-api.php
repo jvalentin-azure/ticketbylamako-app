@@ -760,7 +760,7 @@ function lr_api_get_tiers( $request ) {
                 'min_points' => LR_TIER_FAN,
                 'discount' => 0,
                 'multiplier' => LR_MULTIPLIER_FAN,
-                'benefits' => array( 'Accès au programme', '1 pt/1000 Ar', 'Code parrainage' ),
+                'benefits' => array( 'Accès au programme de fidélité', '1 point par 1 000 Ar dépensé', 'Historique des points et transactions', 'Code de parrainage personnel' ),
             ),
             array(
                 'id' => 'silver',
@@ -768,7 +768,7 @@ function lr_api_get_tiers( $request ) {
                 'min_points' => LR_TIER_SILVER,
                 'discount' => 0,
                 'multiplier' => LR_MULTIPLIER_SILVER,
-                'benefits' => array( 'Réductions membres', 'Préventes', 'Offres spéciales', 'Support WhatsApp' ),
+                'benefits' => array( 'Réductions membres exclusives', 'Accès prioritaire aux préventes', 'Offres spéciales par notification', 'Support prioritaire WhatsApp' ),
             ),
             array(
                 'id' => 'gold',
@@ -776,7 +776,7 @@ function lr_api_get_tiers( $request ) {
                 'min_points' => LR_TIER_GOLD,
                 'discount' => 0,
                 'multiplier' => LR_MULTIPLIER_GOLD,
-                'benefits' => array( 'x1.25 points', 'Événements exclusifs', 'Early access', 'Cadeaux surprises' ),
+                'benefits' => array( 'x1.25 points sur chaque achat', 'Invitations aux événements exclusifs', 'Early access aux nouvelles ventes', 'Cadeaux surprises aux événements' ),
             ),
             array(
                 'id' => 'platinum',
@@ -784,7 +784,7 @@ function lr_api_get_tiers( $request ) {
                 'min_points' => LR_TIER_PLATINUM,
                 'discount' => 0,
                 'multiplier' => LR_MULTIPLIER_PLATINUM,
-                'benefits' => array( 'x1.5 points', 'Surclassement billets', 'Accès VIP', 'Support dédié' ),
+                'benefits' => array( 'x1.5 points sur chaque achat', 'Surclassement de billets', 'Accès VIP aux événements', 'Support dédié' ),
             ),
             array(
                 'id' => 'diamond',
@@ -792,7 +792,7 @@ function lr_api_get_tiers( $request ) {
                 'min_points' => LR_TIER_DIAMOND,
                 'discount' => 0,
                 'multiplier' => LR_MULTIPLIER_DIAMOND,
-                'benefits' => array( 'x2 points', 'Backstage', 'Meet & greet', 'Conciergerie', 'Surclassement auto' ),
+                'benefits' => array( 'x2 points sur chaque achat', 'Accès backstage', 'Meet & greet artistes', 'Conciergerie événementielle', 'Surclassement automatique', 'Invitations privées' ),
             ),
         ),
         'earn_rules' => array(
@@ -928,10 +928,10 @@ function lr_shortcode_rewards_page() {
                 <div class="lr-tier-threshold">Inscription gratuite</div>
                 <div class="lr-tier-mult">x1 points</div>
                 <ul class="lr-tier-benefits">
+                    <li>Accès au programme de fidélité</li>
                     <li>1 point par 1 000 Ar dépensé</li>
+                    <li>Historique des points et transactions</li>
                     <li>Code de parrainage personnel</li>
-                    <li>Historique des transactions</li>
-                    <li>100 pts bonus à l'inscription</li>
                 </ul>
             </div>
             <div class="lr-tier-card silver">
@@ -943,7 +943,7 @@ function lr_shortcode_rewards_page() {
                     <li>Réductions membres exclusives</li>
                     <li>Accès prioritaire aux préventes</li>
                     <li>Offres spéciales par notification</li>
-                    <li>Support WhatsApp prioritaire</li>
+                    <li>Support prioritaire WhatsApp</li>
                 </ul>
             </div>
             <div class="lr-tier-card gold">
@@ -952,6 +952,7 @@ function lr_shortcode_rewards_page() {
                 <div class="lr-tier-threshold">2 000 pts (≈ 10-15 événements)</div>
                 <div class="lr-tier-mult">x1.25 points</div>
                 <ul class="lr-tier-benefits">
+                    <li>x1.25 points sur chaque achat</li>
                     <li>Invitations aux événements exclusifs</li>
                     <li>Early access aux nouvelles ventes</li>
                     <li>Cadeaux surprises aux événements</li>
@@ -963,9 +964,10 @@ function lr_shortcode_rewards_page() {
                 <div class="lr-tier-threshold">5 000 pts (≈ 30+ événements)</div>
                 <div class="lr-tier-mult">x1.5 points</div>
                 <ul class="lr-tier-benefits">
+                    <li>x1.5 points sur chaque achat</li>
                     <li>Surclassement de billets</li>
                     <li>Accès VIP aux événements</li>
-                    <li>Support dédié par téléphone</li>
+                    <li>Support dédié</li>
                 </ul>
             </div>
             <div class="lr-tier-card diamond">
@@ -974,6 +976,7 @@ function lr_shortcode_rewards_page() {
                 <div class="lr-tier-threshold">10 000 pts (top 1%)</div>
                 <div class="lr-tier-mult">x2 points</div>
                 <ul class="lr-tier-benefits">
+                    <li>x2 points sur chaque achat</li>
                     <li>Accès backstage</li>
                     <li>Meet & greet artistes</li>
                     <li>Conciergerie événementielle</li>
@@ -1337,14 +1340,18 @@ add_action( 'wp_footer', 'lr_checkout_page_popup' );
 
 function lr_checkout_page_popup() {
     if ( is_user_logged_in() ) return;
-    // Support both classic and block checkout: check by page slug or WC functions
+    // Show on: checkout, cart, events, shop/boutique pages
     $is_target = false;
     if ( function_exists( 'is_checkout' ) && is_checkout() ) $is_target = true;
     if ( function_exists( 'is_cart' ) && is_cart() ) $is_target = true;
     if ( is_page( 'checkout' ) || is_page( 'cart' ) || is_page( 'panier' ) ) $is_target = true;
+    if ( function_exists( 'is_shop' ) && is_shop() ) $is_target = true;
+    if ( is_singular( 'tc_events' ) ) $is_target = true;
+    if ( is_singular( 'product' ) ) $is_target = true;
+    if ( is_post_type_archive( 'tc_events' ) ) $is_target = true;
     // Fallback: check page ID directly
     $page_id = get_queried_object_id();
-    if ( $page_id == wc_get_page_id( 'checkout' ) || $page_id == wc_get_page_id( 'cart' ) ) $is_target = true;
+    if ( $page_id == wc_get_page_id( 'checkout' ) || $page_id == wc_get_page_id( 'cart' ) || $page_id == wc_get_page_id( 'shop' ) ) $is_target = true;
     if ( ! $is_target ) return;
     echo do_shortcode( '[lamako_rewards_checkout_popup]' );
 }
@@ -1478,7 +1485,7 @@ function lr_account_rewards_content() {
 // HOMEPAGE LAMAKOREWARDS CTA BANNER
 // ============================================================
 
-add_action( 'wp_footer', 'lr_homepage_cta_banner' );
+// add_action( 'wp_footer', 'lr_homepage_cta_banner' ); // Disabled - trop intrusif
 
 function lr_homepage_cta_banner() {
     if ( ! is_front_page() ) return;
@@ -1635,7 +1642,7 @@ function lr_send_welcome_email( $user_id ) {
 // add_action( 'wp_body_open', 'lr_header_banner' );
 
 // --- HEADER POINTS COUNTER (for logged-in users) ---
-add_action( 'wp_footer', 'lr_header_points_counter' );
+// add_action( 'wp_footer', 'lr_header_points_counter' ); // Disabled - trop intrusif
 
 function lr_header_points_counter() {
     if ( ! is_user_logged_in() ) return;

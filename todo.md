@@ -661,3 +661,30 @@
 ## V3.3.3 - Branded Loading Screen
 - [x] Create branded loading screen component (dark bg, logo, subtle spinner)
 - [x] Replace white screen during token verification with branded loading screen
+
+## WordPress Plugin Cleanup - Popup/Banner Removal
+- [x] Remove floating points counter button (lr_header_points_counter hook disabled)
+- [x] Remove homepage CTA banner popup (lr_homepage_cta_banner hook disabled)
+- [x] Remove checkout page popup for guests (lr_checkout_page_popup hook disabled)
+- [x] Sync local plugin file with live WordPress version
+- [ ] Homepage redesign (page d'accueil)
+  - [ ] Hero Slider: Tickera events + static slides (LamakoRewards, CTA devis)
+  - [ ] Barre de recherche événements Tickera
+  - [ ] Événements à venir: grille catégorisée Tickera
+  - [ ] Bannière LamakoRewards section
+  - [ ] Événements passés carousel
+  - [ ] Ils nous ont fait confiance: carousel logos sponsors
+  - [ ] Remove: Newsletter, Blog carousel, Why Choose Eventchamp section
+- [x] Reactivate guest popup on checkout/cart pages
+- [x] Extend guest popup to events and shop pages too
+
+## V3.4 - Homepage Rebuild (Section by Section with Revolution Slider)
+- [ ] Revert homepage to original state (restore old WPBakery content)
+- [ ] Remove lr-homepage-sections plugin
+- [ ] Rebuild hero slider using Revolution Slider (Tickera events + static promo slides)
+- [ ] Rebuild event search bar
+- [ ] Rebuild upcoming events grid (Tickera)
+- [ ] Add LamakoRewards banner section
+- [ ] Add past events carousel
+- [ ] Add sponsors carousel ("Ils nous ont fait confiance")
+- [ ] Remove: Newsletter, Blog carousel, Why Choose Eventchamp

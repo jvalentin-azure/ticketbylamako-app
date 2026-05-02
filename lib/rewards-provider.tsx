@@ -88,7 +88,6 @@ export const TIERS: TierInfo[] = [
     benefits: [
       "x1.5 points sur chaque achat",
       "Surclassement de billets",
-      "25% de points bonus sur chaque achat",
       "Accès VIP aux événements",
       "Support dédié",
     ],
@@ -103,7 +102,6 @@ export const TIERS: TierInfo[] = [
     multiplier: 2,
     benefits: [
       "x2 points sur chaque achat",
-      "50% de points bonus sur chaque achat",
       "Accès backstage",
       "Meet & greet artistes",
       "Conciergerie événementielle",
