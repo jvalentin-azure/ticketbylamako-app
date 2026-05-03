@@ -6,7 +6,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useCart } from "@/lib/cart-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { getTCEvent, getEventTickets, getSeatingChartUrl, getEventsWithTickets, clearServerCart, type TCEvent, type TicketType } from "@/lib/api/woocommerce";
+import { getTCEvent, getEventTickets, getSeatingChartUrl, getEventsData, clearServerCart, type TCEvent, type TicketType } from "@/lib/api/woocommerce";
 import { useFavorites } from "@/lib/favorites-provider";
 import { formatAriary, formatDate, formatDateShort, stripHtml, decodeHtmlEntities } from "@/lib/format";
 import { LinearGradient } from "expo-linear-gradient";
@@ -48,15 +48,18 @@ export default function EventDetailScreen() {
 
   useEffect(() => {
     if (!id) return;
+    // Load event details + tickets first (fast), then upcoming events in background
     Promise.all([
       getTCEvent(Number(id)),
       getEventTickets(Number(id)),
-      getEventsWithTickets(),
-    ]).then(([ev, tix, allEvents]) => {
+    ]).then(([ev, tix]) => {
       setEvent(ev);
       setTickets(tix);
       if (tix.length === 1) setSelectedTicket(tix[0]);
-      // Filter upcoming events (exclude current)
+      setLoading(false);
+    }).catch(() => setLoading(false));
+    // Load upcoming events in background (non-blocking)
+    getEventsData().then(({ events: allEvents }) => {
       const now = Date.now();
       const upcoming = allEvents.filter(e => {
         if (e.id === Number(id)) return false;
@@ -65,8 +68,7 @@ export default function EventDetailScreen() {
         return new Date(dt.replace(' ', 'T')).getTime() > now;
       }).slice(0, 8);
       setUpcomingEvents(upcoming);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch(() => {});
   }, [id]);
 
   // Countdown timer (updates every second)

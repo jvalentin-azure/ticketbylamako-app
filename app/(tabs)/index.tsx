@@ -10,7 +10,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/lib/auth-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { getEventsWithTickets, getShopProducts, type TCEvent, type WCProduct } from "@/lib/api/woocommerce";
+import { getHomeData, type TCEvent, type WCProduct } from "@/lib/api/woocommerce";
 import { formatAriary, formatDateShort, decodeHtmlEntities } from "@/lib/format";
 import { useRewards } from "@/lib/rewards-provider";
 import { useFavorites } from "@/lib/favorites-provider";
@@ -20,7 +20,7 @@ import { notifyNewEvent } from "@/lib/notifications";
 import { setPendingCategory } from "@/lib/filter-state";
 import { PARENT_CATEGORY_COLORS } from "@/constants/category-colors";
 import { PointsBadge } from "@/components/points-badge";
-import { getCached, setCache, CACHE_DURATIONS } from "@/lib/api/cache";
+// Cache removed for stock-critical data (events/products) to ensure real-time availability
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const HERO_H = 220;
@@ -54,33 +54,10 @@ export default function HomeScreen() {
 
   const load = useCallback(async (forceRefresh = false) => {
     try {
-      // Try cache first for instant display (unless force refresh)
-      if (!forceRefresh) {
-        const [cachedEvents, cachedProducts] = await Promise.all([
-          getCached<TCEvent[]>("home_events", CACHE_DURATIONS.EVENTS),
-          getCached<WCProduct[]>("home_products", CACHE_DURATIONS.PRODUCTS),
-        ]);
-        if (cachedEvents && cachedProducts) {
-          setEvents(cachedEvents);
-          setProducts(cachedProducts);
-          setLoading(false);
-          // Still fetch fresh data in background
-          Promise.all([getEventsWithTickets(), getShopProducts({ per_page: "6" })])
-            .then(([ev, pr]) => {
-              setEvents(ev);
-              setProducts(pr);
-              setCache("home_events", ev);
-              setCache("home_products", pr);
-            })
-            .catch(() => {});
-          return;
-        }
-      }
-      const [ev, pr] = await Promise.all([getEventsWithTickets(), getShopProducts({ per_page: "6" })]);
+      // Single optimized endpoint - fresh data, no cache (stock-critical)
+      const { events: ev, products: pr } = await getHomeData();
       setEvents(ev);
       setProducts(pr);
-      // Cache the results
-      await Promise.all([setCache("home_events", ev), setCache("home_products", pr)]);
 
       // Check for new events and notify
       try {

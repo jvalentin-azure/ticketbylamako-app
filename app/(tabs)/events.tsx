@@ -5,13 +5,13 @@ import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { getEventsWithTickets, getEventCategories, type TCEvent, type EventCategory } from "@/lib/api/woocommerce";
+import { getEventsData, type TCEvent, type EventCategory } from "@/lib/api/woocommerce";
 import { useFavorites } from "@/lib/favorites-provider";
 import { formatAriary, formatDateShort, decodeHtmlEntities } from "@/lib/format";
 import { consumePendingCategory, subscribeToPendingCategory } from "@/lib/filter-state";
 import { PointsBadge } from "@/components/points-badge";
-import { CATEGORY_COLOR_MAP } from "@/constants/category-colors";
-import { getCached, setCache, CACHE_DURATIONS } from "@/lib/api/cache";
+import { CATEGORY_COLOR_MAP, PARENT_CATEGORY_COLORS } from "@/constants/category-colors";
+// Single optimized endpoint returns events + categories in one request (no cache, always fresh)
 
 export default function EventsScreen() {
   const colors = useColors();
@@ -31,49 +31,8 @@ export default function EventsScreen() {
 
   const load = useCallback(async (forceRefresh = false) => {
     try {
-      // Try cache first for instant display
-      if (!forceRefresh) {
-        const [cachedEvents, cachedCats] = await Promise.all([
-          getCached<TCEvent[]>("events_list", CACHE_DURATIONS.EVENTS),
-          getCached<EventCategory[]>("event_categories", CACHE_DURATIONS.CATEGORIES),
-        ]);
-        if (cachedEvents && cachedCats) {
-          const now = new Date();
-          const upcoming = cachedEvents.filter(e => {
-            const dateStr = e.mobileFields?.event_date_time || e.date;
-            return new Date(dateStr) >= now;
-          });
-          const past = cachedEvents.filter(e => {
-            const dateStr = e.mobileFields?.event_date_time || e.date;
-            return new Date(dateStr) < now;
-          });
-          setEvents(upcoming);
-          setFiltered(upcoming);
-          setPastEvents(past);
-          setCategories(cachedCats);
-          setLoading(false);
-          // Background refresh
-          Promise.all([getEventsWithTickets(), getEventCategories()])
-            .then(([ev, cats]) => {
-              const upcomingNew = ev.filter(e => { const d = e.mobileFields?.event_date_time || e.date; return new Date(d) >= new Date(); });
-              const pastNew = ev.filter(e => { const d = e.mobileFields?.event_date_time || e.date; return new Date(d) < new Date(); });
-              setEvents(upcomingNew);
-              setFiltered(upcomingNew);
-              setPastEvents(pastNew);
-              setCategories(cats);
-              setCache("events_list", ev);
-              setCache("event_categories", cats);
-            })
-            .catch(() => {});
-          return;
-        }
-      }
-      const [ev, cats] = await Promise.all([
-        getEventsWithTickets(),
-        getEventCategories(),
-      ]);
-      // Cache results
-      await Promise.all([setCache("events_list", ev), setCache("event_categories", cats)]);
+      // Single optimized endpoint - always fresh (stock-critical)
+      const { events: ev, categories: freshCats } = await getEventsData();
       // Separate active (upcoming) from past events
       const now = new Date();
       const upcoming: TCEvent[] = [];
@@ -90,7 +49,7 @@ export default function EventsScreen() {
       setEvents(upcoming);
       setFiltered(upcoming);
       setPastEvents(past);
-      setCategories(cats);
+      setCategories(freshCats);
     } catch (e) {
       console.warn("Events load error:", e);
     } finally {
@@ -346,7 +305,7 @@ export default function EventsScreen() {
               }]}
             >
               <Text style={[styles.chipText, { color: isSelected ? "#fff" : catColor }]}>
-                {decodeHtmlEntities(cat.name)}
+                {PARENT_CATEGORY_COLORS.find(p => p.id === cat.id)?.emoji || ""} {decodeHtmlEntities(cat.name)}
               </Text>
             </TouchableOpacity>
           );

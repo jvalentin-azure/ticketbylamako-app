@@ -14,7 +14,7 @@ import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { getTCEvents, getShopProducts, type TCEvent, type WCProduct } from "@/lib/api/woocommerce";
+import { getHomeData, type TCEvent, type WCProduct } from "@/lib/api/woocommerce";
 import { formatAriary, decodeHtmlEntities, formatDateShort } from "@/lib/format";
 import { PointsBadge } from "@/components/points-badge";
 
@@ -52,10 +52,7 @@ export default function SearchScreen() {
     let cancelled = false;
     (async () => {
       try {
-        const [evts, prods] = await Promise.all([
-          getTCEvents(),
-          getShopProducts(),
-        ]);
+        const { events: evts, products: prods } = await getHomeData();
         if (!cancelled) {
           setEvents(evts);
           setProducts(prods);

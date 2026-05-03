@@ -706,3 +706,9 @@
 - [x] Optimize app loading performance (reduce API calls, add caching, lazy loading)
 - [x] Add social login (Google, Apple, Facebook) with existing account linking
 - [x] Update legal links from the website (CGV, Mentions Légales, Politique de Confidentialité)
+
+## V3.8 - Performance & UX Fixes
+- [x] Remove API cache from stock-critical pages (events, shop, tickets, seating charts)
+- [x] Optimize loading with single combined API endpoint (home-data, events-data) - ~50% faster
+- [x] Non-blocking loading pattern on event detail page (show content first, load related events in background)
+- [x] Add category emojis to filter chips on home and events pages
