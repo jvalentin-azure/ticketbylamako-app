@@ -194,7 +194,7 @@ export default function TicketDetailScreen() {
     return (
       <ScreenContainer className="flex-1 items-center justify-center">
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={{ color: colors.muted, marginTop: 12, fontFamily: "Raleway-Medium" }}>Chargement des billets...</Text>
+        <Text style={{ color: colors.muted, marginTop: 12 }}>Chargement des billets...</Text>
       </ScreenContainer>
     );
   }
@@ -203,9 +203,9 @@ export default function TicketDetailScreen() {
     return (
       <ScreenContainer className="flex-1 items-center justify-center">
         <IconSymbol name="ticket.fill" size={48} color={colors.muted} />
-        <Text style={{ color: colors.muted, fontSize: 16, marginTop: 12, fontFamily: "Raleway-Medium" }}>Commande introuvable</Text>
+        <Text style={{ color: colors.muted, fontSize: 16, marginTop: 12 }}>Commande introuvable</Text>
         <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 16 }}>
-          <Text style={{ color: colors.primary, fontFamily: "Raleway-SemiBold" }}>Retour</Text>
+          <Text style={{ color: colors.primary }}>Retour</Text>
         </TouchableOpacity>
       </ScreenContainer>
     );
@@ -223,7 +223,7 @@ export default function TicketDetailScreen() {
         </View>
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}>
           <IconSymbol name="ticket.fill" size={48} color={colors.muted} />
-          <Text style={{ color: colors.muted, fontSize: 16, marginTop: 12, fontFamily: "Raleway-Medium", textAlign: "center" }}>
+          <Text style={{ color: colors.muted, fontSize: 16, marginTop: 12, textAlign: "center" }}>
             Aucun billet trouvé pour cette commande
           </Text>
         </View>
@@ -284,35 +284,35 @@ export default function TicketDetailScreen() {
 const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
   backBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
-  headerTitle: { fontSize: 18, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  headerTitle: { fontSize: 18, fontWeight: "700" },
   dotsRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 6, paddingVertical: 10 },
   dot: { width: 8, height: 8, borderRadius: 4 },
   ticketCard: { borderRadius: 20, borderWidth: 1, overflow: "hidden" },
   ticketHeader: { padding: 20, paddingBottom: 16, flexDirection: "row", alignItems: "flex-start" },
-  ticketHeaderTitle: { color: "#fff", fontSize: 18, fontWeight: "700", fontFamily: "Raleway-Bold", flex: 1 },
-  ticketHeaderSub: { color: "rgba(255,255,255,0.8)", fontSize: 13, marginTop: 4, fontFamily: "Raleway-Medium" },
+  ticketHeaderTitle: { color: "#fff", fontSize: 18, fontWeight: "700", flex: 1 },
+  ticketHeaderSub: { color: "rgba(255,255,255,0.8)", fontSize: 13, marginTop: 4 },
   ticketBadge: { backgroundColor: "rgba(255,255,255,0.25)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginLeft: 8 },
-  ticketBadgeText: { color: "#fff", fontSize: 12, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  ticketBadgeText: { color: "#fff", fontSize: 12, fontWeight: "700" },
   qrSection: { alignItems: "center", paddingVertical: 24, paddingHorizontal: 16 },
   qrContainer: { padding: 12, backgroundColor: "#fff", borderRadius: 16, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3 },
-  ticketCode: { fontSize: 16, fontWeight: "700", marginTop: 14, letterSpacing: 1.5, fontFamily: "Raleway-Bold" },
-  qrHint: { fontSize: 12, marginTop: 6, fontFamily: "Raleway-Regular" },
+  ticketCode: { fontSize: 16, fontWeight: "700", marginTop: 14, letterSpacing: 1.5 },
+  qrHint: { fontSize: 12, marginTop: 6 },
   invalidQr: { alignItems: "center", paddingVertical: 20 },
-  invalidText: { fontSize: 16, fontWeight: "600", marginTop: 12, fontFamily: "Raleway-SemiBold" },
-  invalidSub: { fontSize: 13, marginTop: 4, fontFamily: "Raleway-Regular" },
+  invalidText: { fontSize: 16, fontWeight: "600", marginTop: 12 },
+  invalidSub: { fontSize: 13, marginTop: 4 },
   dashedSep: { borderTopWidth: 1, borderStyle: "dashed", marginHorizontal: 16 },
   detailsSection: { padding: 16 },
   seatRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, marginBottom: 14 },
-  seatLabel: { fontSize: 15, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  seatLabel: { fontSize: 15, fontWeight: "700" },
   infoGrid: { gap: 10 },
   infoItem: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  infoLabel: { fontSize: 13, fontFamily: "Raleway-Medium" },
-  infoValue: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold", textAlign: "right", flex: 1, marginLeft: 12 },
+  infoLabel: { fontSize: 13 },
+  infoValue: { fontSize: 13, fontWeight: "600", textAlign: "right", flex: 1, marginLeft: 12 },
   statusPill: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 8 },
-  statusPillText: { fontSize: 12, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  statusPillText: { fontSize: 12, fontWeight: "600" },
   attendeeRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 14, paddingTop: 14, borderTopWidth: 1, flexWrap: "wrap" },
-  attendeeName: { fontSize: 14, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
-  attendeeEmail: { fontSize: 12, fontFamily: "Raleway-Regular" },
+  attendeeName: { fontSize: 14, fontWeight: "600" },
+  attendeeEmail: { fontSize: 12 },
   shareBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 14, borderTopWidth: 1 },
-  shareBtnText: { fontSize: 14, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  shareBtnText: { fontSize: 14, fontWeight: "600" },
 });

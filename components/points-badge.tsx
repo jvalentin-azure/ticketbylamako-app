@@ -88,7 +88,6 @@ const styles = StyleSheet.create({
   compactText: {
     fontSize: 11,
     fontWeight: "600",
-    fontFamily: "Raleway-SemiBold",
   },
 
   // Detailed badge (for detail pages)
@@ -123,18 +122,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: "#3d2314",
-    fontFamily: "Raleway-SemiBold",
   },
   detailPoints: {
     fontSize: 14,
     fontWeight: "700",
     color: "#b45309",
-    fontFamily: "Raleway-Bold",
   },
   detailBonus: {
     fontSize: 11,
     color: "#92400e",
     marginTop: 2,
-    fontFamily: "Raleway-Regular",
   },
 });

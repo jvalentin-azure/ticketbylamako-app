@@ -35,7 +35,7 @@ export default function HelpScreen() {
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.surface }]}>
           <IconSymbol name="chevron.left" size={20} color={colors.foreground} />
-          <Text style={{ color: colors.foreground, fontSize: 14, fontFamily: "Raleway-Medium", marginLeft: 4 }}>Retour</Text>
+          <Text style={{ color: colors.foreground, fontSize: 14, marginLeft: 4 }}>Retour</Text>
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>Aide & Support</Text>
         <View style={{ width: 80 }} />
@@ -114,21 +114,21 @@ export default function HelpScreen() {
 const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 0.5 },
   backButton: { flexDirection: "row", alignItems: "center", paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10 },
-  headerTitle: { fontSize: 17, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  headerTitle: { fontSize: 17, fontWeight: "700" },
   content: { padding: 20 },
   heroSection: { alignItems: "center", marginBottom: 28 },
   heroIcon: { width: 80, height: 80, borderRadius: 20, alignItems: "center", justifyContent: "center", marginBottom: 16 },
-  heroTitle: { fontSize: 20, fontWeight: "700", textAlign: "center", fontFamily: "Raleway-Bold" },
-  heroSub: { fontSize: 14, textAlign: "center", marginTop: 6, fontFamily: "Raleway-Regular" },
+  heroTitle: { fontSize: 20, fontWeight: "700", textAlign: "center" },
+  heroSub: { fontSize: 14, textAlign: "center", marginTop: 6 },
   whatsappButton: { flexDirection: "row", alignItems: "center", backgroundColor: "#25D366", borderRadius: 16, padding: 18, marginBottom: 28 },
-  whatsappTitle: { color: "#fff", fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold" },
-  whatsappSub: { color: "rgba(255,255,255,0.8)", fontSize: 12, marginTop: 2, fontFamily: "Raleway-Regular" },
-  sectionTitle: { fontSize: 18, fontWeight: "700", marginBottom: 12, fontFamily: "Raleway-Bold" },
+  whatsappTitle: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  whatsappSub: { color: "rgba(255,255,255,0.8)", fontSize: 12, marginTop: 2 },
+  sectionTitle: { fontSize: 18, fontWeight: "700", marginBottom: 12 },
   faqItem: { borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1 },
-  faqQuestion: { fontSize: 14, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
-  faqAnswer: { fontSize: 13, lineHeight: 20, marginTop: 6, fontFamily: "Raleway-Regular" },
+  faqQuestion: { fontSize: 14, fontWeight: "600" },
+  faqAnswer: { fontSize: 13, lineHeight: 20, marginTop: 6 },
   contactOption: { flexDirection: "row", alignItems: "center", borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1 },
   contactIcon: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  contactTitle: { fontSize: 15, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
-  contactSub: { fontSize: 13, marginTop: 2, fontFamily: "Raleway-Regular" },
+  contactTitle: { fontSize: 15, fontWeight: "600" },
+  contactSub: { fontSize: 13, marginTop: 2 },
 });

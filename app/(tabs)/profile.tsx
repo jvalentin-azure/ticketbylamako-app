@@ -36,7 +36,7 @@ export default function ProfileScreen() {
     <ScreenContainer edges={["left", "right"]}>
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 }}>
-          <Text style={{ color: colors.foreground, fontSize: 22, fontWeight: "700", fontFamily: "Raleway-Bold" }}>Profil</Text>
+          <Text style={{ color: colors.foreground, fontSize: 22, fontWeight: "700" }}>Profil</Text>
         </View>
 
         {/* User Card */}
@@ -44,10 +44,10 @@ export default function ProfileScreen() {
           {isAuthenticated && user ? (
             <View style={{ flexDirection: "row", alignItems: "center" }}>
               <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" }}>
-                <Text style={{ color: "#fff", fontSize: 22, fontWeight: "700", fontFamily: "Raleway-Bold" }}>{(user.firstName || user.displayName || "U")[0].toUpperCase()}</Text>
+                <Text style={{ color: "#fff", fontSize: 22, fontWeight: "700" }}>{(user.firstName || user.displayName || "U")[0].toUpperCase()}</Text>
               </View>
               <View style={{ marginLeft: 14, flex: 1 }}>
-                <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "700", fontFamily: "Raleway-Bold" }}>{user.firstName} {user.lastName}</Text>
+                <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "700" }}>{user.firstName} {user.lastName}</Text>
                 <Text style={{ color: colors.muted, fontSize: 13, marginTop: 2 }}>{user.email}</Text>
                 <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4 }}>
                   <View style={{ backgroundColor: colors.primary + "20", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
@@ -66,7 +66,7 @@ export default function ProfileScreen() {
                 onPress={() => router.push("/(auth)/login" as any)}
                 style={{ backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 28, marginTop: 14 }}
               >
-                <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700", fontFamily: "Raleway-Bold" }}>Se connecter</Text>
+                <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>Se connecter</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -82,7 +82,7 @@ export default function ProfileScreen() {
               <View style={{ flexDirection: "row", alignItems: "center" }}>
                 <Text style={{ fontSize: 24 }}>{currentTier.icon}</Text>
                 <View style={{ marginLeft: 10 }}>
-                  <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "700", fontFamily: "Raleway-Bold" }}>LamakoRewards</Text>
+                  <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "700" }}>LamakoRewards</Text>
                   <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>Niveau {currentTier.name}</Text>
                 </View>
               </View>

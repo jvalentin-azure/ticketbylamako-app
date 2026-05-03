@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Text, View, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Alert } from "react-native";
+import { Text, View, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Alert, Linking } from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
@@ -8,12 +8,13 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useAuth } from "@/lib/auth-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { socialLogin, startGoogleLogin, startAppleLogin, startFacebookLogin, type SocialProvider } from "@/lib/api/social-auth";
 
 export default function LoginScreen() {
   const colors = useColors();
   const scheme = useColorScheme();
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, loginWithUser } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -32,8 +33,47 @@ export default function LoginScreen() {
     } finally { setLoading(false); }
   };
 
-  const handleSocialLogin = (provider: string) => {
-    Alert.alert("Bientôt disponible", `La connexion avec ${provider} sera disponible prochainement.`);
+  const [socialLoading, setSocialLoading] = useState<string | null>(null);
+
+  const handleSocialLogin = async (provider: SocialProvider) => {
+    setSocialLoading(provider);
+    setError("");
+    try {
+      let result: { token: string; email?: string; name?: string; firstName?: string; lastName?: string } | null = null;
+
+      switch (provider) {
+        case "google":
+          result = await startGoogleLogin();
+          break;
+        case "apple":
+          result = await startAppleLogin();
+          break;
+        case "facebook":
+          result = await startFacebookLogin();
+          break;
+      }
+
+      if (!result) {
+        setSocialLoading(null);
+        return; // User cancelled
+      }
+
+      // Send token to backend for verification and account linking
+      const user = await socialLogin(provider, result.token, {
+        email: result.email,
+        firstName: result.firstName,
+        lastName: result.lastName,
+        name: result.name,
+      });
+
+      // Update auth state and navigate
+      loginWithUser(user);
+      router.replace("/(tabs)/" as any);
+    } catch (e: any) {
+      setError(e.message || `Erreur de connexion ${provider}`);
+    } finally {
+      setSocialLoading(null);
+    }
   };
 
   return (
@@ -43,7 +83,7 @@ export default function LoginScreen() {
           {/* Back button */}
           <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.surface }]}>
             <IconSymbol name="chevron.left" size={22} color={colors.foreground} />
-            <Text style={{ color: colors.foreground, fontSize: 15, fontFamily: "Raleway-Medium", marginLeft: 4 }}>Retour</Text>
+            <Text style={{ color: colors.foreground, fontSize: 15, marginLeft: 4 }}>Retour</Text>
           </TouchableOpacity>
 
           {/* Logo */}
@@ -65,7 +105,7 @@ export default function LoginScreen() {
           <View style={styles.socialContainer}>
             {/* Facebook */}
             <TouchableOpacity
-              onPress={() => handleSocialLogin("Facebook")}
+              onPress={() => handleSocialLogin("facebook")}
               style={[styles.socialButton, { backgroundColor: "#1877F2" }]}
               activeOpacity={0.8}
             >
@@ -75,7 +115,7 @@ export default function LoginScreen() {
 
             {/* Apple */}
             <TouchableOpacity
-              onPress={() => handleSocialLogin("Apple")}
+              onPress={() => handleSocialLogin("apple")}
               style={[styles.socialButton, { backgroundColor: scheme === "dark" ? "#fff" : "#000" }]}
               activeOpacity={0.8}
             >
@@ -85,7 +125,7 @@ export default function LoginScreen() {
 
             {/* Google */}
             <TouchableOpacity
-              onPress={() => handleSocialLogin("Google")}
+              onPress={() => handleSocialLogin("google")}
               style={[styles.socialButton, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }]}
               activeOpacity={0.8}
             >
@@ -105,7 +145,7 @@ export default function LoginScreen() {
           {error ? (
             <View style={[styles.errorBox, { backgroundColor: colors.error + "15" }]}>
               <IconSymbol name="xmark.circle.fill" size={18} color={colors.error} />
-              <Text style={{ color: colors.error, fontSize: 13, marginLeft: 8, flex: 1, fontFamily: "Raleway-Medium" }}>{error}</Text>
+              <Text style={{ color: colors.error, fontSize: 13, marginLeft: 8, flex: 1 }}>{error}</Text>
             </View>
           ) : null}
 
@@ -159,15 +199,15 @@ export default function LoginScreen() {
 
           {/* Register link */}
           <View style={styles.registerRow}>
-            <Text style={{ color: colors.muted, fontSize: 14, fontFamily: "Raleway-Regular" }}>Pas encore de compte ? </Text>
+            <Text style={{ color: colors.muted, fontSize: 14 }}>Pas encore de compte ? </Text>
             <TouchableOpacity onPress={() => router.push("/(auth)/register" as any)}>
-              <Text style={{ color: colors.primary, fontSize: 14, fontWeight: "600", fontFamily: "Raleway-SemiBold" }}>S'inscrire</Text>
+              <Text style={{ color: colors.primary, fontSize: 14, fontWeight: "600" }}>S'inscrire</Text>
             </TouchableOpacity>
           </View>
 
           {/* Privacy link */}
-          <TouchableOpacity onPress={() => router.push("/privacy" as any)} style={styles.privacyLink}>
-            <Text style={{ color: colors.muted, fontSize: 12, fontFamily: "Raleway-Regular", textDecorationLine: "underline" }}>Politique de confidentialité</Text>
+          <TouchableOpacity onPress={() => Linking.openURL("https://www.ticketbylamako.com/politique-de-confidentialite/")} style={styles.privacyLink}>
+            <Text style={{ color: colors.muted, fontSize: 12, textDecorationLine: "underline" }}>Politique de confidentialité</Text>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -197,12 +237,10 @@ const styles = StyleSheet.create({
   welcomeText: {
     fontSize: 26,
     fontWeight: "700",
-    fontFamily: "Raleway-Bold",
   },
   subtitleText: {
     fontSize: 14,
     marginTop: 4,
-    fontFamily: "Raleway-Regular",
   },
   socialContainer: {
     flexDirection: "row",
@@ -222,7 +260,6 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 13,
     fontWeight: "600",
-    fontFamily: "Raleway-SemiBold",
   },
   divider: {
     flexDirection: "row",
@@ -236,7 +273,6 @@ const styles = StyleSheet.create({
   dividerText: {
     marginHorizontal: 16,
     fontSize: 13,
-    fontFamily: "Raleway-Medium",
   },
   errorBox: {
     padding: 12,
@@ -249,7 +285,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     marginBottom: 6,
-    fontFamily: "Raleway-SemiBold",
   },
   inputRow: {
     flexDirection: "row",
@@ -263,7 +298,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 10,
     fontSize: 15,
-    fontFamily: "Raleway-Regular",
   },
   loginButton: {
     borderRadius: 14,
@@ -274,7 +308,6 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "700",
-    fontFamily: "Raleway-Bold",
   },
   registerRow: {
     flexDirection: "row",

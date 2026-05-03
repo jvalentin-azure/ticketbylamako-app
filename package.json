@@ -36,6 +36,7 @@
     "dotenv": "^16.6.1",
     "drizzle-orm": "^0.44.7",
     "expo": "~54.0.29",
+    "expo-apple-authentication": "^55.0.13",
     "expo-audio": "~1.1.0",
     "expo-build-properties": "^1.0.10",
     "expo-camera": "^55.0.16",

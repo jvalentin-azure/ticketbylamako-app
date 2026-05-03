@@ -103,7 +103,7 @@ export default function AdminDashboardScreen() {
         {/* Header */}
         <View style={{ marginBottom: 20 }}>
           <Text style={{ color: colors.muted, fontSize: 14 }}>Administration</Text>
-          <Text style={{ color: colors.foreground, fontSize: 24, fontWeight: "800", fontFamily: "Raleway-Bold" }}>Dashboard</Text>
+          <Text style={{ color: colors.foreground, fontSize: 24, fontWeight: "800" }}>Dashboard</Text>
         </View>
 
         {/* Today's highlight */}
@@ -141,7 +141,7 @@ export default function AdminDashboardScreen() {
 
         {/* Revenue Chart (simple bar chart) */}
         <View style={{ backgroundColor: colors.surface, borderRadius: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: colors.border }}>
-          <Text style={{ color: colors.foreground, fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold", marginBottom: 16 }}>Revenus (7 jours)</Text>
+          <Text style={{ color: colors.foreground, fontSize: 16, fontWeight: "700", marginBottom: 16 }}>Revenus (7 jours)</Text>
           <View style={{ flexDirection: "row", alignItems: "flex-end", height: 100, gap: 6 }}>
             {stats?.revenueByDay.map((day, idx) => {
               const height = maxRevenue > 0 ? (day.amount / maxRevenue) * 80 + 4 : 4;
@@ -160,7 +160,7 @@ export default function AdminDashboardScreen() {
 
         {/* Top Products */}
         <View style={{ marginBottom: 20 }}>
-          <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "700", fontFamily: "Raleway-Bold", marginBottom: 12 }}>Top Produits</Text>
+          <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "700", marginBottom: 12 }}>Top Produits</Text>
           {stats?.topProducts.map((product, idx) => (
             <View key={idx} style={{ flexDirection: "row", alignItems: "center", backgroundColor: colors.surface, borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: colors.border }}>
               <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: colors.primary + "15", alignItems: "center", justifyContent: "center", marginRight: 12 }}>
@@ -170,7 +170,7 @@ export default function AdminDashboardScreen() {
                 <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "600" }} numberOfLines={1}>{product.name}</Text>
                 <Text style={{ color: colors.muted, fontSize: 11 }}>{product.sold} vendus</Text>
               </View>
-              <Text style={{ color: colors.primary, fontSize: 14, fontWeight: "700", fontFamily: "Raleway-Bold" }}>{formatAriary(product.revenue)}</Text>
+              <Text style={{ color: colors.primary, fontSize: 14, fontWeight: "700" }}>{formatAriary(product.revenue)}</Text>
             </View>
           ))}
         </View>

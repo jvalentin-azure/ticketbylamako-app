@@ -148,7 +148,7 @@ export default function ParticipantsScreen() {
             </View>
 
             <View style={{ flex: 1 }}>
-              <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "600", fontFamily: "Raleway-SemiBold" }}>{item.name}</Text>
+              <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "600" }}>{item.name}</Text>
               <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>{item.ticketType}{item.seatLabel ? ` - ${item.seatLabel}` : ""}</Text>
               <Text style={{ color: colors.muted, fontSize: 11, marginTop: 1 }}>{item.email}</Text>
             </View>

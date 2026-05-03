@@ -102,7 +102,7 @@ export default function EventDetailScreen() {
   if (!event) {
     return (
       <ScreenContainer className="flex-1 items-center justify-center">
-        <Text style={{ color: colors.muted, fontFamily: "Raleway-Medium" }}>Événement introuvable</Text>
+        <Text style={{ color: colors.muted }}>Événement introuvable</Text>
       </ScreenContainer>
     );
   }
@@ -237,7 +237,7 @@ export default function EventDetailScreen() {
             <View style={{ width: 80 }} />
           </View>
           <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 20 }}>
-            <Text style={{ color: colors.muted, fontFamily: "Raleway-Medium", textAlign: "center" }}>
+            <Text style={{ color: colors.muted, textAlign: "center" }}>
               Le plan de salle interactif n'est pas disponible sur le web.{"\n"}Ouvrez l'app sur votre téléphone pour sélectionner votre siège.
             </Text>
             <TouchableOpacity
@@ -314,7 +314,7 @@ export default function EventDetailScreen() {
           renderLoading={() => (
             <View style={{ flex: 1, alignItems: "center", justifyContent: "center", position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "#fff" }}>
               <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={{ marginTop: 12, color: colors.muted, fontFamily: "Raleway-Medium", textAlign: "center" }}>
+              <Text style={{ marginTop: 12, color: colors.muted, textAlign: "center" }}>
                 {webviewPhase === 'checkout' ? "Chargement du paiement..." : "Chargement du plan de salle..."}
               </Text>
             </View>
@@ -396,14 +396,14 @@ export default function EventDetailScreen() {
             {/* Selected seats display */}
             {selectedSeats.length > 0 && (
               <View style={{ width: '100%', marginBottom: 10 }}>
-                <Text style={{ fontSize: 13, fontWeight: '700', color: '#374151', marginBottom: 6, fontFamily: 'Raleway-Bold' }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#374151', marginBottom: 6 }}>
                   {selectedSeats.length} {selectedSeats.length === 1 ? 'siège sélectionné' : 'sièges sélectionnés'} :
                 </Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxHeight: 36 }}>
                   <View style={{ flexDirection: 'row', gap: 6 }}>
                     {selectedSeats.map((seat, idx) => (
                       <View key={idx} style={{ backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                        <Text style={{ fontSize: 12, fontWeight: '600', color: '#374151', fontFamily: 'Raleway-SemiBold' }}>{seat}</Text>
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: '#374151' }}>{seat}</Text>
                         <TouchableOpacity
                           onPress={() => {
                             // Remove this seat from the WebView cart
@@ -693,7 +693,7 @@ export default function EventDetailScreen() {
                 {hasSeating ? "Types de billets disponibles" : "Types de billets"}
               </Text>
               {hasSeating && (
-                <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 10, fontFamily: "Raleway-Regular" }}>
+                <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 10 }}>
                   La sélection se fait directement sur le plan de salle ci-dessous
                 </Text>
               )}
@@ -714,7 +714,7 @@ export default function EventDetailScreen() {
                         <Text style={[styles.ticketName, { color: colors.foreground }]}>{decodeHtmlEntities(ticket.name)}</Text>
                         <View style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}>
                           <IconSymbol name="mappin" size={10} color="#c79f6c" />
-                          <Text style={{ color: "#c79f6c", fontSize: 11, marginLeft: 4, fontFamily: "Raleway-Medium" }}>Sélection sur le plan</Text>
+                          <Text style={{ color: "#c79f6c", fontSize: 11, marginLeft: 4 }}>Sélection sur le plan</Text>
                         </View>
                       </View>
                       <Text style={[styles.ticketPrice, { color: colors.primary }]}>{formatAriary(ticket.price)}</Text>
@@ -864,7 +864,7 @@ export default function EventDetailScreen() {
                       {item.mobileFields?.event_location && (
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
                           <IconSymbol name="mappin" size={11} color={colors.muted} />
-                          <Text style={{ color: colors.muted, fontSize: 11, fontFamily: 'Raleway-Regular' }} numberOfLines={1}>
+                          <Text style={{ color: colors.muted, fontSize: 11 }} numberOfLines={1}>
                             {item.mobileFields.event_location}
                           </Text>
                         </View>
@@ -920,68 +920,68 @@ export default function EventDetailScreen() {
 const styles = StyleSheet.create({
   backButton: { position: "absolute", top: 12, left: 16, width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center" },
   seatingOverlayBadge: { position: "absolute", bottom: 12, right: 16, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(0,0,0,0.6)", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
-  seatingOverlayText: { color: "#fff", fontSize: 12, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
-  title: { fontSize: 24, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  seatingOverlayText: { color: "#fff", fontSize: 12, fontWeight: "600" },
+  title: { fontSize: 24, fontWeight: "700" },
   catsRow: { flexDirection: "row", alignItems: "center", marginTop: 8, gap: 6 },
-  catsText: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  catsText: { fontSize: 13, fontWeight: "600" },
   infoRow: { flexDirection: "row", flexWrap: "wrap", gap: 16, marginTop: 14 },
   infoItem: { flexDirection: "row", alignItems: "center" },
   infoIcon: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  infoLabel: { fontSize: 11, fontFamily: "Raleway-Regular" },
-  infoValue: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  infoLabel: { fontSize: 11 },
+  infoValue: { fontSize: 13, fontWeight: "600" },
   practicalInfoBox: { marginTop: 20, padding: 16, borderRadius: 14, borderWidth: 1 },
   practicalInfoRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 10 },
-  practicalInfoLabel: { fontSize: 13, fontFamily: "Raleway-Medium", flex: 1 },
-  practicalInfoValue: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold", flex: 1, textAlign: "right" },
+  practicalInfoLabel: { fontSize: 13, flex: 1 },
+  practicalInfoValue: { fontSize: 13, fontWeight: "600", flex: 1, textAlign: "right" },
   priceBox: { marginTop: 20, padding: 16, borderRadius: 14, borderWidth: 1 },
-  priceLabel: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
-  priceValue: { fontSize: 28, fontWeight: "800", marginTop: 2, fontFamily: "Raleway-Bold" },
-  sectionTitle: { fontSize: 16, fontWeight: "700", marginBottom: 10, fontFamily: "Raleway-Bold" },
+  priceLabel: { fontSize: 13, fontWeight: "600" },
+  priceValue: { fontSize: 28, fontWeight: "800", marginTop: 2 },
+  sectionTitle: { fontSize: 16, fontWeight: "700", marginBottom: 10 },
   ticketOption: { flexDirection: "row", alignItems: "center", padding: 14, borderRadius: 12, borderWidth: 1, marginBottom: 8 },
   radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, alignItems: "center", justifyContent: "center" },
   radioInner: { width: 10, height: 10, borderRadius: 5 },
-  ticketName: { fontSize: 14, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
-  ticketPrice: { fontSize: 15, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  ticketName: { fontSize: 14, fontWeight: "600" },
+  ticketPrice: { fontSize: 15, fontWeight: "700" },
   seatingChartBtn: { marginTop: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 14, borderRadius: 12 },
-  seatingChartBtnText: { color: "#fff", fontSize: 14, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  seatingChartBtnText: { color: "#fff", fontSize: 14, fontWeight: "700" },
   qtyRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 20, padding: 14, borderRadius: 12, borderWidth: 1 },
-  qtyLabel: { fontSize: 15, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  qtyLabel: { fontSize: 15, fontWeight: "600" },
   qtyControls: { flexDirection: "row", alignItems: "center", gap: 16 },
   qtyBtn: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   qtyBtnText: { fontSize: 20, fontWeight: "700" },
-  qtyValue: { fontSize: 18, fontWeight: "700", minWidth: 24, textAlign: "center", fontFamily: "Raleway-Bold" },
-  descText: { fontSize: 14, lineHeight: 22, fontFamily: "Raleway-Regular" },
+  qtyValue: { fontSize: 18, fontWeight: "700", minWidth: 24, textAlign: "center" },
+  descText: { fontSize: 14, lineHeight: 22 },
   bottomCta: { padding: 16, paddingBottom: 32, borderTopWidth: 1 },
   ctaButton: { borderRadius: 14, paddingVertical: 16, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 8 },
-  ctaButtonText: { color: "#fff", fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  ctaButtonText: { color: "#fff", fontSize: 16, fontWeight: "700" },
   galleryDots: { position: "absolute", bottom: 16, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 6 },
   dot: { width: 8, height: 8, borderRadius: 4 },
   seatingHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
   seatingBackBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
-  seatingBackText: { fontSize: 15, fontFamily: "Raleway-Medium" },
-  seatingTitle: { fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  seatingBackText: { fontSize: 15 },
+  seatingTitle: { fontSize: 16, fontWeight: "700" },
   webFallbackBtn: { marginTop: 20, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10 },
-  webFallbackBtnText: { color: "#fff", fontSize: 14, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  webFallbackBtnText: { color: "#fff", fontSize: 14, fontWeight: "600" },
   topRightActions: { position: "absolute", top: 12, right: 16, flexDirection: "row", gap: 8 },
   topActionBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center" },
   confirmOverlay: { position: "absolute", bottom: 0, left: 0, right: 0, paddingHorizontal: 16, paddingBottom: 24, paddingTop: 10, backgroundColor: "rgba(255,255,255,0.97)", borderTopWidth: 1, borderTopColor: "#E5E7EB", alignItems: "center" },
   confirmBtn: { width: "100%", paddingVertical: 16, borderRadius: 14, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 4 },
-  confirmBtnText: { color: "#fff", fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold" },
-  confirmHint: { marginTop: 6, fontSize: 12, fontFamily: "Raleway-Regular", textAlign: "center" },
+  confirmBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  confirmHint: { marginTop: 6, fontSize: 12, textAlign: "center" },
   // Countdown (compact at top)
   countdownCompact: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: "#663d17" },
-  countdownCompactText: { fontSize: 14, fontWeight: "700", fontFamily: "Raleway-Bold", color: "#fff", letterSpacing: 0.5 },
-  countdownCompactLabel: { fontSize: 12, fontFamily: "Raleway-Regular", color: "rgba(255,255,255,0.75)" },
+  countdownCompactText: { fontSize: 14, fontWeight: "700", color: "#fff", letterSpacing: 0.5 },
+  countdownCompactLabel: { fontSize: 12, color: "rgba(255,255,255,0.75)" },
   // Conditions
   conditionsBox: { marginTop: 20, padding: 16, borderRadius: 14, borderWidth: 1 },
-  conditionsTitle: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold", marginBottom: 6 },
-  showMoreText: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold", marginTop: 8 },
+  conditionsTitle: { fontSize: 13, fontWeight: "600", marginBottom: 6 },
+  showMoreText: { fontSize: 13, fontWeight: "600", marginTop: 8 },
   // Location
   locationBox: { marginTop: 20, padding: 16, borderRadius: 14, borderWidth: 1 },
   locationHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
-  getDirections: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  getDirections: { fontSize: 13, fontWeight: "600" },
   locationRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
-  locationText: { fontSize: 14, fontFamily: "Raleway-Medium", flex: 1 },
+  locationText: { fontSize: 14, flex: 1 },
   mapPreview: { borderRadius: 10, overflow: "hidden" },
   mapImage: { width: "100%", height: 140, borderRadius: 10 },
   // Upcoming events
@@ -989,6 +989,6 @@ const styles = StyleSheet.create({
   upcomingCard: { width: 200, borderRadius: 14, overflow: "hidden", borderWidth: 1 },
   upcomingCardImage: { width: 200, height: 110 },
   upcomingCardBody: { padding: 10 },
-  upcomingCardTitle: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
-  upcomingCardPrice: { fontSize: 13, fontWeight: "700", fontFamily: "Raleway-Bold", marginTop: 6 },
+  upcomingCardTitle: { fontSize: 13, fontWeight: "600" },
+  upcomingCardPrice: { fontSize: 13, fontWeight: "700", marginTop: 6 },
 });

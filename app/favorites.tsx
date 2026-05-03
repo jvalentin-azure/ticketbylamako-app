@@ -76,7 +76,7 @@ export default function FavoritesScreen() {
           >
             <Text style={[styles.tabText, {
               color: tab === t.key ? colors.primary : colors.muted,
-              fontFamily: tab === t.key ? "Raleway-Bold" : "Raleway-Regular",
+              fontWeight: tab === t.key ? "700" : "400",
             }]}>
               {t.label} ({t.count})
             </Text>
@@ -107,7 +107,7 @@ export default function FavoritesScreen() {
 const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
   backBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
-  headerTitle: { fontSize: 18, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  headerTitle: { fontSize: 18, fontWeight: "700" },
   tabRow: { flexDirection: "row", borderBottomWidth: 1, paddingHorizontal: 16 },
   tab: { flex: 1, paddingVertical: 12, alignItems: "center" },
   tabText: { fontSize: 13 },
@@ -117,11 +117,11 @@ const styles = StyleSheet.create({
   cardBody: { flex: 1, padding: 12 },
   cardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   typeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  typeBadgeText: { fontSize: 10, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  typeBadgeText: { fontSize: 10, fontWeight: "600" },
   removeBtn: { padding: 4 },
-  cardTitle: { fontSize: 14, fontWeight: "600", fontFamily: "Raleway-SemiBold", marginTop: 6 },
-  cardDate: { fontSize: 11, marginTop: 4, fontFamily: "Raleway-Regular" },
+  cardTitle: { fontSize: 14, fontWeight: "600", marginTop: 6 },
+  cardDate: { fontSize: 11, marginTop: 4 },
   emptyContainer: { alignItems: "center", paddingTop: 80, paddingHorizontal: 40 },
-  emptyText: { fontSize: 16, marginTop: 16, fontFamily: "Raleway-SemiBold" },
-  emptySubText: { fontSize: 13, marginTop: 8, textAlign: "center", fontFamily: "Raleway-Regular", lineHeight: 20 },
+  emptyText: { fontSize: 16, marginTop: 16 },
+  emptySubText: { fontSize: 13, marginTop: 8, textAlign: "center", lineHeight: 20 },
 });

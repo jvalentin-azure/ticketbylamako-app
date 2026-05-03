@@ -31,7 +31,7 @@ export default function RewardsScreen() {
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.surface }]}>
           <IconSymbol name="chevron.left" size={20} color={colors.foreground} />
-          <Text style={{ color: colors.foreground, fontSize: 14, fontFamily: "Raleway-Medium", marginLeft: 4 }}>Retour</Text>
+          <Text style={{ color: colors.foreground, fontSize: 14, marginLeft: 4 }}>Retour</Text>
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>LamakoRewards</Text>
         <TouchableOpacity onPress={syncRewards} style={[styles.backButton, { backgroundColor: colors.surface, opacity: isSyncing ? 0.5 : 1 }]} disabled={isSyncing}>
@@ -70,13 +70,13 @@ export default function RewardsScreen() {
           ) : (
             <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4 }}>
               <Text style={{ fontSize: 16, marginRight: 6 }}>🔒</Text>
-              <Text style={[styles.pointsSub, { color: "rgba(255,255,255,0.9)", fontFamily: "Raleway-SemiBold" }]}>
+              <Text style={[styles.pointsSub, { color: "rgba(255,255,255,0.9)" }]}>
                 Encore {pointsUntilRedemption.toLocaleString("fr-FR")} pts pour débloquer l'échange
               </Text>
             </View>
           )}
           {state.lastSynced && (
-            <Text style={{ color: "rgba(255,255,255,0.5)", fontSize: 10, fontFamily: "Raleway-Regular", marginTop: 4 }}>
+            <Text style={{ color: "rgba(255,255,255,0.5)", fontSize: 10, marginTop: 4 }}>
               Dernière sync: {new Date(state.lastSynced).toLocaleString("fr-FR")}
             </Text>
           )}
@@ -231,7 +231,7 @@ export default function RewardsScreen() {
 const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 0.5 },
   backButton: { flexDirection: "row", alignItems: "center", paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10 },
-  headerTitle: { fontSize: 17, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  headerTitle: { fontSize: 17, fontWeight: "700" },
   content: { padding: 16, paddingBottom: 40 },
   logoContainer: { alignItems: "center", marginBottom: 16 },
   rewardsLogo: { width: 200, height: 72 },
@@ -239,57 +239,57 @@ const styles = StyleSheet.create({
   // Points card
   pointsCard: { borderRadius: 20, padding: 24, marginBottom: 16 },
   pointsHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
-  pointsLabel: { color: "rgba(255,255,255,0.8)", fontSize: 14, fontFamily: "Raleway-Medium" },
+  pointsLabel: { color: "rgba(255,255,255,0.8)", fontSize: 14 },
   tierBadge: { backgroundColor: "rgba(255,255,255,0.2)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  tierBadgeText: { color: "#fff", fontSize: 12, fontFamily: "Raleway-SemiBold" },
-  pointsValue: { color: "#fff", fontSize: 42, fontWeight: "800", fontFamily: "Raleway-ExtraBold" },
-  pointsSub: { color: "rgba(255,255,255,0.7)", fontSize: 13, fontFamily: "Raleway-Regular", marginTop: 4 },
+  tierBadgeText: { color: "#fff", fontSize: 12 },
+  pointsValue: { color: "#fff", fontSize: 42, fontWeight: "800" },
+  pointsSub: { color: "rgba(255,255,255,0.7)", fontSize: 13, marginTop: 4 },
   progressSection: { marginTop: 16 },
   progressBar: { height: 6, backgroundColor: "rgba(255,255,255,0.2)", borderRadius: 3, overflow: "hidden" },
   progressFill: { height: "100%", backgroundColor: "#c79f6c", borderRadius: 3 },
-  progressText: { color: "rgba(255,255,255,0.7)", fontSize: 11, marginTop: 6, fontFamily: "Raleway-Regular" },
+  progressText: { color: "rgba(255,255,255,0.7)", fontSize: 11, marginTop: 6 },
   statsRow: { flexDirection: "row", marginTop: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.15)" },
   statItem: { flex: 1, alignItems: "center" },
-  statValue: { color: "#fff", fontSize: 18, fontWeight: "700", fontFamily: "Raleway-Bold" },
-  statLabel: { color: "rgba(255,255,255,0.6)", fontSize: 11, marginTop: 2, fontFamily: "Raleway-Regular" },
+  statValue: { color: "#fff", fontSize: 18, fontWeight: "700" },
+  statLabel: { color: "rgba(255,255,255,0.6)", fontSize: 11, marginTop: 2 },
   statDivider: { width: 1, backgroundColor: "rgba(255,255,255,0.15)", marginVertical: 4 },
 
   // How it works
   section: { borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1 },
-  sectionTitle: { fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold", marginBottom: 4 },
+  sectionTitle: { fontSize: 16, fontWeight: "700", marginBottom: 4 },
   howItWorksGrid: { flexDirection: "row", justifyContent: "space-around", marginTop: 12 },
   howItem: { alignItems: "center", flex: 1 },
   howIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center", marginBottom: 8 },
-  howTitle: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
-  howDesc: { fontSize: 11, marginTop: 2, fontFamily: "Raleway-Regular" },
+  howTitle: { fontSize: 13, fontWeight: "600" },
+  howDesc: { fontSize: 11, marginTop: 2 },
 
   // Tiers
   tiersSection: { marginBottom: 16 },
   tierCard: { borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1 },
   tierCardHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
   tierIcon: { fontSize: 28 },
-  tierName: { fontSize: 15, fontWeight: "700", fontFamily: "Raleway-Bold" },
-  tierMin: { fontSize: 12, fontFamily: "Raleway-Regular", marginTop: 1 },
+  tierName: { fontSize: 15, fontWeight: "700" },
+  tierMin: { fontSize: 12, marginTop: 1 },
   currentBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  currentBadgeText: { color: "#fff", fontSize: 11, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  currentBadgeText: { color: "#fff", fontSize: 11, fontWeight: "600" },
   benefitsList: { marginTop: 10, gap: 6 },
   benefitRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  benefitText: { fontSize: 12, fontFamily: "Raleway-Regular" },
+  benefitText: { fontSize: 12 },
 
   // Referral
   referralCard: { borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1 },
-  referralDesc: { fontSize: 13, fontFamily: "Raleway-Regular", marginTop: 4, marginBottom: 12 },
+  referralDesc: { fontSize: 13, marginTop: 4, marginBottom: 12 },
   codeBox: { alignItems: "center", paddingVertical: 14, borderRadius: 12, borderWidth: 1 },
-  codeText: { fontSize: 22, fontWeight: "800", letterSpacing: 2, fontFamily: "Raleway-ExtraBold" },
+  codeText: { fontSize: 22, fontWeight: "800", letterSpacing: 2 },
 
   // History
   historySection: { marginBottom: 20 },
   emptyHistory: { alignItems: "center", padding: 24, borderRadius: 14, borderWidth: 1 },
-  emptyText: { fontSize: 14, fontFamily: "Raleway-Medium", marginTop: 10 },
-  emptySubText: { fontSize: 12, fontFamily: "Raleway-Regular", marginTop: 4, textAlign: "center" },
+  emptyText: { fontSize: 14, marginTop: 10 },
+  emptySubText: { fontSize: 12, marginTop: 4, textAlign: "center" },
   txRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 0.5, gap: 10 },
   txIcon: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  txDesc: { fontSize: 13, fontFamily: "Raleway-Medium" },
-  txDate: { fontSize: 11, fontFamily: "Raleway-Regular", marginTop: 2 },
-  txAmount: { fontSize: 14, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  txDesc: { fontSize: 13 },
+  txDate: { fontSize: 11, marginTop: 2 },
+  txAmount: { fontSize: 14, fontWeight: "700" },
 });

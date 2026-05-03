@@ -98,7 +98,6 @@ const styles = StyleSheet.create({
   loadingText: {
     color: "rgba(255,255,255,0.5)",
     fontSize: 13,
-    fontFamily: "Raleway-Regular",
     letterSpacing: 1,
   },
 });

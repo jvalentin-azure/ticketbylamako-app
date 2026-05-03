@@ -19,7 +19,7 @@ import {
   initialWindowMetrics,
 } from "react-native-safe-area-context";
 import type { EdgeInsets, Metrics, Rect } from "react-native-safe-area-context";
-import { useFonts } from "expo-font";
+// System font used - no custom font loading
 import * as SplashScreen from "expo-splash-screen";
 
 import { trpc, createTRPCClient } from "@/lib/trpc";
@@ -52,14 +52,9 @@ export default function RootLayout() {
   const [insets, setInsets] = useState<EdgeInsets>(initialInsets);
   const [frame, setFrame] = useState<Rect>(initialFrame);
 
-  // Load Raleway fonts
-  const [fontsLoaded, fontError] = useFonts({
-    "Raleway-Regular": require("@/assets/fonts/Raleway-Regular.ttf"),
-    "Raleway-Medium": require("@/assets/fonts/Raleway-Medium.ttf"),
-    "Raleway-SemiBold": require("@/assets/fonts/Raleway-SemiBold.ttf"),
-    "Raleway-Bold": require("@/assets/fonts/Raleway-Bold.ttf"),
-    "Raleway-ExtraBold": require("@/assets/fonts/Raleway-ExtraBold.ttf"),
-  });
+  // System font is used - no custom font loading needed
+  const fontsLoaded = true;
+  const fontError = null;
 
   const [showSplash, setShowSplash] = useState<boolean | null>(null); // null = checking auth state
 

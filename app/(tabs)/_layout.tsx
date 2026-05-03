@@ -77,7 +77,6 @@ export default function TabLayout() {
             tabBarLabelStyle: {
               fontSize: 10,
               fontWeight: "600",
-              fontFamily: "Raleway-SemiBold",
               marginTop: 2,
             },
           }}
@@ -205,7 +204,6 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 10,
     fontWeight: "700",
-    fontFamily: "Raleway-Bold",
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,

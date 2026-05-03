@@ -18,7 +18,9 @@ import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { notifyNewEvent } from "@/lib/notifications";
 import { setPendingCategory } from "@/lib/filter-state";
+import { PARENT_CATEGORY_COLORS } from "@/constants/category-colors";
 import { PointsBadge } from "@/components/points-badge";
+import { getCached, setCache, CACHE_DURATIONS } from "@/lib/api/cache";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const HERO_H = 220;
@@ -50,11 +52,35 @@ export default function HomeScreen() {
   const [heroIndex, setHeroIndex] = useState(0);
   const heroRef = useRef<FlatList>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (forceRefresh = false) => {
     try {
+      // Try cache first for instant display (unless force refresh)
+      if (!forceRefresh) {
+        const [cachedEvents, cachedProducts] = await Promise.all([
+          getCached<TCEvent[]>("home_events", CACHE_DURATIONS.EVENTS),
+          getCached<WCProduct[]>("home_products", CACHE_DURATIONS.PRODUCTS),
+        ]);
+        if (cachedEvents && cachedProducts) {
+          setEvents(cachedEvents);
+          setProducts(cachedProducts);
+          setLoading(false);
+          // Still fetch fresh data in background
+          Promise.all([getEventsWithTickets(), getShopProducts({ per_page: "6" })])
+            .then(([ev, pr]) => {
+              setEvents(ev);
+              setProducts(pr);
+              setCache("home_events", ev);
+              setCache("home_products", pr);
+            })
+            .catch(() => {});
+          return;
+        }
+      }
       const [ev, pr] = await Promise.all([getEventsWithTickets(), getShopProducts({ per_page: "6" })]);
       setEvents(ev);
       setProducts(pr);
+      // Cache the results
+      await Promise.all([setCache("home_events", ev), setCache("home_products", pr)]);
 
       // Check for new events and notify
       try {
@@ -110,7 +136,7 @@ export default function HomeScreen() {
     <ScreenContainer edges={["left", "right"]}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.primary} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} tintColor={colors.primary} />}
       >
         {/* GREETING */}
         {isAuthenticated && user && (
@@ -237,20 +263,25 @@ export default function HomeScreen() {
 
         {/* CATEGORY FILTER - AFTER EVENTS */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsContainer}>
-          {["Tous", "Spectacles", "Conférences", "Sport", "Foires"].map(cat => (
+          <TouchableOpacity
+            onPress={() => {
+              setPendingCategory(null);
+              router.push("/(tabs)/events" as any);
+            }}
+            style={[styles.chip, { backgroundColor: colors.primary, borderColor: colors.primary }]}
+          >
+            <Text style={[styles.chipText, { color: "#fff" }]}>Tous</Text>
+          </TouchableOpacity>
+          {PARENT_CATEGORY_COLORS.map(cat => (
             <TouchableOpacity
-              key={cat}
+              key={cat.id}
               onPress={() => {
-                // Set global filter state BEFORE navigating
-                setPendingCategory(cat === "Tous" ? null : cat);
+                setPendingCategory(cat.label);
                 router.push("/(tabs)/events" as any);
               }}
-              style={[styles.chip, {
-                backgroundColor: cat === "Tous" ? colors.primary : colors.surface,
-                borderColor: cat === "Tous" ? colors.primary : colors.border,
-              }]}
+              style={[styles.chip, { backgroundColor: cat.color + "18", borderColor: cat.color }]}
             >
-              <Text style={[styles.chipText, { color: cat === "Tous" ? "#fff" : colors.foreground }]}>{cat}</Text>
+              <Text style={[styles.chipText, { color: cat.color }]}>{cat.emoji} {cat.label}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -404,57 +435,57 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  loadingText: { marginTop: 12, fontSize: 14, fontFamily: "Raleway-Medium" },
+  loadingText: { marginTop: 12, fontSize: 14 },
   greetingContainer: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 4 },
-  greetingText: { fontSize: 15, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  greetingText: { fontSize: 15, fontWeight: "600" },
   heroCard: { flex: 1, borderRadius: 16, overflow: "hidden" },
   heroImage: { width: "100%", height: "100%" },
   heroOverlay: { position: "absolute", bottom: 0, left: 0, right: 0, padding: 16, backgroundColor: "rgba(0,0,0,0.5)" },
-  heroTitle: { color: "#fff", fontSize: 18, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  heroTitle: { color: "#fff", fontSize: 18, fontWeight: "700" },
   heroMeta: { flexDirection: "row", alignItems: "center", marginTop: 4 },
-  heroDate: { color: "#c79f6c", fontSize: 13, marginLeft: 4, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
-  heroPrice: { color: "#fff", fontSize: 13, marginLeft: "auto", fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  heroDate: { color: "#c79f6c", fontSize: 13, marginLeft: 4, fontWeight: "600" },
+  heroPrice: { color: "#fff", fontSize: 13, marginLeft: "auto", fontWeight: "600" },
   dotsRow: { flexDirection: "row", justifyContent: "center", marginTop: 8 },
   dot: { height: 6, borderRadius: 3, marginHorizontal: 3 },
   chipsContainer: { paddingHorizontal: 16, paddingVertical: 16, gap: 8 },
   chip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
-  chipText: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  chipText: { fontSize: 13, fontWeight: "600" },
   sectionHeader: { paddingHorizontal: 16, marginTop: 20, flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
   sectionHeaderInline: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
-  sectionTitle: { fontSize: 18, fontWeight: "700", fontFamily: "Raleway-Bold" },
-  seeAll: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  sectionTitle: { fontSize: 18, fontWeight: "700" },
+  seeAll: { fontSize: 13, fontWeight: "600" },
   // Full event cards (same as Events tab)
   eventCardFull: { marginHorizontal: 16, borderRadius: 16, overflow: "hidden", borderWidth: 1 },
   eventCardFullImage: { width: "100%", height: 160 },
   eventCardFullBody: { padding: 14 },
-  eventCardFullTitle: { fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  eventCardFullTitle: { fontSize: 16, fontWeight: "700" },
   eventCardFullMeta: { flexDirection: "row", alignItems: "center", marginTop: 6, gap: 12 },
-  eventCardFullMetaText: { fontSize: 12, marginLeft: 4, fontFamily: "Raleway-Regular" },
+  eventCardFullMetaText: { fontSize: 12, marginLeft: 4 },
   eventCardFullPriceRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8 },
-  eventCardFullPrice: { fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  eventCardFullPrice: { fontSize: 16, fontWeight: "700" },
   eventCardFullBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8 },
-  eventCardFullBtnText: { color: "#fff", fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  eventCardFullBtnText: { color: "#fff", fontSize: 13, fontWeight: "600" },
   // Past events (horizontal scroller - same size as events tab: 220x120)
   pastEventCard: { width: 220, borderRadius: 14, overflow: "hidden", borderWidth: 1 },
   pastEventImage: { width: 220, height: 120 },
   pastEventBody: { padding: 10 },
-  pastEventTitle: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
-  pastEventDate: { fontSize: 11, marginTop: 4, fontFamily: "Raleway-Regular" },
+  pastEventTitle: { fontSize: 13, fontWeight: "600" },
+  pastEventDate: { fontSize: 11, marginTop: 4 },
   // Shop
   shopGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   shopCard: { width: (SCREEN_W - 44) / 2, borderRadius: 14, overflow: "hidden", borderWidth: 1 },
-  shopCardName: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
-  shopCardPrice: { fontSize: 14, fontWeight: "700", marginTop: 4, fontFamily: "Raleway-Bold" },
+  shopCardName: { fontSize: 13, fontWeight: "600" },
+  shopCardPrice: { fontSize: 14, fontWeight: "700", marginTop: 4 },
   // Login CTA
   loginCta: { marginHorizontal: 16, marginTop: 24, padding: 20, borderRadius: 16, borderWidth: 1 },
-  loginCtaTitle: { fontSize: 16, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
-  loginCtaSub: { fontSize: 13, marginTop: 4, fontFamily: "Raleway-Regular" },
+  loginCtaTitle: { fontSize: 16, fontWeight: "600" },
+  loginCtaSub: { fontSize: 13, marginTop: 4 },
   loginCtaButton: { borderRadius: 12, paddingVertical: 12, marginTop: 14, alignItems: "center" },
-  loginCtaButtonText: { color: "#fff", fontSize: 15, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  loginCtaButtonText: { color: "#fff", fontSize: 15, fontWeight: "700" },
   // Rewards
   rewardsBanner: { flexDirection: "row", alignItems: "center", padding: 16, borderRadius: 14 },
-  rewardsBannerTitle: { color: "#fff", fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold" },
-  rewardsBannerSub: { color: "rgba(255,255,255,0.8)", fontSize: 13, marginTop: 2, fontFamily: "Raleway-Medium" },
+  rewardsBannerTitle: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  rewardsBannerSub: { color: "rgba(255,255,255,0.8)", fontSize: 13, marginTop: 2 },
   rewardsBannerIcon: { marginRight: 8 },
   favBtn: { position: "absolute", top: 8, right: 8, width: 32, height: 32, borderRadius: 16, backgroundColor: "rgba(0,0,0,0.4)", alignItems: "center", justifyContent: "center" },
 });

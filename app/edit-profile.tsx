@@ -106,16 +106,16 @@ export default function EditProfileScreen() {
           <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 12 }}>
             <IconSymbol name="chevron.left.forwardslash.chevron.right" size={22} color={colors.foreground} />
           </TouchableOpacity>
-          <Text style={{ color: colors.foreground, fontSize: 20, fontWeight: "700", fontFamily: "Raleway-Bold" }}>Modifier le profil</Text>
+          <Text style={{ color: colors.foreground, fontSize: 20, fontWeight: "700" }}>Modifier le profil</Text>
         </View>
 
         {/* Personal Info Section */}
         <View style={{ marginHorizontal: 16, marginTop: 12 }}>
-          <Text style={{ color: colors.foreground, fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold", marginBottom: 12 }}>Informations personnelles</Text>
+          <Text style={{ color: colors.foreground, fontSize: 16, fontWeight: "700", marginBottom: 12 }}>Informations personnelles</Text>
 
           <View style={{ backgroundColor: colors.surface, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: colors.border, gap: 14 }}>
             <View>
-              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4, fontFamily: "Raleway-Medium" }}>Prénom</Text>
+              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}>Prénom</Text>
               <TextInput
                 value={firstName}
                 onChangeText={setFirstName}
@@ -124,7 +124,7 @@ export default function EditProfileScreen() {
               />
             </View>
             <View>
-              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4, fontFamily: "Raleway-Medium" }}>Nom</Text>
+              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}>Nom</Text>
               <TextInput
                 value={lastName}
                 onChangeText={setLastName}
@@ -133,7 +133,7 @@ export default function EditProfileScreen() {
               />
             </View>
             <View>
-              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4, fontFamily: "Raleway-Medium" }}>Email</Text>
+              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}>Email</Text>
               <TextInput
                 value={email}
                 onChangeText={setEmail}
@@ -144,7 +144,7 @@ export default function EditProfileScreen() {
               />
             </View>
             <View>
-              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4, fontFamily: "Raleway-Medium" }}>Téléphone</Text>
+              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}>Téléphone</Text>
               <TextInput
                 value={phone}
                 onChangeText={setPhone}
@@ -160,18 +160,18 @@ export default function EditProfileScreen() {
               disabled={saving}
               style={{ backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 14, alignItems: "center", marginTop: 4, opacity: saving ? 0.6 : 1 }}
             >
-              {saving ? <ActivityIndicator color="#fff" /> : <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700", fontFamily: "Raleway-Bold" }}>Enregistrer</Text>}
+              {saving ? <ActivityIndicator color="#fff" /> : <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>Enregistrer</Text>}
             </TouchableOpacity>
           </View>
         </View>
 
         {/* Address Section */}
         <View style={{ marginHorizontal: 16, marginTop: 24 }}>
-          <Text style={{ color: colors.foreground, fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold", marginBottom: 12 }}>Adresse de livraison</Text>
+          <Text style={{ color: colors.foreground, fontSize: 16, fontWeight: "700", marginBottom: 12 }}>Adresse de livraison</Text>
 
           <View style={{ backgroundColor: colors.surface, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: colors.border, gap: 14 }}>
             <View>
-              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4, fontFamily: "Raleway-Medium" }}>Adresse</Text>
+              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}>Adresse</Text>
               <TextInput
                 value={address}
                 onChangeText={setAddress}
@@ -181,7 +181,7 @@ export default function EditProfileScreen() {
               />
             </View>
             <View>
-              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4, fontFamily: "Raleway-Medium" }}>Ville</Text>
+              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}>Ville</Text>
               <TextInput
                 value={city}
                 onChangeText={setCity}
@@ -195,11 +195,11 @@ export default function EditProfileScreen() {
 
         {/* Password Section */}
         <View style={{ marginHorizontal: 16, marginTop: 24 }}>
-          <Text style={{ color: colors.foreground, fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold", marginBottom: 12 }}>Modifier le mot de passe</Text>
+          <Text style={{ color: colors.foreground, fontSize: 16, fontWeight: "700", marginBottom: 12 }}>Modifier le mot de passe</Text>
 
           <View style={{ backgroundColor: colors.surface, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: colors.border, gap: 14 }}>
             <View>
-              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4, fontFamily: "Raleway-Medium" }}>Mot de passe actuel</Text>
+              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}>Mot de passe actuel</Text>
               <TextInput
                 value={currentPassword}
                 onChangeText={setCurrentPassword}
@@ -209,7 +209,7 @@ export default function EditProfileScreen() {
               />
             </View>
             <View>
-              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4, fontFamily: "Raleway-Medium" }}>Nouveau mot de passe</Text>
+              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}>Nouveau mot de passe</Text>
               <TextInput
                 value={newPassword}
                 onChangeText={setNewPassword}
@@ -219,7 +219,7 @@ export default function EditProfileScreen() {
               />
             </View>
             <View>
-              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4, fontFamily: "Raleway-Medium" }}>Confirmer le mot de passe</Text>
+              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}>Confirmer le mot de passe</Text>
               <TextInput
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
@@ -234,7 +234,7 @@ export default function EditProfileScreen() {
               disabled={savingPassword || !currentPassword || !newPassword}
               style={{ backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 14, alignItems: "center", marginTop: 4, opacity: (savingPassword || !currentPassword || !newPassword) ? 0.6 : 1 }}
             >
-              {savingPassword ? <ActivityIndicator color="#fff" /> : <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700", fontFamily: "Raleway-Bold" }}>Changer le mot de passe</Text>}
+              {savingPassword ? <ActivityIndicator color="#fff" /> : <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>Changer le mot de passe</Text>}
             </TouchableOpacity>
           </View>
         </View>

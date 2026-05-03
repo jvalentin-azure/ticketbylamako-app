@@ -123,9 +123,9 @@ export default function OrdersScreen() {
       <ScreenContainer>
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}>
           <IconSymbol name="person.fill" size={48} color={colors.muted} />
-          <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "600", marginTop: 16, fontFamily: "Raleway-SemiBold" }}>Connectez-vous pour voir vos commandes</Text>
+          <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "600", marginTop: 16 }}>Connectez-vous pour voir vos commandes</Text>
           <TouchableOpacity onPress={() => router.push("/(auth)/login" as any)} style={{ backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 28, marginTop: 16 }}>
-            <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700", fontFamily: "Raleway-Bold" }}>Se connecter</Text>
+            <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>Se connecter</Text>
           </TouchableOpacity>
         </View>
       </ScreenContainer>
@@ -166,13 +166,13 @@ export default function OrdersScreen() {
       {loading ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={{ color: colors.muted, marginTop: 12, fontFamily: "Raleway-Medium" }}>Chargement des commandes...</Text>
+          <Text style={{ color: colors.muted, marginTop: 12 }}>Chargement des commandes...</Text>
         </View>
       ) : orders.length === 0 ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}>
           <IconSymbol name="clipboard.fill" size={48} color={colors.muted} />
-          <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "600", marginTop: 16, fontFamily: "Raleway-SemiBold" }}>Aucune commande</Text>
-          <Text style={{ color: colors.muted, fontSize: 14, marginTop: 8, textAlign: "center", fontFamily: "Raleway-Regular" }}>Vos commandes apparaîtront ici après votre premier achat.</Text>
+          <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "600", marginTop: 16 }}>Aucune commande</Text>
+          <Text style={{ color: colors.muted, fontSize: 14, marginTop: 8, textAlign: "center" }}>Vos commandes apparaîtront ici après votre premier achat.</Text>
         </View>
       ) : (
         <FlatList
@@ -195,32 +195,32 @@ export default function OrdersScreen() {
 const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12 },
   backBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
-  headerTitle: { fontSize: 22, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  headerTitle: { fontSize: 22, fontWeight: "700" },
   summaryBar: { flexDirection: "row", paddingVertical: 14, paddingHorizontal: 20, borderBottomWidth: 1 },
   summaryItem: { flex: 1, alignItems: "center" },
-  summaryNumber: { fontSize: 20, fontWeight: "800", fontFamily: "Raleway-Bold" },
-  summaryLabel: { fontSize: 11, marginTop: 2, fontFamily: "Raleway-Medium" },
+  summaryNumber: { fontSize: 20, fontWeight: "800" },
+  summaryLabel: { fontSize: 11, marginTop: 2 },
   summaryDivider: { width: 1, marginVertical: 4 },
   orderCard: { borderRadius: 16, borderWidth: 1, marginBottom: 16, overflow: "hidden" },
   orderHeader: { flexDirection: "row", alignItems: "center", padding: 16, paddingBottom: 12 },
-  orderNumber: { fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold" },
-  orderDate: { fontSize: 12, marginTop: 2, fontFamily: "Raleway-Regular" },
+  orderNumber: { fontSize: 16, fontWeight: "700" },
+  orderDate: { fontSize: 12, marginTop: 2 },
   statusBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
-  statusText: { fontSize: 11, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  statusText: { fontSize: 11, fontWeight: "600" },
   lineItemsSection: { borderTopWidth: 1, paddingHorizontal: 16, paddingVertical: 10 },
   lineItem: { flexDirection: "row", alignItems: "center", paddingVertical: 6 },
   lineItemQty: { width: 32, height: 24, borderRadius: 6, alignItems: "center", justifyContent: "center", marginRight: 10 },
-  lineItemQtyText: { fontSize: 12, fontWeight: "700", fontFamily: "Raleway-Bold" },
-  lineItemName: { flex: 1, fontSize: 13, fontFamily: "Raleway-Medium" },
-  lineItemPrice: { fontSize: 13, fontWeight: "600", marginLeft: 8, fontFamily: "Raleway-SemiBold" },
+  lineItemQtyText: { fontSize: 12, fontWeight: "700" },
+  lineItemName: { flex: 1, fontSize: 13 },
+  lineItemPrice: { fontSize: 13, fontWeight: "600", marginLeft: 8 },
   ticketsRow: { flexDirection: "row", alignItems: "center", gap: 6, marginHorizontal: 16, marginBottom: 10, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1, flexWrap: "wrap" },
-  ticketsText: { fontSize: 12, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
-  seatsText: { fontSize: 11, fontFamily: "Raleway-Regular" },
+  ticketsText: { fontSize: 12, fontWeight: "600" },
+  seatsText: { fontSize: 11 },
   orderFooter: { flexDirection: "row", alignItems: "center", borderTopWidth: 1, paddingHorizontal: 16, paddingVertical: 12 },
-  paymentLabel: { fontSize: 11, fontFamily: "Raleway-Regular" },
-  paymentValue: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
-  totalLabel: { fontSize: 11, fontFamily: "Raleway-Regular" },
-  totalValue: { fontSize: 18, fontWeight: "800", fontFamily: "Raleway-Bold" },
+  paymentLabel: { fontSize: 11 },
+  paymentValue: { fontSize: 13, fontWeight: "600" },
+  totalLabel: { fontSize: 11 },
+  totalValue: { fontSize: 18, fontWeight: "800" },
   viewDetails: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingVertical: 10, borderTopWidth: 0 },
-  viewDetailsText: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  viewDetailsText: { fontSize: 13, fontWeight: "600" },
 });

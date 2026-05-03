@@ -89,7 +89,7 @@ export default function ScannerScreen() {
             <Text style={{ color: colors.foreground, fontSize: 15, fontWeight: "600", marginBottom: 8 }}>Statistiques de session</Text>
             <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
               <Text style={{ color: colors.muted, fontSize: 13 }}>Billets scannés</Text>
-              <Text style={{ color: colors.primary, fontSize: 15, fontWeight: "700", fontFamily: "Raleway-Bold" }}>{scanCount}</Text>
+              <Text style={{ color: colors.primary, fontSize: 15, fontWeight: "700" }}>{scanCount}</Text>
             </View>
           </View>
         </View>
@@ -107,7 +107,7 @@ export default function ScannerScreen() {
             Pour scanner les QR codes des billets, autorisez l'accès à la caméra.
           </Text>
           <TouchableOpacity onPress={requestPermission} style={{ backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 28, marginTop: 20 }}>
-            <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700", fontFamily: "Raleway-Bold" }}>Autoriser la caméra</Text>
+            <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>Autoriser la caméra</Text>
           </TouchableOpacity>
         </View>
       </ScreenContainer>
@@ -169,7 +169,7 @@ export default function ScannerScreen() {
               {status === "success" && result && (
                 <>
                   <IconSymbol name="checkmark.circle.fill" size={28} color="#22C55E" />
-                  <Text style={{ color: "#22C55E", fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold", marginTop: 6 }}>Check-in réussi !</Text>
+                  <Text style={{ color: "#22C55E", fontSize: 16, fontWeight: "700", marginTop: 6 }}>Check-in réussi !</Text>
                   {result.ticket?.buyer_name && <Text style={{ color: "#fff", fontSize: 14, marginTop: 4 }}>{result.ticket.buyer_name}</Text>}
                   {result.ticket?.ticket_type && <Text style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, marginTop: 2 }}>{result.ticket.ticket_type}</Text>}
                 </>
@@ -177,20 +177,20 @@ export default function ScannerScreen() {
               {status === "already" && (
                 <>
                   <IconSymbol name="exclamationmark.triangle.fill" size={28} color="#F59E0B" />
-                  <Text style={{ color: "#F59E0B", fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold", marginTop: 6 }}>Déjà scanné</Text>
+                  <Text style={{ color: "#F59E0B", fontSize: 16, fontWeight: "700", marginTop: 6 }}>Déjà scanné</Text>
                   {result?.ticket?.buyer_name && <Text style={{ color: "#fff", fontSize: 14, marginTop: 4 }}>{result.ticket.buyer_name}</Text>}
                 </>
               )}
               {status === "error" && (
                 <>
                   <IconSymbol name="xmark.circle.fill" size={28} color="#EF4444" />
-                  <Text style={{ color: "#EF4444", fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold", marginTop: 6 }}>{result?.message || "Billet invalide"}</Text>
+                  <Text style={{ color: "#EF4444", fontSize: 16, fontWeight: "700", marginTop: 6 }}>{result?.message || "Billet invalide"}</Text>
                 </>
               )}
               {(status === "idle" || status === "scanning") && (
                 <>
                   <IconSymbol name="qrcode.viewfinder" size={28} color="#fff" />
-                  <Text style={{ color: "#fff", fontSize: 14, fontWeight: "600", fontFamily: "Raleway-SemiBold", marginTop: 6 }}>{statusMessages[status]}</Text>
+                  <Text style={{ color: "#fff", fontSize: 14, fontWeight: "600", marginTop: 6 }}>{statusMessages[status]}</Text>
                 </>
               )}
             </View>
@@ -200,7 +200,7 @@ export default function ScannerScreen() {
                 onPress={() => setStatus("scanning")}
                 style={{ backgroundColor: colors.primary, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 40, marginTop: 16 }}
               >
-                <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700", fontFamily: "Raleway-Bold" }}>Commencer le scan</Text>
+                <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>Commencer le scan</Text>
               </TouchableOpacity>
             )}
           </View>

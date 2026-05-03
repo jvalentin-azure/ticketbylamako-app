@@ -61,29 +61,33 @@ export const Colors = {
 
 export type ThemeColorPalette = (typeof Colors)[ColorScheme];
 
-export const RalewayFonts = {
-  regular: "Raleway-Regular",
-  medium: "Raleway-Medium",
-  semiBold: "Raleway-SemiBold",
-  bold: "Raleway-Bold",
-  extraBold: "Raleway-ExtraBold",
+// System fonts - no custom font loading needed
+export const SystemFonts = {
+  regular: undefined, // Uses platform default (SF Pro on iOS, Roboto on Android)
+  medium: undefined,
+  semiBold: undefined,
+  bold: undefined,
+  extraBold: undefined,
 };
+
+// Keep backward compat alias
+export const RalewayFonts = SystemFonts;
 
 export const Fonts = Platform.select({
   ios: {
-    sans: "Raleway-Regular",
+    sans: "System",
     serif: "ui-serif",
     rounded: "ui-rounded",
     mono: "ui-monospace",
   },
   default: {
-    sans: "Raleway-Regular",
+    sans: "System",
     serif: "serif",
     rounded: "normal",
     mono: "monospace",
   },
   web: {
-    sans: "'Raleway', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+    sans: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
     serif: "Georgia, 'Times New Roman', serif",
     rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
     mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",

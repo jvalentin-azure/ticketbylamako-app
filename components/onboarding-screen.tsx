@@ -358,19 +358,16 @@ const styles = StyleSheet.create({
   slideTitle: {
     fontSize: 28,
     color: "#fff",
-    fontFamily: "Raleway-Bold",
     textAlign: "center",
     lineHeight: 36,
     marginBottom: 12,
   },
   slideTitleAccent: {
     color: "#c79f6c",
-    fontFamily: "Raleway-ExtraBold",
   },
   slideDescription: {
     fontSize: 15,
     color: "rgba(255,255,255,0.75)",
-    fontFamily: "Raleway-Regular",
     textAlign: "center",
     lineHeight: 22,
     maxWidth: 300,
@@ -411,7 +408,6 @@ const styles = StyleSheet.create({
   skipBtnText: {
     color: "rgba(255,255,255,0.8)",
     fontSize: 16,
-    fontFamily: "Raleway-SemiBold",
   },
   nextBtn: {
     flex: 1,
@@ -424,7 +420,6 @@ const styles = StyleSheet.create({
   nextBtnText: {
     color: "#fff",
     fontSize: 16,
-    fontFamily: "Raleway-Bold",
     fontWeight: "700",
   },
 });

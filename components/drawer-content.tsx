@@ -265,7 +265,6 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 20,
     fontWeight: "700",
-    fontFamily: "Raleway-Bold",
   },
   userInfo: {
     marginLeft: 12,
@@ -275,13 +274,11 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "700",
-    fontFamily: "Raleway-Bold",
   },
   userEmail: {
     color: "rgba(255,255,255,0.7)",
     fontSize: 12,
     marginTop: 2,
-    fontFamily: "Raleway-Regular",
   },
   roleBadge: {
     backgroundColor: "rgba(199,159,108,0.3)",
@@ -295,7 +292,6 @@ const styles = StyleSheet.create({
     color: "#c79f6c",
     fontSize: 11,
     fontWeight: "600",
-    fontFamily: "Raleway-SemiBold",
   },
   loginButton: {
     flexDirection: "row",
@@ -311,7 +307,6 @@ const styles = StyleSheet.create({
     color: "#663d17",
     fontSize: 14,
     fontWeight: "700",
-    fontFamily: "Raleway-Bold",
   },
   menuScroll: {
     flex: 1,
@@ -328,7 +323,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     paddingHorizontal: 4,
     paddingVertical: 8,
-    fontFamily: "Raleway-SemiBold",
   },
   menuItem: {
     flexDirection: "row",
@@ -349,7 +343,6 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginLeft: 12,
     flex: 1,
-    fontFamily: "Raleway-Medium",
   },
   logoutButton: {
     flexDirection: "row",
@@ -365,12 +358,10 @@ const styles = StyleSheet.create({
   logoutText: {
     fontSize: 14,
     fontWeight: "600",
-    fontFamily: "Raleway-SemiBold",
   },
   version: {
     fontSize: 11,
     textAlign: "center",
     marginTop: 20,
-    fontFamily: "Raleway-Regular",
   },
 });

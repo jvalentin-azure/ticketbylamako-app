@@ -176,6 +176,5 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 15,
     fontWeight: "700",
-    fontFamily: "Raleway-Bold",
   },
 });

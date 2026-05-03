@@ -11,6 +11,7 @@ interface AuthState {
 interface AuthContextType extends AuthState {
   login: (username: string, password: string) => Promise<void>;
   register: (email: string, password: string, firstName: string, lastName: string) => Promise<void>;
+  loginWithUser: (user: User) => void;
   logout: () => Promise<void>;
   switchPortal: (portal: PortalType) => void;
 }
@@ -56,12 +57,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState({ user: null, isLoading: false, isAuthenticated: false, portal: "client" });
   }, []);
 
+  const loginWithUser = useCallback((user: User) => {
+    setState({ user, isLoading: false, isAuthenticated: true, portal: user.portal });
+  }, []);
+
   const switchPortal = useCallback((portal: PortalType) => {
     setState(s => ({ ...s, portal }));
   }, []);
 
   return (
-    <AuthContext.Provider value={{ ...state, login, register, logout, switchPortal }}>
+    <AuthContext.Provider value={{ ...state, login, register, loginWithUser, logout, switchPortal }}>
       {children}
     </AuthContext.Provider>
   );

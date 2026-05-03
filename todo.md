@@ -700,3 +700,9 @@
 ## V3.6 - APK Build Fix
 - [x] Remove expo-barcode-scanner (deprecated, breaks Expo SDK 54 build)
 - [x] QR scanner already uses expo-camera (no migration needed)
+## V3.7 - Mobile App Improvements
+- [x] Configure categories with same colors as website (parent categories with specific colors)
+- [x] Remove Raleway font - replace with system font throughout the app
+- [x] Optimize app loading performance (reduce API calls, add caching, lazy loading)
+- [x] Add social login (Google, Apple, Facebook) with existing account linking
+- [x] Update legal links from the website (CGV, Mentions Légales, Politique de Confidentialité)

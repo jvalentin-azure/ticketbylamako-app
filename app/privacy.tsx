@@ -14,7 +14,7 @@ export default function PrivacyScreen() {
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.surface }]}>
           <IconSymbol name="chevron.left" size={20} color={colors.foreground} />
-          <Text style={{ color: colors.foreground, fontSize: 14, fontFamily: "Raleway-Medium", marginLeft: 4 }}>Retour</Text>
+          <Text style={{ color: colors.foreground, fontSize: 14, marginLeft: 4 }}>Retour</Text>
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>
           Confidentialité
@@ -116,7 +116,6 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 17,
     fontWeight: "700",
-    fontFamily: "Raleway-Bold",
   },
   content: {
     padding: 20,
@@ -124,18 +123,15 @@ const styles = StyleSheet.create({
   lastUpdated: {
     fontSize: 12,
     marginBottom: 20,
-    fontFamily: "Raleway-Regular",
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: "700",
     marginTop: 20,
     marginBottom: 8,
-    fontFamily: "Raleway-Bold",
   },
   paragraph: {
     fontSize: 14,
     lineHeight: 22,
-    fontFamily: "Raleway-Regular",
   },
 });

@@ -231,12 +231,12 @@ export default function CheckoutScreen() {
           <View style={{ width: 40 }} />
         </View>
         <ScrollView contentContainerStyle={{ padding: 20, gap: 16 }}>
-          <Text style={{ color: colors.muted, fontSize: 14, fontFamily: "Raleway-Regular", marginBottom: 4 }}>
+          <Text style={{ color: colors.muted, fontSize: 14, marginBottom: 4 }}>
             Veuillez renseigner votre adresse pour la livraison de vos produits.
           </Text>
 
           <View style={{ gap: 4 }}>
-            <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" }}>Téléphone *</Text>
+            <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "600" }}>Téléphone *</Text>
             <TextInput
               value={shippingPhone}
               onChangeText={setShippingPhone}
@@ -248,7 +248,7 @@ export default function CheckoutScreen() {
           </View>
 
           <View style={{ gap: 4 }}>
-            <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" }}>Adresse *</Text>
+            <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "600" }}>Adresse *</Text>
             <TextInput
               value={shippingAddress}
               onChangeText={setShippingAddress}
@@ -259,7 +259,7 @@ export default function CheckoutScreen() {
           </View>
 
           <View style={{ gap: 4 }}>
-            <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" }}>Ville *</Text>
+            <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "600" }}>Ville *</Text>
             <TextInput
               value={shippingCity}
               onChangeText={setShippingCity}
@@ -270,11 +270,11 @@ export default function CheckoutScreen() {
           </View>
 
           <View style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: colors.border, marginTop: 8 }}>
-            <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "600", fontFamily: "Raleway-SemiBold" }}>Récapitulatif</Text>
-            <Text style={{ color: colors.muted, fontSize: 13, marginTop: 6, fontFamily: "Raleway-Regular" }}>
+            <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "600" }}>Récapitulatif</Text>
+            <Text style={{ color: colors.muted, fontSize: 13, marginTop: 6 }}>
               {items.length} article{items.length > 1 ? "s" : ""} · Sous-total: {formatAriary(total)}
             </Text>
-            <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4, fontFamily: "Raleway-Regular" }}>
+            <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4 }}>
               Les frais d'expédition seront calculés à l'étape suivante.
             </Text>
           </View>
@@ -289,7 +289,7 @@ export default function CheckoutScreen() {
             }}
             style={{ backgroundColor: colors.primary, borderRadius: 14, paddingVertical: 16, alignItems: "center", marginTop: 12 }}
           >
-            <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold" }}>Continuer vers le paiement</Text>
+            <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>Continuer vers le paiement</Text>
           </TouchableOpacity>
         </ScrollView>
       </ScreenContainer>
@@ -529,19 +529,19 @@ export default function CheckoutScreen() {
 const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
   headerCenter: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center" },
-  headerTitle: { fontSize: 17, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  headerTitle: { fontSize: 17, fontWeight: "700" },
   backBtn: { width: 40, alignItems: "flex-start" },
   centerContent: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32 },
-  loadingText: { fontSize: 17, fontWeight: "600", marginTop: 20, fontFamily: "Raleway-SemiBold" },
-  loadingSubtext: { fontSize: 14, marginTop: 6, fontFamily: "Raleway-Regular" },
-  errorTitle: { fontSize: 18, fontWeight: "700", marginTop: 16, textAlign: "center", fontFamily: "Raleway-Bold" },
-  errorMsg: { fontSize: 14, marginTop: 8, textAlign: "center", fontFamily: "Raleway-Regular" },
-  errorHint: { fontSize: 13, marginTop: 12, textAlign: "center", fontFamily: "Raleway-Regular", lineHeight: 18 },
+  loadingText: { fontSize: 17, fontWeight: "600", marginTop: 20 },
+  loadingSubtext: { fontSize: 14, marginTop: 6 },
+  errorTitle: { fontSize: 18, fontWeight: "700", marginTop: 16, textAlign: "center" },
+  errorMsg: { fontSize: 14, marginTop: 8, textAlign: "center" },
+  errorHint: { fontSize: 13, marginTop: 12, textAlign: "center", lineHeight: 18 },
   retryBtn: { borderRadius: 14, paddingVertical: 14, paddingHorizontal: 32, marginTop: 20 },
-  retryBtnText: { color: "#fff", fontSize: 15, fontWeight: "700", fontFamily: "Raleway-Bold", textAlign: "center" },
+  retryBtnText: { color: "#fff", fontSize: 15, fontWeight: "700", textAlign: "center" },
   backLink: { marginTop: 16 },
-  backLinkText: { fontSize: 14, fontFamily: "Raleway-Medium" },
-  successTitle: { fontSize: 20, fontWeight: "700", marginTop: 16, textAlign: "center", fontFamily: "Raleway-Bold" },
-  successSub: { fontSize: 14, marginTop: 8, textAlign: "center", lineHeight: 20, fontFamily: "Raleway-Regular" },
+  backLinkText: { fontSize: 14 },
+  successTitle: { fontSize: 20, fontWeight: "700", marginTop: 16, textAlign: "center" },
+  successSub: { fontSize: 14, marginTop: 8, textAlign: "center", lineHeight: 20 },
   webviewLoader: { position: "absolute", top: 60, left: 0, right: 0, zIndex: 10, alignItems: "center" },
 });

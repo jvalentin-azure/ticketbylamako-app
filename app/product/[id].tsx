@@ -29,7 +29,7 @@ export default function ProductDetailScreen() {
   }, [id]);
 
   if (loading) return <ScreenContainer className="flex-1 items-center justify-center"><ActivityIndicator size="large" color={colors.primary} /></ScreenContainer>;
-  if (!product) return <ScreenContainer className="flex-1 items-center justify-center"><Text style={{ color: colors.muted, fontFamily: "Raleway-Medium" }}>Produit introuvable</Text></ScreenContainer>;
+  if (!product) return <ScreenContainer className="flex-1 items-center justify-center"><Text style={{ color: colors.muted }}>Produit introuvable</Text></ScreenContainer>;
 
   // Mobile fields from the lamako-mobile-fields plugin
   const mobileFields = (product as any).lamako_mobile as { description: string | null; gallery: string[] | null; practical_info: { label: string; value: string }[] | null } | undefined;
@@ -108,7 +108,7 @@ export default function ProductDetailScreen() {
           {/* Stock status */}
           <View style={{ flexDirection: "row", alignItems: "center", marginTop: 10, gap: 8 }}>
             <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: product.stock_status === "instock" ? colors.success : colors.error }} />
-            <Text style={{ color: colors.muted, fontSize: 13, fontFamily: "Raleway-Medium" }}>
+            <Text style={{ color: colors.muted, fontSize: 13 }}>
               {product.stock_status === "instock" ? "En stock" : "Rupture de stock"}
             </Text>
           </View>
@@ -187,26 +187,26 @@ export default function ProductDetailScreen() {
 
 const styles = StyleSheet.create({
   backButton: { position: "absolute", top: 12, left: 16, width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center" },
-  title: { fontSize: 22, fontWeight: "700", fontFamily: "Raleway-Bold" },
-  price: { fontSize: 26, fontWeight: "800", fontFamily: "Raleway-Bold" },
-  oldPrice: { fontSize: 14, textDecorationLine: "line-through", fontFamily: "Raleway-Regular" },
+  title: { fontSize: 22, fontWeight: "700" },
+  price: { fontSize: 26, fontWeight: "800" },
+  oldPrice: { fontSize: 14, textDecorationLine: "line-through" },
   catChip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
-  catChipText: { fontSize: 12, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  catChipText: { fontSize: 12, fontWeight: "600" },
   practicalInfoBox: { marginTop: 20, padding: 16, borderRadius: 14, borderWidth: 1 },
   practicalInfoRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 10 },
-  practicalInfoLabel: { fontSize: 13, fontFamily: "Raleway-Medium", flex: 1 },
-  practicalInfoValue: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold", flex: 1, textAlign: "right" },
-  sectionTitle: { fontSize: 16, fontWeight: "700", marginBottom: 10, fontFamily: "Raleway-Bold" },
+  practicalInfoLabel: { fontSize: 13, flex: 1 },
+  practicalInfoValue: { fontSize: 13, fontWeight: "600", flex: 1, textAlign: "right" },
+  sectionTitle: { fontSize: 16, fontWeight: "700", marginBottom: 10 },
   qtyRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 20, padding: 14, borderRadius: 12, borderWidth: 1 },
-  qtyLabel: { fontSize: 15, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  qtyLabel: { fontSize: 15, fontWeight: "600" },
   qtyControls: { flexDirection: "row", alignItems: "center", gap: 16 },
   qtyBtn: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   qtyBtnText: { fontSize: 20, fontWeight: "700" },
-  qtyValue: { fontSize: 18, fontWeight: "700", minWidth: 24, textAlign: "center", fontFamily: "Raleway-Bold" },
-  descText: { fontSize: 14, lineHeight: 22, fontFamily: "Raleway-Regular" },
+  qtyValue: { fontSize: 18, fontWeight: "700", minWidth: 24, textAlign: "center" },
+  descText: { fontSize: 14, lineHeight: 22 },
   bottomCta: { padding: 16, paddingBottom: 32, borderTopWidth: 1 },
   ctaButton: { borderRadius: 14, paddingVertical: 16, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 8 },
-  ctaButtonText: { color: "#fff", fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  ctaButtonText: { color: "#fff", fontSize: 16, fontWeight: "700" },
   galleryDots: { position: "absolute", bottom: 16, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 6 },
   dot: { width: 8, height: 8, borderRadius: 4 },
 });

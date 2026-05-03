@@ -10,6 +10,8 @@ import { useFavorites } from "@/lib/favorites-provider";
 import { formatAriary, formatDateShort, decodeHtmlEntities } from "@/lib/format";
 import { consumePendingCategory, subscribeToPendingCategory } from "@/lib/filter-state";
 import { PointsBadge } from "@/components/points-badge";
+import { CATEGORY_COLOR_MAP } from "@/constants/category-colors";
+import { getCached, setCache, CACHE_DURATIONS } from "@/lib/api/cache";
 
 export default function EventsScreen() {
   const colors = useColors();
@@ -27,12 +29,51 @@ export default function EventsScreen() {
 
   const [pastEvents, setPastEvents] = useState<TCEvent[]>([]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (forceRefresh = false) => {
     try {
+      // Try cache first for instant display
+      if (!forceRefresh) {
+        const [cachedEvents, cachedCats] = await Promise.all([
+          getCached<TCEvent[]>("events_list", CACHE_DURATIONS.EVENTS),
+          getCached<EventCategory[]>("event_categories", CACHE_DURATIONS.CATEGORIES),
+        ]);
+        if (cachedEvents && cachedCats) {
+          const now = new Date();
+          const upcoming = cachedEvents.filter(e => {
+            const dateStr = e.mobileFields?.event_date_time || e.date;
+            return new Date(dateStr) >= now;
+          });
+          const past = cachedEvents.filter(e => {
+            const dateStr = e.mobileFields?.event_date_time || e.date;
+            return new Date(dateStr) < now;
+          });
+          setEvents(upcoming);
+          setFiltered(upcoming);
+          setPastEvents(past);
+          setCategories(cachedCats);
+          setLoading(false);
+          // Background refresh
+          Promise.all([getEventsWithTickets(), getEventCategories()])
+            .then(([ev, cats]) => {
+              const upcomingNew = ev.filter(e => { const d = e.mobileFields?.event_date_time || e.date; return new Date(d) >= new Date(); });
+              const pastNew = ev.filter(e => { const d = e.mobileFields?.event_date_time || e.date; return new Date(d) < new Date(); });
+              setEvents(upcomingNew);
+              setFiltered(upcomingNew);
+              setPastEvents(pastNew);
+              setCategories(cats);
+              setCache("events_list", ev);
+              setCache("event_categories", cats);
+            })
+            .catch(() => {});
+          return;
+        }
+      }
       const [ev, cats] = await Promise.all([
         getEventsWithTickets(),
         getEventCategories(),
       ]);
+      // Cache results
+      await Promise.all([setCache("events_list", ev), setCache("event_categories", cats)]);
       // Separate active (upcoming) from past events
       const now = new Date();
       const upcoming: TCEvent[] = [];
@@ -292,20 +333,24 @@ export default function EventsScreen() {
         >
           <Text style={[styles.chipText, { color: !selectedCat ? "#fff" : colors.foreground }]}>Tous</Text>
         </TouchableOpacity>
-        {parentCategories.map(cat => (
-          <TouchableOpacity
-            key={cat.id}
-            onPress={() => setSelectedCat(selectedCat === cat.id ? null : cat.id)}
-            style={[styles.chip, {
-              backgroundColor: selectedCat === cat.id ? colors.primary : colors.surface,
-              borderColor: selectedCat === cat.id ? colors.primary : colors.border,
-            }]}
-          >
-            <Text style={[styles.chipText, { color: selectedCat === cat.id ? "#fff" : colors.foreground }]}>
-              {decodeHtmlEntities(cat.name).replace(/^[^\w\s]*\s*/, "")}
-            </Text>
-          </TouchableOpacity>
-        ))}
+        {parentCategories.map(cat => {
+          const catColor = CATEGORY_COLOR_MAP[cat.id] || colors.primary;
+          const isSelected = selectedCat === cat.id;
+          return (
+            <TouchableOpacity
+              key={cat.id}
+              onPress={() => setSelectedCat(isSelected ? null : cat.id)}
+              style={[styles.chip, {
+                backgroundColor: isSelected ? catColor : catColor + "18",
+                borderColor: catColor,
+              }]}
+            >
+              <Text style={[styles.chipText, { color: isSelected ? "#fff" : catColor }]}>
+                {decodeHtmlEntities(cat.name)}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </ScrollView>
 
       {loading ? (
@@ -317,7 +362,7 @@ export default function EventsScreen() {
           data={filtered}
           keyExtractor={item => String(item.id)}
           renderItem={renderEvent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.primary} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} tintColor={colors.primary} />}
           ListFooterComponent={
             pastEvents.length > 0 ? (
               <View style={{ marginTop: 24, marginBottom: 40 }}>
@@ -340,8 +385,8 @@ export default function EventsScreen() {
                       >
                         <Image source={{ uri: item.featuredImage }} style={{ width: 220, height: 120 }} contentFit="cover" />
                         <View style={{ padding: 10 }}>
-                          <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" }} numberOfLines={2}>{name}</Text>
-                          <Text style={{ color: colors.muted, fontSize: 11, marginTop: 4, fontFamily: "Raleway-Regular" }}>{formatDateShort(item.mobileFields?.event_date_time || item.date)}</Text>
+                          <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "600" }} numberOfLines={2}>{name}</Text>
+                          <Text style={{ color: colors.muted, fontSize: 11, marginTop: 4 }}>{formatDateShort(item.mobileFields?.event_date_time || item.date)}</Text>
                         </View>
                       </TouchableOpacity>
                     );
@@ -391,7 +436,7 @@ export default function EventsScreen() {
               >
                 <Text style={[styles.modalOptionText, {
                   color: dateFilter === opt.key ? colors.primary : colors.foreground,
-                  fontFamily: dateFilter === opt.key ? "Raleway-Bold" : "Raleway-Regular",
+                  fontWeight: dateFilter === opt.key ? "700" : "400",
                 }]}>{opt.label}</Text>
                 {dateFilter === opt.key && (
                   <IconSymbol name="checkmark.circle.fill" size={20} color={colors.primary} />
@@ -407,39 +452,39 @@ export default function EventsScreen() {
 
 const styles = StyleSheet.create({
   headerRow: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  headerTitle: { fontSize: 22, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  headerTitle: { fontSize: 22, fontWeight: "700" },
   clearFiltersBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
-  clearFiltersText: { fontSize: 12, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  clearFiltersText: { fontSize: 12, fontWeight: "600" },
   searchBar: { marginHorizontal: 16, marginBottom: 8, flexDirection: "row", alignItems: "center", borderRadius: 12, paddingHorizontal: 12, borderWidth: 1 },
-  searchInput: { flex: 1, paddingVertical: 12, paddingHorizontal: 8, fontSize: 15, fontFamily: "Raleway-Regular" },
+  searchInput: { flex: 1, paddingVertical: 12, paddingHorizontal: 8, fontSize: 15 },
   dateFilterRow: { paddingHorizontal: 16, paddingVertical: 4 },
   dateChip: { height: 32, flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: 6, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1 },
-  dateChipText: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold", lineHeight: 16 },
+  dateChipText: { fontSize: 13, fontWeight: "600", lineHeight: 16 },
   chipsContainer: { paddingHorizontal: 16, paddingVertical: 8, gap: 8, flexDirection: "row", alignItems: "center" },
   chip: { height: 32, paddingHorizontal: 14, borderRadius: 16, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  chipText: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold", lineHeight: 16 },
+  chipText: { fontSize: 13, fontWeight: "600", lineHeight: 16 },
   loadingContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
   eventCard: { marginHorizontal: 16, marginBottom: 14, borderRadius: 16, overflow: "hidden", borderWidth: 1 },
   eventImage: { width: "100%", height: 160 },
   seatingBadge: { position: "absolute", top: 12, right: 12, flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(0,0,0,0.6)", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  seatingBadgeText: { color: "#fff", fontSize: 10, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  seatingBadgeText: { color: "#fff", fontSize: 10, fontWeight: "600" },
   eventBody: { padding: 14 },
-  eventTitle: { fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  eventTitle: { fontSize: 16, fontWeight: "700" },
   metaRow: { flexDirection: "row", alignItems: "center", marginTop: 6, gap: 12 },
   metaItem: { flexDirection: "row", alignItems: "center" },
-  metaText: { fontSize: 12, marginLeft: 4, fontFamily: "Raleway-Regular" },
+  metaText: { fontSize: 12, marginLeft: 4 },
   priceRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8 },
-  price: { fontSize: 16, fontWeight: "700", fontFamily: "Raleway-Bold" },
+  price: { fontSize: 16, fontWeight: "700" },
   buyButton: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8 },
-  buyButtonText: { color: "#fff", fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  buyButtonText: { color: "#fff", fontSize: 13, fontWeight: "600" },
   emptyContainer: { alignItems: "center", paddingTop: 60 },
-  emptyText: { fontSize: 15, marginTop: 12, fontFamily: "Raleway-Medium" },
+  emptyText: { fontSize: 15, marginTop: 12 },
   resetBtn: { marginTop: 16, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10, borderWidth: 1 },
-  resetBtnText: { fontSize: 13, fontWeight: "600", fontFamily: "Raleway-SemiBold" },
+  resetBtnText: { fontSize: 13, fontWeight: "600" },
   // Date filter modal
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
   modalContent: { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 40 },
-  modalTitle: { fontSize: 18, fontWeight: "700", fontFamily: "Raleway-Bold", marginBottom: 16 },
+  modalTitle: { fontSize: 18, fontWeight: "700", marginBottom: 16 },
   modalOption: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 14, paddingHorizontal: 16, borderRadius: 12, marginBottom: 4 },
   modalOptionText: { fontSize: 15 },
   favBtn: { position: "absolute", top: 8, right: 8, width: 32, height: 32, borderRadius: 16, backgroundColor: "rgba(0,0,0,0.4)", alignItems: "center", justifyContent: "center", zIndex: 10 },

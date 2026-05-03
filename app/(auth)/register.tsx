@@ -67,7 +67,7 @@ export default function RegisterScreen() {
           {/* Back button */}
           <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.surface }]}>
             <IconSymbol name="chevron.left" size={22} color={colors.foreground} />
-            <Text style={{ color: colors.foreground, fontSize: 15, fontFamily: "Raleway-Medium", marginLeft: 4 }}>Retour</Text>
+            <Text style={{ color: colors.foreground, fontSize: 15, marginLeft: 4 }}>Retour</Text>
           </TouchableOpacity>
 
           {/* Logo */}
@@ -88,7 +88,7 @@ export default function RegisterScreen() {
           {error ? (
             <View style={[styles.errorBox, { backgroundColor: colors.error + "15" }]}>
               <IconSymbol name="xmark.circle.fill" size={18} color={colors.error} />
-              <Text style={{ color: colors.error, fontSize: 13, marginLeft: 8, flex: 1, fontFamily: "Raleway-Medium" }}>{error}</Text>
+              <Text style={{ color: colors.error, fontSize: 13, marginLeft: 8, flex: 1 }}>{error}</Text>
             </View>
           ) : null}
 
@@ -146,12 +146,12 @@ export default function RegisterScreen() {
               {checkingReferral && <ActivityIndicator size="small" color={colors.primary} />}
             </View>
             {referralStatus?.valid && (
-              <Text style={{ color: colors.success, fontSize: 12, marginTop: 4, fontFamily: "Raleway-Medium" }}>
+              <Text style={{ color: colors.success, fontSize: 12, marginTop: 4 }}>
                 Parrainé par {referralStatus.name} - vous recevrez 25 pts bonus !
               </Text>
             )}
             {referralStatus && !referralStatus.valid && referralCode.length >= 8 && (
-              <Text style={{ color: colors.error, fontSize: 12, marginTop: 4, fontFamily: "Raleway-Medium" }}>
+              <Text style={{ color: colors.error, fontSize: 12, marginTop: 4 }}>
                 Code invalide
               </Text>
             )}
@@ -165,9 +165,9 @@ export default function RegisterScreen() {
 
           {/* Login link */}
           <View style={styles.loginRow}>
-            <Text style={{ color: colors.muted, fontSize: 14, fontFamily: "Raleway-Regular" }}>Déjà un compte ? </Text>
+            <Text style={{ color: colors.muted, fontSize: 14 }}>Déjà un compte ? </Text>
             <TouchableOpacity onPress={() => router.push("/(auth)/login" as any)}>
-              <Text style={{ color: colors.primary, fontSize: 14, fontWeight: "600", fontFamily: "Raleway-SemiBold" }}>Se connecter</Text>
+              <Text style={{ color: colors.primary, fontSize: 14, fontWeight: "600" }}>Se connecter</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -198,12 +198,10 @@ const styles = StyleSheet.create({
   titleText: {
     fontSize: 24,
     fontWeight: "700",
-    fontFamily: "Raleway-Bold",
   },
   subtitleText: {
     fontSize: 14,
     marginTop: 4,
-    fontFamily: "Raleway-Regular",
   },
   errorBox: {
     padding: 12,
@@ -221,7 +219,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     marginBottom: 6,
-    fontFamily: "Raleway-SemiBold",
   },
   inputRow: {
     flexDirection: "row",
@@ -235,7 +232,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 10,
     fontSize: 15,
-    fontFamily: "Raleway-Regular",
   },
   registerButton: {
     borderRadius: 14,
@@ -246,7 +242,6 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "700",
-    fontFamily: "Raleway-Bold",
   },
   loginRow: {
     flexDirection: "row",

@@ -181,14 +181,12 @@ const styles = StyleSheet.create({
   rewardsLabel: {
     fontSize: 14,
     color: "#c79f6c",
-    fontFamily: "Raleway-SemiBold",
     marginTop: 4,
     marginBottom: 16,
   },
   title: {
     fontSize: 16,
     color: "#fff",
-    fontFamily: "Raleway-Bold",
     textAlign: "center",
     lineHeight: 22,
     marginBottom: 12,
@@ -196,7 +194,6 @@ const styles = StyleSheet.create({
   features: {
     fontSize: 12,
     color: "rgba(255,255,255,0.8)",
-    fontFamily: "Raleway-Medium",
     textAlign: "center",
     marginBottom: 24,
   },
@@ -209,7 +206,6 @@ const styles = StyleSheet.create({
   joinBtnText: {
     color: "#fff",
     fontSize: 15,
-    fontFamily: "Raleway-Bold",
     fontWeight: "700",
   },
   loginLink: {
@@ -218,10 +214,8 @@ const styles = StyleSheet.create({
   loginLinkText: {
     color: "rgba(255,255,255,0.7)",
     fontSize: 13,
-    fontFamily: "Raleway-Regular",
   },
   loginLinkAccent: {
     color: "#c79f6c",
-    fontFamily: "Raleway-SemiBold",
   },
 });

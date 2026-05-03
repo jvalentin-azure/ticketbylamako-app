@@ -224,7 +224,7 @@ export default function SearchScreen() {
                   styles.tabText,
                   {
                     color: tab === t.key ? colors.primary : colors.muted,
-                    fontFamily: tab === t.key ? "Raleway-Bold" : "Raleway-Regular",
+                    fontWeight: tab === t.key ? "700" : "400",
                   },
                 ]}
               >
@@ -288,7 +288,6 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: "700",
-    fontFamily: "Raleway-Bold",
   },
   searchContainer: {
     flexDirection: "row",
@@ -304,7 +303,6 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 15,
-    fontFamily: "Raleway-Regular",
     padding: 0,
   },
   tabRow: {
@@ -357,12 +355,10 @@ const styles = StyleSheet.create({
   typeBadgeText: {
     fontSize: 10,
     fontWeight: "600",
-    fontFamily: "Raleway-SemiBold",
   },
   cardTitle: {
     fontSize: 14,
     fontWeight: "600",
-    fontFamily: "Raleway-SemiBold",
     marginTop: 6,
   },
   cardFooter: {
@@ -373,13 +369,11 @@ const styles = StyleSheet.create({
   },
   cardSubtitle: {
     fontSize: 11,
-    fontFamily: "Raleway-Regular",
     flex: 1,
   },
   cardPrice: {
     fontSize: 12,
     fontWeight: "700",
-    fontFamily: "Raleway-Bold",
     marginLeft: 8,
   },
   emptyContainer: {
@@ -390,13 +384,11 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     marginTop: 16,
-    fontFamily: "Raleway-SemiBold",
   },
   emptySubText: {
     fontSize: 13,
     marginTop: 8,
     textAlign: "center",
-    fontFamily: "Raleway-Regular",
     lineHeight: 20,
   },
 });

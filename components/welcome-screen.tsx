@@ -188,7 +188,6 @@ const styles = StyleSheet.create({
   backBtnText: {
     color: "rgba(255,255,255,0.8)",
     fontSize: 15,
-    fontFamily: "Raleway-Medium",
     marginLeft: 2,
   },
   content: {
@@ -207,14 +206,12 @@ const styles = StyleSheet.create({
   tagline: {
     fontSize: 13,
     color: "#fff",
-    fontFamily: "Raleway-SemiBold",
     letterSpacing: 2,
     marginTop: 10,
     textAlign: "center",
   },
   taglineAccent: {
     color: "#c79f6c",
-    fontFamily: "Raleway-Bold",
   },
   headlineSection: {
     alignItems: "center",
@@ -222,7 +219,6 @@ const styles = StyleSheet.create({
   headline: {
     fontSize: 22,
     color: "#fff",
-    fontFamily: "Raleway-Bold",
     textAlign: "center",
     lineHeight: 30,
   },
@@ -241,7 +237,6 @@ const styles = StyleSheet.create({
   signUpBtnText: {
     color: "#fff",
     fontSize: 16,
-    fontFamily: "Raleway-Bold",
     fontWeight: "700",
   },
   loginBtn: {
@@ -255,7 +250,6 @@ const styles = StyleSheet.create({
   loginBtnText: {
     color: "#1a0a00",
     fontSize: 16,
-    fontFamily: "Raleway-Bold",
     fontWeight: "700",
   },
   exploreBtn: {
@@ -267,6 +261,5 @@ const styles = StyleSheet.create({
   exploreBtnText: {
     color: "rgba(255,255,255,0.65)",
     fontSize: 14,
-    fontFamily: "Raleway-Medium",
   },
 });
