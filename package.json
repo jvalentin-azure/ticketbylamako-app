@@ -37,7 +37,6 @@
     "drizzle-orm": "^0.44.7",
     "expo": "~54.0.29",
     "expo-audio": "~1.1.0",
-    "expo-barcode-scanner": "^13.0.1",
     "expo-build-properties": "^1.0.10",
     "expo-camera": "^55.0.16",
     "expo-constants": "~18.0.12",

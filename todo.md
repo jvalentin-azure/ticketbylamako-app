@@ -674,17 +674,29 @@
   - [ ] Bannière LamakoRewards section
   - [ ] Événements passés carousel
   - [ ] Ils nous ont fait confiance: carousel logos sponsors
-  - [ ] Remove: Newsletter, Blog carousel, Why Choose Eventchamp section
+  - [x] Remove: Newsletter, Blog carousel, Why Choose Eventchamp section
 - [x] Reactivate guest popup on checkout/cart pages
 - [x] Extend guest popup to events and shop pages too
 
 ## V3.4 - Homepage Rebuild (Section by Section with Revolution Slider)
-- [ ] Revert homepage to original state (restore old WPBakery content)
-- [ ] Remove lr-homepage-sections plugin
-- [ ] Rebuild hero slider using Revolution Slider (Tickera events + static promo slides)
+- [x] Revert homepage to original state (restore old WPBakery content)
+- [x] Remove lr-homepage-sections plugin
+- [x] Rebuild hero slider using Revolution Slider (3 slides: LamakoRewards, Devis, Events)
+- [x] Remove all broken Eventchamp shortcodes from homepage
 - [ ] Rebuild event search bar
 - [ ] Rebuild upcoming events grid (Tickera)
 - [ ] Add LamakoRewards banner section
 - [ ] Add past events carousel
 - [ ] Add sponsors carousel ("Ils nous ont fait confiance")
 - [ ] Remove: Newsletter, Blog carousel, Why Choose Eventchamp
+
+## V3.5 - Revolution Slider Proper Rebuild
+- [ ] Generate background-only photos (no text) for 3 slides (event, luxury, corporate)
+- [ ] Upload to WordPress and set as RevSlider backgrounds
+- [ ] Add text layers in RevSlider (title, subtitle, CTA button) - editable, not baked in image
+- [ ] Configure: 70-80vh height, fade transition, dots nav, 5-6s auto-rotation
+- [ ] Ensure mobile readability (responsive text layers)
+
+## V3.6 - APK Build Fix
+- [x] Remove expo-barcode-scanner (deprecated, breaks Expo SDK 54 build)
+- [x] QR scanner already uses expo-camera (no migration needed)
