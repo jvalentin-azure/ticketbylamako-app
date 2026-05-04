@@ -1262,6 +1262,47 @@ function lamako_mobile_maybe_serve_checkout() {
         background: rgba(255,255,255,0.7) !important;
     }
     .shop_table { display: none; }
+    /* Hide ALL theme/plugin injected content from wp_head/wp_footer */
+    [class*="rev_slider"], .rs-module-wrap, sr7-module, [class*="sr7"],
+    [class*="slider-revolution"], .tp-bannertimer,
+    #fkcart-floating-toggler, .fkcart-main-wrapper, [class*="fkcart"],
+    [class*="qlwapp"], [id*="qlwapp"], .joinchat, [class*="whatsapp"],
+    [class*="tidio"], [id*="tidio"], [class*="tawk"], [id*="tawk"],
+    [class*="crisp"], [id*="crisp"], [class*="chat-widget"],
+    [class*="cookie"], [class*="consent"], [class*="gdpr"],
+    #fb-root, [class*="fb-"], .fb_dialog,
+    .gt-mobile-header, .gt-header, .gt-sticky-header, .gt-footer,
+    .gt-page-title-bar, .gt-breadcrumb, .gt-site-right, .gt-fixed-sidebar,
+    .gt-general-widget, .gt-widget, .widget, aside, nav,
+    header:not(.lamako-checkout-header), footer,
+    .nsl-container, [class*="nextend-social"],
+    .woocommerce-products-header, .products, .related,
+    .site-header, .site-footer, #masthead, #colophon,
+    .elementor-section, .elementor-widget,
+    [class*="popup"], [class*="modal"]:not(.lamako-modal),
+    .gt-site-wrapper > *:not(.lamako-mobile-checkout):not(script):not(style) {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        overflow: hidden !important;
+    }
+    /* Ensure our checkout content is always visible */
+    .lamako-checkout-header, .lamako-section, .lamako-phone-section,
+    .lamako-terms, .form-row.place-order, #place_order,
+    body.lamako-mobile-checkout > .lamako-checkout-header,
+    body.lamako-mobile-checkout > .lamako-section,
+    body.lamako-mobile-checkout > div[style*="background: #fef2f2"],
+    body.lamako-mobile-checkout > script,
+    body.lamako-mobile-checkout > style {
+        display: block !important;
+        visibility: visible !important;
+        height: auto !important;
+        overflow: visible !important;
+    }
+    /* Hide anything injected after our content by wp_footer */
+    body.lamako-mobile-checkout > *:not(.lamako-checkout-header):not(.lamako-section):not(.form-row):not(script):not(style):not(link):not(div[style*="background: #fef2f2"]):not(#place_order) {
+        display: none !important;
+    }
     /* Loading spinner */
     .lamako-spinner {
         display: inline-block;
@@ -1619,6 +1660,57 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 <?php wp_footer(); ?>
+<script>
+// Post-wp_footer cleanup: hide any DOM elements injected by theme/plugins
+(function() {
+    var validClasses = ['lamako-checkout-header', 'lamako-section', 'lamako-phone-section', 'lamako-terms'];
+    var body = document.body;
+    if (!body) return;
+    // Hide all direct children of body that are not our checkout elements or scripts/styles
+    Array.from(body.children).forEach(function(el) {
+        var tag = el.tagName.toLowerCase();
+        if (tag === 'script' || tag === 'style' || tag === 'link' || tag === 'noscript') return;
+        var cls = el.className || '';
+        var isOurs = validClasses.some(function(c) { return cls.indexOf(c) !== -1; });
+        if (!isOurs && el.id !== 'place_order' && el.id !== 'order_review') {
+            // Check if it's the error banner
+            var style = el.getAttribute('style') || '';
+            if (style.indexOf('fef2f2') !== -1) return;
+            el.style.display = 'none';
+            el.style.visibility = 'hidden';
+            el.style.height = '0';
+            el.style.overflow = 'hidden';
+        }
+    });
+    // Also run after a delay for async-injected content
+    setTimeout(function() {
+        Array.from(body.children).forEach(function(el) {
+            var tag = el.tagName.toLowerCase();
+            if (tag === 'script' || tag === 'style' || tag === 'link' || tag === 'noscript') return;
+            var cls = el.className || '';
+            var isOurs = validClasses.some(function(c) { return cls.indexOf(c) !== -1; });
+            if (!isOurs && el.id !== 'place_order' && el.id !== 'order_review') {
+                var style = el.getAttribute('style') || '';
+                if (style.indexOf('fef2f2') !== -1) return;
+                el.style.display = 'none';
+            }
+        });
+    }, 1000);
+    setTimeout(function() {
+        Array.from(body.children).forEach(function(el) {
+            var tag = el.tagName.toLowerCase();
+            if (tag === 'script' || tag === 'style' || tag === 'link' || tag === 'noscript') return;
+            var cls = el.className || '';
+            var isOurs = validClasses.some(function(c) { return cls.indexOf(c) !== -1; });
+            if (!isOurs && el.id !== 'place_order' && el.id !== 'order_review') {
+                var style = el.getAttribute('style') || '';
+                if (style.indexOf('fef2f2') !== -1) return;
+                el.style.display = 'none';
+            }
+        });
+    }, 3000);
+})();
+</script>
 </body>
 </html>
     <?php
@@ -3047,7 +3139,9 @@ function lamako_mobile_auto_login( WP_REST_Request $request ) {
     header( 'Content-Type: text/html; charset=utf-8' );
     echo '<!DOCTYPE html><html><head><meta charset="utf-8">';
     echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
-    echo '<script>window.location.href = "' . esc_url( $redirect ) . '";</script>';
+    // Use esc_js() instead of esc_url() because esc_url() converts & to &#038;
+    // which breaks query parameters when used inside a JavaScript string
+    echo '<script>window.location.href = "' . esc_js( $redirect ) . '";</script>';
     echo '</head><body><p>Connexion en cours...</p></body></html>';
     exit;
 }

@@ -172,7 +172,7 @@ export default function ProductDetailScreen() {
         <TouchableOpacity
           onPress={() => {
             addItem({ productId: product.id, name: productName, price: parseFloat(product.price) || 0, image: allImages[0] || "", quantity: qty, isEvent: false });
-            router.back();
+            router.push("/(tabs)/cart" as any);
           }}
           style={[styles.ctaButton, { backgroundColor: product.stock_status === "instock" ? colors.primary : colors.muted }]}
           disabled={product.stock_status !== "instock"}

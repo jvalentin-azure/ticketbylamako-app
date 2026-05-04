@@ -135,7 +135,7 @@ export default function EventDetailScreen() {
       quantity: qty,
       isEvent: true,
     });
-    router.back();
+    router.push("/(tabs)/cart" as any);
   };
 
   const handleOpenSeatingChart = async () => {

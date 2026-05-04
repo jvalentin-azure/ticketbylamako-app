@@ -839,3 +839,10 @@
 - [x] Fix APK crash: disabled newArchEnabled, reactCompiler, edgeToEdge
 - [x] Fix APK crash: wrapped notification setup in try-catch
 - [x] Fix events page spacing between date, filters, and first card
+
+## V4.7 - Bug Fixes
+- [x] Fix "invalid chart id" when opening seating chart (esc_url→esc_js in auto-login redirect)
+- [x] Events page: still needs more spacing between date and filters (increased padding)
+- [x] Add to cart does not redirect to cart tab (router.replace→router.push)
+- [x] Payment/checkout page shows homepage content below (CSS + JS cleanup in PHP)
+- [x] Seating chart shows "invalid chart id" (same fix - esc_url encoding & in redirect URL)

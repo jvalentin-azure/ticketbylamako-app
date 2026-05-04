@@ -179,6 +179,13 @@ export default function CheckoutScreen() {
       setPhase("payment_error");
       return;
     }
+    // Detect if WebView navigated to homepage (session expired or gateway redirect)
+    const isHomepage = (url === SITE_URL || url === SITE_URL + "/" || url === SITE_URL + "/en/" || url.match(/^https:\/\/www\.ticketbylamako\.com\/?$/));
+    if (isHomepage && !url.includes("lamako_checkout") && !url.includes("order-received")) {
+      setPaymentErrorMsg("La session a expiré. Veuillez réessayer le paiement.");
+      setPhase("payment_error");
+      return;
+    }
   };
 
   const handleWebViewMessage = (event: any) => {
@@ -209,32 +216,60 @@ export default function CheckoutScreen() {
 
   const checkoutInjectedJS = `
     (function() {
+      // Inject comprehensive CSS to hide ALL non-checkout content
+      var style = document.createElement('style');
+      style.textContent = 
+        // Hide ALL headers (mobile, desktop, sticky)
+        'header, .gt-mobile-header, .gt-header, .gt-sticky-header, .site-header, #masthead,' +
+        '.header-wrapper, .header-main, .header-top, .header-bottom,' +
+        // Hide ALL footers
+        'footer, .gt-footer, .site-footer, #colophon, .footer-wrapper, .absolute-footer,' +
+        // Hide navigation, breadcrumbs, page title bar
+        'nav, .navigation, .nav-links, .gt-breadcrumb, .woocommerce-breadcrumb, #wpadminbar,' +
+        '.gt-page-title-bar,' +
+        // Hide sidebar with widgets (latest posts, categories, etc.)
+        '.gt-site-right, .sidebar, #sidebar, aside, .gt-fixed-sidebar,' +
+        '.gt-general-widget, .gt-widget, .widget,' +
+        // Hide chat/whatsapp/cookie widgets
+        '[class*="whatsapp"], .joinchat, [id*="whatsapp"],' +
+        '[class*="cookie"], [class*="consent"],' +
+        '#fkcart-floating-toggler, .fkcart-main-wrapper, [class*="fkcart"],' +
+        '[class*="tidio"], [id*="tidio"], [class*="chat-widget"],' +
+        '[class*="crisp"], [id*="crisp"],' +
+        '[class*="tawk"], [id*="tawk"],' +
+        '.wc-block-mini-cart, .wp-block-woocommerce-mini-cart,' +
+        '.page-title-inner, .page-title,' +
+        '.comments-area, #comments,' +
+        // Hide Revolution Slider
+        '[class*="rev_slider"], .rs-module-wrap,' +
+        // Hide mobile menu overlay
+        '.gt-mobile-background, .gt-mobile-menu' +
+        '{ display: none !important; }' +
+        // Make checkout content full-width
+        '.gt-site-left { width: 100% !important; max-width: 100% !important; flex: 0 0 100% !important; }' +
+        '.gt-page-content { padding: 0 !important; }' +
+        '.gt-page-content .gt-content { padding: 10px 16px !important; }' +
+        '.container { max-width: 100% !important; padding: 0 10px !important; }' +
+        '.row { margin: 0 !important; }' +
+        'body { background: #f8f8f8 !important; font-family: -apple-system, BlinkMacSystemFont, sans-serif !important; margin: 0 !important; padding: 0 !important; }' +
+        '.gt-site-wrapper { padding-top: 0 !important; margin-top: 0 !important; }' +
+        '.gt-site-inner { padding-top: 0 !important; }' +
+        // Style the WooCommerce checkout form nicely
+        '.woocommerce { max-width: 100% !important; padding: 8px !important; }' +
+        '#payment { border-radius: 12px !important; }' +
+        '#payment .payment_methods { border-radius: 12px !important; }' +
+        '#place_order { border-radius: 12px !important; font-size: 16px !important; padding: 14px !important; }' +
+        // Success page styling
+        '.woocommerce-order { max-width: 100% !important; padding: 20px !important; }' +
+        '.woocommerce-thankyou-order-received { font-size: 18px !important; font-weight: 700 !important; color: #22c55e !important; text-align: center !important; padding: 20px 0 !important; }';
+      document.head.appendChild(style);
+
       var url = window.location.href;
       var isOrderReceived = url.indexOf('order-received') > -1 || url.indexOf('commande-recue') > -1 || url.indexOf('thankyou') > -1;
       if (isOrderReceived) {
         if (window.ReactNativeWebView) {
           window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'payment_success', url: url }));
         }
-        var style = document.createElement('style');
-        style.textContent = 
-          'header, .site-header, #masthead, .header-wrapper, .header-main, .header-top, .header-bottom,' +
-          'footer, .site-footer, #colophon, .footer-wrapper, .absolute-footer,' +
-          'nav, .navigation, .nav-links, .breadcrumbs, .woocommerce-breadcrumb, #wpadminbar,' +
-          '.sidebar, #sidebar, aside,' +
-          '[class*="whatsapp"], .joinchat, [id*="whatsapp"],' +
-          '[class*="cookie"], [class*="consent"],' +
-          '#fkcart-floating-toggler, .fkcart-main-wrapper, [class*="fkcart"],' +
-          '[class*="tidio"], [id*="tidio"], [class*="chat-widget"],' +
-          '[class*="crisp"], [id*="crisp"],' +
-          '[class*="tawk"], [id*="tawk"],' +
-          '.wc-block-mini-cart, .wp-block-woocommerce-mini-cart,' +
-          '.page-title-inner, .page-title,' +
-          '.comments-area, #comments' +
-          '{ display: none !important; }' +
-          'body { background: #f5f5f5 !important; font-family: -apple-system, BlinkMacSystemFont, sans-serif !important; }' +
-          '.woocommerce-order { max-width: 100% !important; padding: 20px !important; }' +
-          '.woocommerce-thankyou-order-received { font-size: 18px !important; font-weight: 700 !important; color: #22c55e !important; text-align: center !important; padding: 20px 0 !important; }';
-        document.head.appendChild(style);
         return;
       }
       if (url.indexOf('lamako_checkout') > -1 && url.indexOf('error=') > -1) {
@@ -247,18 +282,20 @@ export default function CheckoutScreen() {
       }
       if ((url.indexOf('/cart') > -1 || url.indexOf('/panier') > -1) && url.indexOf('lamako_checkout') === -1 && url.indexOf('order-received') === -1) {
         if (window.ReactNativeWebView) {
-          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'payment_cancelled', message: 'Le paiement a \\u00e9t\\u00e9 annul\\u00e9. Votre commande est conserv\\u00e9e.' }));
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'payment_cancelled', message: 'Le paiement a ete annule. Votre commande est conservee.' }));
         }
         return;
       }
       function cleanup() {
-        var hide = '#wpadminbar, .qlwapp__container, [class*="qlwapp"], #fkcart-floating-toggler, [class*="fkcart"], [class*="tidio"], [class*="whatsapp"], [class*="tawk"], [class*="crisp"]';
-        document.querySelectorAll(hide).forEach(function(el) { el.style.display = 'none'; });
+        // Force-hide any elements that CSS might miss (dynamic content)
+        var hideSelectors = '#wpadminbar, .qlwapp__container, [class*="qlwapp"], #fkcart-floating-toggler, [class*="fkcart"], [class*="tidio"], [class*="whatsapp"], [class*="tawk"], [class*="crisp"], .gt-site-right, .gt-fixed-sidebar, .gt-mobile-header, .gt-header, .gt-sticky-header, .gt-footer, .gt-page-title-bar, .gt-breadcrumb, .gt-general-widget';
+        document.querySelectorAll(hideSelectors).forEach(function(el) { el.style.display = 'none'; });
         var btn = document.getElementById('place_order');
         if (btn) { btn.removeAttribute('hidden'); btn.style.display = 'block'; }
       }
       cleanup();
-      setTimeout(cleanup, 500);
+      setTimeout(cleanup, 300);
+      setTimeout(cleanup, 800);
       setTimeout(cleanup, 1500);
       setTimeout(cleanup, 3000);
       setInterval(cleanup, 5000);
