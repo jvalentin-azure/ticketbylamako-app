@@ -2337,45 +2337,46 @@ function lamako_mobile_notify_order_status( $order_id, $old_status, $new_status,
 
 
 // ============================================================
-// 8. WP CRON: Auto-cancel expired pending orders every 5 minutes
+// 8. AUTO-CANCEL EXPIRED ORDERS (via WooCommerce Action Scheduler)
 // ============================================================
+// Uses WooCommerce Action Scheduler instead of WP Cron for:
+// - Visibility in WP Admin > Outils > Actions planifiées
+// - Guaranteed execution (doesn't depend on site visits)
+// - Better logging and retry handling
 
 /**
- * Register a custom 5-minute cron interval.
+ * Schedule the recurring actions on init (only if not already scheduled).
+ * Runs every 5 minutes via WooCommerce Action Scheduler.
  */
-add_filter( 'cron_schedules', 'lamako_add_5min_cron_interval' );
-function lamako_add_5min_cron_interval( $schedules ) {
-    $schedules['every_five_minutes'] = array(
-        'interval' => 300, // 5 minutes
-        'display'  => __( 'Every 5 Minutes' ),
-    );
-    return $schedules;
-}
-
-/**
- * Schedule the cron event on plugin activation / init.
- */
-add_action( 'init', 'lamako_schedule_pending_order_cleanup' );
-function lamako_schedule_pending_order_cleanup() {
-    if ( ! wp_next_scheduled( 'lamako_cancel_expired_pending_orders' ) ) {
-        wp_schedule_event( time(), 'every_five_minutes', 'lamako_cancel_expired_pending_orders' );
+add_action( 'init', 'lamako_schedule_order_cleanup_action' );
+function lamako_schedule_order_cleanup_action() {
+    if ( ! function_exists( 'as_has_scheduled_action' ) ) return;
+    
+    // Schedule pending order cleanup every 5 minutes
+    if ( ! as_has_scheduled_action( 'lamako_cancel_expired_pending_orders' ) ) {
+        as_schedule_recurring_action( time(), 300, 'lamako_cancel_expired_pending_orders', array(), 'lamako' );
+    }
+    
+    // Schedule on-hold order cleanup every 5 minutes
+    if ( ! as_has_scheduled_action( 'lamako_cancel_expired_onhold_orders' ) ) {
+        as_schedule_recurring_action( time(), 300, 'lamako_cancel_expired_onhold_orders', array(), 'lamako' );
     }
 }
 
 /**
  * Unschedule on plugin deactivation.
  */
-register_deactivation_hook( __FILE__, 'lamako_unschedule_pending_order_cleanup' );
-function lamako_unschedule_pending_order_cleanup() {
-    $timestamp = wp_next_scheduled( 'lamako_cancel_expired_pending_orders' );
-    if ( $timestamp ) {
-        wp_unschedule_event( $timestamp, 'lamako_cancel_expired_pending_orders' );
+register_deactivation_hook( __FILE__, 'lamako_unschedule_order_cleanup_actions' );
+function lamako_unschedule_order_cleanup_actions() {
+    if ( function_exists( 'as_unschedule_all_actions' ) ) {
+        as_unschedule_all_actions( 'lamako_cancel_expired_pending_orders' );
+        as_unschedule_all_actions( 'lamako_cancel_expired_onhold_orders' );
     }
 }
 
 /**
- * Cron callback: Find and cancel all pending orders older than the hold_stock setting (10 min).
- * Also releases Firebase seats and restores WooCommerce stock.
+ * Action callback: Cancel all pending orders older than hold_stock setting (10 min).
+ * Releases WooCommerce stock and Firebase seats.
  */
 add_action( 'lamako_cancel_expired_pending_orders', 'lamako_do_cancel_expired_pending_orders' );
 function lamako_do_cancel_expired_pending_orders() {
@@ -2408,7 +2409,38 @@ function lamako_do_cancel_expired_pending_orders() {
     
     // Log for debugging
     if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-        error_log( '[Lamako Cron] Cancelled ' . count( $pending_orders ) . ' expired pending orders.' );
+        error_log( '[Lamako Action Scheduler] Cancelled ' . count( $pending_orders ) . ' expired pending orders.' );
+    }
+}
+
+/**
+ * Action callback: Cancel on-hold orders older than 30 minutes.
+ * On-hold orders are typically waiting for bank transfer or manual payment.
+ */
+add_action( 'lamako_cancel_expired_onhold_orders', 'lamako_do_cancel_expired_onhold_orders' );
+function lamako_do_cancel_expired_onhold_orders() {
+    if ( ! function_exists( 'wc_get_orders' ) ) return;
+    
+    // On-hold orders get 30 minutes (more generous for bank transfers)
+    $date_cutoff = date( 'Y-m-d H:i:s', strtotime( '-30 minutes' ) );
+    
+    $onhold_orders = wc_get_orders( array(
+        'status'       => 'on-hold',
+        'date_created' => '<' . strtotime( $date_cutoff ),
+        'limit'        => 20,
+        'orderby'      => 'date',
+        'order'        => 'ASC',
+    ) );
+    
+    if ( empty( $onhold_orders ) ) return;
+    
+    foreach ( $onhold_orders as $order ) {
+        $order->update_status( 'cancelled', __( 'Commande en attente annulée automatiquement - délai de 30 min expiré.', 'lamako' ) );
+        lamako_cleanup_firebase_seats_for_order( $order );
+    }
+    
+    if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+        error_log( '[Lamako Action Scheduler] Cancelled ' . count( $onhold_orders ) . ' expired on-hold orders.' );
     }
 }
 
@@ -2445,37 +2477,5 @@ function lamako_cleanup_firebase_seats_for_order( $order ) {
     $session_id = $order->get_meta( '_tc_session_id' );
     if ( $session_id ) {
         delete_transient( 'tc_cart_seats_' . $session_id );
-    }
-}
-
-/**
- * Also cancel 'on-hold' orders that have been waiting too long (30 min).
- * On-hold orders are typically waiting for bank transfer or manual payment.
- * For ticket sales, 30 min is generous enough.
- */
-add_action( 'lamako_cancel_expired_pending_orders', 'lamako_cancel_expired_onhold_orders' );
-function lamako_cancel_expired_onhold_orders() {
-    if ( ! function_exists( 'wc_get_orders' ) ) return;
-    
-    // On-hold orders get 30 minutes (more generous for bank transfers)
-    $date_cutoff = date( 'Y-m-d H:i:s', strtotime( '-30 minutes' ) );
-    
-    $onhold_orders = wc_get_orders( array(
-        'status'       => 'on-hold',
-        'date_created' => '<' . strtotime( $date_cutoff ),
-        'limit'        => 20,
-        'orderby'      => 'date',
-        'order'        => 'ASC',
-    ) );
-    
-    if ( empty( $onhold_orders ) ) return;
-    
-    foreach ( $onhold_orders as $order ) {
-        $order->update_status( 'cancelled', __( 'Commande en attente annulée automatiquement - délai de 30 min expiré.', 'lamako' ) );
-        lamako_cleanup_firebase_seats_for_order( $order );
-    }
-    
-    if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-        error_log( '[Lamako Cron] Cancelled ' . count( $onhold_orders ) . ' expired on-hold orders.' );
     }
 }

@@ -9,6 +9,8 @@ import { createOrder, SITE_URL, clearServerCart } from "@/lib/api/woocommerce";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { formatAriary } from "@/lib/format";
 import { notifyPaymentConfirmed } from "@/lib/notifications";
+import { useRewards, estimatePointsForPrice } from "@/lib/rewards-provider";
+import { useAuth } from "@/lib/auth-provider";
 
 // WebView for checkout - loads WooCommerce pay-for-order page
 let WebViewComponent: any = null;
@@ -24,6 +26,14 @@ export default function CheckoutScreen() {
   const colors = useColors();
   const router = useRouter();
   const { items, clearCart, total } = useCart();
+  const { currentTier, canRedeem, getDiscountValue, state: rewardsState } = useRewards();
+  const { isAuthenticated } = useAuth();
+
+  // Calculate total points to earn for this order
+  const totalPointsToEarn = items.reduce((sum, item) => {
+    const price = typeof item.price === "string" ? parseFloat(item.price) || 0 : item.price;
+    return sum + estimatePointsForPrice(price * item.quantity, currentTier.multiplier);
+  }, 0);
   const webviewRef = useRef<any>(null);
 
   const hasPhysicalProducts = items.some(i => !i.isEvent);
@@ -278,6 +288,32 @@ export default function CheckoutScreen() {
               Les frais d'expédition seront calculés à l'étape suivante.
             </Text>
           </View>
+
+          {/* LamakoRewards - Points to earn */}
+          {isAuthenticated && totalPointsToEarn > 0 && (
+            <View style={{ backgroundColor: "#fdf6ee", borderRadius: 12, borderWidth: 1, borderColor: "#e8d5a3", padding: 12, marginTop: 12 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "#f59e0b", alignItems: "center", justifyContent: "center" }}>
+                  <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>★</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 13, fontWeight: "600", color: "#3d2314" }}>
+                    Gagnez <Text style={{ fontSize: 14, fontWeight: "700", color: "#b45309" }}>{totalPointsToEarn} points</Text> LamakoRewards
+                  </Text>
+                  {currentTier.multiplier > 1 && (
+                    <Text style={{ fontSize: 11, color: "#92400e", marginTop: 2 }}>Bonus {currentTier.name} : x{currentTier.multiplier}</Text>
+                  )}
+                </View>
+              </View>
+              {canRedeem && getDiscountValue(rewardsState.availablePoints) > 0 && (
+                <View style={{ borderTopWidth: 1, borderTopColor: "#e8d5a3", marginTop: 10, paddingTop: 10 }}>
+                  <Text style={{ fontSize: 12, color: "#92400e", fontWeight: "500" }}>
+                    💰 {rewardsState.availablePoints} pts disponibles = {formatAriary(getDiscountValue(rewardsState.availablePoints))} de réduction
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
 
           <TouchableOpacity
             onPress={() => {

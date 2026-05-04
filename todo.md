@@ -729,3 +729,8 @@
 - [x] Add WP cron (every 5 min) to auto-cancel pending orders older than 10 min
 - [x] Release held stock and Firebase seats on cancellation
 - [x] Deploy updated plugin to WordPress
+
+## V3.9.3 - LamakoRewards on Boutique/Cart/Checkout Bug Fix
+- [x] Show LamakoRewards points earned on boutique product cards (PointsBadge already present)
+- [x] Show LamakoRewards points earned/redeemable on cart screen (total points + discount info)
+- [x] Show LamakoRewards points earned/redeemable on checkout (summary in récapitulatif)

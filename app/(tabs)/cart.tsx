@@ -6,11 +6,26 @@ import { useColors } from "@/hooks/use-colors";
 import { useCart } from "@/lib/cart-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { formatAriary, decodeHtmlEntities } from "@/lib/format";
+import { PointsBadge } from "@/components/points-badge";
+import { useRewards } from "@/lib/rewards-provider";
+import { estimatePointsForPrice } from "@/lib/rewards-provider";
+import { useAuth } from "@/lib/auth-provider";
 
 export default function CartScreen() {
   const colors = useColors();
   const router = useRouter();
   const { items, removeItem, updateQuantity, clearCart, total, itemCount } = useCart();
+  const { state: rewardsState, currentTier, canRedeem, getDiscountValue } = useRewards();
+  const { isAuthenticated } = useAuth();
+
+  // Calculate total points to earn for this cart
+  const totalPointsToEarn = items.reduce((sum, item) => {
+    const price = typeof item.price === "string" ? parseFloat(item.price) || 0 : item.price;
+    return sum + estimatePointsForPrice(price * item.quantity, currentTier.multiplier);
+  }, 0);
+
+  // Calculate potential discount from available points
+  const availableDiscount = canRedeem ? getDiscountValue(rewardsState.availablePoints) : 0;
 
   const handleCheckout = () => {
     if (items.length === 0) return;
@@ -65,7 +80,10 @@ export default function CartScreen() {
                 )}
               </View>
               <View style={styles.cartItemFooter}>
-                <Text style={[styles.cartItemPrice, { color: colors.primary }]}>{formatAriary(item.price)}</Text>
+                <View>
+                  <Text style={[styles.cartItemPrice, { color: colors.primary }]}>{formatAriary(item.price)}</Text>
+                  <PointsBadge price={typeof item.price === "string" ? parseFloat(item.price) * item.quantity : item.price * item.quantity} />
+                </View>
                 <View style={styles.qtyControls}>
                   <TouchableOpacity
                     onPress={() => item.quantity <= 1 ? removeItem(item.productId, item.seatLabel) : updateQuantity(item.productId, item.quantity - 1, item.seatLabel)}
@@ -87,6 +105,57 @@ export default function CartScreen() {
         )}
         ListFooterComponent={
           <View style={{ marginTop: 8 }}>
+            {/* LamakoRewards Summary */}
+            {isAuthenticated && totalPointsToEarn > 0 && (
+              <View style={[styles.rewardsSummary, { backgroundColor: "#fdf6ee", borderColor: "#e8d5a3" }]}>
+                <View style={styles.rewardsRow}>
+                  <View style={styles.rewardsIcon}>
+                    <Text style={styles.rewardsStar}>★</Text>
+                  </View>
+                  <View style={styles.rewardsContent}>
+                    <Text style={styles.rewardsTitle}>
+                      Gagnez <Text style={styles.rewardsPoints}>{totalPointsToEarn} points</Text> avec cette commande
+                    </Text>
+                    {currentTier.multiplier > 1 && (
+                      <Text style={styles.rewardsBonus}>
+                        Bonus {currentTier.name} : x{currentTier.multiplier}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+                {canRedeem && availableDiscount > 0 && (
+                  <View style={[styles.redeemRow, { borderTopColor: "#e8d5a3" }]}>
+                    <Text style={styles.redeemText}>
+                      💰 Vous avez {rewardsState.availablePoints} pts disponibles ({formatAriary(availableDiscount)} de réduction possible)
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Not logged in - encourage login for rewards */}
+            {!isAuthenticated && (
+              <TouchableOpacity
+                onPress={() => router.push("/login" as any)}
+                style={[styles.rewardsSummary, { backgroundColor: "#fdf6ee", borderColor: "#e8d5a3" }]}
+              >
+                <View style={styles.rewardsRow}>
+                  <View style={styles.rewardsIcon}>
+                    <Text style={styles.rewardsStar}>★</Text>
+                  </View>
+                  <View style={styles.rewardsContent}>
+                    <Text style={styles.rewardsTitle}>
+                      Connectez-vous pour gagner des <Text style={styles.rewardsPoints}>LamakoRewards</Text>
+                    </Text>
+                    <Text style={styles.rewardsBonus}>
+                      1 point par 1 000 Ar dépensé
+                    </Text>
+                  </View>
+                  <IconSymbol name="chevron.right" size={16} color="#b45309" />
+                </View>
+              </TouchableOpacity>
+            )}
+
             <View style={[styles.totalRow, { borderTopColor: colors.border }]}>
               <Text style={[styles.totalLabel, { color: colors.muted }]}>Sous-total</Text>
               <Text style={[styles.totalValue, { color: colors.foreground }]}>{formatAriary(total)}</Text>
@@ -142,4 +211,15 @@ const styles = StyleSheet.create({
   bottomCta: { padding: 16, paddingBottom: 32, borderTopWidth: 1 },
   checkoutBtn: { borderRadius: 14, paddingVertical: 16, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 8 },
   checkoutBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  // LamakoRewards styles
+  rewardsSummary: { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 12 },
+  rewardsRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  rewardsIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: "#f59e0b", alignItems: "center", justifyContent: "center" },
+  rewardsStar: { color: "#fff", fontSize: 14, fontWeight: "700" },
+  rewardsContent: { flex: 1 },
+  rewardsTitle: { fontSize: 13, fontWeight: "600", color: "#3d2314" },
+  rewardsPoints: { fontSize: 14, fontWeight: "700", color: "#b45309" },
+  rewardsBonus: { fontSize: 11, color: "#92400e", marginTop: 2 },
+  redeemRow: { borderTopWidth: 1, marginTop: 10, paddingTop: 10 },
+  redeemText: { fontSize: 12, color: "#92400e", fontWeight: "500" },
 });
