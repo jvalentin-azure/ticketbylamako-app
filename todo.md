@@ -724,3 +724,8 @@
 - [x] Add periodic tc_remove_expired_firebase_seats cleanup (setInterval 1min) in embed
 - [x] Add real-time Firebase listener in embed to show seats taken by others (in_others_cart color)
 - [x] Reduce WooCommerce hold_stock_minutes to 10 min for faster seat release
+
+## V3.9.2 - WP Cron Auto-Cancel Expired Pending Orders
+- [x] Add WP cron (every 5 min) to auto-cancel pending orders older than 10 min
+- [x] Release held stock and Firebase seats on cancellation
+- [x] Deploy updated plugin to WordPress
