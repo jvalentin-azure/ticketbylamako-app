@@ -11,6 +11,7 @@ import { useFavorites } from "@/lib/favorites-provider";
 import { formatAriary, formatDate, formatDateShort, stripHtml, decodeHtmlEntities } from "@/lib/format";
 import { LinearGradient } from "expo-linear-gradient";
 import { PointsBadge } from "@/components/points-badge";
+import { CartToast } from "@/components/cart-toast";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const SITE_URL = process.env.EXPO_PUBLIC_WC_SITE_URL || "https://www.ticketbylamako.com";
@@ -45,6 +46,8 @@ export default function EventDetailScreen() {
   const [upcomingEvents, setUpcomingEvents] = useState<TCEvent[]>([]);
   const [countdown, setCountdown] = useState<{days: number; hours: number; mins: number; secs: number} | null>(null);
   const [showFullTerms, setShowFullTerms] = useState(false);
+  const [showCartToast, setShowCartToast] = useState(false);
+  const [cartToastName, setCartToastName] = useState("");
 
   useEffect(() => {
     if (!id) return;
@@ -127,15 +130,21 @@ export default function EventDetailScreen() {
 
   const handleAddToCart = () => {
     if (!selectedTicket) return;
+    const itemName = `${name} - ${selectedTicket.name}`;
     addItem({
       productId: selectedTicket.id,
-      name: `${name} - ${selectedTicket.name}`,
+      name: itemName,
       price: parseFloat(selectedTicket.price) || 0,
       image: event.featuredImage || "",
       quantity: qty,
       isEvent: true,
     });
-    router.push("/(tabs)/cart" as any);
+    setCartToastName(itemName);
+    setShowCartToast(true);
+    // Navigate to cart after toast animation
+    setTimeout(() => {
+      router.push("/(tabs)/cart" as any);
+    }, 1200);
   };
 
   const handleOpenSeatingChart = async () => {
@@ -374,6 +383,11 @@ export default function EventDetailScreen() {
 
   return (
     <ScreenContainer edges={["top", "left", "right"]}>
+      <CartToast
+        visible={showCartToast}
+        itemName={cartToastName}
+        onHide={() => setShowCartToast(false)}
+      />
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Hero Image / Gallery */}
         <View style={{ position: "relative" }}>

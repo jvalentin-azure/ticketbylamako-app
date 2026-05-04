@@ -846,3 +846,8 @@
 - [x] Add to cart does not redirect to cart tab (router.replace→router.push)
 - [x] Payment/checkout page shows homepage content below (CSS + JS cleanup in PHP)
 - [x] Seating chart shows "invalid chart id" (same fix - esc_url encoding & in redirect URL)
+
+## V4.8 - Plugin Redeploy & Cart Toast
+- [x] Redeploy updated lamako-mobile-api.php to WordPress (esc_js fix + checkout CSS cleanup)
+- [x] Add visual toast/animation confirmation when adding item to cart
+- [x] Toast shows before redirecting to cart tab (1.2s delay with animation)

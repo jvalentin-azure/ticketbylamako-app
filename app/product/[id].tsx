@@ -10,6 +10,7 @@ import { getProduct, type WCProduct } from "@/lib/api/woocommerce";
 import { formatAriary, stripHtml, decodeHtmlEntities } from "@/lib/format";
 import { PointsBadge } from "@/components/points-badge";
 import { useRewards } from "@/lib/rewards-provider";
+import { CartToast } from "@/components/cart-toast";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 
@@ -22,6 +23,8 @@ export default function ProductDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [qty, setQty] = useState(1);
   const [galleryIndex, setGalleryIndex] = useState(0);
+  const [showCartToast, setShowCartToast] = useState(false);
+  const [cartToastName, setCartToastName] = useState("");
 
   useEffect(() => {
     if (!id) return;
@@ -53,6 +56,11 @@ export default function ProductDetailScreen() {
 
   return (
     <ScreenContainer edges={["top", "left", "right"]}>
+      <CartToast
+        visible={showCartToast}
+        itemName={cartToastName}
+        onHide={() => setShowCartToast(false)}
+      />
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Image Gallery */}
         <View style={{ position: "relative" }}>
@@ -172,7 +180,9 @@ export default function ProductDetailScreen() {
         <TouchableOpacity
           onPress={() => {
             addItem({ productId: product.id, name: productName, price: parseFloat(product.price) || 0, image: allImages[0] || "", quantity: qty, isEvent: false });
-            router.push("/(tabs)/cart" as any);
+            setCartToastName(productName);
+            setShowCartToast(true);
+            setTimeout(() => { router.push("/(tabs)/cart" as any); }, 1200);
           }}
           style={[styles.ctaButton, { backgroundColor: product.stock_status === "instock" ? colors.primary : colors.muted }]}
           disabled={product.stock_status !== "instock"}
