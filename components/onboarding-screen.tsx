@@ -41,34 +41,18 @@ const SLIDES: OnboardingSlide[] = [
   {
     id: "1",
     image: require("@/assets/images/onboarding-1.jpg"),
-    title: "Découvrez les ",
-    titleAccent: "meilleurs événements",
+    title: "Votre partenaire ",
+    titleAccent: "billetterie",
     description:
       "Concerts, festivals, spectacles et soirées — retrouvez tout ce qui se passe à Madagascar.",
   },
   {
     id: "2",
     image: require("@/assets/images/onboarding-2.jpg"),
-    title: "Vivez des ",
-    titleAccent: "expériences uniques",
-    description:
-      "Explorez des concerts, ateliers et rencontres qui se passent autour de vous.",
-  },
-  {
-    id: "3",
-    image: require("@/assets/images/onboarding-3.jpg"),
     title: "Réservez vos ",
     titleAccent: "billets en un clic",
     description:
       "Achetez vos places facilement avec un paiement rapide et sécurisé.",
-  },
-  {
-    id: "4",
-    image: require("@/assets/images/onboarding-4.jpg"),
-    title: "Ne ratez ",
-    titleAccent: "aucun événement",
-    description:
-      "Recevez des rappels, des recommandations et soyez toujours au courant.",
   },
 ];
 

@@ -56,6 +56,17 @@ export default function CheckoutScreen() {
   const MAX_RETRIES = 3;
   const paymentTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Auth guard: redirect to login if not authenticated
+  useEffect(() => {
+    if (!isAuthenticated) {
+      Alert.alert(
+        "Connexion requise",
+        "Vous devez être connecté pour passer une commande.",
+        [{ text: "Se connecter", onPress: () => router.replace("/(auth)/login" as any) }]
+      );
+    }
+  }, [isAuthenticated]);
+
   // Shipping address state
   const [shippingAddress, setShippingAddress] = useState("");
   const [shippingCity, setShippingCity] = useState("");

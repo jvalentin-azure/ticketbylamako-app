@@ -743,3 +743,40 @@
 - [x] App: redeemPoints() calls lamako-rewards API, gets coupon_code, passes to createOrder()
 - [x] App: Handle success (show applied coupon + discount), error states, and removeCoupon option
 - [x] Deploy updated lamako-mobile-api.php to WordPress (coupon_code support in create-order)
+
+## V4.0 - UI Fixes + App Separation
+
+### Onboarding Fix
+- [x] Reduce onboarding from 4 slides to 2 slides
+- [x] Keep logo on first slide, change text to "Votre partenaire billetterie"
+- [x] Keep "Commencer" button on last sliden and logo as-is
+
+### Home Screen Fix
+- [x] Move category filters BEFORE event cards (not after)urrently after)
+
+### Boutique Fix
+- [x] Reduce gap between search bar, filter chips, and product grid
+- [x] Add colors to boutique category chips (like events page)
+- [x] Optimize boutique loading speed (new shop-data endpoint with 5min cache)
+
+### Events Page Fix
+- [x] Fix duplicate category emoji on events page (API names already contain emoji, removed manual emoji prefix)
+
+### App Separation
+- [ ] Separate into 2 apps: TicketByLamako (Client) and TicketByLamako Backend (Admin/Organisateur)
+- [ ] Client app: events, boutique, billets, panier, profil client only
+- [ ] Backend app: dashboard exec, QR scanner, participants, gestion événements, admin analytics
+- [ ] Both apps share same WordPress backend/API
+
+### GitHub
+- [ ] Push Client app to GitHub with full history
+- [ ] Push Backend app to GitHub with full history
+
+## V4.0.1 - Auth Guard for Purchases
+- [x] Block checkout for unauthenticated users in cart screen (shows "Se connecter pour commander" button + Alert)
+- [x] Block checkout screen access for unauthenticated users (useEffect redirect to login)
+- [x] Show login prompt with redirect to auth when trying to buy without account
+
+## V4.0.2 - Deploy & GitHub
+- [x] Deploy updated lamako-mobile-api.php (shop-data endpoint + caching) to WordPress
+- [ ] Push all code to GitHub repository

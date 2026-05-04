@@ -305,7 +305,7 @@ export default function EventsScreen() {
               }]}
             >
               <Text style={[styles.chipText, { color: isSelected ? "#fff" : catColor }]}>
-                {PARENT_CATEGORY_COLORS.find(p => p.id === cat.id)?.emoji || ""} {decodeHtmlEntities(cat.name)}
+                {decodeHtmlEntities(cat.name)}
               </Text>
             </TouchableOpacity>
           );

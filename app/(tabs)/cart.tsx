@@ -29,6 +29,17 @@ export default function CartScreen() {
 
   const handleCheckout = () => {
     if (items.length === 0) return;
+    if (!isAuthenticated) {
+      Alert.alert(
+        "Connexion requise",
+        "Vous devez être connecté pour passer une commande. Connectez-vous ou créez un compte pour continuer.",
+        [
+          { text: "Annuler", style: "cancel" },
+          { text: "Se connecter", onPress: () => router.push("/(auth)/login" as any) },
+        ]
+      );
+      return;
+    }
     router.push("/checkout" as any);
   };
 
@@ -169,13 +180,23 @@ export default function CartScreen() {
       />
 
       <View style={[styles.bottomCta, { borderTopColor: colors.border }]}>
-        <TouchableOpacity
-          onPress={handleCheckout}
-          style={[styles.checkoutBtn, { backgroundColor: colors.primary }]}
-        >
-          <IconSymbol name="lock.fill" size={18} color="#fff" />
-          <Text style={styles.checkoutBtnText}>Passer la commande</Text>
-        </TouchableOpacity>
+        {!isAuthenticated ? (
+          <TouchableOpacity
+            onPress={() => router.push("/(auth)/login" as any)}
+            style={[styles.checkoutBtn, { backgroundColor: "#b45309" }]}
+          >
+            <IconSymbol name="person.fill" size={18} color="#fff" />
+            <Text style={styles.checkoutBtnText}>Se connecter pour commander</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            onPress={handleCheckout}
+            style={[styles.checkoutBtn, { backgroundColor: colors.primary }]}
+          >
+            <IconSymbol name="lock.fill" size={18} color="#fff" />
+            <Text style={styles.checkoutBtnText}>Passer la commande</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </ScreenContainer>
   );

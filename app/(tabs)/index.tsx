@@ -180,6 +180,31 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* CATEGORY FILTER - BEFORE EVENT CARDS */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsContainer}>
+          <TouchableOpacity
+            onPress={() => {
+              setPendingCategory(null);
+              router.push("/(tabs)/events" as any);
+            }}
+            style={[styles.chip, { backgroundColor: colors.primary, borderColor: colors.primary }]}
+          >
+            <Text style={[styles.chipText, { color: "#fff" }]}>Tous</Text>
+          </TouchableOpacity>
+          {PARENT_CATEGORY_COLORS.map(cat => (
+            <TouchableOpacity
+              key={cat.id}
+              onPress={() => {
+                setPendingCategory(cat.label);
+                router.push("/(tabs)/events" as any);
+              }}
+              style={[styles.chip, { backgroundColor: cat.color + "18", borderColor: cat.color }]}
+            >
+              <Text style={[styles.chipText, { color: cat.color }]}>{cat.emoji} {cat.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
         <View style={{ gap: 14 }}>
           {upcomingEvents.slice(0, 6).map(item => {
             const itemName = decodeHtmlEntities(item.title.rendered);
@@ -238,30 +263,7 @@ export default function HomeScreen() {
           })}
         </View>
 
-        {/* CATEGORY FILTER - AFTER EVENTS */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsContainer}>
-          <TouchableOpacity
-            onPress={() => {
-              setPendingCategory(null);
-              router.push("/(tabs)/events" as any);
-            }}
-            style={[styles.chip, { backgroundColor: colors.primary, borderColor: colors.primary }]}
-          >
-            <Text style={[styles.chipText, { color: "#fff" }]}>Tous</Text>
-          </TouchableOpacity>
-          {PARENT_CATEGORY_COLORS.map(cat => (
-            <TouchableOpacity
-              key={cat.id}
-              onPress={() => {
-                setPendingCategory(cat.label);
-                router.push("/(tabs)/events" as any);
-              }}
-              style={[styles.chip, { backgroundColor: cat.color + "18", borderColor: cat.color }]}
-            >
-              <Text style={[styles.chipText, { color: cat.color }]}>{cat.emoji} {cat.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+
 
         {/* PAST EVENTS - HORIZONTAL SCROLLER (same size as events tab: 220x120) */}
         {pastEvents.length > 0 && (
