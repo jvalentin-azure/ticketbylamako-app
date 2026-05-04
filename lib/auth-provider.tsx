@@ -1,11 +1,10 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { User, PortalType, login as apiLogin, register as apiRegister, logout as apiLogout, getStoredUser, validateToken } from "./api/auth";
+import { User, login as apiLogin, register as apiRegister, logout as apiLogout, getStoredUser, validateToken } from "./api/auth";
 
 interface AuthState {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  portal: PortalType;
 }
 
 interface AuthContextType extends AuthState {
@@ -13,7 +12,6 @@ interface AuthContextType extends AuthState {
   register: (email: string, password: string, firstName: string, lastName: string) => Promise<void>;
   loginWithUser: (user: User) => void;
   logout: () => Promise<void>;
-  switchPortal: (portal: PortalType) => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -23,7 +21,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user: null,
     isLoading: true,
     isAuthenticated: false,
-    portal: "client",
   });
 
   useEffect(() => {
@@ -33,7 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (user) {
           const valid = await validateToken();
           if (valid) {
-            setState({ user, isLoading: false, isAuthenticated: true, portal: user.portal });
+            setState({ user, isLoading: false, isAuthenticated: true });
             return;
           }
         }
@@ -44,29 +41,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (username: string, password: string) => {
     const user = await apiLogin(username, password);
-    setState({ user, isLoading: false, isAuthenticated: true, portal: user.portal });
+    setState({ user, isLoading: false, isAuthenticated: true });
   }, []);
 
   const register = useCallback(async (email: string, password: string, firstName: string, lastName: string) => {
     const user = await apiRegister(email, password, firstName, lastName);
-    setState({ user, isLoading: false, isAuthenticated: true, portal: user.portal });
+    setState({ user, isLoading: false, isAuthenticated: true });
   }, []);
 
   const logout = useCallback(async () => {
     await apiLogout();
-    setState({ user: null, isLoading: false, isAuthenticated: false, portal: "client" });
+    setState({ user: null, isLoading: false, isAuthenticated: false });
   }, []);
 
   const loginWithUser = useCallback((user: User) => {
-    setState({ user, isLoading: false, isAuthenticated: true, portal: user.portal });
-  }, []);
-
-  const switchPortal = useCallback((portal: PortalType) => {
-    setState(s => ({ ...s, portal }));
+    setState({ user, isLoading: false, isAuthenticated: true });
   }, []);
 
   return (
-    <AuthContext.Provider value={{ ...state, login, register, loginWithUser, logout, switchPortal }}>
+    <AuthContext.Provider value={{ ...state, login, register, loginWithUser, logout }}>
       {children}
     </AuthContext.Provider>
   );

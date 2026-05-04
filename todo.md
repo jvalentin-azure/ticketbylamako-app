@@ -763,14 +763,14 @@
 - [x] Fix duplicate category emoji on events page (API names already contain emoji, removed manual emoji prefix)
 
 ### App Separation
-- [ ] Separate into 2 apps: TicketByLamako (Client) and TicketByLamako Backend (Admin/Organisateur)
-- [ ] Client app: events, boutique, billets, panier, profil client only
-- [ ] Backend app: dashboard exec, QR scanner, participants, gestion événements, admin analytics
-- [ ] Both apps share same WordPress backend/API
+- [x] Separate into 2 apps: TicketByLamako (Client) and TicketByLamako Backend (Admin/Organisateur)
+- [x] Client app: events, boutique, billets, panier, profil client only
+- [x] Backend app: dashboard, QR scanner, participants, reports, admin analytics
+- [x] Both apps share same WordPress backend/API
 
 ### GitHub
-- [ ] Push Client app to GitHub with full history
-- [ ] Push Backend app to GitHub with full history
+- [x] Push Client app to GitHub (jvalentin-azure/ticketbylamako-app, de50dc5)
+- [x] Push Backend app to GitHub (jvalentin-azure/ticketbylamako-backend, V1.0)
 
 ## V4.0.1 - Auth Guard for Purchases
 - [x] Block checkout for unauthenticated users in cart screen (shows "Se connecter pour commander" button + Alert)
@@ -782,9 +782,20 @@
 - [x] Push all code to GitHub repository (jvalentin-azure/ticketbylamako-app, 62eb4ca)
 
 ## V4.1 - App Separation: TicketByLamako Backend
-- [ ] Identify all admin/organiser screens and components to migrate
-- [ ] Remove admin/organiser modules from client app
-- [ ] Create new Backend app with migrated modules (dashboard, scanner QR, participants)
-- [ ] Configure Backend app branding (logo, name, navigation)
-- [ ] Push Backend app to GitHub
-- [ ] Push updated client app to GitHub
+- [x] Identify all admin/organiser screens and components to migrate
+- [x] Remove admin/organiser modules from client app (7 screens removed)
+- [x] Create new Backend app with migrated modules (dashboard, scanner QR, participants, reports)
+- [x] Configure Backend app branding (blue theme, gear+chart logo, admin/org drawer)
+- [x] Push Backend app to GitHub (jvalentin-azure/ticketbylamako-backend)
+- [x] Push updated client app to GitHub (jvalentin-azure/ticketbylamako-app)
+
+## V4.2 - Client App Cleanup (Remove Dead Admin/Organiser Code)
+- [x] Remove portal system from auth-provider.tsx (no more switchPortal, PortalType)
+- [x] Remove tickera.ts entirely (137 lines - scanner/check-in API moved to backend)
+- [x] Remove PortalType, roleToPortal() from auth.ts and portal from User interface
+- [x] Remove portalMap from social-auth.ts
+- [x] Remove portal reference from profile.tsx (always shows "Client")
+- [x] Remove unused admin icon mappings (chart.bar.fill, qrcode.viewfinder, doc.text.fill, camera/flashlight)
+- [x] Update app-structure tests (verify admin screens removed, tickera removed, no portal)
+- [x] Verify TypeScript compilation (0 errors) + 35 tests passing
+- [ ] Push cleaned client app to GitHub

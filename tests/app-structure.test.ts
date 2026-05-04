@@ -7,7 +7,7 @@ const TABS_DIR = path.join(APP_DIR, "(tabs)");
 const AUTH_DIR = path.join(APP_DIR, "(auth)");
 
 describe("App Structure", () => {
-  it("has all required tab screens", () => {
+  it("has all required client tab screens", () => {
     const requiredTabs = [
       "index.tsx",
       "events.tsx",
@@ -15,6 +15,15 @@ describe("App Structure", () => {
       "cart.tsx",
       "tickets.tsx",
       "profile.tsx",
+      "_layout.tsx",
+    ];
+    for (const tab of requiredTabs) {
+      expect(fs.existsSync(path.join(TABS_DIR, tab)), `Missing tab: ${tab}`).toBe(true);
+    }
+  });
+
+  it("does not contain admin/organiser screens (moved to backend app)", () => {
+    const removedScreens = [
       "org-dashboard.tsx",
       "scanner.tsx",
       "participants.tsx",
@@ -22,10 +31,9 @@ describe("App Structure", () => {
       "admin-dashboard.tsx",
       "admin-orders.tsx",
       "admin-analytics.tsx",
-      "_layout.tsx",
     ];
-    for (const tab of requiredTabs) {
-      expect(fs.existsSync(path.join(TABS_DIR, tab)), `Missing tab: ${tab}`).toBe(true);
+    for (const screen of removedScreens) {
+      expect(fs.existsSync(path.join(TABS_DIR, screen)), `Admin screen should be removed: ${screen}`).toBe(false);
     }
   });
 
@@ -43,11 +51,11 @@ describe("App Structure", () => {
     expect(fs.existsSync(path.join(APP_DIR, "orders.tsx"))).toBe(true);
   });
 
-  it("has API service files", () => {
+  it("has API service files (no tickera - moved to backend)", () => {
     const libDir = path.resolve(__dirname, "../lib/api");
     expect(fs.existsSync(path.join(libDir, "woocommerce.ts"))).toBe(true);
     expect(fs.existsSync(path.join(libDir, "auth.ts"))).toBe(true);
-    expect(fs.existsSync(path.join(libDir, "tickera.ts"))).toBe(true);
+    expect(fs.existsSync(path.join(libDir, "tickera.ts"))).toBe(false); // Moved to backend app
   });
 
   it("has providers", () => {
@@ -56,11 +64,17 @@ describe("App Structure", () => {
     expect(fs.existsSync(path.join(libDir, "cart-provider.tsx"))).toBe(true);
   });
 
+  it("auth provider does not contain portal system", () => {
+    const authProvider = fs.readFileSync(path.resolve(__dirname, "../lib/auth-provider.tsx"), "utf-8");
+    expect(authProvider).not.toContain("switchPortal");
+    expect(authProvider).not.toContain("PortalType");
+  });
+
   it("has correct app icon", () => {
     const iconPath = path.resolve(__dirname, "../assets/images/icon.png");
     expect(fs.existsSync(iconPath)).toBe(true);
     const stat = fs.statSync(iconPath);
-    expect(stat.size).toBeGreaterThan(100000); // Should be a real image, not a placeholder
+    expect(stat.size).toBeGreaterThan(100000);
   });
 
   it("tab layout registers all tab files", () => {
@@ -76,9 +90,7 @@ describe("App Structure", () => {
 describe("Theme Configuration", () => {
   it("has TicketByLamako brand colors", () => {
     const themeConfig = fs.readFileSync(path.resolve(__dirname, "../theme.config.js"), "utf-8");
-    // Should have the official brand colors
     expect(themeConfig).toContain("#663d17");
-    // Should have the gold accent color
     expect(themeConfig).toContain("#c79f6c");
   });
 });

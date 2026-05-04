@@ -7,7 +7,6 @@ const TOKEN_KEY = "jwt_token";
 const USER_KEY = "user_data";
 
 export type UserRole = "customer" | "shop_manager" | "administrator";
-export type PortalType = "client" | "organisateur" | "admin";
 
 export interface User {
   id: number;
@@ -16,7 +15,6 @@ export interface User {
   firstName: string;
   lastName: string;
   role: UserRole;
-  portal: PortalType;
   avatar?: string;
 }
 
@@ -48,14 +46,6 @@ async function secureDelete(key: string) {
     await AsyncStorage.removeItem(key);
   } else {
     await SecureStore.deleteItemAsync(key);
-  }
-}
-
-function roleToPortal(role: UserRole): PortalType {
-  switch (role) {
-    case "administrator": return "admin";
-    case "shop_manager": return "organisateur";
-    default: return "client";
   }
 }
 
@@ -95,7 +85,6 @@ export async function login(username: string, password: string): Promise<User> {
     firstName: wpUser.first_name || "",
     lastName: wpUser.last_name || "",
     role,
-    portal: roleToPortal(role),
     avatar: wpUser.avatar_urls?.["96"],
   };
 

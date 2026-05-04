@@ -86,8 +86,6 @@ export async function socialLogin(
   if (roles.includes("administrator")) role = "administrator";
   else if (roles.includes("shop_manager")) role = "shop_manager";
 
-  const portalMap = { administrator: "admin" as const, shop_manager: "organisateur" as const, customer: "client" as const };
-
   const user: User = {
     id: data.user.id,
     email: data.user.email,
@@ -95,7 +93,6 @@ export async function socialLogin(
     firstName: data.user.first_name || "",
     lastName: data.user.last_name || "",
     role,
-    portal: portalMap[role],
     avatar: data.user.avatar_url,
   };
 

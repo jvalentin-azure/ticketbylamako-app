@@ -10,7 +10,7 @@ import { useRewards, TIERS } from "@/lib/rewards-provider";
 export default function ProfileScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { isAuthenticated, user, portal, logout } = useAuth();
+  const { isAuthenticated, user, logout } = useAuth();
   const { colorScheme: scheme, setColorScheme: setScheme } = useThemeContext();
   const { state: rewards, currentTier, progressToNextTier, pointsToNextTier, nextTier } = useRewards();
 
@@ -51,9 +51,7 @@ export default function ProfileScreen() {
                 <Text style={{ color: colors.muted, fontSize: 13, marginTop: 2 }}>{user.email}</Text>
                 <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4 }}>
                   <View style={{ backgroundColor: colors.primary + "20", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
-                    <Text style={{ color: colors.primary, fontSize: 11, fontWeight: "600" }}>
-                      {portal === "admin" ? "Administrateur" : portal === "organisateur" ? "Organisateur" : "Client"}
-                    </Text>
+                    <Text style={{ color: colors.primary, fontSize: 11, fontWeight: "600" }}>Client</Text>
                   </View>
                 </View>
               </View>
