@@ -733,6 +733,134 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         hideWidgets();
         setInterval(hideWidgets, 2000);
+        
+        // ============================================================
+        // FIREBASE: Periodic cleanup of expired seats (every 1 minute)
+        // ============================================================
+        function startFirebaseCleanup() {
+            if (typeof tc_seat_chart_ajax === 'undefined' || tc_seat_chart_ajax.tc_check_firebase != '1') return;
+            
+            var mapEl = document.querySelector('.tc_seating_map');
+            var chartId = mapEl ? mapEl.getAttribute('data-seating-chart-id') : '';
+            if (!chartId) return;
+            
+            // Initial cleanup after 3 seconds
+            setTimeout(function() {
+                jQuery.post(tc_seat_chart_ajax.ajaxUrl, {
+                    action: 'tc_remove_expired_firebase_seats',
+                    tc_seating_chart_id: chartId
+                });
+                console.log('[Lamako] Firebase: initial expired seats cleanup for chart ' + chartId);
+            }, 3000);
+            
+            // Periodic cleanup every 1 minute
+            setInterval(function() {
+                jQuery.post(tc_seat_chart_ajax.ajaxUrl, {
+                    action: 'tc_remove_expired_firebase_seats',
+                    tc_seating_chart_id: chartId
+                });
+                console.log('[Lamako] Firebase: periodic cleanup for chart ' + chartId);
+            }, 60 * 1000);
+        }
+        startFirebaseCleanup();
+        
+        // ============================================================
+        // FIREBASE: Real-time listener for other users' seat changes
+        // Shows seats taken by others in grey/different color
+        // ============================================================
+        function startFirebaseRealtimeListener() {
+            if (typeof tc_seat_chart_ajax === 'undefined' || tc_seat_chart_ajax.tc_check_firebase != '1') return;
+            if (typeof firebase === 'undefined' || typeof tc_firebase_vars === 'undefined') {
+                console.log('[Lamako] Firebase SDK not available - skipping real-time listener');
+                return;
+            }
+            
+            var mapEl = document.querySelector('.tc_seating_map');
+            var chartId = mapEl ? mapEl.getAttribute('data-seating-chart-id') : '';
+            if (!chartId) return;
+            
+            var sessionId = tc_firebase_vars.session_id || '';
+            var inOthersCartColor = tc_firebase_vars.tc_in_others_cart_seat_color || '#808080';
+            var reservedColor = (typeof tc_seat_chart_ajax !== 'undefined' && tc_seat_chart_ajax.tc_reserved_seat_color) 
+                ? tc_seat_chart_ajax.tc_reserved_seat_color : '#333333';
+            
+            // Listen for in-cart changes (other users adding/removing seats)
+            var inCartRef = firebase.database().ref('/in-cart/' + chartId);
+            
+            inCartRef.orderByChild('timestamp').on('child_added', function(data) {
+                var seatId = data.key;
+                var seatData = data.val();
+                
+                if (seatData.session_id !== sessionId) {
+                    // Another user has this seat in their cart - mark it grey
+                    var seatEl = mapEl.querySelector('#' + seatId + ':not(.tc-object-selectable)');
+                    if (seatEl && !seatEl.classList.contains('tc_seat_in_cart')) {
+                        seatEl.style.backgroundColor = inOthersCartColor;
+                        seatEl.style.color = inOthersCartColor;
+                        seatEl.classList.add('tc_seat_in_others_cart');
+                        seatEl.classList.remove('ui-selected', 'ui-selectee');
+                    }
+                }
+            });
+            
+            inCartRef.on('child_removed', function(data) {
+                var seatId = data.key;
+                var seatData = data.val();
+                
+                if (seatData.session_id !== sessionId) {
+                    // Another user released this seat - mark it available again
+                    var seatEl = mapEl.querySelector('#' + seatId + ':not(.tc-object-selectable)');
+                    if (seatEl && !seatEl.classList.contains('tc_seat_in_cart')) {
+                        seatEl.classList.remove('tc_seat_in_others_cart');
+                        // Restore original color from ticket type
+                        var ttId = seatEl.getAttribute('data-tt-id');
+                        var ttLi = ttId ? document.querySelector('li.tt_' + ttId) : null;
+                        var origColor = ttLi ? window.getComputedStyle(ttLi).color : '';
+                        if (origColor) {
+                            seatEl.style.backgroundColor = origColor;
+                            seatEl.style.color = origColor;
+                        }
+                        seatEl.classList.add('ui-selectee');
+                    }
+                }
+            });
+            
+            // Listen for reserved seats (purchased by others)
+            var reservedRef = firebase.database().ref('/reserved/' + chartId);
+            
+            reservedRef.orderByChild('timestamp').on('child_added', function(data) {
+                var seatId = data.key;
+                var seatEl = mapEl.querySelector('#' + seatId + ':not(.tc-object-selectable)');
+                if (seatEl) {
+                    seatEl.style.backgroundColor = reservedColor;
+                    seatEl.style.color = reservedColor;
+                    seatEl.classList.add('tc_seat_reserved');
+                    seatEl.classList.remove('ui-selected', 'ui-selectee', 'tc_seat_in_others_cart');
+                }
+            });
+            
+            reservedRef.on('child_removed', function(data) {
+                var seatId = data.key;
+                var seatEl = mapEl.querySelector('#' + seatId + ':not(.tc-object-selectable)');
+                if (seatEl && !seatEl.classList.contains('tc_seat_in_cart')) {
+                    seatEl.classList.remove('tc_seat_reserved');
+                    var ttId = seatEl.getAttribute('data-tt-id');
+                    var ttLi = ttId ? document.querySelector('li.tt_' + ttId) : null;
+                    var origColor = ttLi ? window.getComputedStyle(ttLi).color : '';
+                    if (origColor) {
+                        seatEl.style.backgroundColor = origColor;
+                        seatEl.style.color = origColor;
+                    }
+                    seatEl.classList.add('ui-selectee');
+                }
+            });
+            
+            console.log('[Lamako] Firebase real-time listener active for chart ' + chartId);
+        }
+        
+        // Start Firebase listener after a short delay to ensure Firebase SDK is loaded
+        setTimeout(startFirebaseRealtimeListener, 3000);
+        
     }, 2000);
 });
 </script>

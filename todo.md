@@ -720,7 +720,7 @@
 - [x] Add tc_remove_seat_from_firebase_cart call in removeSeatFromCart() - releases seat immediately for others
 - [x] Add chart_id parameter to clearServerCart endpoint for Firebase cleanup on exit
 - [x] Pass chart_id from seatingChartUrl to clearServerCart() in app event detail screen
-- [ ] Deploy updated lamako-mobile-api.php to WordPress server
-- [ ] Add periodic tc_remove_expired_firebase_seats cleanup (setInterval 2min) in embed
-- [ ] Add real-time Firebase listener in embed to show seats taken by others (in_others_cart color)
-- [ ] Reduce WooCommerce hold_stock_minutes from 1440 (24h) to 30 min for faster seat release
+- [x] Deploy updated lamako-mobile-api.php to WordPress server
+- [x] Add periodic tc_remove_expired_firebase_seats cleanup (setInterval 1min) in embed
+- [x] Add real-time Firebase listener in embed to show seats taken by others (in_others_cart color)
+- [x] Reduce WooCommerce hold_stock_minutes to 10 min for faster seat release
