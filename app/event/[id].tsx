@@ -141,14 +141,39 @@ export default function EventDetailScreen() {
   const handleOpenSeatingChart = async () => {
     if (!hasSeating || !event) return;
     setSeatingLoading(true);
-    // BilletClic approach: load the full event page in WebView
-    // The seating chart popup opens natively within the page when user clicks "CHOISIR MA PLACE"
-    const eventPageUrl = event.link || `${SITE_URL}/tc-events/${event.slug}/`;
-    setSeatingChartUrl(eventPageUrl);
-    setShowSeatingChart(true);
-    setWebviewPhase('seating');
-    setSelectedSeats([]);
-    setSeatingLoading(false);
+    try {
+      // Get the user's JWT token for auto-login in WebView
+      const { getStoredToken } = await import("@/lib/api/auth");
+      const token = await getStoredToken();
+      
+      // Try to get the direct seating chart embed URL
+      let targetUrl = event.link || `${SITE_URL}/tc-events/${event.slug}/`;
+      try {
+        const chartUrl = await getSeatingChartUrl(event.id, event.slug, event.link);
+        if (chartUrl) targetUrl = chartUrl;
+      } catch {}
+      
+      // If user is logged in, use auto-login endpoint to set cookies in WebView
+      if (token) {
+        const autoLoginUrl = `${SITE_URL}/wp-json/lamako-mobile/v1/auto-login?token=${encodeURIComponent(token)}&redirect=${encodeURIComponent(targetUrl)}`;
+        setSeatingChartUrl(autoLoginUrl);
+      } else {
+        setSeatingChartUrl(targetUrl);
+      }
+      
+      setShowSeatingChart(true);
+      setWebviewPhase('seating');
+      setSelectedSeats([]);
+    } catch (e) {
+      console.warn("Seating chart open error:", e);
+      // Fallback: load event page directly
+      const eventPageUrl = event.link || `${SITE_URL}/tc-events/${event.slug}/`;
+      setSeatingChartUrl(eventPageUrl);
+      setShowSeatingChart(true);
+      setWebviewPhase('seating');
+    } finally {
+      setSeatingLoading(false);
+    }
   };
 
   // Seating Chart WebView - loads the tc_seat_charts page directly (same approach as POS plugin)
@@ -175,8 +200,13 @@ export default function EventDetailScreen() {
             'body { margin-top: 0 !important; padding-top: 0 !important; }' +
             '.entry-content, .tc_event_content { padding-top: 10px !important; }';
           document.head.appendChild(style);
-          // On checkout/cart pages, add mobile-friendly styles
-          if (window.location.href.indexOf('/checkout') > -1 || window.location.href.indexOf('/commande') > -1 || window.location.href.indexOf('/cart') > -1 || window.location.href.indexOf('/panier') > -1) {
+          // Auto-redirect cart to checkout (skip cart page - go direct to checkout)
+          if ((window.location.href.indexOf('/cart') > -1 || window.location.href.indexOf('/panier') > -1) && window.location.href.indexOf('/checkout') === -1 && window.location.href.indexOf('/commande') === -1) {
+            window.location.href = window.location.origin + '/checkout/';
+            return;
+          }
+          // On checkout pages, add mobile-friendly styles
+          if (window.location.href.indexOf('/checkout') > -1 || window.location.href.indexOf('/commande') > -1) {
             var checkoutStyle = document.createElement('style');
             checkoutStyle.textContent = 
               'body { font-family: -apple-system, BlinkMacSystemFont, sans-serif !important; font-size: 15px !important; }' +
@@ -313,16 +343,18 @@ export default function EventDetailScreen() {
           }}
           onNavigationStateChange={(navState: any) => {
             const url = navState.url || "";
-            // Detect checkout/cart pages
+            // Detect checkout pages
             if (url.includes('/checkout') || url.includes('/commande')) {
-              setWebviewPhase('checkout');
+              if (!url.includes('/cart') && !url.includes('/panier')) {
+                setWebviewPhase('checkout');
+              }
             }
             // Detect order confirmation page
             if (url.includes("order-received") || url.includes("commande-recue")) {
               setWebviewPhase('confirmation');
             }
             // Detect if user navigated back to event page (reset phase)
-            if (url.includes('/tc-events/') || url.includes('/tc_event/')) {
+            if (url.includes('/tc-events/') || url.includes('/tc_event/') || url.includes('lamako_seat_embed') || url.includes('seat-chart')) {
               setWebviewPhase('seating');
             }
           }}

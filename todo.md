@@ -829,3 +829,13 @@
 - [x] Intercept order-received URL to show success in app
 - [x] Fix cart redirect bug (redirecting to home after login)
 - [x] Fix seats persisting after clearing selection (no more native overlay)
+
+## V4.6 - Seamless Seating Chart Flow & APK Crash Fix
+- [x] WordPress: auto-login endpoint (JWT → WP session cookies → redirect)
+- [x] WebView loads seating chart directly (not event page)
+- [x] Auto-login before loading chart (user already connected)
+- [x] After seat selection → skip cart → direct to checkout
+- [x] Deploy updated plugin to WordPress
+- [x] Fix APK crash: disabled newArchEnabled, reactCompiler, edgeToEdge
+- [x] Fix APK crash: wrapped notification setup in try-catch
+- [x] Fix events page spacing between date, filters, and first card

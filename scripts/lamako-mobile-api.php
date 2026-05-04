@@ -2954,3 +2954,100 @@ function lamako_generate_jwt_for_user( $user ) {
 
     return $header . '.' . $payload_encoded . '.' . $signature;
 }
+
+// ============================================================
+// AUTO-LOGIN ENDPOINT FOR MOBILE APP WEBVIEW
+// ============================================================
+
+/**
+ * Auto-login endpoint: validates JWT token, sets WordPress session cookies,
+ * then redirects to the target page (seating chart, checkout, etc.)
+ * 
+ * GET /wp-json/lamako-mobile/v1/auto-login?token=JWT&redirect=/tc-events/xxx/
+ * 
+ * This allows the WebView to be pre-authenticated before loading pages
+ * that require login (checkout, seating chart with cart, etc.)
+ */
+add_action( 'rest_api_init', function () {
+    register_rest_route( 'lamako-mobile/v1', '/auto-login', [
+        'methods'  => 'GET',
+        'callback' => 'lamako_mobile_auto_login',
+        'permission_callback' => '__return_true',
+    ] );
+} );
+
+function lamako_mobile_auto_login( WP_REST_Request $request ) {
+    $token    = $request->get_param( 'token' );
+    $redirect = $request->get_param( 'redirect' );
+
+    if ( empty( $token ) ) {
+        return new WP_Error( 'missing_token', 'Token requis', [ 'status' => 400 ] );
+    }
+
+    if ( empty( $redirect ) ) {
+        $redirect = home_url( '/' );
+    }
+
+    // Decode and validate the JWT token
+    $secret_key = defined( 'JWT_AUTH_SECRET_KEY' ) ? JWT_AUTH_SECRET_KEY : 
+                  ( defined( 'AUTH_KEY' ) ? AUTH_KEY : wp_salt( 'auth' ) );
+
+    $parts = explode( '.', $token );
+    if ( count( $parts ) !== 3 ) {
+        return new WP_Error( 'invalid_token', 'Token invalide', [ 'status' => 401 ] );
+    }
+
+    // Verify signature
+    $header_payload = $parts[0] . '.' . $parts[1];
+    $signature = hash_hmac( 'sha256', $header_payload, $secret_key, true );
+    $signature_encoded = rtrim( strtr( base64_encode( $signature ), '+/', '-_' ), '=' );
+
+    if ( ! hash_equals( $signature_encoded, $parts[2] ) ) {
+        // Also try with JWT Auth plugin's secret if different
+        $jwt_secret = defined( 'JWT_AUTH_SECRET_KEY' ) ? JWT_AUTH_SECRET_KEY : '';
+        if ( ! empty( $jwt_secret ) && $jwt_secret !== $secret_key ) {
+            $signature2 = hash_hmac( 'sha256', $header_payload, $jwt_secret, true );
+            $signature2_encoded = rtrim( strtr( base64_encode( $signature2 ), '+/', '-_' ), '=' );
+            if ( ! hash_equals( $signature2_encoded, $parts[2] ) ) {
+                return new WP_Error( 'invalid_signature', 'Signature invalide', [ 'status' => 401 ] );
+            }
+        } else {
+            return new WP_Error( 'invalid_signature', 'Signature invalide', [ 'status' => 401 ] );
+        }
+    }
+
+    // Decode payload
+    $payload = json_decode( base64_decode( strtr( $parts[1], '-_', '+/' ) . '==' ), true );
+    if ( ! $payload || ! isset( $payload['data']['user']['id'] ) ) {
+        return new WP_Error( 'invalid_payload', 'Payload invalide', [ 'status' => 401 ] );
+    }
+
+    // Check expiration
+    if ( isset( $payload['exp'] ) && $payload['exp'] < time() ) {
+        return new WP_Error( 'token_expired', 'Token expiré', [ 'status' => 401 ] );
+    }
+
+    $user_id = (int) $payload['data']['user']['id'];
+    $user = get_user_by( 'id', $user_id );
+
+    if ( ! $user ) {
+        return new WP_Error( 'user_not_found', 'Utilisateur introuvable', [ 'status' => 404 ] );
+    }
+
+    // Log the user in (set WordPress auth cookies)
+    wp_set_current_user( $user_id );
+    wp_set_auth_cookie( $user_id, true );
+
+    // Build the full redirect URL
+    if ( strpos( $redirect, 'http' ) !== 0 ) {
+        $redirect = home_url( $redirect );
+    }
+
+    // Return a redirect response (HTML page that sets cookies then redirects)
+    header( 'Content-Type: text/html; charset=utf-8' );
+    echo '<!DOCTYPE html><html><head><meta charset="utf-8">';
+    echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
+    echo '<script>window.location.href = "' . esc_url( $redirect ) . '";</script>';
+    echo '</head><body><p>Connexion en cours...</p></body></html>';
+    exit;
+}

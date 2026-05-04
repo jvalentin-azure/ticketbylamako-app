@@ -33,7 +33,7 @@ import * as Notifications from "expo-notifications";
 import { router as expoRouter } from "expo-router";
 
 // Set up notification handler at module level (before any component renders)
-setupNotificationHandler();
+try { setupNotificationHandler(); } catch (e) { console.warn("Notification handler setup failed:", e); }
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
@@ -66,7 +66,7 @@ export default function RootLayout() {
   // Set up push notifications
   useEffect(() => {
     if (Platform.OS === "web") return;
-    setupAndroidChannel();
+    try { setupAndroidChannel(); } catch (e) { console.warn("Android channel setup failed:", e); }
     registerForPushNotificationsAsync().then(async (token) => {
       if (token) {
         // Register with WordPress backend
