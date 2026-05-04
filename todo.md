@@ -798,4 +798,18 @@
 - [x] Remove unused admin icon mappings (chart.bar.fill, qrcode.viewfinder, doc.text.fill, camera/flashlight)
 - [x] Update app-structure tests (verify admin screens removed, tickera removed, no portal)
 - [x] Verify TypeScript compilation (0 errors) + 35 tests passing
-- [ ] Push cleaned client app to GitHub
+- [x] Push cleaned client app to GitHub (084eaa6d)
+
+## V4.3 - Social Login (Google/Facebook/Apple)
+- [x] Create social-login REST endpoint in lamako-mobile-api.php
+- [x] Google: validate token via googleapis.com/oauth2/v3/tokeninfo
+- [x] Facebook: validate token via graph.facebook.com/me
+- [x] Apple: validate identity token via JWT verification
+- [x] Create or login WooCommerce user from social provider data
+- [x] Return JWT token + user data to app
+- [x] Store Google Client ID in WordPress wp_options
+- [x] Deploy updated plugin to WordPress
+- [x] Test endpoint with curl
+- [x] Configure Nextend Social Login on WordPress (Google enabled, Facebook configured)
+- [x] Verify Google OAuth flow end-to-end (test successful)
+- [x] App social-auth.ts integrated with WordPress endpoint

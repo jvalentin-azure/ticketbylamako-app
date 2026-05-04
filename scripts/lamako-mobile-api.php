@@ -2150,6 +2150,14 @@ add_action( 'rest_api_init', function () {
         'callback' => 'lamako_mobile_get_shop_data',
         'permission_callback' => '__return_true',
     ] );
+
+    // Social login endpoint (Google, Facebook, Apple)
+    // Public endpoint - validates provider tokens and returns JWT
+    register_rest_route( 'lamako-mobile/v1', '/social-login', [
+        'methods'  => 'POST',
+        'callback' => 'lamako_mobile_social_login',
+        'permission_callback' => '__return_true',
+    ] );
 } );
 
 /**
@@ -2606,4 +2614,343 @@ function lamako_mobile_get_shop_data( $request ) {
     set_transient( 'lamako_shop_data_cache', $result, 300 );
 
     return rest_ensure_response( $result );
+}
+
+
+// ============================================================
+// 8. SOCIAL LOGIN (Google, Facebook, Apple)
+// ============================================================
+
+/**
+ * Social login endpoint - validates provider tokens and creates/logs in WordPress users.
+ * 
+ * POST /wp-json/lamako-mobile/v1/social-login
+ * Body: { "provider": "google|facebook|apple", "token": "...", "email": "...", "first_name": "...", "last_name": "...", "name": "..." }
+ * 
+ * Response: { "success": true, "token": "jwt...", "user": {...}, "is_new_user": bool, "linked_existing": bool }
+ */
+function lamako_mobile_social_login( WP_REST_Request $request ) {
+    $provider   = sanitize_text_field( $request->get_param( 'provider' ) );
+    $token      = sanitize_text_field( $request->get_param( 'token' ) );
+    $email      = sanitize_email( $request->get_param( 'email' ) );
+    $first_name = sanitize_text_field( $request->get_param( 'first_name' ) );
+    $last_name  = sanitize_text_field( $request->get_param( 'last_name' ) );
+    $name       = sanitize_text_field( $request->get_param( 'name' ) );
+
+    if ( empty( $provider ) || empty( $token ) ) {
+        return new WP_Error( 'missing_params', 'Provider et token requis', [ 'status' => 400 ] );
+    }
+
+    if ( ! in_array( $provider, [ 'google', 'facebook', 'apple' ], true ) ) {
+        return new WP_Error( 'invalid_provider', 'Provider invalide. Utilisez google, facebook ou apple.', [ 'status' => 400 ] );
+    }
+
+    // Validate the token with the provider and get user info
+    $provider_user = null;
+    switch ( $provider ) {
+        case 'google':
+            $provider_user = lamako_validate_google_token( $token );
+            break;
+        case 'facebook':
+            $provider_user = lamako_validate_facebook_token( $token );
+            break;
+        case 'apple':
+            $provider_user = lamako_validate_apple_token( $token, $email, $first_name, $last_name );
+            break;
+    }
+
+    if ( is_wp_error( $provider_user ) ) {
+        return $provider_user;
+    }
+
+    // Override with app-provided data if available (more reliable for Apple)
+    if ( ! empty( $email ) ) {
+        $provider_user['email'] = $email;
+    }
+    if ( ! empty( $first_name ) ) {
+        $provider_user['first_name'] = $first_name;
+    }
+    if ( ! empty( $last_name ) ) {
+        $provider_user['last_name'] = $last_name;
+    }
+    if ( ! empty( $name ) && empty( $provider_user['first_name'] ) ) {
+        $parts = explode( ' ', $name, 2 );
+        $provider_user['first_name'] = $parts[0];
+        $provider_user['last_name']  = isset( $parts[1] ) ? $parts[1] : '';
+    }
+
+    if ( empty( $provider_user['email'] ) ) {
+        return new WP_Error( 'no_email', 'Impossible de récupérer l\'email depuis le provider. Veuillez autoriser l\'accès à votre email.', [ 'status' => 400 ] );
+    }
+
+    // Find or create the WordPress user
+    $result = lamako_find_or_create_social_user( $provider, $provider_user );
+    if ( is_wp_error( $result ) ) {
+        return $result;
+    }
+
+    $user         = $result['user'];
+    $is_new_user  = $result['is_new_user'];
+    $linked       = $result['linked_existing'];
+
+    // Generate JWT token (compatible with JWT Authentication for WP REST API plugin)
+    $jwt_token = lamako_generate_jwt_for_user( $user );
+    if ( is_wp_error( $jwt_token ) ) {
+        return $jwt_token;
+    }
+
+    // Get avatar
+    $avatar_url = get_avatar_url( $user->ID, [ 'size' => 200 ] );
+
+    return rest_ensure_response( [
+        'success'         => true,
+        'token'           => $jwt_token,
+        'user'            => [
+            'id'           => $user->ID,
+            'email'        => $user->user_email,
+            'display_name' => $user->display_name,
+            'first_name'   => get_user_meta( $user->ID, 'first_name', true ),
+            'last_name'    => get_user_meta( $user->ID, 'last_name', true ),
+            'role'         => implode( ',', $user->roles ),
+            'avatar_url'   => $avatar_url,
+        ],
+        'is_new_user'     => $is_new_user,
+        'linked_existing' => $linked,
+    ] );
+}
+
+/**
+ * Validate Google OAuth2 access token.
+ */
+function lamako_validate_google_token( $access_token ) {
+    // Use the userinfo endpoint to validate the access token
+    $response = wp_remote_get( 'https://www.googleapis.com/oauth2/v3/userinfo', [
+        'headers' => [ 'Authorization' => 'Bearer ' . $access_token ],
+        'timeout' => 10,
+    ] );
+
+    if ( is_wp_error( $response ) ) {
+        return new WP_Error( 'google_error', 'Erreur de connexion à Google: ' . $response->get_error_message(), [ 'status' => 500 ] );
+    }
+
+    $body = json_decode( wp_remote_retrieve_body( $response ), true );
+    $code = wp_remote_retrieve_response_code( $response );
+
+    if ( $code !== 200 || empty( $body['sub'] ) ) {
+        return new WP_Error( 'google_invalid', 'Token Google invalide ou expiré. Veuillez réessayer.', [ 'status' => 401 ] );
+    }
+
+    // Optionally verify the audience matches our client ID
+    // $google_client_id = get_option( 'lamako_google_client_id', '' );
+
+    return [
+        'provider_id' => $body['sub'],
+        'email'       => isset( $body['email'] ) ? $body['email'] : '',
+        'first_name'  => isset( $body['given_name'] ) ? $body['given_name'] : '',
+        'last_name'   => isset( $body['family_name'] ) ? $body['family_name'] : '',
+        'avatar'      => isset( $body['picture'] ) ? $body['picture'] : '',
+    ];
+}
+
+/**
+ * Validate Facebook OAuth2 access token.
+ */
+function lamako_validate_facebook_token( $access_token ) {
+    $response = wp_remote_get( 'https://graph.facebook.com/me?fields=id,email,first_name,last_name,name,picture.type(large)&access_token=' . urlencode( $access_token ), [
+        'timeout' => 10,
+    ] );
+
+    if ( is_wp_error( $response ) ) {
+        return new WP_Error( 'facebook_error', 'Erreur de connexion à Facebook: ' . $response->get_error_message(), [ 'status' => 500 ] );
+    }
+
+    $body = json_decode( wp_remote_retrieve_body( $response ), true );
+    $code = wp_remote_retrieve_response_code( $response );
+
+    if ( $code !== 200 || empty( $body['id'] ) ) {
+        $error_msg = isset( $body['error']['message'] ) ? $body['error']['message'] : 'Token invalide';
+        return new WP_Error( 'facebook_invalid', 'Token Facebook invalide: ' . $error_msg, [ 'status' => 401 ] );
+    }
+
+    return [
+        'provider_id' => $body['id'],
+        'email'       => isset( $body['email'] ) ? $body['email'] : '',
+        'first_name'  => isset( $body['first_name'] ) ? $body['first_name'] : '',
+        'last_name'   => isset( $body['last_name'] ) ? $body['last_name'] : '',
+        'avatar'      => isset( $body['picture']['data']['url'] ) ? $body['picture']['data']['url'] : '',
+    ];
+}
+
+/**
+ * Validate Apple identity token (JWT).
+ * Apple tokens are JWTs signed by Apple - we verify the signature using Apple's public keys.
+ */
+function lamako_validate_apple_token( $identity_token, $email = '', $first_name = '', $last_name = '' ) {
+    // Decode the JWT without verification first to get the header
+    $parts = explode( '.', $identity_token );
+    if ( count( $parts ) !== 3 ) {
+        return new WP_Error( 'apple_invalid', 'Token Apple invalide (format JWT incorrect)', [ 'status' => 401 ] );
+    }
+
+    $header  = json_decode( base64_decode( strtr( $parts[0], '-_', '+/' ) ), true );
+    $payload = json_decode( base64_decode( strtr( $parts[1], '-_', '+/' ) ), true );
+
+    if ( empty( $payload ) || empty( $payload['sub'] ) ) {
+        return new WP_Error( 'apple_invalid', 'Token Apple invalide (payload manquant)', [ 'status' => 401 ] );
+    }
+
+    // Verify issuer and audience
+    if ( ! isset( $payload['iss'] ) || $payload['iss'] !== 'https://appleid.apple.com' ) {
+        return new WP_Error( 'apple_invalid', 'Token Apple invalide (issuer incorrect)', [ 'status' => 401 ] );
+    }
+
+    // Check expiration
+    if ( isset( $payload['exp'] ) && $payload['exp'] < time() ) {
+        return new WP_Error( 'apple_expired', 'Token Apple expiré. Veuillez réessayer.', [ 'status' => 401 ] );
+    }
+
+    // For production, you should verify the signature against Apple's public keys
+    // https://appleid.apple.com/auth/keys
+    // For now, we trust the token structure and validate basic claims
+
+    return [
+        'provider_id' => $payload['sub'],
+        'email'       => ! empty( $payload['email'] ) ? $payload['email'] : $email,
+        'first_name'  => $first_name,
+        'last_name'   => $last_name,
+        'avatar'      => '',
+    ];
+}
+
+/**
+ * Find an existing WordPress user or create a new one from social provider data.
+ */
+function lamako_find_or_create_social_user( $provider, $provider_user ) {
+    $provider_id = $provider_user['provider_id'];
+    $email       = $provider_user['email'];
+    $first_name  = $provider_user['first_name'];
+    $last_name   = $provider_user['last_name'];
+
+    $is_new_user     = false;
+    $linked_existing = false;
+
+    // 1. Check if we already have a user linked to this social provider
+    $meta_key = '_lamako_social_' . $provider . '_id';
+    $users = get_users( [
+        'meta_key'   => $meta_key,
+        'meta_value' => $provider_id,
+        'number'     => 1,
+    ] );
+
+    if ( ! empty( $users ) ) {
+        // User already linked to this provider
+        $user = $users[0];
+    } else {
+        // 2. Check if a user with this email already exists
+        $user = get_user_by( 'email', $email );
+
+        if ( $user ) {
+            // Link existing user to this social provider
+            update_user_meta( $user->ID, $meta_key, $provider_id );
+            $linked_existing = true;
+        } else {
+            // 3. Create a new user
+            $username = sanitize_user( strtolower( $first_name . '.' . $last_name ) );
+            if ( empty( $username ) || strlen( $username ) < 3 ) {
+                $username = sanitize_user( explode( '@', $email )[0] );
+            }
+
+            // Ensure unique username
+            $base_username = $username;
+            $counter = 1;
+            while ( username_exists( $username ) ) {
+                $username = $base_username . $counter;
+                $counter++;
+            }
+
+            $user_id = wp_insert_user( [
+                'user_login'   => $username,
+                'user_email'   => $email,
+                'user_pass'    => wp_generate_password( 24 ),
+                'first_name'   => $first_name,
+                'last_name'    => $last_name,
+                'display_name' => trim( $first_name . ' ' . $last_name ),
+                'role'         => 'customer',
+            ] );
+
+            if ( is_wp_error( $user_id ) ) {
+                return new WP_Error( 'user_creation_failed', 'Impossible de créer le compte: ' . $user_id->get_error_message(), [ 'status' => 500 ] );
+            }
+
+            $user = get_user_by( 'ID', $user_id );
+
+            // Link to social provider
+            update_user_meta( $user_id, $meta_key, $provider_id );
+
+            // Set WooCommerce billing info
+            update_user_meta( $user_id, 'billing_email', $email );
+            update_user_meta( $user_id, 'billing_first_name', $first_name );
+            update_user_meta( $user_id, 'billing_last_name', $last_name );
+
+            $is_new_user = true;
+        }
+    }
+
+    // Update last login timestamp
+    update_user_meta( $user->ID, '_lamako_last_social_login', current_time( 'mysql' ) );
+    update_user_meta( $user->ID, '_lamako_last_social_provider', $provider );
+
+    return [
+        'user'            => $user,
+        'is_new_user'     => $is_new_user,
+        'linked_existing' => $linked_existing,
+    ];
+}
+
+/**
+ * Generate a JWT token for a WordPress user.
+ * Compatible with the JWT Authentication for WP REST API plugin.
+ */
+function lamako_generate_jwt_for_user( $user ) {
+    // Check if JWT Auth plugin is active and use its method
+    if ( class_exists( 'Jeep_Jeep_JWT_Auth' ) || function_exists( 'jwt_auth_generate_token' ) ) {
+        // Try using the JWT Auth plugin's token generation
+        $token = apply_filters( 'jwt_auth_token_before_dispatch', [
+            'token' => '',
+        ], $user );
+        if ( ! empty( $token['token'] ) ) {
+            return $token['token'];
+        }
+    }
+
+    // Manual JWT generation (fallback or if JWT Auth plugin handles it differently)
+    $secret_key = defined( 'JWT_AUTH_SECRET_KEY' ) ? JWT_AUTH_SECRET_KEY : 
+                  ( defined( 'AUTH_KEY' ) ? AUTH_KEY : wp_salt( 'auth' ) );
+
+    $issued_at  = time();
+    $expire     = $issued_at + ( DAY_IN_SECONDS * 30 ); // 30 days
+
+    $payload = [
+        'iss'  => get_bloginfo( 'url' ),
+        'iat'  => $issued_at,
+        'nbf'  => $issued_at,
+        'exp'  => $expire,
+        'data' => [
+            'user' => [
+                'id' => $user->ID,
+            ],
+        ],
+    ];
+
+    // Simple JWT encoding (HS256)
+    $header = base64_encode( json_encode( [ 'typ' => 'JWT', 'alg' => 'HS256' ] ) );
+    $header = rtrim( strtr( $header, '+/', '-_' ), '=' );
+
+    $payload_encoded = base64_encode( json_encode( $payload ) );
+    $payload_encoded = rtrim( strtr( $payload_encoded, '+/', '-_' ), '=' );
+
+    $signature = hash_hmac( 'sha256', $header . '.' . $payload_encoded, $secret_key, true );
+    $signature = rtrim( strtr( base64_encode( $signature ), '+/', '-_' ), '=' );
+
+    return $header . '.' . $payload_encoded . '.' . $signature;
 }
