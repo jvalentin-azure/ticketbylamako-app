@@ -2089,6 +2089,15 @@ function lamako_mobile_create_order( $request ) {
         return new WP_Error( 'empty_order', 'No valid items could be added. Errors: ' . implode( '; ', $errors ), [ 'status' => 400 ] );
     }
     
+    // Apply coupon if provided (LamakoRewards redemption)
+    if ( ! empty( $body['coupon_code'] ) ) {
+        $coupon_code = sanitize_text_field( $body['coupon_code'] );
+        $coupon_result = $order->apply_coupon( $coupon_code );
+        if ( is_wp_error( $coupon_result ) ) {
+            $errors[] = 'Coupon error: ' . $coupon_result->get_error_message();
+        }
+    }
+    
     // Calculate totals and set status
     $order->calculate_totals();
     $order->set_status( 'pending' );
@@ -2332,5 +2341,150 @@ function lamako_mobile_notify_order_status( $order_id, $old_status, $new_status,
             ]] ),
             'timeout' => 15,
         ] );
+    }
+}
+
+
+// ============================================================
+// 8. AUTO-CANCEL EXPIRED ORDERS (via WooCommerce Action Scheduler)
+// ============================================================
+// Uses WooCommerce Action Scheduler instead of WP Cron for:
+// - Visibility in WP Admin > Outils > Actions planifiées
+// - Guaranteed execution (doesn't depend on site visits)
+// - Better logging and retry handling
+
+/**
+ * Schedule the recurring actions on init (only if not already scheduled).
+ * Runs every 5 minutes via WooCommerce Action Scheduler.
+ */
+add_action( 'init', 'lamako_schedule_order_cleanup_action' );
+function lamako_schedule_order_cleanup_action() {
+    if ( ! function_exists( 'as_has_scheduled_action' ) ) return;
+    
+    // Schedule pending order cleanup every 5 minutes
+    if ( ! as_has_scheduled_action( 'lamako_cancel_expired_pending_orders' ) ) {
+        as_schedule_recurring_action( time(), 300, 'lamako_cancel_expired_pending_orders', array(), 'lamako' );
+    }
+    
+    // Schedule on-hold order cleanup every 5 minutes
+    if ( ! as_has_scheduled_action( 'lamako_cancel_expired_onhold_orders' ) ) {
+        as_schedule_recurring_action( time(), 300, 'lamako_cancel_expired_onhold_orders', array(), 'lamako' );
+    }
+}
+
+/**
+ * Unschedule on plugin deactivation.
+ */
+register_deactivation_hook( __FILE__, 'lamako_unschedule_order_cleanup_actions' );
+function lamako_unschedule_order_cleanup_actions() {
+    if ( function_exists( 'as_unschedule_all_actions' ) ) {
+        as_unschedule_all_actions( 'lamako_cancel_expired_pending_orders' );
+        as_unschedule_all_actions( 'lamako_cancel_expired_onhold_orders' );
+    }
+}
+
+/**
+ * Action callback: Cancel all pending orders older than hold_stock setting (10 min).
+ * Releases WooCommerce stock and Firebase seats.
+ */
+add_action( 'lamako_cancel_expired_pending_orders', 'lamako_do_cancel_expired_pending_orders' );
+function lamako_do_cancel_expired_pending_orders() {
+    if ( ! function_exists( 'wc_get_orders' ) ) return;
+    
+    // Get hold_stock_minutes from WooCommerce settings (default 10)
+    $hold_stock_minutes = absint( get_option( 'woocommerce_hold_stock_minutes', 10 ) );
+    if ( $hold_stock_minutes < 1 ) return; // Disabled
+    
+    // Find pending orders older than hold_stock_minutes
+    $date_cutoff = date( 'Y-m-d H:i:s', strtotime( "-{$hold_stock_minutes} minutes" ) );
+    
+    $pending_orders = wc_get_orders( array(
+        'status'       => 'pending',
+        'date_created' => '<' . strtotime( $date_cutoff ),
+        'limit'        => 50, // Process max 50 per run to avoid timeout
+        'orderby'      => 'date',
+        'order'        => 'ASC',
+    ) );
+    
+    if ( empty( $pending_orders ) ) return;
+    
+    foreach ( $pending_orders as $order ) {
+        // Cancel the order - this triggers WooCommerce stock restoration automatically
+        $order->update_status( 'cancelled', __( 'Commande annulée automatiquement - délai de paiement expiré (10 min).', 'lamako' ) );
+        
+        // Also clean up Firebase seats for any seating chart items in this order
+        lamako_cleanup_firebase_seats_for_order( $order );
+    }
+    
+    // Log for debugging
+    if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+        error_log( '[Lamako Action Scheduler] Cancelled ' . count( $pending_orders ) . ' expired pending orders.' );
+    }
+}
+
+/**
+ * Action callback: Cancel on-hold orders older than 30 minutes.
+ * On-hold orders are typically waiting for bank transfer or manual payment.
+ */
+add_action( 'lamako_cancel_expired_onhold_orders', 'lamako_do_cancel_expired_onhold_orders' );
+function lamako_do_cancel_expired_onhold_orders() {
+    if ( ! function_exists( 'wc_get_orders' ) ) return;
+    
+    // On-hold orders get 30 minutes (more generous for bank transfers)
+    $date_cutoff = date( 'Y-m-d H:i:s', strtotime( '-30 minutes' ) );
+    
+    $onhold_orders = wc_get_orders( array(
+        'status'       => 'on-hold',
+        'date_created' => '<' . strtotime( $date_cutoff ),
+        'limit'        => 20,
+        'orderby'      => 'date',
+        'order'        => 'ASC',
+    ) );
+    
+    if ( empty( $onhold_orders ) ) return;
+    
+    foreach ( $onhold_orders as $order ) {
+        $order->update_status( 'cancelled', __( 'Commande en attente annulée automatiquement - délai de 30 min expiré.', 'lamako' ) );
+        lamako_cleanup_firebase_seats_for_order( $order );
+    }
+    
+    if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+        error_log( '[Lamako Action Scheduler] Cancelled ' . count( $onhold_orders ) . ' expired on-hold orders.' );
+    }
+}
+
+/**
+ * Clean up Firebase seats for a cancelled order.
+ * Finds seating chart items and calls the Firebase removal.
+ */
+function lamako_cleanup_firebase_seats_for_order( $order ) {
+    if ( ! $order ) return;
+    
+    foreach ( $order->get_items() as $item ) {
+        // Check if this item has seating chart metadata
+        $seat_id  = $item->get_meta( '_tc_seat_id' );
+        $chart_id = $item->get_meta( '_tc_chart_id' );
+        
+        if ( ! $seat_id && ! $chart_id ) {
+            // Try alternative meta keys used by Tickera
+            $seat_id  = $item->get_meta( 'tc_seat_id' );
+            $chart_id = $item->get_meta( 'tc_chart_id' );
+        }
+        
+        if ( $seat_id && $chart_id ) {
+            // Remove from Firebase via the Tickera function if available
+            if ( function_exists( 'tc_remove_seat_from_firebase' ) ) {
+                tc_remove_seat_from_firebase( $seat_id, $chart_id );
+            } else {
+                // Direct Firebase removal via WordPress transient cleanup
+                delete_transient( 'tc_seat_' . $chart_id . '_' . $seat_id );
+            }
+        }
+    }
+    
+    // Also delete the Tickera cart transients for this order's session
+    $session_id = $order->get_meta( '_tc_session_id' );
+    if ( $session_id ) {
+        delete_transient( 'tc_cart_seats_' . $session_id );
     }
 }

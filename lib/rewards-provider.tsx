@@ -190,8 +190,18 @@ interface RewardsContextType {
   syncRewards: () => Promise<void>;
   getDiscountValue: (points: number) => number;
   getBestRedemption: (points: number) => { points: number; value: number } | null;
+  redeemPoints: (points: number, wpUserId: number) => Promise<RedeemResult>;
   isLoading: boolean;
   isSyncing: boolean;
+}
+
+export interface RedeemResult {
+  success: boolean;
+  coupon_code?: string;
+  discount_value?: number;
+  points_deducted?: number;
+  new_balance?: number;
+  error?: string;
 }
 
 const RewardsContext = createContext<RewardsContextType | null>(null);
@@ -241,6 +251,34 @@ export async function registerReferral(refereeUserId: number, referrerCode: stri
   } catch (e) {
     console.warn("Failed to register referral:", e);
     return { success: false, error: "Erreur réseau" };
+  }
+}
+
+/**
+ * Redeem points for a WooCommerce coupon code.
+ * Calls the /redeem endpoint which deducts points and creates a one-time coupon.
+ */
+export async function redeemPointsApi(points: number, wpUserId: number): Promise<RedeemResult> {
+  try {
+    const res = await fetch(`${API_BASE}/redeem`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: wpUserId, points, api_key: API_KEY }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data.message || data.code || "Erreur lors de l'échange" };
+    }
+    return {
+      success: true,
+      coupon_code: data.coupon_code,
+      discount_value: data.discount_value,
+      points_deducted: data.points_deducted,
+      new_balance: data.new_balance,
+    };
+  } catch (e: any) {
+    console.warn("Failed to redeem points:", e);
+    return { success: false, error: "Erreur réseau. Veuillez réessayer." };
   }
 }
 
@@ -446,6 +484,33 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
     ? Math.max(0, nextTierInfo.minPoints - state.lifetimePoints)
     : 0;
 
+  // Redeem points - calls API and updates local state
+  const redeemPoints = useCallback(async (points: number, wpUserId: number): Promise<RedeemResult> => {
+    const result = await redeemPointsApi(points, wpUserId);
+    if (result.success && result.new_balance !== undefined) {
+      // Update local state with new balance
+      const newState: RewardsState = {
+        ...state,
+        totalPoints: result.new_balance,
+        availablePoints: result.new_balance,
+        history: [
+          {
+            id: Date.now().toString(),
+            type: "redeem",
+            amount: result.points_deducted || points,
+            reference: "redemption",
+            description: `Échange ${points} pts → ${result.coupon_code}`,
+            date: new Date().toISOString(),
+          },
+          ...state.history,
+        ],
+      };
+      setState(newState);
+      await saveState(newState);
+    }
+    return result;
+  }, [state, saveState]);
+
   return (
     <RewardsContext.Provider
       value={{
@@ -459,6 +524,7 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
         syncRewards,
         getDiscountValue,
         getBestRedemption,
+        redeemPoints,
         isLoading,
         isSyncing,
       }}

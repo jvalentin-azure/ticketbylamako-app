@@ -103,13 +103,18 @@ export interface CreateOrderResponse {
 export async function createOrder(
   items: CreateOrderItem[],
   billing: CreateOrderBilling,
-  customerId?: number
+  customerId?: number,
+  couponCode?: string
 ): Promise<CreateOrderResponse> {
-  return mobileApiPost<CreateOrderResponse>('create-order', {
+  const body: any = {
     items,
     billing,
     customer_id: customerId || 0,
-  });
+  };
+  if (couponCode) {
+    body.coupon_code = couponCode;
+  }
+  return mobileApiPost<CreateOrderResponse>('create-order', body);
 }
 
 // ---- Push Token Registration ----

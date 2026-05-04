@@ -2089,6 +2089,15 @@ function lamako_mobile_create_order( $request ) {
         return new WP_Error( 'empty_order', 'No valid items could be added. Errors: ' . implode( '; ', $errors ), [ 'status' => 400 ] );
     }
     
+    // Apply coupon if provided (LamakoRewards redemption)
+    if ( ! empty( $body['coupon_code'] ) ) {
+        $coupon_code = sanitize_text_field( $body['coupon_code'] );
+        $coupon_result = $order->apply_coupon( $coupon_code );
+        if ( is_wp_error( $coupon_result ) ) {
+            $errors[] = 'Coupon error: ' . $coupon_result->get_error_message();
+        }
+    }
+    
     // Calculate totals and set status
     $order->calculate_totals();
     $order->set_status( 'pending' );

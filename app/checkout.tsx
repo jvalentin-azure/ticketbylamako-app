@@ -9,7 +9,7 @@ import { createOrder, SITE_URL, clearServerCart } from "@/lib/api/woocommerce";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { formatAriary } from "@/lib/format";
 import { notifyPaymentConfirmed } from "@/lib/notifications";
-import { useRewards, estimatePointsForPrice } from "@/lib/rewards-provider";
+import { useRewards, estimatePointsForPrice, REDEMPTION_TIERS, type RedeemResult } from "@/lib/rewards-provider";
 import { useAuth } from "@/lib/auth-provider";
 
 // WebView for checkout - loads WooCommerce pay-for-order page
@@ -20,14 +20,20 @@ if (Platform.OS !== "web") {
   } catch {}
 }
 
-type CheckoutPhase = "address" | "creating" | "paying" | "success" | "error" | "payment_error";
+type CheckoutPhase = "address" | "confirm" | "creating" | "paying" | "success" | "error" | "payment_error";
 
 export default function CheckoutScreen() {
   const colors = useColors();
   const router = useRouter();
   const { items, clearCart, total } = useCart();
-  const { currentTier, canRedeem, getDiscountValue, state: rewardsState } = useRewards();
-  const { isAuthenticated } = useAuth();
+  const { currentTier, canRedeem, getDiscountValue, getBestRedemption, redeemPoints, state: rewardsState } = useRewards();
+  const { isAuthenticated, user } = useAuth();
+
+  // Rewards redemption state
+  const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
+  const [appliedDiscount, setAppliedDiscount] = useState<number>(0);
+  const [isRedeeming, setIsRedeeming] = useState(false);
+  const [redeemError, setRedeemError] = useState<string | null>(null);
 
   // Calculate total points to earn for this order
   const totalPointsToEarn = items.reduce((sum, item) => {
@@ -37,7 +43,9 @@ export default function CheckoutScreen() {
   const webviewRef = useRef<any>(null);
 
   const hasPhysicalProducts = items.some(i => !i.isEvent);
-  const [phase, setPhase] = useState<CheckoutPhase>(hasPhysicalProducts ? "address" : "creating");
+  // Show confirm phase for events-only if user can redeem points, otherwise go straight to creating
+  const canShowRedeem = canRedeem && rewardsState.availablePoints >= 500 && isAuthenticated;
+  const [phase, setPhase] = useState<CheckoutPhase>(hasPhysicalProducts ? "address" : (canShowRedeem ? "confirm" : "creating"));
   const [checkoutUrl, setCheckoutUrl] = useState<string>("");
   const [orderId, setOrderId] = useState<number>(0);
   const [orderKey, setOrderKey] = useState<string>("");
@@ -52,6 +60,35 @@ export default function CheckoutScreen() {
   const [shippingAddress, setShippingAddress] = useState("");
   const [shippingCity, setShippingCity] = useState("");
   const [shippingPhone, setShippingPhone] = useState("");
+
+  // Handle redeem points
+  const handleRedeemPoints = async (points: number) => {
+    if (!rewardsState.wpUserId) {
+      setRedeemError("Impossible de trouver votre compte. Veuillez vous reconnecter.");
+      return;
+    }
+    setIsRedeeming(true);
+    setRedeemError(null);
+    try {
+      const result = await redeemPoints(points, rewardsState.wpUserId);
+      if (result.success && result.coupon_code) {
+        setAppliedCoupon(result.coupon_code);
+        setAppliedDiscount(result.discount_value || 0);
+      } else {
+        setRedeemError(result.error || "Erreur lors de l'échange de points.");
+      }
+    } catch (e: any) {
+      setRedeemError("Erreur réseau. Veuillez réessayer.");
+    } finally {
+      setIsRedeeming(false);
+    }
+  };
+
+  // Remove applied coupon
+  const removeCoupon = () => {
+    setAppliedCoupon(null);
+    setAppliedDiscount(0);
+  };
 
   // Create WC order
   const startOrderCreation = async () => {
@@ -81,7 +118,7 @@ export default function CheckoutScreen() {
         quantity: item.quantity,
       }));
 
-      const result = await createOrder(orderItems, billing, user?.id);
+      const result = await createOrder(orderItems, billing, user?.id, appliedCoupon || undefined);
 
       if (result.checkout_url) {
         setOrderId(result.order_id);
@@ -99,9 +136,9 @@ export default function CheckoutScreen() {
     }
   };
 
-  // Auto-start order creation for events-only carts
+  // Auto-start order creation for events-only carts (only if no redeem option)
   useEffect(() => {
-    if (!hasPhysicalProducts) {
+    if (!hasPhysicalProducts && !canShowRedeem) {
       startOrderCreation();
     }
   }, []);
@@ -289,26 +326,85 @@ export default function CheckoutScreen() {
             </Text>
           </View>
 
-          {/* LamakoRewards - Points to earn */}
-          {isAuthenticated && totalPointsToEarn > 0 && (
+          {/* LamakoRewards - Points to earn + Redeem */}
+          {isAuthenticated && (
             <View style={{ backgroundColor: "#fdf6ee", borderRadius: 12, borderWidth: 1, borderColor: "#e8d5a3", padding: 12, marginTop: 12 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "#f59e0b", alignItems: "center", justifyContent: "center" }}>
-                  <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>★</Text>
+              {/* Points to earn */}
+              {totalPointsToEarn > 0 && (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                  <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "#f59e0b", alignItems: "center", justifyContent: "center" }}>
+                    <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>★</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13, fontWeight: "600", color: "#3d2314" }}>
+                      Gagnez <Text style={{ fontSize: 14, fontWeight: "700", color: "#b45309" }}>{totalPointsToEarn} points</Text> LamakoRewards
+                    </Text>
+                    {currentTier.multiplier > 1 && (
+                      <Text style={{ fontSize: 11, color: "#92400e", marginTop: 2 }}>Bonus {currentTier.name} : x{currentTier.multiplier}</Text>
+                    )}
+                  </View>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 13, fontWeight: "600", color: "#3d2314" }}>
-                    Gagnez <Text style={{ fontSize: 14, fontWeight: "700", color: "#b45309" }}>{totalPointsToEarn} points</Text> LamakoRewards
+              )}
+
+              {/* Redeem section */}
+              {canRedeem && rewardsState.availablePoints >= 500 && !appliedCoupon && (
+                <View style={{ borderTopWidth: totalPointsToEarn > 0 ? 1 : 0, borderTopColor: "#e8d5a3", marginTop: totalPointsToEarn > 0 ? 10 : 0, paddingTop: totalPointsToEarn > 0 ? 10 : 0 }}>
+                  <Text style={{ fontSize: 13, fontWeight: "600", color: "#3d2314", marginBottom: 8 }}>
+                    Utiliser mes points ({rewardsState.availablePoints} pts)
                   </Text>
-                  {currentTier.multiplier > 1 && (
-                    <Text style={{ fontSize: 11, color: "#92400e", marginTop: 2 }}>Bonus {currentTier.name} : x{currentTier.multiplier}</Text>
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                    {REDEMPTION_TIERS.filter(t => t.points <= rewardsState.availablePoints).map(tier => (
+                      <TouchableOpacity
+                        key={tier.points}
+                        onPress={() => handleRedeemPoints(tier.points)}
+                        disabled={isRedeeming}
+                        style={{ backgroundColor: "#b45309", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, opacity: isRedeeming ? 0.5 : 1 }}
+                      >
+                        <Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>
+                          -{formatAriary(tier.value)}
+                        </Text>
+                        <Text style={{ color: "#fde68a", fontSize: 10 }}>
+                          {tier.points} pts
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  {isRedeeming && (
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 }}>
+                      <ActivityIndicator size="small" color="#b45309" />
+                      <Text style={{ fontSize: 12, color: "#92400e" }}>Échange en cours...</Text>
+                    </View>
+                  )}
+                  {redeemError && (
+                    <Text style={{ fontSize: 12, color: "#dc2626", marginTop: 6 }}>{redeemError}</Text>
                   )}
                 </View>
-              </View>
-              {canRedeem && getDiscountValue(rewardsState.availablePoints) > 0 && (
-                <View style={{ borderTopWidth: 1, borderTopColor: "#e8d5a3", marginTop: 10, paddingTop: 10 }}>
-                  <Text style={{ fontSize: 12, color: "#92400e", fontWeight: "500" }}>
-                    💰 {rewardsState.availablePoints} pts disponibles = {formatAriary(getDiscountValue(rewardsState.availablePoints))} de réduction
+              )}
+
+              {/* Applied coupon */}
+              {appliedCoupon && (
+                <View style={{ borderTopWidth: totalPointsToEarn > 0 ? 1 : 0, borderTopColor: "#e8d5a3", marginTop: totalPointsToEarn > 0 ? 10 : 0, paddingTop: totalPointsToEarn > 0 ? 10 : 0 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 13, fontWeight: "700", color: "#15803d" }}>
+                        ✓ Réduction appliquée : -{formatAriary(appliedDiscount)}
+                      </Text>
+                      <Text style={{ fontSize: 11, color: "#92400e", marginTop: 2 }}>
+                        Coupon : {appliedCoupon}
+                      </Text>
+                    </View>
+                    <TouchableOpacity onPress={removeCoupon} style={{ padding: 6 }}>
+                      <Text style={{ fontSize: 12, color: "#dc2626", fontWeight: "600" }}>Retirer</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
+              {/* Not eligible message */}
+              {!canRedeem && rewardsState.availablePoints > 0 && (
+                <View style={{ borderTopWidth: totalPointsToEarn > 0 ? 1 : 0, borderTopColor: "#e8d5a3", marginTop: totalPointsToEarn > 0 ? 10 : 0, paddingTop: totalPointsToEarn > 0 ? 10 : 0 }}>
+                  <Text style={{ fontSize: 11, color: "#92400e" }}>
+                    Encore {750 - rewardsState.lifetimePoints} pts à accumuler pour débloquer l'échange
                   </Text>
                 </View>
               )}
@@ -327,6 +423,130 @@ export default function CheckoutScreen() {
           >
             <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>Continuer vers le paiement</Text>
           </TouchableOpacity>
+        </ScrollView>
+      </ScreenContainer>
+    );
+  }
+
+  // ---- CONFIRM phase (events-only with redeem option) ----
+  if (phase === "confirm") {
+    return (
+      <ScreenContainer edges={["top", "bottom", "left", "right"]}>
+        <View style={[styles.header, { borderBottomColor: colors.border }]}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Confirmation</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <ScrollView contentContainerStyle={{ padding: 20, gap: 16 }}>
+          {/* Order summary */}
+          <View style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: colors.border }}>
+            <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "600" }}>R\u00e9capitulatif</Text>
+            <Text style={{ color: colors.muted, fontSize: 13, marginTop: 6 }}>
+              {items.length} article{items.length > 1 ? "s" : ""} \u00b7 Total: {formatAriary(total)}
+            </Text>
+            {appliedCoupon && (
+              <Text style={{ color: "#15803d", fontSize: 13, fontWeight: "600", marginTop: 4 }}>
+                R\u00e9duction : -{formatAriary(appliedDiscount)}
+              </Text>
+            )}
+          </View>
+
+          {/* Redeem section */}
+          <View style={{ backgroundColor: "#fdf6ee", borderRadius: 12, borderWidth: 1, borderColor: "#e8d5a3", padding: 12 }}>
+            {/* Points to earn */}
+            {totalPointsToEarn > 0 && (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "#f59e0b", alignItems: "center", justifyContent: "center" }}>
+                  <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>\u2605</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 13, fontWeight: "600", color: "#3d2314" }}>
+                    Gagnez <Text style={{ fontSize: 14, fontWeight: "700", color: "#b45309" }}>{totalPointsToEarn} points</Text> LamakoRewards
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* Redeem buttons */}
+            {!appliedCoupon && (
+              <View>
+                <Text style={{ fontSize: 13, fontWeight: "600", color: "#3d2314", marginBottom: 8 }}>
+                  Utiliser mes points ({rewardsState.availablePoints} pts)
+                </Text>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                  {REDEMPTION_TIERS.filter(t => t.points <= rewardsState.availablePoints).map(tier => (
+                    <TouchableOpacity
+                      key={tier.points}
+                      onPress={() => handleRedeemPoints(tier.points)}
+                      disabled={isRedeeming}
+                      style={{ backgroundColor: "#b45309", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, opacity: isRedeeming ? 0.5 : 1 }}
+                    >
+                      <Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>
+                        -{formatAriary(tier.value)}
+                      </Text>
+                      <Text style={{ color: "#fde68a", fontSize: 10 }}>
+                        {tier.points} pts
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                {isRedeeming && (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 }}>
+                    <ActivityIndicator size="small" color="#b45309" />
+                    <Text style={{ fontSize: 12, color: "#92400e" }}>\u00c9change en cours...</Text>
+                  </View>
+                )}
+                {redeemError && (
+                  <Text style={{ fontSize: 12, color: "#dc2626", marginTop: 6 }}>{redeemError}</Text>
+                )}
+              </View>
+            )}
+
+            {/* Applied coupon */}
+            {appliedCoupon && (
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 13, fontWeight: "700", color: "#15803d" }}>
+                    \u2713 R\u00e9duction appliqu\u00e9e : -{formatAriary(appliedDiscount)}
+                  </Text>
+                  <Text style={{ fontSize: 11, color: "#92400e", marginTop: 2 }}>
+                    Coupon : {appliedCoupon}
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={removeCoupon} style={{ padding: 6 }}>
+                  <Text style={{ fontSize: 12, color: "#dc2626", fontWeight: "600" }}>Retirer</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+
+          {/* Continue button */}
+          <TouchableOpacity
+            onPress={() => {
+              setPhase("creating");
+              startOrderCreation();
+            }}
+            style={{ backgroundColor: colors.primary, borderRadius: 14, paddingVertical: 16, alignItems: "center", marginTop: 8 }}
+          >
+            <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>
+              {appliedCoupon ? `Payer ${formatAriary(Math.max(0, total - appliedDiscount))}` : "Continuer vers le paiement"}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Skip redeem */}
+          {!appliedCoupon && (
+            <TouchableOpacity
+              onPress={() => {
+                setPhase("creating");
+                startOrderCreation();
+              }}
+              style={{ alignItems: "center", paddingVertical: 10 }}
+            >
+              <Text style={{ color: colors.muted, fontSize: 13 }}>Passer sans utiliser mes points</Text>
+            </TouchableOpacity>
+          )}
         </ScrollView>
       </ScreenContainer>
     );

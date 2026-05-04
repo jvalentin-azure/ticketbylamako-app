@@ -734,3 +734,12 @@
 - [x] Show LamakoRewards points earned on boutique product cards (PointsBadge already present)
 - [x] Show LamakoRewards points earned/redeemable on cart screen (total points + discount info)
 - [x] Show LamakoRewards points earned/redeemable on checkout (summary in récapitulatif)
+
+## V3.9.4 - LamakoRewards Coupon Redemption at Checkout
+- [x] WordPress: lamako-rewards-api /redeem endpoint generates unique WC coupon (LR-xxxxx) and deducts points
+- [x] WordPress: lamako-mobile-api create-order endpoint accepts coupon_code and applies it to order
+- [x] App: Add "Utiliser mes points" UI on checkout (both ADDRESS phase for physical products and CONFIRM phase for events-only)
+- [x] App: Show REDEMPTION_TIERS buttons (500pts/-5000Ar, 1000pts/-12000Ar, 2000pts/-25000Ar, 5000pts/-70000Ar)
+- [x] App: redeemPoints() calls lamako-rewards API, gets coupon_code, passes to createOrder()
+- [x] App: Handle success (show applied coupon + discount), error states, and removeCoupon option
+- [x] Deploy updated lamako-mobile-api.php to WordPress (coupon_code support in create-order)
