@@ -125,8 +125,7 @@ export function WelcomeScreen({ onExplore, onBack }: WelcomeScreenProps) {
             contentFit="contain"
           />
           <Text style={styles.tagline}>
-            <Text style={styles.taglineAccent}>#1 BILLETTERIE</Text>
-            {"  "}À MADAGASCAR
+            Une expérience fluide, du premier clic{"\n"}jusqu'à l'entrée dans la salle
           </Text>
         </View>
 
@@ -206,9 +205,10 @@ const styles = StyleSheet.create({
   tagline: {
     fontSize: 13,
     color: "#fff",
-    letterSpacing: 2,
-    marginTop: 10,
+    letterSpacing: 0.5,
     textAlign: "center",
+    lineHeight: 18,
+    marginTop: 10,
   },
   taglineAccent: {
     color: "#c79f6c",

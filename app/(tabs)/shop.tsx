@@ -169,11 +169,11 @@ export default function ShopScreen() {
 }
 
 const styles = StyleSheet.create({
-  headerRow: { paddingHorizontal: 16, paddingTop: 2, paddingBottom: 2 },
+  headerRow: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
   headerTitle: { fontSize: 22, fontWeight: "700" },
-  searchBar: { marginHorizontal: 16, marginBottom: 6, flexDirection: "row", alignItems: "center", borderRadius: 12, paddingHorizontal: 12, borderWidth: 1 },
+  searchBar: { marginHorizontal: 16, marginBottom: 4, flexDirection: "row", alignItems: "center", borderRadius: 12, paddingHorizontal: 12, borderWidth: 1 },
   searchInput: { flex: 1, paddingVertical: 8, paddingHorizontal: 8, fontSize: 15 },
-  chipsContainer: { paddingHorizontal: 16, paddingTop: 0, paddingBottom: 6, gap: 8, flexDirection: "row", alignItems: "center" },
+  chipsContainer: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 10, gap: 8, flexDirection: "row", alignItems: "center" },
   chip: { height: 32, paddingHorizontal: 14, borderRadius: 16, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   chipText: { fontSize: 13, fontWeight: "600", lineHeight: 16 },
   loadingContainer: { flex: 1, alignItems: "center", justifyContent: "center" },

@@ -141,27 +141,21 @@ export default function EventDetailScreen() {
   const handleOpenSeatingChart = async () => {
     if (!hasSeating || !event) return;
     setSeatingLoading(true);
-    try {
-      const url = await getSeatingChartUrl(Number(id), event.slug, event.link);
-      if (url) {
-        setSeatingChartUrl(url);
-        setShowSeatingChart(true);
-      } else {
-        // Fallback: open event page directly in browser
-        const fallbackUrl = event.link || `${SITE_URL}/tc-events/${event.slug}/`;
-        Linking.openURL(fallbackUrl);
-      }
-    } catch {
-      const fallbackUrl = event.link || `${SITE_URL}/tc-events/${event.slug}/`;
-      Linking.openURL(fallbackUrl);
-    } finally {
-      setSeatingLoading(false);
-    }
+    // BilletClic approach: load the full event page in WebView
+    // The seating chart popup opens natively within the page when user clicks "CHOISIR MA PLACE"
+    const eventPageUrl = event.link || `${SITE_URL}/tc-events/${event.slug}/`;
+    setSeatingChartUrl(eventPageUrl);
+    setShowSeatingChart(true);
+    setWebviewPhase('seating');
+    setSelectedSeats([]);
+    setSeatingLoading(false);
   };
 
   // Seating Chart WebView - loads the tc_seat_charts page directly (same approach as POS plugin)
   if (showSeatingChart && event && seatingChartUrl) {
-    // JS injected on every page load in the WebView - hides site chrome
+    // BilletClic approach: Load the full event page in WebView
+    // User interacts naturally: clicks "CHOISIR MA PLACE" → seating chart popup opens → selects seats → 
+    // confirms → goes to cart → checkout → payment - ALL within the same WebView session
     const injectedJS = `
       (function() {
         function cleanup() {
@@ -176,54 +170,44 @@ export default function EventDetailScreen() {
             '#fkcart-floating-toggler, .fkcart-main-wrapper,' +
             '[class*="tidio"], [id*="tidio"], [class*="chat-widget"],' +
             '[class*="crisp"], [id*="crisp"],' +
-            '[class*="tawk"], [id*="tawk"],' +
-            '.tc-seatchart-go-to-cart, a.tc-seatchart-go-to-cart,' +
-            '.tc-checkout-bar' +
+            '[class*="tawk"], [id*="tawk"]' +
             '{ display: none !important; }' +
-            '.tc_in_cart { position: fixed !important; bottom: 0 !important; left: 0 !important; right: 0 !important; z-index: 998 !important; background: rgba(255,255,255,0.97) !important; border-top: 1px solid #e5e7eb !important; padding: 8px 16px !important; font-size: 13px !important; max-height: 100px !important; overflow-y: auto !important; }' +
-            '.tc-seatchart-subtotal { font-weight: 600 !important; color: #663d17 !important; }' +
-            /* HIDE jQuery UI dialog entirely - we bypass it with direct AJAX in embed */
-            '.ui-widget-overlay, .ui-dialog, .tc-seat-dialog { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }';
+            'body { margin-top: 0 !important; padding-top: 0 !important; }' +
+            '.entry-content, .tc_event_content { padding-top: 10px !important; }';
           document.head.appendChild(style);
-          // Auto-click the "Pick your seat(s)" button after a short delay (only on seating page)
-          if (window.location.href.indexOf('lamako_seat_embed') > -1) {
-            setTimeout(function() {
-              var btn = document.querySelector('.tc_seating_map_button');
-              if (btn) btn.click();
-            }, 2000);
-          }
-          // On checkout page, add mobile-friendly styles
-          if (window.location.href.indexOf('/checkout') > -1 || window.location.href.indexOf('/commande') > -1) {
+          // On checkout/cart pages, add mobile-friendly styles
+          if (window.location.href.indexOf('/checkout') > -1 || window.location.href.indexOf('/commande') > -1 || window.location.href.indexOf('/cart') > -1 || window.location.href.indexOf('/panier') > -1) {
             var checkoutStyle = document.createElement('style');
             checkoutStyle.textContent = 
               'body { font-family: -apple-system, BlinkMacSystemFont, sans-serif !important; font-size: 15px !important; }' +
-              '.woocommerce-checkout { padding: 12px !important; }' +
-              '.woocommerce-form-coupon-toggle, .woocommerce-form-login-toggle { display: none !important; }' +
+              '.woocommerce-checkout, .woocommerce-cart { padding: 12px !important; }' +
+              '.woocommerce-form-coupon-toggle { display: none !important; }' +
               'table.shop_table { font-size: 14px !important; }' +
               '#payment { margin-top: 16px !important; }' +
               '#place_order { font-size: 17px !important; padding: 14px !important; border-radius: 12px !important; }';
             document.head.appendChild(checkoutStyle);
-            // Notify app that checkout page loaded
             if (window.ReactNativeWebView) {
               window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'checkout_loaded' }));
             }
           }
           // On order confirmation page
-          if (window.location.href.indexOf('order-received') > -1 || window.location.href.indexOf('commande-recue') > -1) {
+          if (window.location.href.indexOf('order-received') > -1 || window.location.href.indexOf('commande-recue') > -1 || window.location.href.indexOf('thankyou') > -1) {
             if (window.ReactNativeWebView) {
               window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'order_confirmed' }));
             }
           }
         }
-        if (document.readyState === 'complete') setTimeout(cleanup, 500);
-        else window.addEventListener('load', function() { setTimeout(cleanup, 500); });
+        if (document.readyState === 'complete') setTimeout(cleanup, 300);
+        else window.addEventListener('load', function() { setTimeout(cleanup, 300); });
+        // Also run on DOMContentLoaded for faster response
+        document.addEventListener('DOMContentLoaded', function() { setTimeout(cleanup, 200); });
       })();
       true;
     `;
 
     // Header title and icon based on current phase
-    const headerTitle = webviewPhase === 'seating' ? 'Plan de salle' 
-      : webviewPhase === 'checkout' ? 'Paiement sécurisé' 
+    const headerTitle = webviewPhase === 'seating' ? 'Billetterie' 
+      : webviewPhase === 'checkout' ? 'Paiement s\u00e9curis\u00e9' 
       : 'Confirmation';
     const headerIcon = webviewPhase === 'checkout' ? 'lock.fill' : webviewPhase === 'confirmation' ? 'checkmark.circle.fill' : undefined;
     
@@ -231,16 +215,16 @@ export default function EventDetailScreen() {
       return (
         <ScreenContainer edges={["top", "left", "right", "bottom"]}>
           <View style={[styles.seatingHeader, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
-            <TouchableOpacity onPress={() => { clearServerCart(undefined, seatingChartUrl ? new URL(seatingChartUrl).searchParams.get('chart_id') || undefined : undefined); setShowSeatingChart(false); }} style={styles.seatingBackBtn}>
+            <TouchableOpacity onPress={() => { setShowSeatingChart(false); }} style={styles.seatingBackBtn}>
               <IconSymbol name="chevron.left" size={20} color={colors.foreground} />
               <Text style={[styles.seatingBackText, { color: colors.foreground }]}>Retour</Text>
             </TouchableOpacity>
-            <Text style={[styles.seatingTitle, { color: colors.foreground }]}>Plan de salle</Text>
+            <Text style={[styles.seatingTitle, { color: colors.foreground }]}>Billetterie</Text>
             <View style={{ width: 80 }} />
           </View>
           <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 20 }}>
             <Text style={{ color: colors.muted, textAlign: "center" }}>
-              Le plan de salle interactif n'est pas disponible sur le web.{"\n"}Ouvrez l'app sur votre téléphone pour sélectionner votre siège.
+              La billetterie interactive n'est pas disponible sur le web.{"\n"}Ouvrez l'app sur votre t\u00e9l\u00e9phone ou utilisez le site web.
             </Text>
             <TouchableOpacity
               onPress={() => Linking.openURL(seatingChartUrl!)}
@@ -267,22 +251,14 @@ export default function EventDetailScreen() {
       <ScreenContainer edges={["top", "left", "right", "bottom"]}>
         <View style={[styles.seatingHeader, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
           <TouchableOpacity onPress={() => {
-            const chartIdFromUrl = seatingChartUrl ? new URL(seatingChartUrl).searchParams.get('chart_id') || undefined : undefined;
             if (webviewPhase === 'confirmation') {
-              // After order confirmation, go to tickets
+              // After order confirmation, clear local cart and go to tickets
+              clearCart();
               setShowSeatingChart(false);
               setWebviewPhase('seating');
               router.replace("/(tabs)/tickets");
-            } else if (webviewPhase === 'checkout') {
-              // User is leaving during checkout - clear cart AND server-side seats
-              clearCart();
-              clearServerCart(undefined, chartIdFromUrl); // Release Tickera seat transients + Firebase
-              setShowSeatingChart(false);
-              setWebviewPhase('seating');
             } else {
-              // User is leaving seating chart - clear local cart AND server-side seat reservations
-              clearCart();
-              clearServerCart(undefined, chartIdFromUrl); // Release Tickera seat transients + Firebase
+              // User is leaving - just close the WebView
               setShowSeatingChart(false);
               setWebviewPhase('seating');
             }
@@ -310,7 +286,7 @@ export default function EventDetailScreen() {
           allowsInlineMediaPlayback
           mixedContentMode="compatibility"
           scalesPageToFit={true}
-          allowsBackForwardNavigationGestures={false}
+          allowsBackForwardNavigationGestures={true}
           bounces={false}
           scrollEnabled={true}
           injectedJavaScript={injectedJS}
@@ -318,63 +294,26 @@ export default function EventDetailScreen() {
             <View style={{ flex: 1, alignItems: "center", justifyContent: "center", position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "#fff" }}>
               <ActivityIndicator size="large" color={colors.primary} />
               <Text style={{ marginTop: 12, color: colors.muted, textAlign: "center" }}>
-                {webviewPhase === 'checkout' ? "Chargement du paiement..." : "Chargement du plan de salle..."}
+                Chargement...
               </Text>
             </View>
           )}
           onMessage={(e: any) => {
             try {
               const data = JSON.parse(e.nativeEvent.data);
-              if (data.type === 'seats_confirmed' && data.seats && Array.isArray(data.seats)) {
-                // Add each seat to the local cart
-                data.seats.forEach((seat: any) => {
-                  if (seat.ticketTypeId && seat.price) {
-                    addItem({
-                      productId: Number(seat.ticketTypeId),
-                      name: `${event?.title?.rendered || 'Événement'} - ${seat.ticketTypeName || 'Siège'} (${seat.label || 'Siège'})`,
-                      price: Number(seat.price) || 0,
-                      image: event?.featuredImage || "",
-                      isEvent: true,
-                      seatLabel: seat.label || seat.seatId || '',
-                    });
-                  }
-                });
-                // Close the seating chart WebView and go to cart
-                setShowSeatingChart(false);
-                setWebviewPhase('seating');
-                setSeatingReady(false);
-                // Navigate to cart so user can see their seats and proceed to checkout
-                setTimeout(() => router.push('/(tabs)/cart'), 300);
-              }
-              if (data.type === 'no_seats_selected') {
-                if (Platform.OS !== 'web') {
-                  const debugInfo = data.debug ? `\n\nDébug: ${data.debug.totalSeats} sièges trouvés, ${data.debug.cartItems} dans le panier` : '';
-                  Alert.alert(
-                    'Aucun siège sélectionné',
-                    'Veuillez sélectionner au moins un siège en appuyant dessus sur le plan, puis appuyez sur "Confirmer ma sélection".' + debugInfo
-                  );
-                }
-              }
-              if (data.type === 'seat_extraction_error') {
-                if (Platform.OS !== 'web') {
-                  Alert.alert('Erreur', 'Impossible d\'extraire les sièges sélectionnés. Veuillez réessayer.');
-                }
-              }
-              if (data.type === 'seat_count_update') {
-                setSelectedSeats(data.seats || []);
-              }
-              if (data.type === 'navigating_to_checkout' || data.type === 'checkout_loaded') {
+              if (data.type === 'checkout_loaded') {
                 setWebviewPhase('checkout');
               }
               if (data.type === 'order_confirmed') {
                 setWebviewPhase('confirmation');
+                // Clear local cart since order was placed via web
                 clearCart();
               }
             } catch {}
           }}
           onNavigationStateChange={(navState: any) => {
             const url = navState.url || "";
-            // Detect checkout page
+            // Detect checkout/cart pages
             if (url.includes('/checkout') || url.includes('/commande')) {
               setWebviewPhase('checkout');
             }
@@ -382,169 +321,21 @@ export default function EventDetailScreen() {
             if (url.includes("order-received") || url.includes("commande-recue")) {
               setWebviewPhase('confirmation');
             }
+            // Detect if user navigated back to event page (reset phase)
+            if (url.includes('/tc-events/') || url.includes('/tc_event/')) {
+              setWebviewPhase('seating');
+            }
           }}
           onShouldStartLoadWithRequest={(request: any) => {
-            // Allow all navigation within the site (including checkout)
+            // Allow all navigation within the site (including checkout, cart, login)
             const url = request.url || "";
             if (url.startsWith(SITE_URL) || url.startsWith("about:") || url.startsWith("data:")) return true;
-            // Allow payment gateway redirects (some payment gateways redirect to external URLs)
-            if (url.includes('mvola') || url.includes('orange') || url.includes('airtel') || url.includes('cybersource') || url.includes('visa')) return true;
+            // Allow payment gateway redirects
+            if (url.includes('mvola') || url.includes('orange') || url.includes('airtel') || url.includes('cybersource') || url.includes('visa') || url.includes('stripe') || url.includes('paypal')) return true;
             // Block other external navigation
             return false;
           }}
         />
-        {/* Native confirm button overlay - always visible during seating phase */}
-        {webviewPhase === 'seating' && (
-          <View style={[styles.confirmOverlay, { bottom: 0 }]}>
-            {/* Selected seats display */}
-            {selectedSeats.length > 0 && (
-              <View style={{ width: '100%', marginBottom: 10 }}>
-                <Text style={{ fontSize: 13, fontWeight: '700', color: '#374151', marginBottom: 6 }}>
-                  {selectedSeats.length} {selectedSeats.length === 1 ? 'siège sélectionné' : 'sièges sélectionnés'} :
-                </Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxHeight: 36 }}>
-                  <View style={{ flexDirection: 'row', gap: 6 }}>
-                    {selectedSeats.map((seat, idx) => (
-                      <View key={idx} style={{ backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                        <Text style={{ fontSize: 12, fontWeight: '600', color: '#374151' }}>{seat}</Text>
-                        <TouchableOpacity
-                          onPress={() => {
-                            // Remove this seat from the WebView cart
-                            if (webviewRef.current) {
-                              webviewRef.current.injectJavaScript(`
-                                (function() {
-                                  var seats = document.querySelectorAll('.tc_seat_in_cart');
-                                  seats.forEach(function(s) {
-                                    var labelEl = s.querySelector('span p');
-                                    var name = labelEl ? labelEl.textContent.trim() : (s.id || '');
-                                    if (name === '${seat}') {
-                                      // Trigger click to remove
-                                      s.click();
-                                    }
-                                  });
-                                })();
-                                true;
-                              `);
-                            }
-                          }}
-                          style={{ padding: 2 }}
-                        >
-                          <Text style={{ color: '#dc2626', fontSize: 16, fontWeight: 'bold', lineHeight: 16 }}>×</Text>
-                        </TouchableOpacity>
-                      </View>
-                    ))}
-                  </View>
-                </ScrollView>
-              </View>
-            )}
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, width: '100%' }}>
-              {/* Confirm button */}
-              <TouchableOpacity
-                style={[styles.confirmBtn, { flex: 1, backgroundColor: selectedSeats.length > 0 ? '#663d17' : '#a0a0a0' }]}
-                disabled={selectedSeats.length === 0}
-                onPress={() => {
-                // Inject JS to extract selected seats from the Tickera DOM
-                if (webviewRef.current) {
-                  webviewRef.current.injectJavaScript(`
-                    (function() {
-                      try {
-                        // Build ticket type lookup from legend / listing elements
-                        var ticketTypes = {};
-                        // Method 1: tc-ticket-listing elements (Tickera seating chart legend)
-                        document.querySelectorAll('.tc-ticket-listing, [data-ticket-type-id]').forEach(function(el) {
-                          var ttId = el.getAttribute('data-ticket-type-id');
-                          var priceStr = el.getAttribute('data-tt-price') || el.getAttribute('data-price') || '';
-                          var title = el.getAttribute('data-tt-title') || el.getAttribute('data-title') || el.textContent.trim().split('\\n')[0] || 'Siège';
-                          var price = parseInt(priceStr.replace(/[^0-9]/g, '')) || 0;
-                          if (ttId) ticketTypes[ttId] = { price: price, title: title };
-                        });
-                        
-                        // Method 2: tc_in_cart items (Tickera cart summary)
-                        document.querySelectorAll('.tc_in_cart .tc_cart_item, .tc_in_cart tr, .tc-cart-item').forEach(function(el) {
-                          var ttId = el.getAttribute('data-ticket-type-id') || el.getAttribute('data-tt-id');
-                          if (!ttId) {
-                            var link = el.querySelector('a[data-ticket-type-id]');
-                            if (link) ttId = link.getAttribute('data-ticket-type-id');
-                          }
-                          var priceEl = el.querySelector('.tc_cart_item_price, .price, td:last-child');
-                          if (ttId && priceEl) {
-                            var price = parseInt(priceEl.textContent.replace(/[^0-9]/g, '')) || 0;
-                            if (!ticketTypes[ttId] || price > 0) {
-                              ticketTypes[ttId] = ticketTypes[ttId] || {};
-                              if (price > 0) ticketTypes[ttId].price = price;
-                            }
-                          }
-                        });
-                        
-                        var seatData = [];
-                        var seen = {};
-                        
-                        // Find all seats that are selected/in-cart using multiple selectors
-                        // ONLY select seats that Tickera has added to its WC cart
-                        // tc_seat_in_cart is the class Tickera adds when user confirms via the popup
-                        var seats = document.querySelectorAll('.tc_seat_in_cart');
-                        
-                        seats.forEach(function(seat) {
-                          var ttId = seat.getAttribute('data-tt-id');
-                          if (!ttId) return;
-                          var seatId = seat.id || seat.getAttribute('data-seat-id') || '';
-                          // Avoid duplicates
-                          var key = seatId + '-' + ttId;
-                          if (seen[key]) return;
-                          seen[key] = true;
-                          
-                          // Get seat label from various possible elements
-                          var labelEl = seat.querySelector('p, span, .tc_seat_label');
-                          var label = labelEl ? labelEl.textContent.trim() : seatId || 'Siège';
-                          var tt = ticketTypes[ttId] || { price: 0, title: 'Siège' };
-                          seatData.push({
-                            seatId: seatId,
-                            label: label,
-                            ticketTypeId: ttId,
-                            ticketTypeName: tt.title || 'Siège',
-                            price: tt.price || 0
-                          });
-                        });
-                        
-                        if (seatData.length > 0) {
-                          window.ReactNativeWebView.postMessage(JSON.stringify({
-                            type: 'seats_confirmed',
-                            seats: seatData
-                          }));
-                        } else {
-                          // Debug: send info about what we found in the DOM
-                          var allSeats = document.querySelectorAll('.tc_seat');
-                          var cartItems = document.querySelectorAll('.tc_in_cart .tc_cart_item, .tc_in_cart tr');
-                          window.ReactNativeWebView.postMessage(JSON.stringify({
-                            type: 'no_seats_selected',
-                            debug: {
-                              totalSeats: allSeats.length,
-                              cartItems: cartItems.length,
-                              ticketTypes: Object.keys(ticketTypes).length
-                            }
-                          }));
-                        }
-                      } catch(e) {
-                        window.ReactNativeWebView.postMessage(JSON.stringify({
-                          type: 'seat_extraction_error',
-                          error: e.message
-                        }));
-                      }
-                    })();
-                    true;
-                  `);
-                }
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.confirmBtnText}>Confirmer ma sélection</Text>
-              </TouchableOpacity>
-            </View>
-            {selectedSeats.length === 0 && (
-              <Text style={[styles.confirmHint, { color: colors.muted }]}>Appuyez sur un siège coloré pour le sélectionner</Text>
-            )}
-          </View>
-        )}
       </ScreenContainer>
     );
   }

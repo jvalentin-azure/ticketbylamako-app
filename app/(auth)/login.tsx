@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Text, View, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Alert, Linking } from "react-native";
 import { Image } from "expo-image";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -14,6 +14,7 @@ export default function LoginScreen() {
   const colors = useColors();
   const scheme = useColorScheme();
   const router = useRouter();
+  const params = useLocalSearchParams<{ returnTo?: string }>();
   const { login, loginWithUser } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,7 +28,11 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await login(email.trim(), password);
-      router.replace("/(tabs)/" as any);
+      if (params.returnTo) {
+        router.replace(params.returnTo as any);
+      } else {
+        router.replace("/(tabs)/" as any);
+      }
     } catch (e: any) {
       setError(e.message || "Identifiants incorrects");
     } finally { setLoading(false); }
@@ -68,7 +73,11 @@ export default function LoginScreen() {
 
       // Update auth state and navigate
       loginWithUser(user);
-      router.replace("/(tabs)/" as any);
+      if (params.returnTo) {
+        router.replace(params.returnTo as any);
+      } else {
+        router.replace("/(tabs)/" as any);
+      }
     } catch (e: any) {
       setError(e.message || `Erreur de connexion ${provider}`);
     } finally {

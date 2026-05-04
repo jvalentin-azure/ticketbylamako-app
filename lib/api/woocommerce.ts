@@ -2,6 +2,31 @@ export const SITE_URL = process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketb
 const CK = process.env.EXPO_PUBLIC_WC_CONSUMER_KEY || "";
 const CS = process.env.EXPO_PUBLIC_WC_CONSUMER_SECRET || "";
 
+// Lightweight in-memory cache to avoid redundant API calls when switching tabs
+// TTL of 30 seconds ensures data stays fresh while reducing network requests
+const memoryCache: Record<string, { data: any; timestamp: number }> = {};
+const CACHE_TTL = 30000; // 30 seconds
+
+function getCached<T>(key: string): T | null {
+  const entry = memoryCache[key];
+  if (entry && Date.now() - entry.timestamp < CACHE_TTL) {
+    return entry.data as T;
+  }
+  return null;
+}
+
+function setCache(key: string, data: any): void {
+  memoryCache[key] = { data, timestamp: Date.now() };
+}
+
+export function invalidateCache(key?: string): void {
+  if (key) {
+    delete memoryCache[key];
+  } else {
+    Object.keys(memoryCache).forEach(k => delete memoryCache[k]);
+  }
+}
+
 function wcUrl(endpoint: string, params: Record<string, string> = {}): string {
   const url = new URL(`${SITE_URL}/wp-json/wc/v3/${endpoint}`);
   url.searchParams.set("consumer_key", CK);
@@ -615,6 +640,8 @@ export async function getShopCategories(): Promise<WCCategory[]> {
  * ~3x faster than separate WC API calls.
  */
 export async function getShopData(): Promise<{ products: WCProduct[]; categories: WCCategory[] }> {
+  const cached = getCached<{ products: WCProduct[]; categories: WCCategory[] }>('shop-data');
+  if (cached) return cached;
   try {
     const raw = await mobileApiFetch<any>('shop-data');
     const products: WCProduct[] = (raw.products || []).map((p: any) => ({
@@ -642,14 +669,18 @@ export async function getShopData(): Promise<{ products: WCProduct[]; categories
       image: null,
       parent: c.parent || 0,
     }));
-    return { products, categories };
+    const result = { products, categories };
+    setCache('shop-data', result);
+    return result;
   } catch (error) {
     console.warn('Combined shop-data endpoint failed, falling back to separate calls:', error);
     const [products, categories] = await Promise.all([
       getShopProducts({ per_page: "50" }),
       getShopCategories(),
     ]);
-    return { products, categories };
+    const result = { products, categories };
+    setCache('shop-data', result);
+    return result;
   }
 }
 
@@ -695,6 +726,8 @@ interface EventsDataResponse {
  * ~50% faster than separate API calls due to direct DB queries and no _embed overhead.
  */
 export async function getHomeData(): Promise<HomeDataResponse> {
+  const cached = getCached<HomeDataResponse>('home-data');
+  if (cached) return cached;
   try {
     const raw = await mobileApiFetch<any>('home-data');
     // Normalize events to match TCEvent interface
@@ -752,7 +785,9 @@ export async function getHomeData(): Promise<HomeDataResponse> {
       parent: c.parent || 0,
     }));
 
-    return { events, products, categories };
+    const result = { events, products, categories };
+    setCache('home-data', result);
+    return result;
   } catch (error) {
     // Fallback to separate calls if combined endpoint fails
     console.warn('Combined home-data endpoint failed, falling back to separate calls:', error);
@@ -761,7 +796,9 @@ export async function getHomeData(): Promise<HomeDataResponse> {
       getEventCategories(),
     ]);
     const products = await getShopProducts({ per_page: "6" });
-    return { events, products, categories };
+    const result = { events, products, categories };
+    setCache('home-data', result);
+    return result;
   }
 }
 
@@ -770,6 +807,8 @@ export async function getHomeData(): Promise<HomeDataResponse> {
  * Returns events (with tickets/prices inline) and categories.
  */
 export async function getEventsData(): Promise<EventsDataResponse> {
+  const cached = getCached<EventsDataResponse>('events-data');
+  if (cached) return cached;
   try {
     const raw = await mobileApiFetch<any>('events-data');
     const events: TCEvent[] = (raw.events || []).map((e: any) => ({
@@ -806,7 +845,9 @@ export async function getEventsData(): Promise<EventsDataResponse> {
       parent: c.parent || 0,
     }));
 
-    return { events, categories };
+    const result = { events, categories };
+    setCache('events-data', result);
+    return result;
   } catch (error) {
     // Fallback to separate calls
     console.warn('Combined events-data endpoint failed, falling back:', error);
@@ -814,6 +855,8 @@ export async function getEventsData(): Promise<EventsDataResponse> {
       getEventsWithTickets(),
       getEventCategories(),
     ]);
-    return { events, categories };
+    const result = { events, categories };
+    setCache('events-data', result);
+    return result;
   }
 }

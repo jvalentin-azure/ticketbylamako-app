@@ -35,7 +35,7 @@ export default function CartScreen() {
         "Vous devez être connecté pour passer une commande. Connectez-vous ou créez un compte pour continuer.",
         [
           { text: "Annuler", style: "cancel" },
-          { text: "Se connecter", onPress: () => router.push("/(auth)/login" as any) },
+          { text: "Se connecter", onPress: () => router.push({ pathname: "/(auth)/login", params: { returnTo: "/checkout" } } as any) },
         ]
       );
       return;

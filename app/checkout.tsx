@@ -62,7 +62,7 @@ export default function CheckoutScreen() {
       Alert.alert(
         "Connexion requise",
         "Vous devez être connecté pour passer une commande.",
-        [{ text: "Se connecter", onPress: () => router.replace("/(auth)/login" as any) }]
+        [{ text: "Se connecter", onPress: () => router.replace({ pathname: "/(auth)/login", params: { returnTo: "/checkout" } } as any) }]
       );
     }
   }, [isAuthenticated]);

@@ -813,3 +813,19 @@
 - [x] Configure Nextend Social Login on WordPress (Google enabled, Facebook configured)
 - [x] Verify Google OAuth flow end-to-end (test successful)
 - [x] App social-auth.ts integrated with WordPress endpoint
+
+## V4.4 - UI Fixes & Performance Improvements
+- [x] Events page: improve spacing between date, filters, and first card
+- [x] Shop page: improve spacing between search box, filters, and first card
+- [x] Fix Google OAuth "outdated" error (switched to authorization code flow with PKCE)
+- [x] Login screen: replace tagline with "une expérience fluide, du premier clic jusqu'à l'entrée dans la salle"
+- [x] Optimize loading performance (30s memory cache for tab switching)
+
+## V4.5 - Seating Chart & Payment Rewrite (BilletClic approach)
+- [x] Rewrite seating chart: load full event page in WebView (like BilletClic)
+- [x] CSS injection to hide header/footer/nav/admin bar/chat widget/cookie banner
+- [x] Let Tickera seating chart popup work natively in WebView
+- [x] Checkout/payment happens in same WebView (all WooCommerce payment methods)
+- [x] Intercept order-received URL to show success in app
+- [x] Fix cart redirect bug (redirecting to home after login)
+- [x] Fix seats persisting after clearing selection (no more native overlay)

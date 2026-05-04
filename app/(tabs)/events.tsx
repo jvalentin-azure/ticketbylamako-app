@@ -410,16 +410,16 @@ export default function EventsScreen() {
 }
 
 const styles = StyleSheet.create({
-  headerRow: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  headerRow: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   headerTitle: { fontSize: 22, fontWeight: "700" },
   clearFiltersBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
   clearFiltersText: { fontSize: 12, fontWeight: "600" },
-  searchBar: { marginHorizontal: 16, marginBottom: 8, flexDirection: "row", alignItems: "center", borderRadius: 12, paddingHorizontal: 12, borderWidth: 1 },
+  searchBar: { marginHorizontal: 16, marginBottom: 4, flexDirection: "row", alignItems: "center", borderRadius: 12, paddingHorizontal: 12, borderWidth: 1 },
   searchInput: { flex: 1, paddingVertical: 12, paddingHorizontal: 8, fontSize: 15 },
-  dateFilterRow: { paddingHorizontal: 16, paddingVertical: 4 },
+  dateFilterRow: { paddingHorizontal: 16, paddingTop: 2, paddingBottom: 0 },
   dateChip: { height: 32, flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: 6, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1 },
   dateChipText: { fontSize: 13, fontWeight: "600", lineHeight: 16 },
-  chipsContainer: { paddingHorizontal: 16, paddingVertical: 8, gap: 8, flexDirection: "row", alignItems: "center" },
+  chipsContainer: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 10, gap: 8, flexDirection: "row", alignItems: "center" },
   chip: { height: 32, paddingHorizontal: 14, borderRadius: 16, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   chipText: { fontSize: 13, fontWeight: "600", lineHeight: 16 },
   loadingContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
