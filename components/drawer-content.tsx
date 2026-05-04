@@ -18,7 +18,7 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
   const scheme = useColorScheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { isAuthenticated, user, portal, logout } = useAuth();
+  const { isAuthenticated, user, logout } = useAuth();
   const { colorScheme, setColorScheme } = useThemeContext();
 
   const navigate = (path: string) => {
@@ -78,29 +78,7 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
     },
   ];
 
-  // Add organisateur/admin items if applicable
-  if (portal === "organisateur" || portal === "admin") {
-    menuSections.splice(1, 0, {
-      title: "Organisateur",
-      items: [
-        { icon: "chart.bar.fill" as const, label: "Dashboard", onPress: () => { onClose?.(); router.push("/(tabs)/org-dashboard" as any); } },
-        { icon: "qrcode.viewfinder" as const, label: "Scanner", onPress: () => { onClose?.(); router.push("/(tabs)/scanner" as any); } },
-        { icon: "person.2.fill" as const, label: "Participants", onPress: () => { onClose?.(); router.push("/(tabs)/participants" as any); } },
-        { icon: "doc.text.fill" as const, label: "Rapports", onPress: () => { onClose?.(); router.push("/(tabs)/reports" as any); } },
-      ],
-    });
-  }
-
-  if (portal === "admin") {
-    menuSections.splice(2, 0, {
-      title: "Administration",
-      items: [
-        { icon: "chart.bar.fill" as const, label: "Admin Dashboard", onPress: () => { onClose?.(); router.push("/(tabs)/admin-dashboard" as any); } },
-        { icon: "clipboard.fill" as const, label: "Commandes", onPress: () => { onClose?.(); router.push("/(tabs)/admin-orders" as any); } },
-        { icon: "chart.line.uptrend.xyaxis" as const, label: "Analytics", onPress: () => { onClose?.(); router.push("/(tabs)/admin-analytics" as any); } },
-      ],
-    });
-  }
+  // Admin/Organisateur modules have been moved to TicketByLamako Backend app
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -144,11 +122,7 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
               </Text>
               <View style={styles.roleBadge}>
                 <Text style={styles.roleText}>
-                  {portal === "admin"
-                    ? "Administrateur"
-                    : portal === "organisateur"
-                    ? "Organisateur"
-                    : "Client"}
+                  Client
                 </Text>
               </View>
             </View>

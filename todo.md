@@ -779,4 +779,12 @@
 
 ## V4.0.2 - Deploy & GitHub
 - [x] Deploy updated lamako-mobile-api.php (shop-data endpoint + caching) to WordPress
-- [ ] Push all code to GitHub repository
+- [x] Push all code to GitHub repository (jvalentin-azure/ticketbylamako-app, 62eb4ca)
+
+## V4.1 - App Separation: TicketByLamako Backend
+- [ ] Identify all admin/organiser screens and components to migrate
+- [ ] Remove admin/organiser modules from client app
+- [ ] Create new Backend app with migrated modules (dashboard, scanner QR, participants)
+- [ ] Configure Backend app branding (logo, name, navigation)
+- [ ] Push Backend app to GitHub
+- [ ] Push updated client app to GitHub
