@@ -57,9 +57,12 @@ async function mobileApiPost<T>(endpoint: string, body: any): Promise<T> {
 }
 
 // ---- Clear Server Cart ----
-export async function clearServerCart(orderId?: number): Promise<void> {
+export async function clearServerCart(orderId?: number, chartId?: string): Promise<void> {
   try {
-    await mobileApiPost<{ success: boolean }>('clear-cart', orderId ? { order_id: orderId } : {});
+    const params: Record<string, any> = {};
+    if (orderId) params.order_id = orderId;
+    if (chartId) params.chart_id = chartId;
+    await mobileApiPost<{ success: boolean }>('clear-cart', params);
   } catch (e) {
     // Non-critical - don't throw if cart clear fails
     console.warn('Failed to clear server cart:', e);

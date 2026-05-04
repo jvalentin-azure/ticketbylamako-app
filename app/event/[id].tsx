@@ -231,7 +231,7 @@ export default function EventDetailScreen() {
       return (
         <ScreenContainer edges={["top", "left", "right", "bottom"]}>
           <View style={[styles.seatingHeader, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
-            <TouchableOpacity onPress={() => { clearServerCart(); setShowSeatingChart(false); }} style={styles.seatingBackBtn}>
+            <TouchableOpacity onPress={() => { clearServerCart(undefined, seatingChartUrl ? new URL(seatingChartUrl).searchParams.get('chart_id') || undefined : undefined); setShowSeatingChart(false); }} style={styles.seatingBackBtn}>
               <IconSymbol name="chevron.left" size={20} color={colors.foreground} />
               <Text style={[styles.seatingBackText, { color: colors.foreground }]}>Retour</Text>
             </TouchableOpacity>
@@ -267,6 +267,7 @@ export default function EventDetailScreen() {
       <ScreenContainer edges={["top", "left", "right", "bottom"]}>
         <View style={[styles.seatingHeader, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
           <TouchableOpacity onPress={() => {
+            const chartIdFromUrl = seatingChartUrl ? new URL(seatingChartUrl).searchParams.get('chart_id') || undefined : undefined;
             if (webviewPhase === 'confirmation') {
               // After order confirmation, go to tickets
               setShowSeatingChart(false);
@@ -275,13 +276,13 @@ export default function EventDetailScreen() {
             } else if (webviewPhase === 'checkout') {
               // User is leaving during checkout - clear cart AND server-side seats
               clearCart();
-              clearServerCart(); // Release Tickera seat transients on server
+              clearServerCart(undefined, chartIdFromUrl); // Release Tickera seat transients + Firebase
               setShowSeatingChart(false);
               setWebviewPhase('seating');
             } else {
               // User is leaving seating chart - clear local cart AND server-side seat reservations
               clearCart();
-              clearServerCart(); // Release Tickera seat transients on server
+              clearServerCart(undefined, chartIdFromUrl); // Release Tickera seat transients + Firebase
               setShowSeatingChart(false);
               setWebviewPhase('seating');
             }

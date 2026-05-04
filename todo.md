@@ -712,3 +712,15 @@
 - [x] Optimize loading with single combined API endpoint (home-data, events-data) - ~50% faster
 - [x] Non-blocking loading pattern on event detail page (show content first, load related events in background)
 - [x] Add category emojis to filter chips on home and events pages
+
+## V3.9 - Seating Chart Firebase Sync Fix
+
+### Bug Fixes (Seating Chart Stock Blocking)
+- [x] Add tc_add_seat_to_firebase_cart call in addSeatToCart() - notifies other users in real-time
+- [x] Add tc_remove_seat_from_firebase_cart call in removeSeatFromCart() - releases seat immediately for others
+- [x] Add chart_id parameter to clearServerCart endpoint for Firebase cleanup on exit
+- [x] Pass chart_id from seatingChartUrl to clearServerCart() in app event detail screen
+- [ ] Deploy updated lamako-mobile-api.php to WordPress server
+- [ ] Add periodic tc_remove_expired_firebase_seats cleanup (setInterval 2min) in embed
+- [ ] Add real-time Firebase listener in embed to show seats taken by others (in_others_cart color)
+- [ ] Reduce WooCommerce hold_stock_minutes from 1440 (24h) to 30 min for faster seat release

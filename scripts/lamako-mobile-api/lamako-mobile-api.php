@@ -88,70 +88,6 @@ function lamako_force_all_in_stock( $in_stock, $product ) {
 }
 
 // ============================================================
-// 0b. DISPLAY "App Mobile" SOURCE IN WOOCOMMERCE ORDERS LIST
-// ============================================================
-
-/**
- * Register 'lamako_mobile' as a known order source so WooCommerce
- * displays "App Mobile" instead of generic "Web" in the orders list.
- * 
- * WooCommerce 8.x+ with HPOS uses Order Attribution to track source.
- * The "origin" column reads from _wc_order_attribution_source_type meta.
- * We must set this meta when creating orders AND override the display label.
- */
-
-// Override the origin column display for HPOS orders list
-add_filter( 'woocommerce_order_list_table_column_origin_content', function( $content, $order ) {
-    if ( $order->get_created_via() === 'lamako_mobile' || $order->get_meta('_lamako_mobile_order') === 'yes' ) {
-        return '<span style="color:#8B5E3C;font-weight:bold;">📱 App Mobile</span>';
-    }
-    return $content;
-}, 10, 2 );
-
-// For the orders list table custom column (fallback for older WC)
-add_action( 'manage_woocommerce_page_wc-orders_custom_column', function( $column_name, $order ) {
-    if ( $column_name === 'origin' && ( $order->get_created_via() === 'lamako_mobile' || $order->get_meta('_lamako_mobile_order') === 'yes' ) ) {
-        echo '<span style="color:#8B5E3C;font-weight:bold;">📱 App Mobile</span>';
-    }
-}, 10, 2 );
-
-// Also handle legacy post-type orders list
-add_action( 'manage_shop_order_posts_custom_column', function( $column, $post_id ) {
-    if ( $column === 'order_source' || $column === 'origin' ) {
-        $order = wc_get_order( $post_id );
-        if ( $order && ( $order->get_created_via() === 'lamako_mobile' || $order->get_meta('_lamako_mobile_order') === 'yes' ) ) {
-            echo '<span style="color:#8B5E3C;font-weight:bold;">📱 App Mobile</span>';
-        }
-    }
-}, 10, 2 );
-
-// Register source type label for WC attribution system
-add_filter( 'wc_order_attribution_source_type_label', function( $label, $source_type ) {
-    if ( $source_type === 'lamako_mobile' || $source_type === 'mobile_app' ) {
-        return '📱 App Mobile';
-    }
-    return $label;
-}, 10, 2 );
-
-// Override the created_via display label in order details
-add_filter( 'woocommerce_order_get_created_via', function( $created_via, $order ) {
-    return $created_via;
-}, 10, 2 );
-
-// Set WC Order Attribution meta when order is created via mobile
-add_action( 'woocommerce_new_order', function( $order_id, $order ) {
-    if ( ! is_a( $order, 'WC_Order' ) ) {
-        $order = wc_get_order( $order_id );
-    }
-    if ( $order && $order->get_created_via() === 'lamako_mobile' ) {
-        // Set the attribution meta that WC uses for the origin column
-        $order->update_meta_data( '_wc_order_attribution_source_type', 'lamako_mobile' );
-        $order->update_meta_data( '_wc_order_attribution_utm_source', 'lamako_mobile_app' );
-        $order->save();
-    }
-}, 10, 2 );
-
-// ============================================================
 // 1. SEATING CHART EMBED TEMPLATE (template_redirect hook)
 // ============================================================
 
@@ -568,6 +504,15 @@ document.addEventListener('DOMContentLoaded', function() {
                         seatEl.style.backgroundColor = inCartColor;
                         seatEl.style.color = inCartColor;
                         
+                        // === FIREBASE: Notify other users this seat is now in cart ===
+                        if (typeof tc_seat_chart_ajax !== 'undefined' && tc_seat_chart_ajax.tc_check_firebase == '1' && !seatEl.classList.contains('tc-object-selectable')) {
+                            var firebaseSeatItems = [chartId + '-' + seatId + '-' + ticketTypeId];
+                            jQuery.post(tc_seat_chart_ajax.ajaxUrl, {
+                                action: 'tc_add_seat_to_firebase_cart',
+                                tc_seat_cart_items: firebaseSeatItems
+                            });
+                        }
+                        
                         // Update subtotal display
                         if (response.subtotal && response.total) {
                             var subtotalEl = document.querySelector('.tc-seatchart-subtotal');
@@ -620,6 +565,15 @@ document.addEventListener('DOMContentLoaded', function() {
             
             showToast('Retrait en cours...');
             seatEl.classList.add('lamako-seat-loading');
+            
+            // === FIREBASE: Remove seat from Firebase BEFORE WC cart (immediate visual update for others) ===
+            if (typeof tc_seat_chart_ajax !== 'undefined' && tc_seat_chart_ajax.tc_check_firebase == '1' && !seatEl.classList.contains('tc-object-selectable')) {
+                jQuery.post(tc_seat_chart_ajax.ajaxUrl, {
+                    action: 'tc_remove_seat_from_firebase_cart',
+                    seat_id: seatId,
+                    chart_id: chartId
+                });
+            }
             
             jQuery.post(
                 (typeof tc_seat_chart_ajax !== 'undefined' ? tc_seat_chart_ajax.ajaxUrl : '/wp-admin/admin-ajax.php'),
@@ -1624,7 +1578,6 @@ function lamako_mobile_clear_cart( $request ) {
                 if ( $seat_id ) {
                     delete_transient( 'tc_seat_' . $seat_id . '_reserved' );
                     delete_transient( 'tc_seat_reserved_' . $seat_id );
-                    // Tickera also uses tc_cart_seat_{seat_id} pattern
                     delete_transient( 'tc_cart_seat_' . $seat_id );
                 }
             }
@@ -1636,12 +1589,24 @@ function lamako_mobile_clear_cart( $request ) {
     }
     
     // Method 2: Clear ALL Tickera seat-related transients from the database
-    // This is a broader cleanup for cases where order_id is not available
-    // Tickera stores seats in wp_options as _transient_tc_seat_* and _transient_tc_cart_seat_*
     global $wpdb;
     $wpdb->query(
         "DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_tc_seat_%' OR option_name LIKE '_transient_timeout_tc_seat_%' OR option_name LIKE '_transient_tc_cart_seat_%' OR option_name LIKE '_transient_timeout_tc_cart_seat_%'"
     );
+    
+    // === FIREBASE: Clear all in-cart seats for this session from Firebase ===
+    // Tickera stores Firebase data in the Realtime Database under /in-cart/{chart_id}/{seat_id}
+    // The tc_remove_expired_firebase_seats action handles cleanup, but we also need to
+    // clear the current session's seats. We do this by calling the same AJAX action internally.
+    $chart_id = $request->get_param( 'chart_id' );
+    if ( $chart_id && class_exists( 'TC_Seat_Chart_Firebase' ) ) {
+        // If Tickera's Firebase class is available, use it to clear seats
+        try {
+            do_action( 'tc_remove_expired_firebase_seats_action', $chart_id );
+        } catch ( \Exception $e ) {
+            // Non-critical - continue even if Firebase cleanup fails
+        }
+    }
     
     // Also clear Tickera's session-based cart cookies if available
     if ( isset( $_COOKIE['tc_cart_cookie'] ) ) {

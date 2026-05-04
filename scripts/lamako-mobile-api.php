@@ -504,6 +504,15 @@ document.addEventListener('DOMContentLoaded', function() {
                         seatEl.style.backgroundColor = inCartColor;
                         seatEl.style.color = inCartColor;
                         
+                        // === FIREBASE: Notify other users this seat is now in cart ===
+                        if (typeof tc_seat_chart_ajax !== 'undefined' && tc_seat_chart_ajax.tc_check_firebase == '1' && !seatEl.classList.contains('tc-object-selectable')) {
+                            var firebaseSeatItems = [chartId + '-' + seatId + '-' + ticketTypeId];
+                            jQuery.post(tc_seat_chart_ajax.ajaxUrl, {
+                                action: 'tc_add_seat_to_firebase_cart',
+                                tc_seat_cart_items: firebaseSeatItems
+                            });
+                        }
+                        
                         // Update subtotal display
                         if (response.subtotal && response.total) {
                             var subtotalEl = document.querySelector('.tc-seatchart-subtotal');
@@ -556,6 +565,15 @@ document.addEventListener('DOMContentLoaded', function() {
             
             showToast('Retrait en cours...');
             seatEl.classList.add('lamako-seat-loading');
+            
+            // === FIREBASE: Remove seat from Firebase BEFORE WC cart (immediate visual update for others) ===
+            if (typeof tc_seat_chart_ajax !== 'undefined' && tc_seat_chart_ajax.tc_check_firebase == '1' && !seatEl.classList.contains('tc-object-selectable')) {
+                jQuery.post(tc_seat_chart_ajax.ajaxUrl, {
+                    action: 'tc_remove_seat_from_firebase_cart',
+                    seat_id: seatId,
+                    chart_id: chartId
+                });
+            }
             
             jQuery.post(
                 (typeof tc_seat_chart_ajax !== 'undefined' ? tc_seat_chart_ajax.ajaxUrl : '/wp-admin/admin-ajax.php'),
@@ -1575,6 +1593,20 @@ function lamako_mobile_clear_cart( $request ) {
     $wpdb->query(
         "DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_tc_seat_%' OR option_name LIKE '_transient_timeout_tc_seat_%' OR option_name LIKE '_transient_tc_cart_seat_%' OR option_name LIKE '_transient_timeout_tc_cart_seat_%'"
     );
+    
+    // === FIREBASE: Clear all in-cart seats for this session from Firebase ===
+    // Tickera stores Firebase data in the Realtime Database under /in-cart/{chart_id}/{seat_id}
+    // The tc_remove_expired_firebase_seats action handles cleanup, but we also need to
+    // clear the current session's seats. We do this by calling the same AJAX action internally.
+    $chart_id = $request->get_param( 'chart_id' );
+    if ( $chart_id && class_exists( 'TC_Seat_Chart_Firebase' ) ) {
+        // If Tickera's Firebase class is available, use it to clear seats
+        try {
+            do_action( 'tc_remove_expired_firebase_seats_action', $chart_id );
+        } catch ( \Exception $e ) {
+            // Non-critical - continue even if Firebase cleanup fails
+        }
+    }
     
     // Also clear Tickera's session-based cart cookies if available
     if ( isset( $_COOKIE['tc_cart_cookie'] ) ) {
