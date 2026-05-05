@@ -21,8 +21,8 @@ export default function ProfileScreen() {
       { icon: "ticket.fill" as const, label: "Mes Billets", onPress: () => router.push("/(tabs)/tickets" as any) },
     ] : []),
     { icon: scheme === "dark" ? "sun.max.fill" as const : "moon.fill" as const, label: scheme === "dark" ? "Mode Clair" : "Mode Sombre", onPress: () => setScheme(scheme === "dark" ? "light" : "dark") },
-    { icon: "globe" as const, label: "Langue", onPress: () => {} },
-    { icon: "info.circle.fill" as const, label: "À propos", onPress: () => {} },
+    { icon: "bell.fill" as const, label: "Notifications", onPress: () => router.push("/notification-settings" as any) },
+    { icon: "info.circle.fill" as const, label: "À propos", onPress: () => router.push("/about" as any) },
   ];
 
   const handleLogout = () => {

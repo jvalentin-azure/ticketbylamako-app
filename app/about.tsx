@@ -1,5 +1,6 @@
 import { Text, View, TouchableOpacity, ScrollView, StyleSheet, Linking, Alert, Image } from "react-native";
 import { useRouter } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -30,6 +31,10 @@ export default function AboutScreen() {
         else Alert.alert("Erreur", "Impossible d'ouvrir ce lien.");
       })
       .catch(() => Alert.alert("Erreur", "Impossible d'ouvrir ce lien."));
+  };
+
+  const openLegalPage = (url: string) => {
+    WebBrowser.openBrowserAsync(url).catch(() => openLink(url));
   };
 
   return (
@@ -182,7 +187,7 @@ export default function AboutScreen() {
         </View>
 
         <TouchableOpacity
-          onPress={() => openLink("https://www.ticketbylamako.com/conditions-generales-de-vente/")}
+          onPress={() => openLegalPage("https://www.ticketbylamako.com/conditions-generales-de-vente/")}
           style={[styles.contactRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
         >
           <View style={[styles.contactIcon, { backgroundColor: colors.primary + "15" }]}>
@@ -195,7 +200,7 @@ export default function AboutScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={() => openLink("https://www.ticketbylamako.com/mentions-legales/")}
+          onPress={() => openLegalPage("https://www.ticketbylamako.com/mentions-legales/")}
           style={[styles.contactRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
         >
           <View style={[styles.contactIcon, { backgroundColor: colors.primary + "15" }]}>
@@ -208,7 +213,7 @@ export default function AboutScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={() => openLink("https://www.ticketbylamako.com/politique-de-confidentialite/")}
+          onPress={() => openLegalPage("https://www.ticketbylamako.com/politique-de-confidentialite/")}
           style={[styles.contactRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
         >
           <View style={[styles.contactIcon, { backgroundColor: colors.primary + "15" }]}>

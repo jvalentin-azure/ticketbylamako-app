@@ -11,6 +11,7 @@ import { formatAriary } from "@/lib/format";
 import { notifyPaymentConfirmed } from "@/lib/notifications";
 import { useRewards, estimatePointsForPrice, REDEMPTION_TIERS, type RedeemResult } from "@/lib/rewards-provider";
 import { useAuth } from "@/lib/auth-provider";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // WebView for checkout - loads WooCommerce pay-for-order page
 let WebViewComponent: any = null;
@@ -71,6 +72,21 @@ export default function CheckoutScreen() {
   const [shippingAddress, setShippingAddress] = useState("");
   const [shippingCity, setShippingCity] = useState("");
   const [shippingPhone, setShippingPhone] = useState("");
+
+  // Auto-fill saved billing info
+  useEffect(() => {
+    (async () => {
+      try {
+        const saved = await AsyncStorage.getItem("billing_info");
+        if (saved) {
+          const data = JSON.parse(saved);
+          if (data.phone && !shippingPhone) setShippingPhone(data.phone);
+          if (data.address && !shippingAddress) setShippingAddress(data.address);
+          if (data.city && !shippingCity) setShippingCity(data.city);
+        }
+      } catch {}
+    })();
+  }, []);
 
   // Handle redeem points
   const handleRedeemPoints = async (points: number) => {
@@ -156,6 +172,7 @@ export default function CheckoutScreen() {
 
   const handleNavChange = (navState: any) => {
     const url = navState.url || "";
+    // Detect order confirmation (success)
     if (url.includes("order-received") || url.includes("commande-recue") || url.includes("thankyou")) {
       setPhase("success");
       clearCart();
@@ -163,6 +180,7 @@ export default function CheckoutScreen() {
       notifyPaymentConfirmed(orderId, formatAriary(total)).catch(() => {});
       return;
     }
+    // Detect our custom checkout error param
     if (url.includes("lamako_checkout") && url.includes("error=")) {
       try {
         const urlObj = new URL(url);
@@ -174,16 +192,39 @@ export default function CheckoutScreen() {
         }
       } catch {}
     }
-    if (url.includes("cancel") || url.includes("failed") || url.includes("declined") || url.includes("annule")) {
-      setPaymentErrorMsg("Le paiement a été annulé ou n'a pas abouti.");
-      setPhase("payment_error");
+    // DO NOT treat generic URLs with 'cancel'/'failed' as errors if they are payment gateway pages
+    // Only treat as error if it's our own site URL with those terms
+    if (url.startsWith(SITE_URL) && (url.includes("cancel") || url.includes("failed") || url.includes("declined") || url.includes("annule"))) {
+      // Ignore if it's a 404 page or the homepage (gateway return)
+      if (!url.includes("404") && !url.match(/ticketbylamako\.com\/?$/)) {
+        setPaymentErrorMsg("Le paiement a été annulé ou n'a pas abouti.");
+        setPhase("payment_error");
+        return;
+      }
+    }
+    // If we land on a 404 page or homepage after payment gateway return, check order status
+    if (url.includes("404") || url.includes("page-not-found")) {
+      // This happens when Orange Money returns to a non-existent callback URL
+      // Inject JS to check if order was actually paid
+      if (webviewRef.current) {
+        webviewRef.current.injectJavaScript(`
+          // Redirect to our checkout page to check order status
+          window.location.href = '${SITE_URL}/?lamako_checkout=1&order_id=${orderId}&order_key=${orderKey}';
+          true;
+        `);
+      }
       return;
     }
     // Detect if WebView navigated to homepage (session expired or gateway redirect)
     const isHomepage = (url === SITE_URL || url === SITE_URL + "/" || url === SITE_URL + "/en/" || url.match(/^https:\/\/www\.ticketbylamako\.com\/?$/));
     if (isHomepage && !url.includes("lamako_checkout") && !url.includes("order-received")) {
-      setPaymentErrorMsg("La session a expiré. Veuillez réessayer le paiement.");
-      setPhase("payment_error");
+      // After payment gateway, redirect back to our checkout to check status
+      if (webviewRef.current && orderId) {
+        webviewRef.current.injectJavaScript(`
+          window.location.href = '${SITE_URL}/?lamako_checkout=1&order_id=${orderId}&order_key=${orderKey}';
+          true;
+        `);
+      }
       return;
     }
   };

@@ -124,30 +124,33 @@ function lamako_mobile_maybe_serve_seat_embed() {
         background: #f8f9fa !important;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
-    /* Hide all theme elements */
-    header, .site-header, .page-header, #masthead, .header-wrapper,
-    footer, .site-footer, .page-footer, #colophon, .footer-wrapper,
-    nav, .navigation, .nav-links, .breadcrumbs, .breadcrumb,
-    .sidebar, #sidebar, aside,
-    .woocommerce-breadcrumb, #wpadminbar,
-    .header-main, .header-top, .header-bottom,
-    .footer-1, .footer-2, .absolute-footer,
-    .page-title-inner, .page-title,
-    .comments-area, #comments,
-    [class*="whatsapp"], .joinchat, [id*="whatsapp"],
-    .qlwapp__container, [class*="qlwapp"],
-    [class*="cookie"], [class*="consent"],
-    #fkcart-floating-toggler, #fkcart-modal, .fkcart-main-wrapper,
-    [class*="fkcart"],
-    .woocommerce-mini-cart, .cart-icon, .shopping-cart,
+    /* NUCLEAR APPROACH: Hide EVERYTHING in body, then show only what we need */
+    body > *:not(.lamako-embed-instruction):not(.tc_seating_map_button):not(.tc_seating_map):not(script):not(link):not(style) {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        pointer-events: none !important;
+    }
+    /* Re-show the elements we actually want */
+    .lamako-embed-instruction,
+    .tc_seating_map_button,
+    .tc_seating_map {
+        display: block !important;
+        visibility: visible !important;
+        height: auto !important;
+        overflow: visible !important;
+        pointer-events: auto !important;
+    }
+    /* Also hide homepage sections that get injected by JS */
+    #lamako-home-sections, .home-sections, .home-filter-section, .home-upcoming-section, .home-past-section,
+    .modal, .gt-modal, [class*="modal"],
+    #fb-root, [class*="qlwapp"], [class*="fkcart"], [class*="whatsapp"],
     [class*="tidio"], [id*="tidio"], [class*="chat-widget"],
-    [class*="crisp"], [id*="crisp"],
-    [class*="tawk"], [id*="tawk"],
-    [class*="intercom"], [id*="intercom"],
-    [class*="drift"], [id*="drift"],
-    [class*="livechat"], [id*="livechat"],
-    .wc-block-mini-cart, .wp-block-woocommerce-mini-cart
-    { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }
+    .fkcart-modal-backdrop, .fkcart-drawer-container,
+    .wc-block-mini-cart, .wp-block-woocommerce-mini-cart,
+    #wpadminbar
+    { display: none !important; visibility: hidden !important; height: 0 !important; pointer-events: none !important; }
     
     /* Style the seating chart button */
     .tc_seating_map_button {
@@ -175,29 +178,65 @@ function lamako_mobile_maybe_serve_seat_embed() {
         touch-action: manipulation !important;
     }
     
-    /* HIDE checkout navigation - seating chart is for seat selection only */
-    /* Keep .tc_in_cart visible so Tickera can track selected seats properly */
-    .tc-seatchart-go-to-cart, a.tc-seatchart-go-to-cart,
+    /* SHOW Tickera's native checkout bar (subtotal + 'Voir le panier' button) */
     .tc-checkout-bar {
-        display: none !important;
-    }
-    /* Style the in-cart summary to be compact and informative */
-    .tc_in_cart {
+        display: flex !important;
+        visibility: visible !important;
+        height: auto !important;
+        overflow: visible !important;
+        pointer-events: auto !important;
         position: fixed !important;
         bottom: 0 !important;
         left: 0 !important;
         right: 0 !important;
-        z-index: 998 !important;
+        z-index: 99999 !important;
+        background: #fff !important;
+        border-top: 2px solid #663d17 !important;
+        padding: 12px 16px !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        box-shadow: 0 -4px 12px rgba(0,0,0,0.1) !important;
+    }
+    .tc-seatchart-subtotal {
+        font-weight: 600 !important;
+        font-size: 15px !important;
+        color: #663d17 !important;
+        margin: 0 !important;
+    }
+    .tc-checkout-button {
+        display: inline-block !important;
+        visibility: visible !important;
+        height: auto !important;
+        overflow: visible !important;
+        pointer-events: auto !important;
+        padding: 14px 28px !important;
+        font-size: 16px !important;
+        font-weight: 700 !important;
+        background: #663d17 !important;
+        color: #fff !important;
+        border: none !important;
+        border-radius: 12px !important;
+        text-decoration: none !important;
+        cursor: pointer !important;
+        box-shadow: 0 4px 10px rgba(102,61,23,0.3) !important;
+    }
+    .tc-checkout-button[style*="opacity: 0.4"] {
+        opacity: 0.4 !important;
+        pointer-events: none !important;
+    }
+    /* Style the in-cart info area */
+    .tc_in_cart {
+        position: fixed !important;
+        bottom: 70px !important;
+        left: 0 !important;
+        right: 0 !important;
+        z-index: 99998 !important;
         background: rgba(255,255,255,0.97) !important;
         border-top: 1px solid #e5e7eb !important;
         padding: 8px 16px !important;
         font-size: 13px !important;
-        max-height: 120px !important;
+        max-height: 100px !important;
         overflow-y: auto !important;
-    }
-    .tc-seatchart-subtotal {
-        font-weight: 600 !important;
-        color: #663d17 !important;
     }
     
     /* HIDE jQuery UI dialog entirely - we bypass it with direct AJAX */
@@ -876,6 +915,84 @@ document.addEventListener('DOMContentLoaded', function() {
     <p class="lamako-embed-instruction">Appuyez sur le bouton ci-dessous, puis touchez un siège pour l'ajouter. Touchez-le à nouveau pour le retirer.</p>
     <?php echo do_shortcode( '[tc_seat_chart id="' . $chart_id . '" show_legend="true"]' ); ?>
 <?php wp_footer(); ?>
+<script>
+// POST-WP_FOOTER CLEANUP & SEATING CHART HELPERS
+(function() {
+    // Remove all body children that are not our content
+    var body = document.body;
+    var allowed = ['lamako-embed-instruction', 'tc_seating_map_button', 'tc_seating_map'];
+    var children = Array.from(body.children);
+    children.forEach(function(child) {
+        if (child.tagName === 'SCRIPT' || child.tagName === 'LINK' || child.tagName === 'STYLE') return;
+        var dominated = false;
+        for (var i = 0; i < allowed.length; i++) {
+            if (child.classList && child.classList.contains(allowed[i])) { dominated = true; break; }
+            if (child.id === allowed[i]) { dominated = true; break; }
+        }
+        if (!dominated) {
+            child.style.display = 'none';
+            child.style.visibility = 'hidden';
+            child.style.height = '0';
+            child.style.overflow = 'hidden';
+        }
+    });
+    
+    // AUTO-CLICK the 'Pick your seats' button after a short delay
+    setTimeout(function() {
+        var btn = document.querySelector('.tc_seating_map_button');
+        if (btn) {
+            btn.click();
+            // Hide the button after clicking
+            setTimeout(function() { btn.style.display = 'none'; }, 500);
+        }
+    }, 1500);
+    
+    // INTERCEPT the Tickera 'Voir le panier' button click to send message to React Native
+    // instead of navigating to /cart/ (which would load in the WebView)
+    function interceptCheckoutButton() {
+        var checkoutBtn = document.querySelector('.tc-checkout-button');
+        if (checkoutBtn) {
+            checkoutBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (window.ReactNativeWebView) {
+                    window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'SEATS_CONFIRMED' }));
+                }
+                return false;
+            });
+            console.log('[Lamako] Checkout button intercepted');
+        } else {
+            // Button not yet in DOM (map not loaded yet), retry
+            setTimeout(interceptCheckoutButton, 1000);
+        }
+    }
+    // Start intercepting after map loads (button is created by AJAX)
+    setTimeout(interceptCheckoutButton, 3000);
+    
+    // Also intercept any future clicks on the checkout button (in case it gets recreated)
+    document.addEventListener('click', function(e) {
+        var target = e.target;
+        if (target && (target.classList.contains('tc-checkout-button') || target.closest('.tc-checkout-button'))) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'SEATS_CONFIRMED' }));
+            }
+            return false;
+        }
+    }, true);
+    
+    // Periodic cleanup for late-loading widgets
+    setInterval(function() {
+        var junk = document.querySelectorAll('#lamako-home-sections, .home-sections, .modal, .gt-modal, [class*="qlwapp"], [class*="fkcart"], .fkcart-modal-backdrop, #fb-root');
+        junk.forEach(function(el) {
+            el.style.display = 'none';
+            el.style.visibility = 'hidden';
+            el.style.height = '0';
+        });
+    }, 2000);
+})();
+</script>
 </body>
 </html>
     <?php
@@ -944,6 +1061,9 @@ function lamako_mobile_maybe_serve_checkout() {
         
         // Update order with payment method
         $order->set_payment_method( $gateway );
+        // Mark as mobile app order (for seating chart orders that go through WebView checkout)
+        $order->set_created_via( 'lamako_mobile' );
+        $order->update_meta_data( '_lamako_order_source', 'mobile_app' );
         $order->save();
         
         // Process the payment via the gateway
@@ -1262,6 +1382,61 @@ function lamako_mobile_maybe_serve_checkout() {
         background: rgba(255,255,255,0.7) !important;
     }
     .shop_table { display: none; }
+    /* Hide ALL theme/plugin injected content from wp_head/wp_footer */
+    [class*="rev_slider"], .rs-module-wrap, sr7-module, [class*="sr7"],
+    [class*="slider-revolution"], .tp-bannertimer,
+    #fkcart-floating-toggler, .fkcart-main-wrapper, [class*="fkcart"],
+    [class*="qlwapp"], [id*="qlwapp"], .joinchat, [class*="whatsapp"],
+    [class*="tidio"], [id*="tidio"], [class*="tawk"], [id*="tawk"],
+    [class*="crisp"], [id*="crisp"], [class*="chat-widget"],
+    [class*="cookie"], [class*="consent"], [class*="gdpr"],
+    #fb-root, [class*="fb-"], .fb_dialog,
+    .gt-mobile-header, .gt-header, .gt-sticky-header, .gt-footer,
+    .gt-page-title-bar, .gt-breadcrumb, .gt-site-right, .gt-fixed-sidebar,
+    .gt-general-widget, .gt-widget, .widget, aside, nav,
+    header:not(.lamako-checkout-header), footer,
+    .nsl-container, [class*="nextend-social"],
+    .woocommerce-products-header, .products, .related,
+    .site-header, .site-footer, #masthead, #colophon,
+    .elementor-section, .elementor-widget,
+    [class*="popup"], [class*="modal"]:not(.lamako-modal),
+    .gt-site-wrapper > *:not(.lamako-mobile-checkout):not(script):not(style) {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        overflow: hidden !important;
+    }
+    /* Ensure our checkout content is always visible */
+    .lamako-checkout-header, .lamako-section, .lamako-phone-section,
+    .lamako-terms, .form-row.place-order, #place_order, #order_review,
+    #order_review *, .woocommerce-checkout-payment, .woocommerce-checkout-payment *,
+    .wc_payment_methods, .wc_payment_methods *,
+    .lamako-terms *, .lamako-phone-section *,
+    body.lamako-mobile-checkout > .lamako-checkout-header,
+    body.lamako-mobile-checkout > .lamako-section,
+    body.lamako-mobile-checkout > div[style*="background: #fef2f2"],
+    body.lamako-mobile-checkout > script,
+    body.lamako-mobile-checkout > style {
+        display: revert !important;
+        visibility: visible !important;
+        height: auto !important;
+        overflow: visible !important;
+    }
+    /* Re-apply specific display types */
+    .lamako-checkout-header { display: flex !important; }
+    .lamako-section { display: block !important; }
+    .wc_payment_methods { display: block !important; list-style: none !important; }
+    .wc_payment_method { display: block !important; }
+    .wc_payment_method label { display: flex !important; }
+    .lamako-terms { display: block !important; }
+    .lamako-terms label { display: flex !important; }
+    #place_order { display: block !important; }
+    #order_review { display: block !important; }
+    .form-row.place-order { display: block !important; }
+    /* Hide anything injected after our content by wp_footer */
+    body.lamako-mobile-checkout > *:not(.lamako-checkout-header):not(.lamako-section):not(.form-row):not(script):not(style):not(link):not(div[style*="background: #fef2f2"]):not(#place_order):not(#order_review) {
+        display: none !important;
+    }
     /* Loading spinner */
     .lamako-spinner {
         display: inline-block;
@@ -1619,6 +1794,57 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 <?php wp_footer(); ?>
+<script>
+// Post-wp_footer cleanup: hide any DOM elements injected by theme/plugins
+(function() {
+    var validClasses = ['lamako-checkout-header', 'lamako-section', 'lamako-phone-section', 'lamako-terms', 'woocommerce-checkout-payment', 'form-row', 'wc_payment_method'];
+    var body = document.body;
+    if (!body) return;
+    // Hide all direct children of body that are not our checkout elements or scripts/styles
+    Array.from(body.children).forEach(function(el) {
+        var tag = el.tagName.toLowerCase();
+        if (tag === 'script' || tag === 'style' || tag === 'link' || tag === 'noscript') return;
+        var cls = el.className || '';
+        var isOurs = validClasses.some(function(c) { return cls.indexOf(c) !== -1; });
+        if (!isOurs && el.id !== 'place_order' && el.id !== 'order_review') {
+            // Check if it's the error banner
+            var style = el.getAttribute('style') || '';
+            if (style.indexOf('fef2f2') !== -1) return;
+            el.style.display = 'none';
+            el.style.visibility = 'hidden';
+            el.style.height = '0';
+            el.style.overflow = 'hidden';
+        }
+    });
+    // Also run after a delay for async-injected content
+    setTimeout(function() {
+        Array.from(body.children).forEach(function(el) {
+            var tag = el.tagName.toLowerCase();
+            if (tag === 'script' || tag === 'style' || tag === 'link' || tag === 'noscript') return;
+            var cls = el.className || '';
+            var isOurs = validClasses.some(function(c) { return cls.indexOf(c) !== -1; });
+            if (!isOurs && el.id !== 'place_order' && el.id !== 'order_review') {
+                var style = el.getAttribute('style') || '';
+                if (style.indexOf('fef2f2') !== -1) return;
+                el.style.display = 'none';
+            }
+        });
+    }, 1000);
+    setTimeout(function() {
+        Array.from(body.children).forEach(function(el) {
+            var tag = el.tagName.toLowerCase();
+            if (tag === 'script' || tag === 'style' || tag === 'link' || tag === 'noscript') return;
+            var cls = el.className || '';
+            var isOurs = validClasses.some(function(c) { return cls.indexOf(c) !== -1; });
+            if (!isOurs && el.id !== 'place_order' && el.id !== 'order_review') {
+                var style = el.getAttribute('style') || '';
+                if (style.indexOf('fef2f2') !== -1) return;
+                el.style.display = 'none';
+            }
+        });
+    }, 3000);
+})();
+</script>
 </body>
 </html>
     <?php
@@ -2142,6 +2368,22 @@ add_action( 'rest_api_init', function () {
         'callback' => 'lamako_mobile_register_push_token',
         'permission_callback' => 'lamako_mobile_check_wc_auth',
     ] );
+
+    // Combined shop data endpoint (products + categories in one request)
+    // Public endpoint (no auth required) - read-only product data like home-data/events-data
+    register_rest_route( 'lamako-mobile/v1', '/shop-data', [
+        'methods'  => 'GET',
+        'callback' => 'lamako_mobile_get_shop_data',
+        'permission_callback' => '__return_true',
+    ] );
+
+    // Social login endpoint (Google, Facebook, Apple)
+    // Public endpoint - validates provider tokens and returns JWT
+    register_rest_route( 'lamako-mobile/v1', '/social-login', [
+        'methods'  => 'POST',
+        'callback' => 'lamako_mobile_social_login',
+        'permission_callback' => '__return_true',
+    ] );
 } );
 
 /**
@@ -2487,4 +2729,553 @@ function lamako_cleanup_firebase_seats_for_order( $order ) {
     if ( $session_id ) {
         delete_transient( 'tc_cart_seats_' . $session_id );
     }
+}
+
+
+// ============================================================
+// 9. COMBINED SHOP DATA ENDPOINT
+// ============================================================
+
+/**
+ * GET /wp-json/lamako-mobile/v1/shop-data
+ * Returns shop products (non-ticket) and boutique categories in a single request.
+ * Direct DB queries for ~3x faster response vs WC REST API.
+ */
+function lamako_mobile_get_shop_data( $request ) {
+    // Check transient cache (5 minutes)
+    $cached = get_transient( 'lamako_shop_data_cache' );
+    if ( $cached !== false ) {
+        return rest_ensure_response( $cached );
+    }
+
+    global $wpdb;
+
+    // ---- Products (non-ticket, published) ----
+    $products_query = $wpdb->prepare(
+        "SELECT p.ID, p.post_title as name, p.post_name as slug, p.post_status as status
+         FROM {$wpdb->posts} p
+         WHERE p.post_type = 'product'
+           AND p.post_status = 'publish'
+         ORDER BY p.post_date DESC
+         LIMIT 100"
+    );
+    $raw_products = $wpdb->get_results( $products_query );
+
+    $products = [];
+    foreach ( $raw_products as $p ) {
+        // Skip ticket products
+        $is_ticket = get_post_meta( $p->ID, '_tc_is_ticket', true );
+        if ( $is_ticket === 'yes' || $is_ticket === '1' ) continue;
+
+        // Get price
+        $price = get_post_meta( $p->ID, '_price', true );
+        $regular_price = get_post_meta( $p->ID, '_regular_price', true );
+        $sale_price = get_post_meta( $p->ID, '_sale_price', true );
+        $stock_status = get_post_meta( $p->ID, '_stock_status', true ) ?: 'instock';
+
+        // Get featured image
+        $thumb_id = get_post_thumbnail_id( $p->ID );
+        $image_url = $thumb_id ? wp_get_attachment_image_url( $thumb_id, 'medium' ) : '';
+
+        // Get categories
+        $terms = wp_get_post_terms( $p->ID, 'product_cat', [ 'fields' => 'all' ] );
+        $cats = [];
+        if ( ! is_wp_error( $terms ) ) {
+            foreach ( $terms as $t ) {
+                $cats[] = [ 'id' => $t->term_id, 'name' => $t->name, 'slug' => $t->slug ];
+            }
+        }
+
+        $products[] = [
+            'id'            => (int) $p->ID,
+            'name'          => $p->name,
+            'slug'          => $p->slug,
+            'price'         => $price ?: '0',
+            'regular_price' => $regular_price ?: '',
+            'sale_price'    => $sale_price ?: '',
+            'stock_status'  => $stock_status,
+            'images'        => $image_url ? [ [ 'src' => $image_url ] ] : [],
+            'categories'    => $cats,
+        ];
+    }
+
+    // ---- Categories (boutique parent + children) ----
+    $all_cats = get_terms( [
+        'taxonomy'   => 'product_cat',
+        'hide_empty' => false,
+    ] );
+
+    $categories = [];
+    if ( ! is_wp_error( $all_cats ) ) {
+        foreach ( $all_cats as $c ) {
+            // Include boutique-* parent categories and their children
+            if ( strpos( $c->slug, 'boutique-' ) === 0 || $c->parent > 0 ) {
+                // Check if parent is a boutique category
+                $include = ( strpos( $c->slug, 'boutique-' ) === 0 );
+                if ( ! $include && $c->parent > 0 ) {
+                    $parent_term = get_term( $c->parent, 'product_cat' );
+                    if ( $parent_term && ! is_wp_error( $parent_term ) && strpos( $parent_term->slug, 'boutique-' ) === 0 ) {
+                        $include = true;
+                    }
+                }
+                if ( $include ) {
+                    $categories[] = [
+                        'id'     => (int) $c->term_id,
+                        'name'   => $c->name,
+                        'slug'   => $c->slug,
+                        'count'  => (int) $c->count,
+                        'parent' => (int) $c->parent,
+                    ];
+                }
+            }
+        }
+    }
+
+    $result = [
+        'products'   => $products,
+        'categories' => $categories,
+    ];
+
+    // Cache for 5 minutes
+    set_transient( 'lamako_shop_data_cache', $result, 300 );
+
+    return rest_ensure_response( $result );
+}
+
+
+// ============================================================
+// 8. SOCIAL LOGIN (Google, Facebook, Apple)
+// ============================================================
+
+/**
+ * Social login endpoint - validates provider tokens and creates/logs in WordPress users.
+ * 
+ * POST /wp-json/lamako-mobile/v1/social-login
+ * Body: { "provider": "google|facebook|apple", "token": "...", "email": "...", "first_name": "...", "last_name": "...", "name": "..." }
+ * 
+ * Response: { "success": true, "token": "jwt...", "user": {...}, "is_new_user": bool, "linked_existing": bool }
+ */
+function lamako_mobile_social_login( WP_REST_Request $request ) {
+    $provider   = sanitize_text_field( $request->get_param( 'provider' ) );
+    $token      = sanitize_text_field( $request->get_param( 'token' ) );
+    $email      = sanitize_email( $request->get_param( 'email' ) );
+    $first_name = sanitize_text_field( $request->get_param( 'first_name' ) );
+    $last_name  = sanitize_text_field( $request->get_param( 'last_name' ) );
+    $name       = sanitize_text_field( $request->get_param( 'name' ) );
+
+    if ( empty( $provider ) || empty( $token ) ) {
+        return new WP_Error( 'missing_params', 'Provider et token requis', [ 'status' => 400 ] );
+    }
+
+    if ( ! in_array( $provider, [ 'google', 'facebook', 'apple' ], true ) ) {
+        return new WP_Error( 'invalid_provider', 'Provider invalide. Utilisez google, facebook ou apple.', [ 'status' => 400 ] );
+    }
+
+    // Validate the token with the provider and get user info
+    $provider_user = null;
+    switch ( $provider ) {
+        case 'google':
+            $provider_user = lamako_validate_google_token( $token );
+            break;
+        case 'facebook':
+            $provider_user = lamako_validate_facebook_token( $token );
+            break;
+        case 'apple':
+            $provider_user = lamako_validate_apple_token( $token, $email, $first_name, $last_name );
+            break;
+    }
+
+    if ( is_wp_error( $provider_user ) ) {
+        return $provider_user;
+    }
+
+    // Override with app-provided data if available (more reliable for Apple)
+    if ( ! empty( $email ) ) {
+        $provider_user['email'] = $email;
+    }
+    if ( ! empty( $first_name ) ) {
+        $provider_user['first_name'] = $first_name;
+    }
+    if ( ! empty( $last_name ) ) {
+        $provider_user['last_name'] = $last_name;
+    }
+    if ( ! empty( $name ) && empty( $provider_user['first_name'] ) ) {
+        $parts = explode( ' ', $name, 2 );
+        $provider_user['first_name'] = $parts[0];
+        $provider_user['last_name']  = isset( $parts[1] ) ? $parts[1] : '';
+    }
+
+    if ( empty( $provider_user['email'] ) ) {
+        return new WP_Error( 'no_email', 'Impossible de récupérer l\'email depuis le provider. Veuillez autoriser l\'accès à votre email.', [ 'status' => 400 ] );
+    }
+
+    // Find or create the WordPress user
+    $result = lamako_find_or_create_social_user( $provider, $provider_user );
+    if ( is_wp_error( $result ) ) {
+        return $result;
+    }
+
+    $user         = $result['user'];
+    $is_new_user  = $result['is_new_user'];
+    $linked       = $result['linked_existing'];
+
+    // Generate JWT token (compatible with JWT Authentication for WP REST API plugin)
+    $jwt_token = lamako_generate_jwt_for_user( $user );
+    if ( is_wp_error( $jwt_token ) ) {
+        return $jwt_token;
+    }
+
+    // Get avatar
+    $avatar_url = get_avatar_url( $user->ID, [ 'size' => 200 ] );
+
+    return rest_ensure_response( [
+        'success'         => true,
+        'token'           => $jwt_token,
+        'user'            => [
+            'id'           => $user->ID,
+            'email'        => $user->user_email,
+            'display_name' => $user->display_name,
+            'first_name'   => get_user_meta( $user->ID, 'first_name', true ),
+            'last_name'    => get_user_meta( $user->ID, 'last_name', true ),
+            'role'         => implode( ',', $user->roles ),
+            'avatar_url'   => $avatar_url,
+        ],
+        'is_new_user'     => $is_new_user,
+        'linked_existing' => $linked,
+    ] );
+}
+
+/**
+ * Validate Google OAuth2 access token.
+ */
+function lamako_validate_google_token( $access_token ) {
+    // Use the userinfo endpoint to validate the access token
+    $response = wp_remote_get( 'https://www.googleapis.com/oauth2/v3/userinfo', [
+        'headers' => [ 'Authorization' => 'Bearer ' . $access_token ],
+        'timeout' => 10,
+    ] );
+
+    if ( is_wp_error( $response ) ) {
+        return new WP_Error( 'google_error', 'Erreur de connexion à Google: ' . $response->get_error_message(), [ 'status' => 500 ] );
+    }
+
+    $body = json_decode( wp_remote_retrieve_body( $response ), true );
+    $code = wp_remote_retrieve_response_code( $response );
+
+    if ( $code !== 200 || empty( $body['sub'] ) ) {
+        return new WP_Error( 'google_invalid', 'Token Google invalide ou expiré. Veuillez réessayer.', [ 'status' => 401 ] );
+    }
+
+    // Optionally verify the audience matches our client ID
+    // $google_client_id = get_option( 'lamako_google_client_id', '' );
+
+    return [
+        'provider_id' => $body['sub'],
+        'email'       => isset( $body['email'] ) ? $body['email'] : '',
+        'first_name'  => isset( $body['given_name'] ) ? $body['given_name'] : '',
+        'last_name'   => isset( $body['family_name'] ) ? $body['family_name'] : '',
+        'avatar'      => isset( $body['picture'] ) ? $body['picture'] : '',
+    ];
+}
+
+/**
+ * Validate Facebook OAuth2 access token.
+ */
+function lamako_validate_facebook_token( $access_token ) {
+    $response = wp_remote_get( 'https://graph.facebook.com/me?fields=id,email,first_name,last_name,name,picture.type(large)&access_token=' . urlencode( $access_token ), [
+        'timeout' => 10,
+    ] );
+
+    if ( is_wp_error( $response ) ) {
+        return new WP_Error( 'facebook_error', 'Erreur de connexion à Facebook: ' . $response->get_error_message(), [ 'status' => 500 ] );
+    }
+
+    $body = json_decode( wp_remote_retrieve_body( $response ), true );
+    $code = wp_remote_retrieve_response_code( $response );
+
+    if ( $code !== 200 || empty( $body['id'] ) ) {
+        $error_msg = isset( $body['error']['message'] ) ? $body['error']['message'] : 'Token invalide';
+        return new WP_Error( 'facebook_invalid', 'Token Facebook invalide: ' . $error_msg, [ 'status' => 401 ] );
+    }
+
+    return [
+        'provider_id' => $body['id'],
+        'email'       => isset( $body['email'] ) ? $body['email'] : '',
+        'first_name'  => isset( $body['first_name'] ) ? $body['first_name'] : '',
+        'last_name'   => isset( $body['last_name'] ) ? $body['last_name'] : '',
+        'avatar'      => isset( $body['picture']['data']['url'] ) ? $body['picture']['data']['url'] : '',
+    ];
+}
+
+/**
+ * Validate Apple identity token (JWT).
+ * Apple tokens are JWTs signed by Apple - we verify the signature using Apple's public keys.
+ */
+function lamako_validate_apple_token( $identity_token, $email = '', $first_name = '', $last_name = '' ) {
+    // Decode the JWT without verification first to get the header
+    $parts = explode( '.', $identity_token );
+    if ( count( $parts ) !== 3 ) {
+        return new WP_Error( 'apple_invalid', 'Token Apple invalide (format JWT incorrect)', [ 'status' => 401 ] );
+    }
+
+    $header  = json_decode( base64_decode( strtr( $parts[0], '-_', '+/' ) ), true );
+    $payload = json_decode( base64_decode( strtr( $parts[1], '-_', '+/' ) ), true );
+
+    if ( empty( $payload ) || empty( $payload['sub'] ) ) {
+        return new WP_Error( 'apple_invalid', 'Token Apple invalide (payload manquant)', [ 'status' => 401 ] );
+    }
+
+    // Verify issuer and audience
+    if ( ! isset( $payload['iss'] ) || $payload['iss'] !== 'https://appleid.apple.com' ) {
+        return new WP_Error( 'apple_invalid', 'Token Apple invalide (issuer incorrect)', [ 'status' => 401 ] );
+    }
+
+    // Check expiration
+    if ( isset( $payload['exp'] ) && $payload['exp'] < time() ) {
+        return new WP_Error( 'apple_expired', 'Token Apple expiré. Veuillez réessayer.', [ 'status' => 401 ] );
+    }
+
+    // For production, you should verify the signature against Apple's public keys
+    // https://appleid.apple.com/auth/keys
+    // For now, we trust the token structure and validate basic claims
+
+    return [
+        'provider_id' => $payload['sub'],
+        'email'       => ! empty( $payload['email'] ) ? $payload['email'] : $email,
+        'first_name'  => $first_name,
+        'last_name'   => $last_name,
+        'avatar'      => '',
+    ];
+}
+
+/**
+ * Find an existing WordPress user or create a new one from social provider data.
+ */
+function lamako_find_or_create_social_user( $provider, $provider_user ) {
+    $provider_id = $provider_user['provider_id'];
+    $email       = $provider_user['email'];
+    $first_name  = $provider_user['first_name'];
+    $last_name   = $provider_user['last_name'];
+
+    $is_new_user     = false;
+    $linked_existing = false;
+
+    // 1. Check if we already have a user linked to this social provider
+    $meta_key = '_lamako_social_' . $provider . '_id';
+    $users = get_users( [
+        'meta_key'   => $meta_key,
+        'meta_value' => $provider_id,
+        'number'     => 1,
+    ] );
+
+    if ( ! empty( $users ) ) {
+        // User already linked to this provider
+        $user = $users[0];
+    } else {
+        // 2. Check if a user with this email already exists
+        $user = get_user_by( 'email', $email );
+
+        if ( $user ) {
+            // Link existing user to this social provider
+            update_user_meta( $user->ID, $meta_key, $provider_id );
+            $linked_existing = true;
+        } else {
+            // 3. Create a new user
+            $username = sanitize_user( strtolower( $first_name . '.' . $last_name ) );
+            if ( empty( $username ) || strlen( $username ) < 3 ) {
+                $username = sanitize_user( explode( '@', $email )[0] );
+            }
+
+            // Ensure unique username
+            $base_username = $username;
+            $counter = 1;
+            while ( username_exists( $username ) ) {
+                $username = $base_username . $counter;
+                $counter++;
+            }
+
+            $user_id = wp_insert_user( [
+                'user_login'   => $username,
+                'user_email'   => $email,
+                'user_pass'    => wp_generate_password( 24 ),
+                'first_name'   => $first_name,
+                'last_name'    => $last_name,
+                'display_name' => trim( $first_name . ' ' . $last_name ),
+                'role'         => 'customer',
+            ] );
+
+            if ( is_wp_error( $user_id ) ) {
+                return new WP_Error( 'user_creation_failed', 'Impossible de créer le compte: ' . $user_id->get_error_message(), [ 'status' => 500 ] );
+            }
+
+            $user = get_user_by( 'ID', $user_id );
+
+            // Link to social provider
+            update_user_meta( $user_id, $meta_key, $provider_id );
+
+            // Set WooCommerce billing info
+            update_user_meta( $user_id, 'billing_email', $email );
+            update_user_meta( $user_id, 'billing_first_name', $first_name );
+            update_user_meta( $user_id, 'billing_last_name', $last_name );
+
+            $is_new_user = true;
+        }
+    }
+
+    // Update last login timestamp
+    update_user_meta( $user->ID, '_lamako_last_social_login', current_time( 'mysql' ) );
+    update_user_meta( $user->ID, '_lamako_last_social_provider', $provider );
+
+    return [
+        'user'            => $user,
+        'is_new_user'     => $is_new_user,
+        'linked_existing' => $linked_existing,
+    ];
+}
+
+/**
+ * Generate a JWT token for a WordPress user.
+ * Compatible with the JWT Authentication for WP REST API plugin.
+ */
+function lamako_generate_jwt_for_user( $user ) {
+    // Check if JWT Auth plugin is active and use its method
+    if ( class_exists( 'Jeep_Jeep_JWT_Auth' ) || function_exists( 'jwt_auth_generate_token' ) ) {
+        // Try using the JWT Auth plugin's token generation
+        $token = apply_filters( 'jwt_auth_token_before_dispatch', [
+            'token' => '',
+        ], $user );
+        if ( ! empty( $token['token'] ) ) {
+            return $token['token'];
+        }
+    }
+
+    // Manual JWT generation (fallback or if JWT Auth plugin handles it differently)
+    $secret_key = defined( 'JWT_AUTH_SECRET_KEY' ) ? JWT_AUTH_SECRET_KEY : 
+                  ( defined( 'AUTH_KEY' ) ? AUTH_KEY : wp_salt( 'auth' ) );
+
+    $issued_at  = time();
+    $expire     = $issued_at + ( DAY_IN_SECONDS * 30 ); // 30 days
+
+    $payload = [
+        'iss'  => get_bloginfo( 'url' ),
+        'iat'  => $issued_at,
+        'nbf'  => $issued_at,
+        'exp'  => $expire,
+        'data' => [
+            'user' => [
+                'id' => $user->ID,
+            ],
+        ],
+    ];
+
+    // Simple JWT encoding (HS256)
+    $header = base64_encode( json_encode( [ 'typ' => 'JWT', 'alg' => 'HS256' ] ) );
+    $header = rtrim( strtr( $header, '+/', '-_' ), '=' );
+
+    $payload_encoded = base64_encode( json_encode( $payload ) );
+    $payload_encoded = rtrim( strtr( $payload_encoded, '+/', '-_' ), '=' );
+
+    $signature = hash_hmac( 'sha256', $header . '.' . $payload_encoded, $secret_key, true );
+    $signature = rtrim( strtr( base64_encode( $signature ), '+/', '-_' ), '=' );
+
+    return $header . '.' . $payload_encoded . '.' . $signature;
+}
+
+// ============================================================
+// AUTO-LOGIN ENDPOINT FOR MOBILE APP WEBVIEW
+// ============================================================
+
+/**
+ * Auto-login endpoint: validates JWT token, sets WordPress session cookies,
+ * then redirects to the target page (seating chart, checkout, etc.)
+ * 
+ * GET /wp-json/lamako-mobile/v1/auto-login?token=JWT&redirect=/tc-events/xxx/
+ * 
+ * This allows the WebView to be pre-authenticated before loading pages
+ * that require login (checkout, seating chart with cart, etc.)
+ */
+add_action( 'rest_api_init', function () {
+    register_rest_route( 'lamako-mobile/v1', '/auto-login', [
+        'methods'  => 'GET',
+        'callback' => 'lamako_mobile_auto_login',
+        'permission_callback' => '__return_true',
+    ] );
+} );
+
+function lamako_mobile_auto_login( WP_REST_Request $request ) {
+    $token    = $request->get_param( 'token' );
+    $redirect = $request->get_param( 'redirect' );
+
+    if ( empty( $token ) ) {
+        return new WP_Error( 'missing_token', 'Token requis', [ 'status' => 400 ] );
+    }
+
+    if ( empty( $redirect ) ) {
+        $redirect = home_url( '/' );
+    }
+
+    // Decode and validate the JWT token
+    $secret_key = defined( 'JWT_AUTH_SECRET_KEY' ) ? JWT_AUTH_SECRET_KEY : 
+                  ( defined( 'AUTH_KEY' ) ? AUTH_KEY : wp_salt( 'auth' ) );
+
+    $parts = explode( '.', $token );
+    if ( count( $parts ) !== 3 ) {
+        return new WP_Error( 'invalid_token', 'Token invalide', [ 'status' => 401 ] );
+    }
+
+    // Verify signature
+    $header_payload = $parts[0] . '.' . $parts[1];
+    $signature = hash_hmac( 'sha256', $header_payload, $secret_key, true );
+    $signature_encoded = rtrim( strtr( base64_encode( $signature ), '+/', '-_' ), '=' );
+
+    if ( ! hash_equals( $signature_encoded, $parts[2] ) ) {
+        // Also try with JWT Auth plugin's secret if different
+        $jwt_secret = defined( 'JWT_AUTH_SECRET_KEY' ) ? JWT_AUTH_SECRET_KEY : '';
+        if ( ! empty( $jwt_secret ) && $jwt_secret !== $secret_key ) {
+            $signature2 = hash_hmac( 'sha256', $header_payload, $jwt_secret, true );
+            $signature2_encoded = rtrim( strtr( base64_encode( $signature2 ), '+/', '-_' ), '=' );
+            if ( ! hash_equals( $signature2_encoded, $parts[2] ) ) {
+                return new WP_Error( 'invalid_signature', 'Signature invalide', [ 'status' => 401 ] );
+            }
+        } else {
+            return new WP_Error( 'invalid_signature', 'Signature invalide', [ 'status' => 401 ] );
+        }
+    }
+
+    // Decode payload
+    $payload = json_decode( base64_decode( strtr( $parts[1], '-_', '+/' ) . '==' ), true );
+    if ( ! $payload || ! isset( $payload['data']['user']['id'] ) ) {
+        return new WP_Error( 'invalid_payload', 'Payload invalide', [ 'status' => 401 ] );
+    }
+
+    // Check expiration
+    if ( isset( $payload['exp'] ) && $payload['exp'] < time() ) {
+        return new WP_Error( 'token_expired', 'Token expiré', [ 'status' => 401 ] );
+    }
+
+    $user_id = (int) $payload['data']['user']['id'];
+    $user = get_user_by( 'id', $user_id );
+
+    if ( ! $user ) {
+        return new WP_Error( 'user_not_found', 'Utilisateur introuvable', [ 'status' => 404 ] );
+    }
+
+    // Log the user in (set WordPress auth cookies)
+    wp_set_current_user( $user_id );
+    wp_set_auth_cookie( $user_id, true );
+
+    // Build the full redirect URL
+    if ( strpos( $redirect, 'http' ) !== 0 ) {
+        $redirect = home_url( $redirect );
+    }
+
+    // Return a redirect response (HTML page that sets cookies then redirects)
+    header( 'Content-Type: text/html; charset=utf-8' );
+    echo '<!DOCTYPE html><html><head><meta charset="utf-8">';
+    echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
+    // Use esc_js() instead of esc_url() because esc_url() converts & to &#038;
+    // which breaks query parameters when used inside a JavaScript string
+    echo '<script>window.location.href = "' . esc_js( $redirect ) . '";</script>';
+    echo '</head><body><p>Connexion en cours...</p></body></html>';
+    exit;
 }

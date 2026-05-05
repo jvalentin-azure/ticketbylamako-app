@@ -64,7 +64,7 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
           onPress: () => setColorScheme(colorScheme === "dark" ? "light" : "dark"),
         },
         { icon: "bell.fill" as const, label: "Notifications", onPress: () => navigate("/notification-settings") },
-        { icon: "gearshape.fill" as const, label: "Paramètres", onPress: () => {} },
+        { icon: "gearshape.fill" as const, label: "Paramètres", onPress: () => navigate("/notification-settings") },
       ],
     },
     {

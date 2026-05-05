@@ -227,6 +227,7 @@ export default function RootLayout() {
             <Stack.Screen name="about" />
             <Stack.Screen name="notifications" />
             <Stack.Screen name="edit-profile" />
+            <Stack.Screen name="notification-settings" />
             <Stack.Screen name="oauth/callback" />
           </Stack>
           <StatusBar style="auto" />

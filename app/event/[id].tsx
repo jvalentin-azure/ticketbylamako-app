@@ -236,8 +236,17 @@ export default function EventDetailScreen() {
             '[class*="tawk"], [id*="tawk"]' +
             '{ display: none !important; }' +
             'body { margin-top: 0 !important; padding-top: 0 !important; }' +
-            '.entry-content, .tc_event_content { padding-top: 10px !important; }';
+            '.entry-content, .tc_event_content { padding-top: 10px !important; }' +
+            /* Keep zoom controls visible */
+            '.tc_zoom_in, .tc_zoom_out, .tc-zoom-in, .tc-zoom-out, [class*="zoom"] { display: block !important; visibility: visible !important; }';
           document.head.appendChild(style);
+          // Handle 404 page after payment gateway return
+          if (document.title.indexOf('404') > -1 || document.querySelector('.error-404, .not-found')) {
+            if (window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'order_confirmed' }));
+            }
+            return;
+          }
           // Auto-redirect cart to checkout (skip cart page - go direct to checkout)
           if ((window.location.href.indexOf('/cart') > -1 || window.location.href.indexOf('/panier') > -1) && window.location.href.indexOf('/checkout') === -1 && window.location.href.indexOf('/commande') === -1) {
             window.location.href = window.location.origin + '/checkout/';
@@ -320,13 +329,11 @@ export default function EventDetailScreen() {
         <View style={[styles.seatingHeader, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
           <TouchableOpacity onPress={() => {
             if (webviewPhase === 'confirmation') {
-              // After order confirmation, clear local cart and go to tickets
               clearCart();
               setShowSeatingChart(false);
               setWebviewPhase('seating');
               router.replace("/(tabs)/tickets");
             } else {
-              // User is leaving - just close the WebView
               setShowSeatingChart(false);
               setWebviewPhase('seating');
             }
@@ -340,79 +347,133 @@ export default function EventDetailScreen() {
             {headerIcon && <IconSymbol name={headerIcon as any} size={16} color={webviewPhase === 'checkout' ? colors.success : colors.primary} />}
             <Text style={[styles.seatingTitle, { color: colors.foreground }]}>{headerTitle}</Text>
           </View>
-          <View style={{ width: 80 }} />
-        </View>
-        <WebViewComponent
-          ref={webviewRef}
-          source={{ uri: seatingChartUrl! }}
-          style={{ flex: 1 }}
-          javaScriptEnabled
-          domStorageEnabled
-          startInLoadingState
-          sharedCookiesEnabled
-          thirdPartyCookiesEnabled
-          allowsInlineMediaPlayback
-          mixedContentMode="compatibility"
-          scalesPageToFit={true}
-          allowsBackForwardNavigationGestures={true}
-          bounces={false}
-          scrollEnabled={true}
-          injectedJavaScript={injectedJS}
-          renderLoading={() => (
-            <View style={{ flex: 1, alignItems: "center", justifyContent: "center", position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "#fff" }}>
-              <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={{ marginTop: 12, color: colors.muted, textAlign: "center" }}>
-                Chargement...
-              </Text>
+          {/* Seat count badge */}
+          {selectedSeats.length > 0 && webviewPhase === 'seating' ? (
+            <View style={{ backgroundColor: colors.primary, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 }}>
+              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{selectedSeats.length} siège{selectedSeats.length > 1 ? 's' : ''}</Text>
             </View>
+          ) : (
+            <View style={{ width: 80 }} />
           )}
-          onMessage={(e: any) => {
-            try {
-              const data = JSON.parse(e.nativeEvent.data);
-              if (data.type === 'SEATS_CONFIRMED') {
-                // User confirmed seat selection - navigate WebView to cart/checkout
-                setWebviewPhase('checkout');
-                if (webviewRef.current) {
-                  webviewRef.current.injectJavaScript(`window.location.href = 'https://www.ticketbylamako.com/cart/'; true;`);
+        </View>
+        <View style={{ flex: 1 }}>
+          <WebViewComponent
+            ref={webviewRef}
+            source={{ uri: seatingChartUrl! }}
+            style={{ flex: 1 }}
+            javaScriptEnabled
+            domStorageEnabled
+            startInLoadingState
+            sharedCookiesEnabled
+            thirdPartyCookiesEnabled
+            allowsInlineMediaPlayback
+            mixedContentMode="compatibility"
+            scalesPageToFit={true}
+            allowsBackForwardNavigationGestures={true}
+            bounces={false}
+            scrollEnabled={true}
+            injectedJavaScript={injectedJS}
+            renderLoading={() => (
+              <View style={{ flex: 1, alignItems: "center", justifyContent: "center", position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "#fff" }}>
+                <ActivityIndicator size="large" color={colors.primary} />
+                <Text style={{ marginTop: 12, color: colors.muted, textAlign: "center" }}>
+                  Chargement...
+                </Text>
+              </View>
+            )}
+            onMessage={(e: any) => {
+              try {
+                const data = JSON.parse(e.nativeEvent.data);
+                if (data.type === 'SEATS_CONFIRMED') {
+                  setWebviewPhase('checkout');
+                  if (webviewRef.current) {
+                    webviewRef.current.injectJavaScript(`window.location.href = 'https://www.ticketbylamako.com/cart/'; true;`);
+                  }
+                }
+                if (data.type === 'checkout_loaded') {
+                  setWebviewPhase('checkout');
+                }
+                if (data.type === 'order_confirmed') {
+                  setWebviewPhase('confirmation');
+                  clearCart();
+                }
+                if (data.type === 'seat_count_update') {
+                  // Update selected seats from WebView
+                  setSelectedSeats(data.seats || []);
+                }
+              } catch {}
+            }}
+            onNavigationStateChange={(navState: any) => {
+              const url = navState.url || "";
+              // Detect checkout pages
+              if (url.includes('/checkout') || url.includes('/commande')) {
+                if (!url.includes('/cart') && !url.includes('/panier')) {
+                  setWebviewPhase('checkout');
                 }
               }
-              if (data.type === 'checkout_loaded') {
-                setWebviewPhase('checkout');
-              }
-              if (data.type === 'order_confirmed') {
+              // Detect order confirmation page
+              if (url.includes("order-received") || url.includes("commande-recue") || url.includes("thankyou")) {
                 setWebviewPhase('confirmation');
-                // Clear local cart since order was placed via web
                 clearCart();
               }
-            } catch {}
-          }}
-          onNavigationStateChange={(navState: any) => {
-            const url = navState.url || "";
-            // Detect checkout pages
-            if (url.includes('/checkout') || url.includes('/commande')) {
-              if (!url.includes('/cart') && !url.includes('/panier')) {
-                setWebviewPhase('checkout');
+              // Detect if user navigated back to event page (reset phase)
+              if (url.includes('/tc-events/') || url.includes('/tc_event/') || url.includes('lamako_seat_embed') || url.includes('seat-chart')) {
+                setWebviewPhase('seating');
               }
-            }
-            // Detect order confirmation page
-            if (url.includes("order-received") || url.includes("commande-recue")) {
-              setWebviewPhase('confirmation');
-            }
-            // Detect if user navigated back to event page (reset phase)
-            if (url.includes('/tc-events/') || url.includes('/tc_event/') || url.includes('lamako_seat_embed') || url.includes('seat-chart')) {
-              setWebviewPhase('seating');
-            }
-          }}
-          onShouldStartLoadWithRequest={(request: any) => {
-            // Allow all navigation within the site (including checkout, cart, login)
-            const url = request.url || "";
-            if (url.startsWith(SITE_URL) || url.startsWith("about:") || url.startsWith("data:")) return true;
-            // Allow payment gateway redirects
-            if (url.includes('mvola') || url.includes('orange') || url.includes('airtel') || url.includes('cybersource') || url.includes('visa') || url.includes('stripe') || url.includes('paypal')) return true;
-            // Block other external navigation
-            return false;
-          }}
-        />
+              // Handle 404 page after payment gateway return (Orange Money)
+              if (url.includes('404') || url.includes('page-not-found')) {
+                setWebviewPhase('confirmation');
+                clearCart();
+              }
+              // Handle homepage redirect after payment (gateway return)
+              const isHomepage = (url === 'https://www.ticketbylamako.com' || url === 'https://www.ticketbylamako.com/' || url.match(/^https:\/\/www\.ticketbylamako\.com\/?$/));
+              if (isHomepage && webviewPhase === 'checkout') {
+                setWebviewPhase('confirmation');
+                clearCart();
+              }
+            }}
+            onShouldStartLoadWithRequest={(request: any) => {
+              const url = request.url || "";
+              // Allow all HTTPS navigation (payment gateways return to various domains)
+              if (url.startsWith("https://") || url.startsWith("http://")) return true;
+              if (url.startsWith("about:") || url.startsWith("data:")) return true;
+              return false;
+            }}
+          />
+          {/* Zoom controls overlay - only show during seating phase */}
+          {webviewPhase === 'seating' && (
+            <View style={{ position: 'absolute', bottom: 80, right: 16, gap: 8 }}>
+              <TouchableOpacity
+                onPress={() => {
+                  if (webviewRef.current) {
+                    webviewRef.current.injectJavaScript(`
+                      var zoomIn = document.querySelector('.tc_zoom_in, .tc-zoom-in, [class*="zoom_in"], .tc_seating_chart_zoom_in');
+                      if (zoomIn) zoomIn.click();
+                      true;
+                    `);
+                  }
+                }}
+                style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 4 }}
+              >
+                <IconSymbol name="plus" size={20} color={colors.foreground} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  if (webviewRef.current) {
+                    webviewRef.current.injectJavaScript(`
+                      var zoomOut = document.querySelector('.tc_zoom_out, .tc-zoom-out, [class*="zoom_out"], .tc_seating_chart_zoom_out');
+                      if (zoomOut) zoomOut.click();
+                      true;
+                    `);
+                  }
+                }}
+                style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 4 }}
+              >
+                <IconSymbol name="minus" size={20} color={colors.foreground} />
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
       </ScreenContainer>
     );
   }

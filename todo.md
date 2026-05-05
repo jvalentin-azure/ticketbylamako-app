@@ -876,3 +876,38 @@
 - [x] Endpoint clears: WC cart, Tickera session data, seat transients, Firebase seats, cart cookies
 - [x] App calls clearServerCart with chart_id before loading embed page
 - [x] Previously selected seats are released when user opens seating chart again
+
+## V5.3 - CRITICAL: Production Bug Fixes (5 May 2026 - 30min to launch)
+
+### Navigation & Profile Fixes
+- [x] Fix: Back button on "Modifier le profil" (was using wrong icon, now uses chevron.left)
+- [x] Fix: "Mes Commandes" in burger menu not working (was navigating to wrong route, now uses /orders)
+- [x] Fix: "À propos" in profile not working (was navigating to wrong route, now uses /about)
+- [x] Fix: "Paramètres" shows nothing → now navigates to /notification-settings (the existing settings screen)
+- [x] Fix: notification-settings route added to Stack in _layout.tsx
+
+### LamakoRewards Fixes
+- [x] Fix: History shows "%plural%" text → cleaned in rewards-provider.tsx (regex removes %_plural% and %plural% patterns)
+
+### Checkout & Payment Fixes
+- [x] Fix: Checkout page CSS broken (terms, payment methods hidden by nuclear CSS) → whitelist #order_review, .wc_payment_methods, .lamako-terms in CSS and JS cleanup
+- [x] Fix: 404 error after Orange Money payment return → checkout.tsx now detects order-received, 404, homepage redirect and shows confirmation phase
+- [x] Fix: 404 error after payment from seating chart WebView → same detection added to event/[id].tsx onNavigationStateChange
+- [x] Fix: Seating chart WebView orders tracked as "web" not "mobile" → added set_created_via('lamako_mobile') + _lamako_order_source meta in checkout POST handler
+
+### Seating Chart Fixes
+- [x] Fix: Zoom buttons disappeared → native React Native zoom overlay buttons restored (inject JS to click Tickera's hidden zoom buttons)
+- [x] Fix: No seat count visible → lamako-seat-count badge already in PHP CSS, now properly visible
+- [x] Fix: Only "Voir panier" button, no total → tc-checkout-bar already shows subtotal + button (CSS ensures visibility)
+- [x] Fix: No notification when adding/removing seats → toast notifications already implemented in PHP (green add, orange remove, red error)
+
+### Profile & Address
+- [x] Fix: Must enter address/phone every purchase → added address/city fields to edit-profile.tsx, saved to AsyncStorage + WordPress user meta
+- [x] Fix: Checkout auto-fills billing info from saved profile (AsyncStorage billing_info)
+
+### Mentions Légales
+- [x] Fix: About screen legal links now open in-app browser (WebBrowser.openBrowserAsync) instead of external browser
+
+### Plugin Sync
+- [x] Synced scripts/lamako-mobile-api/lamako-mobile-api.php with root plugin copy
+

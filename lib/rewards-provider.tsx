@@ -325,7 +325,7 @@ async function fetchHistory(wpUserId: number, limit = 20): Promise<RewardTransac
       type: item.points >= 0 ? "earn" : "redeem",
       amount: Math.abs(item.points),
       reference: item.type,
-      description: item.description,
+      description: (item.description || '').replace(/%[a-zA-Z_]+%/g, '').trim() || `${item.points >= 0 ? 'Points gagnés' : 'Points échangés'}`,
       date: item.date,
     }));
   } catch (e) {

@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Text, View, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from "react-native";
 import { useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/lib/auth-provider";
@@ -20,6 +21,21 @@ export default function EditProfileScreen() {
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
+
+  // Load saved billing info from AsyncStorage on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const saved = await AsyncStorage.getItem("billing_info");
+        if (saved) {
+          const data = JSON.parse(saved);
+          if (data.phone) setPhone(data.phone);
+          if (data.address) setAddress(data.address);
+          if (data.city) setCity(data.city);
+        }
+      } catch {}
+    })();
+  }, []);
   const [saving, setSaving] = useState(false);
 
   // Password section
@@ -52,6 +68,8 @@ export default function EditProfileScreen() {
         }),
       });
       if (!res.ok) throw new Error("Erreur");
+      // Save billing info locally for checkout auto-fill
+      await AsyncStorage.setItem("billing_info", JSON.stringify({ phone, address, city }));
       Alert.alert("Succès", "Profil mis à jour avec succès");
     } catch (e) {
       Alert.alert("Erreur", "Impossible de mettre à jour le profil");
@@ -104,7 +122,7 @@ export default function EditProfileScreen() {
         {/* Header */}
         <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12 }}>
           <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 12 }}>
-            <IconSymbol name="chevron.left.forwardslash.chevron.right" size={22} color={colors.foreground} />
+            <IconSymbol name="chevron.left" size={22} color={colors.foreground} />
           </TouchableOpacity>
           <Text style={{ color: colors.foreground, fontSize: 20, fontWeight: "700" }}>Modifier le profil</Text>
         </View>

@@ -1061,6 +1061,9 @@ function lamako_mobile_maybe_serve_checkout() {
         
         // Update order with payment method
         $order->set_payment_method( $gateway );
+        // Mark as mobile app order (for seating chart orders that go through WebView checkout)
+        $order->set_created_via( 'lamako_mobile' );
+        $order->update_meta_data( '_lamako_order_source', 'mobile_app' );
         $order->save();
         
         // Process the payment via the gateway
@@ -1405,19 +1408,33 @@ function lamako_mobile_maybe_serve_checkout() {
     }
     /* Ensure our checkout content is always visible */
     .lamako-checkout-header, .lamako-section, .lamako-phone-section,
-    .lamako-terms, .form-row.place-order, #place_order,
+    .lamako-terms, .form-row.place-order, #place_order, #order_review,
+    #order_review *, .woocommerce-checkout-payment, .woocommerce-checkout-payment *,
+    .wc_payment_methods, .wc_payment_methods *,
+    .lamako-terms *, .lamako-phone-section *,
     body.lamako-mobile-checkout > .lamako-checkout-header,
     body.lamako-mobile-checkout > .lamako-section,
     body.lamako-mobile-checkout > div[style*="background: #fef2f2"],
     body.lamako-mobile-checkout > script,
     body.lamako-mobile-checkout > style {
-        display: block !important;
+        display: revert !important;
         visibility: visible !important;
         height: auto !important;
         overflow: visible !important;
     }
+    /* Re-apply specific display types */
+    .lamako-checkout-header { display: flex !important; }
+    .lamako-section { display: block !important; }
+    .wc_payment_methods { display: block !important; list-style: none !important; }
+    .wc_payment_method { display: block !important; }
+    .wc_payment_method label { display: flex !important; }
+    .lamako-terms { display: block !important; }
+    .lamako-terms label { display: flex !important; }
+    #place_order { display: block !important; }
+    #order_review { display: block !important; }
+    .form-row.place-order { display: block !important; }
     /* Hide anything injected after our content by wp_footer */
-    body.lamako-mobile-checkout > *:not(.lamako-checkout-header):not(.lamako-section):not(.form-row):not(script):not(style):not(link):not(div[style*="background: #fef2f2"]):not(#place_order) {
+    body.lamako-mobile-checkout > *:not(.lamako-checkout-header):not(.lamako-section):not(.form-row):not(script):not(style):not(link):not(div[style*="background: #fef2f2"]):not(#place_order):not(#order_review) {
         display: none !important;
     }
     /* Loading spinner */
@@ -1780,7 +1797,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <script>
 // Post-wp_footer cleanup: hide any DOM elements injected by theme/plugins
 (function() {
-    var validClasses = ['lamako-checkout-header', 'lamako-section', 'lamako-phone-section', 'lamako-terms'];
+    var validClasses = ['lamako-checkout-header', 'lamako-section', 'lamako-phone-section', 'lamako-terms', 'woocommerce-checkout-payment', 'form-row', 'wc_payment_method'];
     var body = document.body;
     if (!body) return;
     // Hide all direct children of body that are not our checkout elements or scripts/styles
