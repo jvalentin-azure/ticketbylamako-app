@@ -360,6 +360,13 @@ export default function EventDetailScreen() {
           onMessage={(e: any) => {
             try {
               const data = JSON.parse(e.nativeEvent.data);
+              if (data.type === 'SEATS_CONFIRMED') {
+                // User confirmed seat selection - navigate WebView to cart/checkout
+                setWebviewPhase('checkout');
+                if (webviewRef.current) {
+                  webviewRef.current.injectJavaScript(`window.location.href = 'https://www.ticketbylamako.com/cart/'; true;`);
+                }
+              }
               if (data.type === 'checkout_loaded') {
                 setWebviewPhase('checkout');
               }

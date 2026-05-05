@@ -124,30 +124,34 @@ function lamako_mobile_maybe_serve_seat_embed() {
         background: #f8f9fa !important;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
-    /* Hide all theme elements */
-    header, .site-header, .page-header, #masthead, .header-wrapper,
-    footer, .site-footer, .page-footer, #colophon, .footer-wrapper,
-    nav, .navigation, .nav-links, .breadcrumbs, .breadcrumb,
-    .sidebar, #sidebar, aside,
-    .woocommerce-breadcrumb, #wpadminbar,
-    .header-main, .header-top, .header-bottom,
-    .footer-1, .footer-2, .absolute-footer,
-    .page-title-inner, .page-title,
-    .comments-area, #comments,
-    [class*="whatsapp"], .joinchat, [id*="whatsapp"],
-    .qlwapp__container, [class*="qlwapp"],
-    [class*="cookie"], [class*="consent"],
-    #fkcart-floating-toggler, #fkcart-modal, .fkcart-main-wrapper,
-    [class*="fkcart"],
-    .woocommerce-mini-cart, .cart-icon, .shopping-cart,
+    /* NUCLEAR APPROACH: Hide EVERYTHING in body, then show only what we need */
+    body > *:not(.lamako-embed-instruction):not(.tc_seating_map_button):not(.tc_seating_map):not(script):not(link):not(style):not(#lamako-confirm-btn) {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        pointer-events: none !important;
+    }
+    /* Re-show the elements we actually want */
+    .lamako-embed-instruction,
+    .tc_seating_map_button,
+    .tc_seating_map,
+    #lamako-confirm-btn {
+        display: block !important;
+        visibility: visible !important;
+        height: auto !important;
+        overflow: visible !important;
+        pointer-events: auto !important;
+    }
+    /* Also hide homepage sections that get injected by JS */
+    #lamako-home-sections, .home-sections, .home-filter-section, .home-upcoming-section, .home-past-section,
+    .modal, .gt-modal, [class*="modal"],
+    #fb-root, [class*="qlwapp"], [class*="fkcart"], [class*="whatsapp"],
     [class*="tidio"], [id*="tidio"], [class*="chat-widget"],
-    [class*="crisp"], [id*="crisp"],
-    [class*="tawk"], [id*="tawk"],
-    [class*="intercom"], [id*="intercom"],
-    [class*="drift"], [id*="drift"],
-    [class*="livechat"], [id*="livechat"],
-    .wc-block-mini-cart, .wp-block-woocommerce-mini-cart
-    { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }
+    .fkcart-modal-backdrop, .fkcart-drawer-container,
+    .wc-block-mini-cart, .wp-block-woocommerce-mini-cart,
+    #wpadminbar
+    { display: none !important; visibility: hidden !important; height: 0 !important; pointer-events: none !important; }
     
     /* Style the seating chart button */
     .tc_seating_map_button {
@@ -875,7 +879,75 @@ document.addEventListener('DOMContentLoaded', function() {
 ?>
     <p class="lamako-embed-instruction">Appuyez sur le bouton ci-dessous, puis touchez un siège pour l'ajouter. Touchez-le à nouveau pour le retirer.</p>
     <?php echo do_shortcode( '[tc_seat_chart id="' . $chart_id . '" show_legend="true"]' ); ?>
+    <button id="lamako-confirm-btn" style="display:none; position:fixed; bottom:20px; left:50%; transform:translateX(-50%); z-index:9999; padding:16px 40px; font-size:17px; font-weight:700; background:#663d17; color:#fff; border:none; border-radius:14px; cursor:pointer; width:90%; max-width:400px; box-shadow:0 4px 14px rgba(102,61,23,0.3); text-align:center;">Confirmer la sélection</button>
 <?php wp_footer(); ?>
+<script>
+// POST-WP_FOOTER CLEANUP: Remove all injected content that shouldn't be visible
+(function() {
+    // Remove all body children that are not our content
+    var body = document.body;
+    var allowed = ['lamako-embed-instruction', 'tc_seating_map_button', 'tc_seating_map', 'lamako-confirm-btn'];
+    var children = Array.from(body.children);
+    children.forEach(function(child) {
+        if (child.tagName === 'SCRIPT' || child.tagName === 'LINK' || child.tagName === 'STYLE') return;
+        var dominated = false;
+        for (var i = 0; i < allowed.length; i++) {
+            if (child.classList && child.classList.contains(allowed[i])) { dominated = true; break; }
+            if (child.id === allowed[i]) { dominated = true; break; }
+        }
+        if (!dominated) {
+            child.style.display = 'none';
+            child.style.visibility = 'hidden';
+            child.style.height = '0';
+            child.style.overflow = 'hidden';
+        }
+    });
+    
+    // AUTO-CLICK the 'Pick your seats' button after a short delay
+    setTimeout(function() {
+        var btn = document.querySelector('.tc_seating_map_button');
+        if (btn) {
+            btn.click();
+            // Hide the button after clicking
+            setTimeout(function() { btn.style.display = 'none'; }, 500);
+        }
+    }, 1500);
+    
+    // Show confirm button when seats are selected
+    function checkSeats() {
+        var confirmBtn = document.getElementById('lamako-confirm-btn');
+        if (!confirmBtn) return;
+        var selectedSeats = document.querySelectorAll('.tc_seat_unit.tc_added_to_cart, .tc_seat_unit.selected, .tc_seat_unit[style*="opacity: 0.5"]');
+        if (selectedSeats.length > 0) {
+            confirmBtn.style.display = 'block';
+            confirmBtn.textContent = 'Confirmer (' + selectedSeats.length + ' siège' + (selectedSeats.length > 1 ? 's' : '') + ')';
+        } else {
+            confirmBtn.style.display = 'none';
+        }
+    }
+    setInterval(checkSeats, 1000);
+    
+    // Confirm button sends message to React Native
+    var confirmBtn = document.getElementById('lamako-confirm-btn');
+    if (confirmBtn) {
+        confirmBtn.addEventListener('click', function() {
+            if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'SEATS_CONFIRMED' }));
+            }
+        });
+    }
+    
+    // Periodic cleanup for late-loading widgets
+    setInterval(function() {
+        var junk = document.querySelectorAll('#lamako-home-sections, .home-sections, .modal, .gt-modal, [class*="qlwapp"], [class*="fkcart"], .fkcart-modal-backdrop, #fb-root');
+        junk.forEach(function(el) {
+            el.style.display = 'none';
+            el.style.visibility = 'hidden';
+            el.style.height = '0';
+        });
+    }, 2000);
+})();
+</script>
 </body>
 </html>
     <?php

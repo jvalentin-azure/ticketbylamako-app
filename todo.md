@@ -855,3 +855,10 @@
 ## V4.9 - Critical Bug Fixes
 - [x] Fix "invalid chart id" - root cause: auto-login with expired JWT shows JSON error instead of embed page. Fix: skip auto-login for seating chart (doesn't need auth)
 - [x] Fix event detail page taking ~1 minute to load - root cause: getEventTickets called getProducts(per_page=100) which takes 15s+. Fix: use cached events-data (includes tickets), increased cache TTL to 5min
+
+## V5.0 - Seating Chart Embed Critical Fix
+- [x] Seating chart embed page shows all homepage/theme content - FIXED: nuclear CSS hides everything except instruction, button, map, and confirm button + post-wp_footer JS cleanup removes all injected DOM
+- [x] "Pick your seats" auto-click - FIXED: auto-clicks after 1.5s delay, then hides button
+- [x] "Confirmer la sélection" button appears when seats are selected, sends SEATS_CONFIRMED to React Native
+- [x] React Native handles SEATS_CONFIRMED by navigating WebView to cart page
+- [x] Deployed to WordPress and verified live
