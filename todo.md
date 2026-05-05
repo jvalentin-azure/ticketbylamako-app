@@ -851,3 +851,7 @@
 - [x] Redeploy updated lamako-mobile-api.php to WordPress (esc_js fix + checkout CSS cleanup)
 - [x] Add visual toast/animation confirmation when adding item to cart
 - [x] Toast shows before redirecting to cart tab (1.2s delay with animation)
+
+## V4.9 - Critical Bug Fixes
+- [x] Fix "invalid chart id" - root cause: auto-login with expired JWT shows JSON error instead of embed page. Fix: skip auto-login for seating chart (doesn't need auth)
+- [x] Fix event detail page taking ~1 minute to load - root cause: getEventTickets called getProducts(per_page=100) which takes 15s+. Fix: use cached events-data (includes tickets), increased cache TTL to 5min

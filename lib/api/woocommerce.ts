@@ -5,7 +5,7 @@ const CS = process.env.EXPO_PUBLIC_WC_CONSUMER_SECRET || "";
 // Lightweight in-memory cache to avoid redundant API calls when switching tabs
 // TTL of 30 seconds ensures data stays fresh while reducing network requests
 const memoryCache: Record<string, { data: any; timestamp: number }> = {};
-const CACHE_TTL = 30000; // 30 seconds
+const CACHE_TTL = 300000; // 5 minutes - reduces repeated slow API calls from Madagascar
 
 function getCached<T>(key: string): T | null {
   const entry = memoryCache[key];
@@ -498,6 +498,25 @@ export async function getEventCategories(): Promise<EventCategory[]> {
  * Ticket products are WC products with _tc_is_ticket='yes' and _event_name=eventId.
  */
 export async function getEventTickets(eventId: number): Promise<TicketType[]> {
+  // Fast path: use cached events-data (already includes tickets per event)
+  const cached = getCached<EventsDataResponse>('events-data');
+  if (cached) {
+    const ev = cached.events.find(e => e.id === eventId);
+    if (ev && ev.tickets && ev.tickets.length > 0) {
+      return ev.tickets;
+    }
+  }
+  
+  // Medium path: try events-data API (6s vs 15s for products)
+  try {
+    const eventsData = await getEventsData();
+    const ev = eventsData.events.find(e => e.id === eventId);
+    if (ev && ev.tickets && ev.tickets.length > 0) {
+      return ev.tickets;
+    }
+  } catch {}
+  
+  // Slow fallback: fetch all WC products (only if event not found in events-data)
   const products = await getProducts({ per_page: "100" });
   return products
     .filter(p => {

@@ -51,27 +51,56 @@ export default function EventDetailScreen() {
 
   useEffect(() => {
     if (!id) return;
-    // Load event details + tickets first (fast), then upcoming events in background
-    Promise.all([
-      getTCEvent(Number(id)),
-      getEventTickets(Number(id)),
-    ]).then(([ev, tix]) => {
-      setEvent(ev);
-      setTickets(tix);
-      if (tix.length === 1) setSelectedTicket(tix[0]);
-      setLoading(false);
-    }).catch(() => setLoading(false));
-    // Load upcoming events in background (non-blocking)
+    const eventId = Number(id);
+    
+    // Strategy: Use cached events-data for instant display, fetch full details in parallel
+    // This avoids the slow getProducts(per_page=100) call that was causing 1min+ load times
     getEventsData().then(({ events: allEvents }) => {
+      // Try to get event + tickets from cached data (instant if coming from events list)
+      const cachedEvent = allEvents.find(e => e.id === eventId);
+      if (cachedEvent) {
+        setEvent(cachedEvent);
+        if (cachedEvent.tickets && cachedEvent.tickets.length > 0) {
+          setTickets(cachedEvent.tickets);
+          if (cachedEvent.tickets.length === 1) setSelectedTicket(cachedEvent.tickets[0]);
+        }
+        setLoading(false);
+      }
+      
+      // Set upcoming events
       const now = Date.now();
       const upcoming = allEvents.filter(e => {
-        if (e.id === Number(id)) return false;
+        if (e.id === eventId) return false;
         const dt = e.mobileFields?.event_date_time;
         if (!dt) return true;
         return new Date(dt.replace(' ', 'T')).getTime() > now;
       }).slice(0, 8);
       setUpcomingEvents(upcoming);
-    }).catch(() => {});
+      
+      // If event not found in cache, fall back to individual API calls
+      if (!cachedEvent) {
+        Promise.all([
+          getTCEvent(eventId),
+          getEventTickets(eventId),
+        ]).then(([ev, tix]) => {
+          setEvent(ev);
+          setTickets(tix);
+          if (tix.length === 1) setSelectedTicket(tix[0]);
+          setLoading(false);
+        }).catch(() => setLoading(false));
+      }
+    }).catch(() => {
+      // If events-data fails, fall back to individual API calls
+      Promise.all([
+        getTCEvent(eventId),
+        getEventTickets(eventId),
+      ]).then(([ev, tix]) => {
+        setEvent(ev);
+        setTickets(tix);
+        if (tix.length === 1) setSelectedTicket(tix[0]);
+        setLoading(false);
+      }).catch(() => setLoading(false));
+    });
   }, [id]);
 
   // Countdown timer (updates every second)
@@ -151,25 +180,16 @@ export default function EventDetailScreen() {
     if (!hasSeating || !event) return;
     setSeatingLoading(true);
     try {
-      // Get the user's JWT token for auto-login in WebView
-      const { getStoredToken } = await import("@/lib/api/auth");
-      const token = await getStoredToken();
-      
-      // Try to get the direct seating chart embed URL
+      // Get the direct seating chart embed URL (no auth needed for viewing)
       let targetUrl = event.link || `${SITE_URL}/tc-events/${event.slug}/`;
       try {
         const chartUrl = await getSeatingChartUrl(event.id, event.slug, event.link);
         if (chartUrl) targetUrl = chartUrl;
       } catch {}
       
-      // If user is logged in, use auto-login endpoint to set cookies in WebView
-      if (token) {
-        const autoLoginUrl = `${SITE_URL}/wp-json/lamako-mobile/v1/auto-login?token=${encodeURIComponent(token)}&redirect=${encodeURIComponent(targetUrl)}`;
-        setSeatingChartUrl(autoLoginUrl);
-      } else {
-        setSeatingChartUrl(targetUrl);
-      }
-      
+      // Load the embed URL directly - seating chart doesn't require authentication
+      // Auto-login is only needed later if user proceeds to checkout
+      setSeatingChartUrl(targetUrl);
       setShowSeatingChart(true);
       setWebviewPhase('seating');
       setSelectedSeats([]);
