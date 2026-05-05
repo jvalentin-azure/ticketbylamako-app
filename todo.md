@@ -869,3 +869,10 @@
 - [x] Intercept checkout button click → sends SEATS_CONFIRMED to React Native → navigates to cart
 - [x] Deployed and verified live (interceptCheckoutButton + SEATS_CONFIRMED confirmed on page)
 - [ ] Previously selected seats still showing (WooCommerce cart session persists - expected behavior)
+
+## V5.2 - CRITICAL: Auto-clear cart before seating chart
+- [x] Automatically clear WooCommerce cart before opening seating chart (clearCart() + clearServerCart())
+- [x] Clear cart via existing /lamako-mobile/v1/clear-cart endpoint (already deployed)
+- [x] Endpoint clears: WC cart, Tickera session data, seat transients, Firebase seats, cart cookies
+- [x] App calls clearServerCart with chart_id before loading embed page
+- [x] Previously selected seats are released when user opens seating chart again

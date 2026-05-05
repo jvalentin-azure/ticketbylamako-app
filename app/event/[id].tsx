@@ -180,6 +180,15 @@ export default function EventDetailScreen() {
     if (!hasSeating || !event) return;
     setSeatingLoading(true);
     try {
+      // CRITICAL: Clear WooCommerce cart + release Tickera seats BEFORE opening seating chart
+      // This prevents seat duplication and stock blocking (standard for ticket sites)
+      clearCart(); // Clear local app cart
+      try {
+        await clearServerCart(undefined, String(event.id)); // Clear WC cart + release Tickera seats on server
+      } catch (e) {
+        console.warn('Failed to clear server cart before seating:', e);
+      }
+
       // Get the direct seating chart embed URL (no auth needed for viewing)
       let targetUrl = event.link || `${SITE_URL}/tc-events/${event.slug}/`;
       try {
