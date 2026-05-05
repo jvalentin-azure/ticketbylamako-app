@@ -862,3 +862,10 @@
 - [x] "Confirmer la sélection" button appears when seats are selected, sends SEATS_CONFIRMED to React Native
 - [x] React Native handles SEATS_CONFIRMED by navigating WebView to cart page
 - [x] Deployed to WordPress and verified live
+
+## V5.1 - Seating Chart Confirm Button Fix
+- [x] Confirm button not appearing - FIXED: was hiding Tickera's native 'Voir le panier' button. Now showing tc-checkout-bar with proper styling (position fixed, bottom)
+- [x] Removed custom confirm button, using Tickera's native checkout button instead
+- [x] Intercept checkout button click → sends SEATS_CONFIRMED to React Native → navigates to cart
+- [x] Deployed and verified live (interceptCheckoutButton + SEATS_CONFIRMED confirmed on page)
+- [ ] Previously selected seats still showing (WooCommerce cart session persists - expected behavior)

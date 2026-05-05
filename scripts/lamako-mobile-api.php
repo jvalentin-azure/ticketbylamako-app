@@ -125,7 +125,7 @@ function lamako_mobile_maybe_serve_seat_embed() {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
     /* NUCLEAR APPROACH: Hide EVERYTHING in body, then show only what we need */
-    body > *:not(.lamako-embed-instruction):not(.tc_seating_map_button):not(.tc_seating_map):not(script):not(link):not(style):not(#lamako-confirm-btn) {
+    body > *:not(.lamako-embed-instruction):not(.tc_seating_map_button):not(.tc_seating_map):not(script):not(link):not(style) {
         display: none !important;
         visibility: hidden !important;
         height: 0 !important;
@@ -135,8 +135,7 @@ function lamako_mobile_maybe_serve_seat_embed() {
     /* Re-show the elements we actually want */
     .lamako-embed-instruction,
     .tc_seating_map_button,
-    .tc_seating_map,
-    #lamako-confirm-btn {
+    .tc_seating_map {
         display: block !important;
         visibility: visible !important;
         height: auto !important;
@@ -179,29 +178,65 @@ function lamako_mobile_maybe_serve_seat_embed() {
         touch-action: manipulation !important;
     }
     
-    /* HIDE checkout navigation - seating chart is for seat selection only */
-    /* Keep .tc_in_cart visible so Tickera can track selected seats properly */
-    .tc-seatchart-go-to-cart, a.tc-seatchart-go-to-cart,
+    /* SHOW Tickera's native checkout bar (subtotal + 'Voir le panier' button) */
     .tc-checkout-bar {
-        display: none !important;
-    }
-    /* Style the in-cart summary to be compact and informative */
-    .tc_in_cart {
+        display: flex !important;
+        visibility: visible !important;
+        height: auto !important;
+        overflow: visible !important;
+        pointer-events: auto !important;
         position: fixed !important;
         bottom: 0 !important;
         left: 0 !important;
         right: 0 !important;
-        z-index: 998 !important;
+        z-index: 99999 !important;
+        background: #fff !important;
+        border-top: 2px solid #663d17 !important;
+        padding: 12px 16px !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        box-shadow: 0 -4px 12px rgba(0,0,0,0.1) !important;
+    }
+    .tc-seatchart-subtotal {
+        font-weight: 600 !important;
+        font-size: 15px !important;
+        color: #663d17 !important;
+        margin: 0 !important;
+    }
+    .tc-checkout-button {
+        display: inline-block !important;
+        visibility: visible !important;
+        height: auto !important;
+        overflow: visible !important;
+        pointer-events: auto !important;
+        padding: 14px 28px !important;
+        font-size: 16px !important;
+        font-weight: 700 !important;
+        background: #663d17 !important;
+        color: #fff !important;
+        border: none !important;
+        border-radius: 12px !important;
+        text-decoration: none !important;
+        cursor: pointer !important;
+        box-shadow: 0 4px 10px rgba(102,61,23,0.3) !important;
+    }
+    .tc-checkout-button[style*="opacity: 0.4"] {
+        opacity: 0.4 !important;
+        pointer-events: none !important;
+    }
+    /* Style the in-cart info area */
+    .tc_in_cart {
+        position: fixed !important;
+        bottom: 70px !important;
+        left: 0 !important;
+        right: 0 !important;
+        z-index: 99998 !important;
         background: rgba(255,255,255,0.97) !important;
         border-top: 1px solid #e5e7eb !important;
         padding: 8px 16px !important;
         font-size: 13px !important;
-        max-height: 120px !important;
+        max-height: 100px !important;
         overflow-y: auto !important;
-    }
-    .tc-seatchart-subtotal {
-        font-weight: 600 !important;
-        color: #663d17 !important;
     }
     
     /* HIDE jQuery UI dialog entirely - we bypass it with direct AJAX */
@@ -879,14 +914,13 @@ document.addEventListener('DOMContentLoaded', function() {
 ?>
     <p class="lamako-embed-instruction">Appuyez sur le bouton ci-dessous, puis touchez un siège pour l'ajouter. Touchez-le à nouveau pour le retirer.</p>
     <?php echo do_shortcode( '[tc_seat_chart id="' . $chart_id . '" show_legend="true"]' ); ?>
-    <button id="lamako-confirm-btn" style="display:none; position:fixed; bottom:20px; left:50%; transform:translateX(-50%); z-index:9999; padding:16px 40px; font-size:17px; font-weight:700; background:#663d17; color:#fff; border:none; border-radius:14px; cursor:pointer; width:90%; max-width:400px; box-shadow:0 4px 14px rgba(102,61,23,0.3); text-align:center;">Confirmer la sélection</button>
 <?php wp_footer(); ?>
 <script>
-// POST-WP_FOOTER CLEANUP: Remove all injected content that shouldn't be visible
+// POST-WP_FOOTER CLEANUP & SEATING CHART HELPERS
 (function() {
     // Remove all body children that are not our content
     var body = document.body;
-    var allowed = ['lamako-embed-instruction', 'tc_seating_map_button', 'tc_seating_map', 'lamako-confirm-btn'];
+    var allowed = ['lamako-embed-instruction', 'tc_seating_map_button', 'tc_seating_map'];
     var children = Array.from(body.children);
     children.forEach(function(child) {
         if (child.tagName === 'SCRIPT' || child.tagName === 'LINK' || child.tagName === 'STYLE') return;
@@ -913,29 +947,40 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }, 1500);
     
-    // Show confirm button when seats are selected
-    function checkSeats() {
-        var confirmBtn = document.getElementById('lamako-confirm-btn');
-        if (!confirmBtn) return;
-        var selectedSeats = document.querySelectorAll('.tc_seat_unit.tc_added_to_cart, .tc_seat_unit.selected, .tc_seat_unit[style*="opacity: 0.5"]');
-        if (selectedSeats.length > 0) {
-            confirmBtn.style.display = 'block';
-            confirmBtn.textContent = 'Confirmer (' + selectedSeats.length + ' siège' + (selectedSeats.length > 1 ? 's' : '') + ')';
+    // INTERCEPT the Tickera 'Voir le panier' button click to send message to React Native
+    // instead of navigating to /cart/ (which would load in the WebView)
+    function interceptCheckoutButton() {
+        var checkoutBtn = document.querySelector('.tc-checkout-button');
+        if (checkoutBtn) {
+            checkoutBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (window.ReactNativeWebView) {
+                    window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'SEATS_CONFIRMED' }));
+                }
+                return false;
+            });
+            console.log('[Lamako] Checkout button intercepted');
         } else {
-            confirmBtn.style.display = 'none';
+            // Button not yet in DOM (map not loaded yet), retry
+            setTimeout(interceptCheckoutButton, 1000);
         }
     }
-    setInterval(checkSeats, 1000);
+    // Start intercepting after map loads (button is created by AJAX)
+    setTimeout(interceptCheckoutButton, 3000);
     
-    // Confirm button sends message to React Native
-    var confirmBtn = document.getElementById('lamako-confirm-btn');
-    if (confirmBtn) {
-        confirmBtn.addEventListener('click', function() {
+    // Also intercept any future clicks on the checkout button (in case it gets recreated)
+    document.addEventListener('click', function(e) {
+        var target = e.target;
+        if (target && (target.classList.contains('tc-checkout-button') || target.closest('.tc-checkout-button'))) {
+            e.preventDefault();
+            e.stopPropagation();
             if (window.ReactNativeWebView) {
                 window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'SEATS_CONFIRMED' }));
             }
-        });
-    }
+            return false;
+        }
+    }, true);
     
     // Periodic cleanup for late-loading widgets
     setInterval(function() {
