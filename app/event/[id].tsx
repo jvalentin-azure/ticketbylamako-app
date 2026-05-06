@@ -6,7 +6,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useCart } from "@/lib/cart-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { getTCEvent, getEventTickets, getSeatingChartUrl, getEventsData, clearServerCart, createOrder, SITE_URL as API_SITE_URL, type TCEvent, type TicketType } from "@/lib/api/woocommerce";
+import { getTCEvent, getEventTickets, getEventsData, clearServerCart, createOrder, SITE_URL as API_SITE_URL, type TCEvent, type TicketType } from "@/lib/api/woocommerce";
 import { useAuth } from "@/lib/auth-provider";
 import { getStoredToken, getStoredUser } from "@/lib/api/auth";
 import { useFavorites } from "@/lib/favorites-provider";
@@ -185,7 +185,7 @@ export default function EventDetailScreen() {
     if (!hasSeating || !event) return;
     
     // REQUIRE AUTH: User must be logged in before opening seating chart
-    // This prevents the admin login exposure issue
+    // This prevents the admin login exposure issue and ensures WC session is linked to user
     if (!isAuthenticated) {
       Alert.alert(
         "Connexion requise",
@@ -208,21 +208,20 @@ export default function EventDetailScreen() {
         console.warn('Failed to clear server cart before seating:', e);
       }
 
-      // Get the seating chart embed URL
-      let targetUrl = event.link || `${SITE_URL}/tc-events/${event.slug}/`;
-      try {
-        const chartUrl = await getSeatingChartUrl(event.id, event.slug, event.link);
-        if (chartUrl) targetUrl = chartUrl;
-      } catch {}
+      // BilletClic approach: Load the EVENT PAGE directly in the WebView
+      // Tickera displays the seating chart button on the event page natively
+      // The user clicks "CHOISIR MA PLACE" → seating popup opens → selects seats →
+      // confirms → cart → checkout → payment - ALL within the same WebView session
+      const eventPageUrl = event.link || `${SITE_URL}/tc-events/${event.slug}/`;
       
       // Use auto-login URL to pre-authenticate the WebView session
-      // This ensures the user is logged in for the entire seating chart flow
+      // This ensures the user is logged in for checkout (no login form exposed)
       const token = await getStoredToken();
       if (token) {
-        const autoLoginUrl = `${SITE_URL}/wp-json/lamako-mobile/v1/auto-login?token=${encodeURIComponent(token)}&redirect=${encodeURIComponent(targetUrl)}`;
+        const autoLoginUrl = `${SITE_URL}/wp-json/lamako-mobile/v1/auto-login?token=${encodeURIComponent(token)}&redirect=${encodeURIComponent(eventPageUrl)}`;
         setSeatingChartUrl(autoLoginUrl);
       } else {
-        setSeatingChartUrl(targetUrl);
+        setSeatingChartUrl(eventPageUrl);
       }
       
       setShowSeatingChart(true);
@@ -272,10 +271,18 @@ export default function EventDetailScreen() {
             }
             return;
           }
-          // Auto-redirect cart to checkout (skip cart page - go direct to checkout)
-          if ((window.location.href.indexOf('/cart') > -1 || window.location.href.indexOf('/panier') > -1) && window.location.href.indexOf('/checkout') === -1 && window.location.href.indexOf('/commande') === -1) {
-            window.location.href = window.location.origin + '/checkout/';
-            return;
+          // On cart page, add mobile-friendly styles and notify app
+          if ((window.location.href.indexOf('/cart') > -1 || window.location.href.indexOf('/panier') > -1) && window.location.href.indexOf('/checkout') === -1) {
+            var cartStyle = document.createElement('style');
+            cartStyle.textContent = 
+              'body { font-family: -apple-system, BlinkMacSystemFont, sans-serif !important; font-size: 15px !important; }' +
+              '.woocommerce-cart { padding: 12px !important; }' +
+              'table.shop_table { font-size: 14px !important; }' +
+              '.checkout-button { font-size: 17px !important; padding: 14px !important; border-radius: 12px !important; }';
+            document.head.appendChild(cartStyle);
+            if (window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'checkout_loaded' }));
+            }
           }
           // On checkout pages, add mobile-friendly styles
           if (window.location.href.indexOf('/checkout') > -1 || window.location.href.indexOf('/commande') > -1) {
@@ -408,12 +415,11 @@ export default function EventDetailScreen() {
               try {
                 const data = JSON.parse(e.nativeEvent.data);
                 if (data.type === 'SEATS_CONFIRMED') {
-                  // Instead of navigating to /cart/ (which exposes login),
-                  // navigate to /checkout/ directly - user is already auto-logged in
+                  // BilletClic approach: Don't intercept - let the user flow naturally
+                  // through cart → checkout in the WebView. The auto-login ensures
+                  // the user is already authenticated for the entire flow.
+                  // Just update the phase for the header UI
                   setWebviewPhase('checkout');
-                  if (webviewRef.current) {
-                    webviewRef.current.injectJavaScript(`window.location.href = '${SITE_URL}/checkout/'; true;`);
-                  }
                 }
                 if (data.type === 'checkout_loaded') {
                   setWebviewPhase('checkout');
@@ -429,11 +435,9 @@ export default function EventDetailScreen() {
             }}
             onNavigationStateChange={(navState: any) => {
               const url = navState.url || "";
-              // Detect checkout pages
-              if (url.includes('/checkout') || url.includes('/commande') || url.includes('lamako_checkout')) {
-                if (!url.includes('/cart') && !url.includes('/panier')) {
-                  setWebviewPhase('checkout');
-                }
+              // Detect cart/checkout pages
+              if (url.includes('/cart') || url.includes('/panier') || url.includes('/checkout') || url.includes('/commande') || url.includes('lamako_checkout')) {
+                setWebviewPhase('checkout');
               }
               // Detect order confirmation page
               if (url.includes("order-received") || url.includes("commande-recue") || url.includes("thankyou")) {

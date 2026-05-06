@@ -928,3 +928,14 @@
 - [x] Add: Confetti/success animation on payment success screen
 - [x] Add: Detailed "My Orders" page accessible from hamburger menu (already existed, verified working)
 
+## V5.5 - BilletClic Approach Fix (Invalid Chart ID + 404 Definitive Fix)
+
+### Critical Fix
+- [x] Fix: "Invalid chart ID" error → removed lamako_seat_embed dependency, now loads event page directly in WebView (BilletClic approach)
+- [x] Fix: 404 after Orange Money payment → return URL now uses standard WC order-received page (detected by WebView onNavigationStateChange)
+- [x] Fix: Admin login exposed in WebView → auto-login sets lamako_mobile_session cookie, return URL filter detects mobile orders
+- [x] Fix: Cart auto-redirect removed → user sees cart page naturally (BilletClic flow: event → seats → cart → checkout → payment)
+- [x] Fix: Mobile session cookie set on auto-login → woocommerce_get_return_url filter marks orders as mobile
+- [x] Removed getSeatingChartUrl dependency (no longer needed)
+- [x] PHP plugin synced with nested copy
+

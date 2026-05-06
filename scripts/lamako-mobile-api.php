@@ -62,17 +62,26 @@ add_filter( 'woocommerce_get_return_url', 'lamako_mobile_override_return_url', 9
 function lamako_mobile_override_return_url( $return_url, $order ) {
     if ( ! $order ) return $return_url;
     
-    // Only override for mobile app orders
+    // Only override for mobile app orders (created via API or via WebView with auto-login)
     $is_mobile = $order->get_meta( '_lamako_mobile_order' ) === 'yes' 
                  || $order->get_created_via() === 'lamako_mobile';
     
+    // Also check if the current user was auto-logged in from the mobile app
+    // (session flag set by auto-login endpoint)
+    if ( ! $is_mobile && isset( $_COOKIE['lamako_mobile_session'] ) ) {
+        $is_mobile = true;
+        // Mark this order as mobile for future reference
+        $order->update_meta_data( '_lamako_mobile_order', 'yes' );
+        $order->set_created_via( 'lamako_mobile' );
+        $order->save();
+    }
+    
     if ( ! $is_mobile ) return $return_url;
     
-    // Return to our custom checkout page which will detect the paid status
-    // and show a success screen + notify the React Native app
-    $order_id  = $order->get_id();
-    $order_key = $order->get_order_key();
-    return home_url( '/?lamako_checkout=1&order_id=' . $order_id . '&order_key=' . $order_key );
+    // For mobile orders, use the standard WooCommerce order-received page
+    // The WebView detects 'order-received' in the URL and shows the native confirmation
+    // This avoids 404 issues with custom redirect URLs
+    return $order->get_checkout_order_received_url();
 }
 
 /**
@@ -3306,6 +3315,10 @@ function lamako_mobile_auto_login( WP_REST_Request $request ) {
     // Log the user in (set WordPress auth cookies)
     wp_set_current_user( $user_id );
     wp_set_auth_cookie( $user_id, true );
+    
+    // Set a session cookie to identify this as a mobile app session
+    // Used by woocommerce_get_return_url filter to detect mobile orders
+    setcookie( 'lamako_mobile_session', '1', 0, COOKIEPATH, COOKIE_DOMAIN, is_ssl(), false );
 
     // Build the full redirect URL
     if ( strpos( $redirect, 'http' ) !== 0 ) {
