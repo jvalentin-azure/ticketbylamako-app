@@ -6,6 +6,8 @@ import { useColors } from "@/hooks/use-colors";
 import { useCart } from "@/lib/cart-provider";
 import { getStoredUser } from "@/lib/api/auth";
 import { createOrder, SITE_URL, clearServerCart } from "@/lib/api/woocommerce";
+import { Confetti } from "@/components/confetti";
+import { CheckoutSkeleton } from "@/components/skeleton-loader";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { formatAriary } from "@/lib/format";
 import { notifyPaymentConfirmed } from "@/lib/notifications";
@@ -734,15 +736,23 @@ export default function CheckoutScreen() {
   if (phase === "success") {
     return (
       <ScreenContainer edges={["top", "bottom", "left", "right"]}>
+        <Confetti active={true} />
         <View style={styles.centerContent}>
-          <IconSymbol name="checkmark.circle.fill" size={64} color={colors.success} />
-          <Text style={[styles.successTitle, { color: colors.foreground }]}>Commande confirmée !</Text>
+          <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: colors.success + "15", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
+            <IconSymbol name="checkmark.circle.fill" size={56} color={colors.success} />
+          </View>
+          <Text style={[styles.successTitle, { color: colors.foreground }]}>Paiement réussi !</Text>
           <Text style={[styles.successSub, { color: colors.muted }]}>
-            Votre commande #{orderId} a été enregistrée. Vous recevrez un email de confirmation.
+            Votre commande #{orderId} a été confirmée.{"\n"}Vous recevrez un email de confirmation.
           </Text>
+          {total > 0 && (
+            <Text style={{ fontSize: 24, fontWeight: "800", color: colors.primary, marginTop: 8 }}>
+              {formatAriary(total)}
+            </Text>
+          )}
           <TouchableOpacity
             onPress={() => router.replace("/(tabs)/" as any)}
-            style={[styles.retryBtn, { backgroundColor: colors.primary }]}
+            style={[styles.retryBtn, { backgroundColor: colors.primary, marginTop: 24 }]}
           >
             <Text style={styles.retryBtnText}>Retour à l'accueil</Text>
           </TouchableOpacity>
@@ -807,8 +817,8 @@ export default function CheckoutScreen() {
         <View style={{ width: 40 }} />
       </View>
       {webviewLoading && (
-        <View style={styles.webviewLoader}>
-          <ActivityIndicator size="large" color={colors.primary} />
+        <View style={[styles.webviewLoader, { backgroundColor: colors.background }]}>
+          <CheckoutSkeleton />
         </View>
       )}
       <WebViewComponent

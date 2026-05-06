@@ -911,3 +911,20 @@
 ### Plugin Sync
 - [x] Synced scripts/lamako-mobile-api/lamako-mobile-api.php with root plugin copy
 
+
+## V5.4 - CRITICAL: Seating Chart BilletClic Rewrite + Payment Fix + APK Fix
+
+### P0 - Critical Bugs
+- [x] Fix: Seating chart → rewrite to BilletClic approach (full WebView flow: event page → seats → checkout → payment, no native overlay)
+- [x] Fix: Seating chart must require login before opening (auth guard)
+- [x] Fix: Seating chart checkout shows admin login credentials (security issue - uses auto-login URL)
+- [x] Fix: 404 after Orange Money payment return (PHP: woocommerce_get_return_url filter + order status check)
+- [x] Fix: After payment success, app shows "connectez-vous" instead of tickets (fixed: confirmation phase in WebView)
+- [x] Fix: APK crash on open (disabled ProGuard/R8, added largeHeap)
+- [x] Fix: Zoom +/- buttons removed (handled by WebView native pinch-to-zoom)
+
+### P1 - UX Improvements
+- [x] Add: Skeleton loading indicator while seating chart WebView loads
+- [x] Add: Confetti/success animation on payment success screen
+- [x] Add: Detailed "My Orders" page accessible from hamburger menu (already existed, verified working)
+

@@ -52,6 +52,30 @@ function lamako_mobile_allow_pay_without_login( $allcaps, $caps, $args ) {
 add_filter( 'woocommerce_order_email_verification_required', '__return_false', 9999 );
 
 /**
+ * Override WooCommerce return URL for mobile app orders.
+ * After payment gateway (Orange Money, MVola, etc.) completes,
+ * redirect back to our custom lamako_checkout page instead of the
+ * standard WC order-received page (which causes 404 in the app WebView).
+ */
+add_filter( 'woocommerce_get_return_url', 'lamako_mobile_override_return_url', 9999, 2 );
+
+function lamako_mobile_override_return_url( $return_url, $order ) {
+    if ( ! $order ) return $return_url;
+    
+    // Only override for mobile app orders
+    $is_mobile = $order->get_meta( '_lamako_mobile_order' ) === 'yes' 
+                 || $order->get_created_via() === 'lamako_mobile';
+    
+    if ( ! $is_mobile ) return $return_url;
+    
+    // Return to our custom checkout page which will detect the paid status
+    // and show a success screen + notify the React Native app
+    $order_id  = $order->get_id();
+    $order_key = $order->get_order_key();
+    return home_url( '/?lamako_checkout=1&order_id=' . $order_id . '&order_key=' . $order_key );
+}
+
+/**
  * Force ALL Tickera ticket products to be purchasable.
  * 
  * Tickera's WooCommerce Bridge marks ticket products as non-purchasable
@@ -1063,6 +1087,7 @@ function lamako_mobile_maybe_serve_checkout() {
         $order->set_payment_method( $gateway );
         // Mark as mobile app order (for seating chart orders that go through WebView checkout)
         $order->set_created_via( 'lamako_mobile' );
+        $order->update_meta_data( '_lamako_mobile_order', 'yes' );
         $order->update_meta_data( '_lamako_order_source', 'mobile_app' );
         $order->save();
         
@@ -1099,6 +1124,24 @@ function lamako_mobile_maybe_serve_checkout() {
     // ============================================================
     // HANDLE GET: Show the checkout form
     // ============================================================
+    
+    // CHECK: If order is already paid (processing/completed/on-hold), show success page
+    $order_status = $order->get_status();
+    if ( in_array( $order_status, [ 'processing', 'completed', 'on-hold' ], true ) ) {
+        // Order is already paid - show success page that notifies the app
+        header( 'Content-Type: text/html; charset=utf-8' );
+        echo '<!DOCTYPE html><html><head><meta charset="utf-8">';
+        echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
+        echo '<style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f0fdf4;}';
+        echo '.success{text-align:center;padding:40px 20px;}.icon{font-size:64px;margin-bottom:16px;}.title{font-size:22px;font-weight:700;color:#166534;margin-bottom:8px;}.sub{font-size:15px;color:#4b5563;}</style>';
+        echo '</head><body><div class="success"><div class="icon">\u2705</div>';
+        echo '<div class="title">Paiement confirm\u00e9 !</div>';
+        echo '<div class="sub">Commande #' . $order_id . ' - ' . esc_html( $order->get_formatted_order_total() ) . '</div>';
+        echo '</div><script>';
+        echo 'if(window.ReactNativeWebView){window.ReactNativeWebView.postMessage(JSON.stringify({type:"payment_success",url:window.location.href,order_id:' . $order_id . '}));}';
+        echo '</script></body></html>';
+        exit;
+    }
     
     // Set up the pay-for-order context so WC renders the payment form
     global $wp;

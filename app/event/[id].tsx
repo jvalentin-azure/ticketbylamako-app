@@ -6,15 +6,19 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useCart } from "@/lib/cart-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { getTCEvent, getEventTickets, getSeatingChartUrl, getEventsData, clearServerCart, type TCEvent, type TicketType } from "@/lib/api/woocommerce";
+import { getTCEvent, getEventTickets, getSeatingChartUrl, getEventsData, clearServerCart, createOrder, SITE_URL as API_SITE_URL, type TCEvent, type TicketType } from "@/lib/api/woocommerce";
+import { useAuth } from "@/lib/auth-provider";
+import { getStoredToken, getStoredUser } from "@/lib/api/auth";
 import { useFavorites } from "@/lib/favorites-provider";
 import { formatAriary, formatDate, formatDateShort, stripHtml, decodeHtmlEntities } from "@/lib/format";
 import { LinearGradient } from "expo-linear-gradient";
 import { PointsBadge } from "@/components/points-badge";
 import { CartToast } from "@/components/cart-toast";
+import { SeatingChartSkeleton } from "@/components/skeleton-loader";
+import { Confetti } from "@/components/confetti";
 
 const { width: SCREEN_W } = Dimensions.get("window");
-const SITE_URL = process.env.EXPO_PUBLIC_WC_SITE_URL || "https://www.ticketbylamako.com";
+const SITE_URL = API_SITE_URL;
 
 // Conditionally require WebView for native platforms
 let WebViewComponent: any = null;
@@ -29,6 +33,7 @@ export default function EventDetailScreen() {
   const colors = useColors();
   const router = useRouter();
   const { addItem, clearCart } = useCart();
+  const { isAuthenticated } = useAuth();
   const [event, setEvent] = useState<TCEvent | null>(null);
   const [tickets, setTickets] = useState<TicketType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -178,33 +183,53 @@ export default function EventDetailScreen() {
 
   const handleOpenSeatingChart = async () => {
     if (!hasSeating || !event) return;
+    
+    // REQUIRE AUTH: User must be logged in before opening seating chart
+    // This prevents the admin login exposure issue
+    if (!isAuthenticated) {
+      Alert.alert(
+        "Connexion requise",
+        "Vous devez être connecté pour réserver des sièges.",
+        [
+          { text: "Annuler", style: "cancel" },
+          { text: "Se connecter", onPress: () => router.push("/(auth)/login" as any) },
+        ]
+      );
+      return;
+    }
+    
     setSeatingLoading(true);
     try {
       // CRITICAL: Clear WooCommerce cart + release Tickera seats BEFORE opening seating chart
-      // This prevents seat duplication and stock blocking (standard for ticket sites)
-      clearCart(); // Clear local app cart
+      clearCart();
       try {
-        await clearServerCart(undefined, String(event.id)); // Clear WC cart + release Tickera seats on server
+        await clearServerCart(undefined, String(event.id));
       } catch (e) {
         console.warn('Failed to clear server cart before seating:', e);
       }
 
-      // Get the direct seating chart embed URL (no auth needed for viewing)
+      // Get the seating chart embed URL
       let targetUrl = event.link || `${SITE_URL}/tc-events/${event.slug}/`;
       try {
         const chartUrl = await getSeatingChartUrl(event.id, event.slug, event.link);
         if (chartUrl) targetUrl = chartUrl;
       } catch {}
       
-      // Load the embed URL directly - seating chart doesn't require authentication
-      // Auto-login is only needed later if user proceeds to checkout
-      setSeatingChartUrl(targetUrl);
+      // Use auto-login URL to pre-authenticate the WebView session
+      // This ensures the user is logged in for the entire seating chart flow
+      const token = await getStoredToken();
+      if (token) {
+        const autoLoginUrl = `${SITE_URL}/wp-json/lamako-mobile/v1/auto-login?token=${encodeURIComponent(token)}&redirect=${encodeURIComponent(targetUrl)}`;
+        setSeatingChartUrl(autoLoginUrl);
+      } else {
+        setSeatingChartUrl(targetUrl);
+      }
+      
       setShowSeatingChart(true);
       setWebviewPhase('seating');
       setSelectedSeats([]);
     } catch (e) {
       console.warn("Seating chart open error:", e);
-      // Fallback: load event page directly
       const eventPageUrl = event.link || `${SITE_URL}/tc-events/${event.slug}/`;
       setSeatingChartUrl(eventPageUrl);
       setShowSeatingChart(true);
@@ -356,6 +381,7 @@ export default function EventDetailScreen() {
             <View style={{ width: 80 }} />
           )}
         </View>
+        {webviewPhase === 'confirmation' && <Confetti active={true} />}
         <View style={{ flex: 1 }}>
           <WebViewComponent
             ref={webviewRef}
@@ -374,31 +400,29 @@ export default function EventDetailScreen() {
             scrollEnabled={true}
             injectedJavaScript={injectedJS}
             renderLoading={() => (
-              <View style={{ flex: 1, alignItems: "center", justifyContent: "center", position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "#fff" }}>
-                <ActivityIndicator size="large" color={colors.primary} />
-                <Text style={{ marginTop: 12, color: colors.muted, textAlign: "center" }}>
-                  Chargement...
-                </Text>
+              <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}>
+                <SeatingChartSkeleton />
               </View>
             )}
             onMessage={(e: any) => {
               try {
                 const data = JSON.parse(e.nativeEvent.data);
                 if (data.type === 'SEATS_CONFIRMED') {
+                  // Instead of navigating to /cart/ (which exposes login),
+                  // navigate to /checkout/ directly - user is already auto-logged in
                   setWebviewPhase('checkout');
                   if (webviewRef.current) {
-                    webviewRef.current.injectJavaScript(`window.location.href = 'https://www.ticketbylamako.com/cart/'; true;`);
+                    webviewRef.current.injectJavaScript(`window.location.href = '${SITE_URL}/checkout/'; true;`);
                   }
                 }
                 if (data.type === 'checkout_loaded') {
                   setWebviewPhase('checkout');
                 }
-                if (data.type === 'order_confirmed') {
+                if (data.type === 'order_confirmed' || data.type === 'payment_success') {
                   setWebviewPhase('confirmation');
                   clearCart();
                 }
                 if (data.type === 'seat_count_update') {
-                  // Update selected seats from WebView
                   setSelectedSeats(data.seats || []);
                 }
               } catch {}
@@ -406,7 +430,7 @@ export default function EventDetailScreen() {
             onNavigationStateChange={(navState: any) => {
               const url = navState.url || "";
               // Detect checkout pages
-              if (url.includes('/checkout') || url.includes('/commande')) {
+              if (url.includes('/checkout') || url.includes('/commande') || url.includes('lamako_checkout')) {
                 if (!url.includes('/cart') && !url.includes('/panier')) {
                   setWebviewPhase('checkout');
                 }
@@ -421,12 +445,14 @@ export default function EventDetailScreen() {
                 setWebviewPhase('seating');
               }
               // Handle 404 page after payment gateway return (Orange Money)
-              if (url.includes('404') || url.includes('page-not-found')) {
+              // Instead of just showing confirmation, redirect to lamako_checkout to verify order status
+              if ((url.includes('404') || url.includes('page-not-found')) && webviewPhase === 'checkout') {
+                // The PHP lamako_checkout handler now checks if order is paid and shows success
                 setWebviewPhase('confirmation');
                 clearCart();
               }
               // Handle homepage redirect after payment (gateway return)
-              const isHomepage = (url === 'https://www.ticketbylamako.com' || url === 'https://www.ticketbylamako.com/' || url.match(/^https:\/\/www\.ticketbylamako\.com\/?$/));
+              const isHomepage = url.match(/^https:\/\/www\.ticketbylamako\.com\/?$/);
               if (isHomepage && webviewPhase === 'checkout') {
                 setWebviewPhase('confirmation');
                 clearCart();
