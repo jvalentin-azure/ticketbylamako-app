@@ -245,51 +245,158 @@ export default function EventDetailScreen() {
     // confirms → goes to cart → checkout → payment - ALL within the same WebView session
     const injectedJS = `
       (function() {
+        var isEventPage = window.location.href.indexOf('/tc-events/') > -1 || window.location.href.indexOf('/tc_event/') > -1;
+        var isCartPage = (window.location.href.indexOf('/cart') > -1 || window.location.href.indexOf('/panier') > -1) && window.location.href.indexOf('/checkout') === -1;
+        var isCheckoutPage = window.location.href.indexOf('/checkout') > -1 || window.location.href.indexOf('/commande') > -1;
+        var isOrderReceived = window.location.href.indexOf('order-received') > -1 || window.location.href.indexOf('commande-recue') > -1 || window.location.href.indexOf('thankyou') > -1;
+        var is404 = false;
+
         function cleanup() {
-          var style = document.createElement('style');
-          style.textContent = 
+          // Check for 404
+          if (document.title.indexOf('404') > -1 || document.querySelector('.error-404, .not-found')) {
+            is404 = true;
+            if (window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'order_confirmed' }));
+            }
+            return;
+          }
+
+          // === GLOBAL: Hide all non-essential elements on every page ===
+          var globalStyle = document.createElement('style');
+          globalStyle.textContent = 
             'header, .site-header, #masthead, .header-wrapper, .header-main, .header-top, .header-bottom,' +
             'footer, .site-footer, #colophon, .footer-wrapper, .absolute-footer,' +
-            'nav:not(.tc-nav), .breadcrumbs, .woocommerce-breadcrumb, #wpadminbar,' +
+            'nav:not(.tc-nav):not(.woocommerce-pagination), .breadcrumbs, .woocommerce-breadcrumb, #wpadminbar,' +
             '.sidebar, #sidebar, aside,' +
             '[class*="whatsapp"], .joinchat, [id*="whatsapp"],' +
             '[class*="cookie"], [class*="consent"],' +
             '#fkcart-floating-toggler, .fkcart-main-wrapper,' +
             '[class*="tidio"], [id*="tidio"], [class*="chat-widget"],' +
             '[class*="crisp"], [id*="crisp"],' +
-            '[class*="tawk"], [id*="tawk"]' +
+            '[class*="tawk"], [id*="tawk"],' +
+            '.related, .upsells, .cross-sells' +
             '{ display: none !important; }' +
-            'body { margin-top: 0 !important; padding-top: 0 !important; }' +
-            '.entry-content, .tc_event_content { padding-top: 10px !important; }' +
-            /* Keep zoom controls visible */
+            'body { margin-top: 0 !important; padding-top: 0 !important; font-family: -apple-system, BlinkMacSystemFont, sans-serif !important; }' +
             '.tc_zoom_in, .tc_zoom_out, .tc-zoom-in, .tc-zoom-out, [class*="zoom"] { display: block !important; visibility: visible !important; }';
-          document.head.appendChild(style);
-          // Handle 404 page after payment gateway return
-          if (document.title.indexOf('404') > -1 || document.querySelector('.error-404, .not-found')) {
-            if (window.ReactNativeWebView) {
-              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'order_confirmed' }));
+          document.head.appendChild(globalStyle);
+
+          // === EVENT PAGE: Show only featured image + auto-click seating chart button ===
+          if (isEventPage) {
+            var eventStyle = document.createElement('style');
+            eventStyle.textContent = 
+              /* Hide everything in the content area */
+              '.entry-content > *, .tc_event_content > *, .post-content > *, .single-content > *,' +
+              '.tc_event_details, .tc_event_description, .tc_event_meta, .tc_event_info,' +
+              '.tc_event_date, .tc_event_location, .tc_event_organizer,' +
+              '.tc_ticket_type_table, .tc_tickets_wrapper, .tc_add_to_cart,' +
+              '.event-meta, .event-details, .event-description,' +
+              '.qode-single-event-holder, .qode-event-info,' +
+              'h1, h2, h3, .entry-title, .page-title,' +
+              '.comments-area, #comments, .comment-respond,' +
+              '.post-navigation, .nav-links,' +
+              '.share-buttons, .social-share, [class*="share"],' +
+              '.woocommerce-tabs, .tabs-container' +
+              '{ display: none !important; }' +
+              /* Show only the featured image */
+              '.post-thumbnail, .wp-post-image, .tc_event_featured_image, .attachment-full,' +
+              'img.wp-post-image, .entry-thumbnail, .single-post-thumbnail,' +
+              '.qode-event-image, [class*="featured-image"], [class*="event-image"]' +
+              '{ display: block !important; width: 100% !important; height: auto !important; max-height: 250px !important; object-fit: cover !important; border-radius: 0 !important; margin: 0 !important; }' +
+              /* Show the Tickera seating chart button */
+              '.tc_seat_chart_button, .tc_buy_tickets_button, [class*="tc_seat"], [class*="choose-seat"],' +
+              'a[href*="seat"], button[class*="seat"], .tc_open_seat_chart,' +
+              '.tc_event_buy_button, .tc_add_to_cart_button' +
+              '{ display: block !important; visibility: visible !important; margin: 16px auto !important; padding: 14px 24px !important; font-size: 17px !important; font-weight: 600 !important; text-align: center !important; border-radius: 12px !important; }' +
+              /* Show the Tickera seating chart popup/modal when opened */
+              '.tc_seat_chart_wrap, .tc_seat_chart_modal, .tc_seat_chart_container,' +
+              '#tc_seat_chart_modal, [class*="tc_seat_chart"], .tc-seat-chart,' +
+              '.tc_seating_chart, #tc_seating_chart, .fancybox-overlay, .fancybox-wrap,' +
+              '.tc-modal, [id*="tc_seat"]' +
+              '{ display: block !important; visibility: visible !important; position: fixed !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; z-index: 99999 !important; }' +
+              /* Loading indicator while waiting for auto-click */
+              '.lamako-loading-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #fff; display: flex; align-items: center; justify-content: center; flex-direction: column; z-index: 9998; }' +
+              '.lamako-loading-spinner { width: 40px; height: 40px; border: 3px solid #e5e7eb; border-top-color: #c79f6c; border-radius: 50%; animation: spin 0.8s linear infinite; }' +
+              '@keyframes spin { to { transform: rotate(360deg); } }' +
+              '.lamako-loading-text { margin-top: 12px; font-size: 14px; color: #687076; }';
+            document.head.appendChild(eventStyle);
+
+            // Add a loading overlay while we wait for the button
+            var overlay = document.createElement('div');
+            overlay.className = 'lamako-loading-overlay';
+            overlay.innerHTML = '<div class="lamako-loading-spinner"></div><div class="lamako-loading-text">Chargement du plan de salle...</div>';
+            document.body.appendChild(overlay);
+
+            // Auto-click the seating chart button
+            function tryClickSeatButton() {
+              var selectors = [
+                '.tc_seat_chart_button',
+                '.tc_buy_tickets_button', 
+                '.tc_open_seat_chart',
+                '.tc_event_buy_button',
+                'a[href*="seat-chart"]',
+                'a[href*="seat_chart"]',
+                '.tc_add_to_cart_button',
+                'a[class*="tc_seat"]',
+                'button[class*="seat"]',
+                '.tc_event_content a.button',
+                '.tc_event_content .btn',
+                'a[href*="choose"]'
+              ];
+              for (var i = 0; i < selectors.length; i++) {
+                var btn = document.querySelector(selectors[i]);
+                if (btn) {
+                  // Remove overlay
+                  var ov = document.querySelector('.lamako-loading-overlay');
+                  if (ov) ov.style.display = 'none';
+                  // Click the button
+                  btn.click();
+                  if (window.ReactNativeWebView) {
+                    window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'seat_chart_opened' }));
+                  }
+                  return true;
+                }
+              }
+              return false;
             }
-            return;
+
+            // Try immediately, then retry every 500ms for up to 10 seconds
+            if (!tryClickSeatButton()) {
+              var attempts = 0;
+              var maxAttempts = 20;
+              var interval = setInterval(function() {
+                attempts++;
+                if (tryClickSeatButton() || attempts >= maxAttempts) {
+                  clearInterval(interval);
+                  // If button never found, remove overlay and show page
+                  if (attempts >= maxAttempts) {
+                    var ov = document.querySelector('.lamako-loading-overlay');
+                    if (ov) ov.style.display = 'none';
+                  }
+                }
+              }, 500);
+            }
           }
-          // On cart page, add mobile-friendly styles and notify app
-          if ((window.location.href.indexOf('/cart') > -1 || window.location.href.indexOf('/panier') > -1) && window.location.href.indexOf('/checkout') === -1) {
+
+          // === CART PAGE: Mobile-friendly styles ===
+          if (isCartPage) {
             var cartStyle = document.createElement('style');
             cartStyle.textContent = 
-              'body { font-family: -apple-system, BlinkMacSystemFont, sans-serif !important; font-size: 15px !important; }' +
+              'body { font-size: 15px !important; }' +
               '.woocommerce-cart { padding: 12px !important; }' +
               'table.shop_table { font-size: 14px !important; }' +
-              '.checkout-button { font-size: 17px !important; padding: 14px !important; border-radius: 12px !important; }';
+              '.checkout-button, .wc-proceed-to-checkout a { font-size: 17px !important; padding: 14px 24px !important; border-radius: 12px !important; display: block !important; text-align: center !important; }';
             document.head.appendChild(cartStyle);
             if (window.ReactNativeWebView) {
               window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'checkout_loaded' }));
             }
           }
-          // On checkout pages, add mobile-friendly styles
-          if (window.location.href.indexOf('/checkout') > -1 || window.location.href.indexOf('/commande') > -1) {
+
+          // === CHECKOUT PAGE: Mobile-friendly styles ===
+          if (isCheckoutPage) {
             var checkoutStyle = document.createElement('style');
             checkoutStyle.textContent = 
-              'body { font-family: -apple-system, BlinkMacSystemFont, sans-serif !important; font-size: 15px !important; }' +
-              '.woocommerce-checkout, .woocommerce-cart { padding: 12px !important; }' +
+              'body { font-size: 15px !important; }' +
+              '.woocommerce-checkout { padding: 12px !important; }' +
               '.woocommerce-form-coupon-toggle { display: none !important; }' +
               'table.shop_table { font-size: 14px !important; }' +
               '#payment { margin-top: 16px !important; }' +
@@ -299,13 +406,15 @@ export default function EventDetailScreen() {
               window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'checkout_loaded' }));
             }
           }
-          // On order confirmation page
-          if (window.location.href.indexOf('order-received') > -1 || window.location.href.indexOf('commande-recue') > -1 || window.location.href.indexOf('thankyou') > -1) {
+
+          // === ORDER RECEIVED: Notify app of success ===
+          if (isOrderReceived) {
             if (window.ReactNativeWebView) {
               window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'order_confirmed' }));
             }
           }
         }
+
         if (document.readyState === 'complete') setTimeout(cleanup, 300);
         else window.addEventListener('load', function() { setTimeout(cleanup, 300); });
         // Also run on DOMContentLoaded for faster response

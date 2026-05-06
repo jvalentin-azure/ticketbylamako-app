@@ -939,3 +939,12 @@
 - [x] Removed getSeatingChartUrl dependency (no longer needed)
 - [x] PHP plugin synced with nested copy
 
+## V5.6 - Seating Chart Auto-Open (Hide page, show only image + auto-click button)
+
+- [x] Inject CSS to hide everything except featured image and seating chart button
+- [x] Auto-click the seating chart button after page loads (500ms delay, retries every 500ms up to 10s)
+- [x] User sees: skeleton → loading overlay with spinner → seating chart opens automatically
+- [x] Cart page: mobile-friendly styles applied
+- [x] Checkout page: mobile-friendly styles applied
+- [x] Order received: notifies app of success
+
