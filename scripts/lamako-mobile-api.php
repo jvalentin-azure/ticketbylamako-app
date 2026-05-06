@@ -3316,14 +3316,25 @@ function lamako_mobile_auto_login( WP_REST_Request $request ) {
     wp_set_current_user( $user_id );
     wp_set_auth_cookie( $user_id, true );
     
+    // CRITICAL: Hide admin bar for this session (even if user is admin)
+    // This prevents the seating chart from opening in edit mode
+    update_user_meta( $user_id, 'show_admin_bar_front', 'false' );
+    
     // Set a session cookie to identify this as a mobile app session
     // Used by woocommerce_get_return_url filter to detect mobile orders
     setcookie( 'lamako_mobile_session', '1', 0, COOKIEPATH, COOKIE_DOMAIN, is_ssl(), false );
+    
+    // Set a cookie to tell WordPress to hide admin bar on frontend
+    setcookie( 'lamako_hide_admin', '1', 0, COOKIEPATH, COOKIE_DOMAIN, is_ssl(), false );
 
     // Build the full redirect URL
     if ( strpos( $redirect, 'http' ) !== 0 ) {
         $redirect = home_url( $redirect );
     }
+    
+    // Add a query parameter to identify mobile app requests
+    $separator = ( strpos( $redirect, '?' ) !== false ) ? '&' : '?';
+    $redirect .= $separator . 'from_app=1';
 
     // Return a redirect response (HTML page that sets cookies then redirects)
     header( 'Content-Type: text/html; charset=utf-8' );
@@ -3335,3 +3346,167 @@ function lamako_mobile_auto_login( WP_REST_Request $request ) {
     echo '</head><body><p>Connexion en cours...</p></body></html>';
     exit;
 }
+
+/**
+ * ===== MOBILE APP FRONTEND CLEANUP =====
+ * When a page is loaded from the mobile app (via auto-login with from_app=1 or lamako_mobile_session cookie),
+ * hide all admin elements, notices, chat widgets, and force a clean customer-facing view.
+ */
+
+// Hide admin bar completely for mobile app sessions
+add_filter( 'show_admin_bar', function( $show ) {
+    if ( isset( $_COOKIE['lamako_mobile_session'] ) || isset( $_COOKIE['lamako_hide_admin'] ) || isset( $_GET['from_app'] ) ) {
+        return false;
+    }
+    return $show;
+}, 9999 );
+
+// Disable admin-related capabilities for mobile app sessions (prevent edit mode on seating charts)
+add_action( 'init', function() {
+    if ( isset( $_COOKIE['lamako_mobile_session'] ) || isset( $_COOKIE['lamako_hide_admin'] ) || isset( $_GET['from_app'] ) ) {
+        // Force hide admin bar
+        show_admin_bar( false );
+        
+        // Remove all admin notices
+        remove_all_actions( 'admin_notices' );
+        remove_all_actions( 'all_admin_notices' );
+    }
+}, 1 );
+
+// Inject CSS/JS to hide admin elements on frontend pages loaded from mobile app
+add_action( 'wp_head', function() {
+    if ( ! isset( $_COOKIE['lamako_mobile_session'] ) && ! isset( $_COOKIE['lamako_hide_admin'] ) && ! isset( $_GET['from_app'] ) ) {
+        return;
+    }
+    ?>
+    <style id="lamako-mobile-cleanup">
+        /* Hide admin bar */
+        #wpadminbar, .admin-bar-spacer { display: none !important; }
+        html.admin-bar { margin-top: 0 !important; }
+        body.admin-bar { margin-top: 0 !important; padding-top: 0 !important; }
+        
+        /* Hide ALL admin notices and plugin notifications */
+        .notice, .update-nag, .updated, .error, .is-dismissible,
+        .woocommerce-message, .woocommerce-error, .woocommerce-info:not(.wc-forward),
+        [class*="notice-"], [class*="nsl-"], [class*="jwt-"],
+        .wpbakery-notice, .vc_license-activation-notice,
+        .nextend-social-login-notice, .nsl-admin-notice,
+        div[class*="license"], div[class*="activation"],
+        .update-message, .plugin-update-tr,
+        .wp-header-end + *, /* catches notices after header */
+        .wrap > .notice, .wrap > .updated, .wrap > .error,
+        #jwt-auth-notice, .jwt-auth-notice,
+        div[data-dismissible], .is-dismissible,
+        .components-notice-list { display: none !important; }
+        
+        /* Hide Tickera admin edit toolbar (prevents edit mode) */
+        .tc_seat_chart_admin_toolbar, .tc_admin_toolbar, .tc-admin-bar,
+        .tc_seat_chart_edit_controls, [class*="tc_admin"],
+        .tc_chart_settings, .tc_chart_toolbar,
+        #tc_seat_chart_admin_toolbar, #tc_admin_toolbar,
+        .tc_seat_chart_wrap .tc_admin_toolbar,
+        [class*="chart-settings"], [class*="chart-toolbar"],
+        .tc_seat_chart_controls_admin { display: none !important; }
+        
+        /* Hide chat widgets */
+        [class*="tidio"], [id*="tidio"], [class*="chat-widget"],
+        [class*="crisp"], [id*="crisp"],
+        [class*="tawk"], [id*="tawk"],
+        .joinchat, [class*="whatsapp"], [id*="whatsapp"],
+        [class*="intercom"], [id*="intercom"],
+        iframe[title*="chat"], iframe[title*="Chat"],
+        div[class*="livechat"], div[id*="livechat"] { display: none !important; }
+        
+        /* Hide header, footer, navigation for clean mobile view */
+        header, .site-header, #masthead, .header-wrapper, .header-main,
+        .header-top, .header-bottom,
+        footer, .site-footer, #colophon, .footer-wrapper, .absolute-footer,
+        nav:not(.tc-nav):not(.woocommerce-pagination),
+        .breadcrumbs, .woocommerce-breadcrumb,
+        .sidebar, #sidebar, aside,
+        .related, .upsells, .cross-sells,
+        [class*="cookie"], [class*="consent"],
+        #fkcart-floating-toggler, .fkcart-main-wrapper { display: none !important; }
+        
+        /* Clean body */
+        body { margin-top: 0 !important; padding-top: 0 !important; 
+               font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important; }
+    </style>
+    <script>
+    // Remove Tickera admin capabilities from the page
+    (function() {
+        // Override Tickera's admin detection
+        if (typeof window.tc_admin !== 'undefined') window.tc_admin = false;
+        if (typeof window.TC_ADMIN !== 'undefined') window.TC_ADMIN = false;
+        if (typeof window.tc_is_admin !== 'undefined') window.tc_is_admin = false;
+        
+        // Wait for DOM and remove any admin toolbars that load dynamically
+        function removeAdminElements() {
+            var adminSelectors = [
+                '.tc_seat_chart_admin_toolbar', '.tc_admin_toolbar', '.tc-admin-bar',
+                '.tc_seat_chart_edit_controls', '[class*="tc_admin"]',
+                '.tc_chart_settings', '.tc_chart_toolbar',
+                '#tc_seat_chart_admin_toolbar', '#tc_admin_toolbar',
+                '.notice', '.update-nag', '.is-dismissible',
+                '[class*="nsl-"]', '[class*="jwt-"]', '.wpbakery-notice'
+            ];
+            adminSelectors.forEach(function(sel) {
+                document.querySelectorAll(sel).forEach(function(el) { el.remove(); });
+            });
+        }
+        
+        if (document.readyState === 'complete') {
+            setTimeout(removeAdminElements, 100);
+            setTimeout(removeAdminElements, 1000);
+            setTimeout(removeAdminElements, 3000);
+        } else {
+            window.addEventListener('load', function() {
+                setTimeout(removeAdminElements, 100);
+                setTimeout(removeAdminElements, 1000);
+                setTimeout(removeAdminElements, 3000);
+            });
+        }
+        
+        // MutationObserver to catch dynamically added admin elements
+        var observer = new MutationObserver(function(mutations) {
+            removeAdminElements();
+        });
+        if (document.body) {
+            observer.observe(document.body, { childList: true, subtree: true });
+            // Stop observing after 10 seconds to save performance
+            setTimeout(function() { observer.disconnect(); }, 10000);
+        } else {
+            document.addEventListener('DOMContentLoaded', function() {
+                observer.observe(document.body, { childList: true, subtree: true });
+                setTimeout(function() { observer.disconnect(); }, 10000);
+            });
+        }
+    })();
+    </script>
+    <?php
+}, 1 ); // Priority 1 = load very early
+
+// Also prevent Tickera from showing edit mode for mobile sessions
+add_filter( 'tc_seat_chart_is_admin', function( $is_admin ) {
+    if ( isset( $_COOKIE['lamako_mobile_session'] ) || isset( $_COOKIE['lamako_hide_admin'] ) || isset( $_GET['from_app'] ) ) {
+        return false;
+    }
+    return $is_admin;
+}, 9999 );
+
+// Prevent any capability check from returning true for seat chart editing in mobile sessions
+add_filter( 'user_has_cap', function( $allcaps, $caps, $args ) {
+    if ( ! isset( $_COOKIE['lamako_mobile_session'] ) && ! isset( $_COOKIE['lamako_hide_admin'] ) && ! isset( $_GET['from_app'] ) ) {
+        return $allcaps;
+    }
+    // Remove admin/editor capabilities that trigger edit mode in Tickera
+    $caps_to_remove = [
+        'manage_options', 'edit_posts', 'edit_pages', 'edit_others_posts',
+        'manage_tc_events', 'manage_tc_seat_charts', 'edit_tc_seat_charts',
+        'manage_woocommerce', 'edit_shop_orders',
+    ];
+    foreach ( $caps_to_remove as $cap ) {
+        $allcaps[ $cap ] = false;
+    }
+    return $allcaps;
+}, 9999, 3 );

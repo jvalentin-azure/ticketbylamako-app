@@ -264,20 +264,47 @@ export default function EventDetailScreen() {
           // === GLOBAL: Hide all non-essential elements on every page ===
           var globalStyle = document.createElement('style');
           globalStyle.textContent = 
+            /* Admin bar and admin notices */
+            '#wpadminbar, .admin-bar-spacer,' +
+            '.notice, .update-nag, .updated, .is-dismissible,' +
+            '.woocommerce-message, .woocommerce-info:not(.wc-forward),' +
+            '[class*="notice-"], [class*="nsl-"], [class*="jwt-"],' +
+            '.wpbakery-notice, .vc_license-activation-notice,' +
+            '.nextend-social-login-notice, .nsl-admin-notice,' +
+            'div[class*="license"], div[class*="activation"],' +
+            '#jwt-auth-notice, .jwt-auth-notice,' +
+            'div[data-dismissible], .components-notice-list,' +
+            /* Tickera admin toolbar (prevents edit mode UI) */
+            '.tc_seat_chart_admin_toolbar, .tc_admin_toolbar, .tc-admin-bar,' +
+            '.tc_seat_chart_edit_controls, [class*="tc_admin"],' +
+            '.tc_chart_settings, .tc_chart_toolbar,' +
+            '#tc_seat_chart_admin_toolbar, #tc_admin_toolbar,' +
+            '.tc_seat_chart_controls_admin,' +
+            /* Header, footer, nav */
             'header, .site-header, #masthead, .header-wrapper, .header-main, .header-top, .header-bottom,' +
             'footer, .site-footer, #colophon, .footer-wrapper, .absolute-footer,' +
-            'nav:not(.tc-nav):not(.woocommerce-pagination), .breadcrumbs, .woocommerce-breadcrumb, #wpadminbar,' +
+            'nav:not(.tc-nav):not(.woocommerce-pagination), .breadcrumbs, .woocommerce-breadcrumb,' +
             '.sidebar, #sidebar, aside,' +
+            /* Chat widgets */
             '[class*="whatsapp"], .joinchat, [id*="whatsapp"],' +
             '[class*="cookie"], [class*="consent"],' +
             '#fkcart-floating-toggler, .fkcart-main-wrapper,' +
             '[class*="tidio"], [id*="tidio"], [class*="chat-widget"],' +
             '[class*="crisp"], [id*="crisp"],' +
             '[class*="tawk"], [id*="tawk"],' +
+            '[class*="intercom"], [id*="intercom"],' +
+            'iframe[title*="chat"], iframe[title*="Chat"],' +
+            'div[class*="livechat"], div[id*="livechat"],' +
             '.related, .upsells, .cross-sells' +
             '{ display: none !important; }' +
+            'html.admin-bar { margin-top: 0 !important; }' +
+            'body.admin-bar { margin-top: 0 !important; padding-top: 0 !important; }' +
             'body { margin-top: 0 !important; padding-top: 0 !important; font-family: -apple-system, BlinkMacSystemFont, sans-serif !important; }' +
             '.tc_zoom_in, .tc_zoom_out, .tc-zoom-in, .tc-zoom-out, [class*="zoom"] { display: block !important; visibility: visible !important; }';
+          // Also override Tickera admin detection
+          if (typeof window.tc_admin !== 'undefined') window.tc_admin = false;
+          if (typeof window.TC_ADMIN !== 'undefined') window.TC_ADMIN = false;
+          if (typeof window.tc_is_admin !== 'undefined') window.tc_is_admin = false;
           document.head.appendChild(globalStyle);
 
           // === EVENT PAGE: Show only featured image + auto-click seating chart button ===
