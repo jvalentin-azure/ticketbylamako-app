@@ -217,11 +217,16 @@ export default function EventDetailScreen() {
       // Use auto-login URL to pre-authenticate the WebView session
       // This ensures the user is logged in for checkout (no login form exposed)
       const token = await getStoredToken();
+      // Add nocache parameter to bypass Cloudways Varnish/Redis cache
+      const nocache = `nocache=${Date.now()}`;
       if (token) {
-        const autoLoginUrl = `${SITE_URL}/wp-json/lamako-mobile/v1/auto-login?token=${encodeURIComponent(token)}&redirect=${encodeURIComponent(eventPageUrl)}`;
+        // The redirect URL will have from_app=1 added by the PHP endpoint
+        const redirectUrl = eventPageUrl + (eventPageUrl.includes('?') ? '&' : '?') + nocache;
+        const autoLoginUrl = `${SITE_URL}/wp-json/lamako-mobile/v1/auto-login?token=${encodeURIComponent(token)}&redirect=${encodeURIComponent(redirectUrl)}`;
         setSeatingChartUrl(autoLoginUrl);
       } else {
-        setSeatingChartUrl(eventPageUrl);
+        const directUrl = eventPageUrl + (eventPageUrl.includes('?') ? '&' : '?') + nocache + '&from_app=1';
+        setSeatingChartUrl(directUrl);
       }
       
       setShowSeatingChart(true);
@@ -330,6 +335,7 @@ export default function EventDetailScreen() {
               '.qode-event-image, [class*="featured-image"], [class*="event-image"]' +
               '{ display: block !important; width: 100% !important; height: auto !important; max-height: 250px !important; object-fit: cover !important; border-radius: 0 !important; margin: 0 !important; }' +
               /* Show the Tickera seating chart button */
+              '.tc_seating_map_button, button.tc_seating_map_button,' +
               '.tc_seat_chart_button, .tc_buy_tickets_button, [class*="tc_seat"], [class*="choose-seat"],' +
               'a[href*="seat"], button[class*="seat"], .tc_open_seat_chart,' +
               '.tc_event_buy_button, .tc_add_to_cart_button' +
@@ -338,7 +344,7 @@ export default function EventDetailScreen() {
               '.tc_seat_chart_wrap, .tc_seat_chart_modal, .tc_seat_chart_container,' +
               '#tc_seat_chart_modal, [class*="tc_seat_chart"], .tc-seat-chart,' +
               '.tc_seating_chart, #tc_seating_chart, .fancybox-overlay, .fancybox-wrap,' +
-              '.tc-modal, [id*="tc_seat"]' +
+              '.tc_seating_map, [class*="tc_seating_map_"], .tc-modal, [id*="tc_seat"]' +
               '{ display: block !important; visibility: visible !important; position: fixed !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; z-index: 99999 !important; }' +
               /* Loading indicator while waiting for auto-click */
               '.lamako-loading-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #fff; display: flex; align-items: center; justify-content: center; flex-direction: column; z-index: 9998; }' +
@@ -356,6 +362,8 @@ export default function EventDetailScreen() {
             // Auto-click the seating chart button
             function tryClickSeatButton() {
               var selectors = [
+                '.tc_seating_map_button',
+                'button.tc_seating_map_button',
                 '.tc_seat_chart_button',
                 '.tc_buy_tickets_button', 
                 '.tc_open_seat_chart',

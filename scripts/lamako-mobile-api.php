@@ -3336,14 +3336,12 @@ function lamako_mobile_auto_login( WP_REST_Request $request ) {
     $separator = ( strpos( $redirect, '?' ) !== false ) ? '&' : '?';
     $redirect .= $separator . 'from_app=1';
 
-    // Return a redirect response (HTML page that sets cookies then redirects)
-    header( 'Content-Type: text/html; charset=utf-8' );
-    echo '<!DOCTYPE html><html><head><meta charset="utf-8">';
-    echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
-    // Use esc_js() instead of esc_url() because esc_url() converts & to &#038;
-    // which breaks query parameters when used inside a JavaScript string
-    echo '<script>window.location.href = "' . esc_js( $redirect ) . '";</script>';
-    echo '</head><body><p>Connexion en cours...</p></body></html>';
+    // Use PHP header() redirect instead of JS redirect
+    // This ensures cookies (lamako_mobile_session, auth cookies) are sent in the same
+    // HTTP response as the redirect, so they are available when the browser loads the
+    // redirected page. JS redirect (window.location.href) was unreliable in WebView
+    // because the cookie might not be stored before the new page request.
+    header( 'Location: ' . $redirect, true, 302 );
     exit;
 }
 
@@ -3372,6 +3370,22 @@ add_action( 'init', function() {
         remove_all_actions( 'all_admin_notices' );
     }
 }, 1 );
+
+// Dequeue admin-only scripts and styles for mobile sessions
+add_action( 'wp_enqueue_scripts', function() {
+    if ( ! isset( $_COOKIE['lamako_mobile_session'] ) && ! isset( $_COOKIE['lamako_hide_admin'] ) && ! isset( $_GET['from_app'] ) ) {
+        return;
+    }
+    // Dequeue WPBakery/Visual Composer admin scripts
+    wp_dequeue_script( 'wpb_composer_front_js' );
+    wp_dequeue_style( 'js_composer_front' );
+    // Dequeue admin bar scripts
+    wp_dequeue_script( 'admin-bar' );
+    wp_dequeue_style( 'admin-bar' );
+    // Dequeue Nextend Social Login admin scripts
+    wp_dequeue_script( 'nsl-admin' );
+    wp_dequeue_style( 'nsl-admin' );
+}, 9999 );
 
 // Inject CSS/JS to hide admin elements on frontend pages loaded from mobile app
 add_action( 'wp_head', function() {
@@ -3406,7 +3420,22 @@ add_action( 'wp_head', function() {
         #tc_seat_chart_admin_toolbar, #tc_admin_toolbar,
         .tc_seat_chart_wrap .tc_admin_toolbar,
         [class*="chart-settings"], [class*="chart-toolbar"],
-        .tc_seat_chart_controls_admin { display: none !important; }
+        .tc_seat_chart_controls_admin,
+        /* Bridge for WooCommerce admin notices */
+        .bridge-for-woocommerce-notice, [class*="bridge-notice"],
+        /* WPBakery Visual Composer admin elements */
+        .vc_license-activation-notice, [class*="vc_"][class*="notice"],
+        #vc_license-activation-notice, .js-wpv-addon-update-message,
+        /* Nextend Social Login admin elements */
+        .nsl-admin-notice, [class*="nsl-admin"], .nsl-container-notice,
+        /* WordPress admin scripts output */
+        #wp-admin-bar-root-default, #adminmenuwrap, #adminmenuback,
+        /* Tickera admin-only elements in seating chart */
+        .tc-group-controls, .ui-rotatable-handle, .ui-resizable-handle { display: none !important; }
+        
+        /* Prevent draggable/resizable behavior on seating chart elements */
+        .tc-group-wrap { cursor: default !important; }
+        .ui-draggable-handle { cursor: default !important; }
         
         /* Hide chat widgets */
         [class*="tidio"], [id*="tidio"], [class*="chat-widget"],
@@ -3448,10 +3477,22 @@ add_action( 'wp_head', function() {
                 '.tc_chart_settings', '.tc_chart_toolbar',
                 '#tc_seat_chart_admin_toolbar', '#tc_admin_toolbar',
                 '.notice', '.update-nag', '.is-dismissible',
-                '[class*="nsl-"]', '[class*="jwt-"]', '.wpbakery-notice'
+                '[class*="nsl-"]', '[class*="jwt-"]', '.wpbakery-notice',
+                '.vc_license-activation-notice', '#vc_license-activation-notice',
+                '.bridge-for-woocommerce-notice', '[class*="bridge-notice"]',
+                '.nsl-admin-notice', '[class*="nsl-admin"]',
+                '#wpadminbar', '#adminmenuwrap', '#adminmenuback',
+                '.tc-group-controls', '.ui-rotatable-handle', '.ui-resizable-handle'
             ];
             adminSelectors.forEach(function(sel) {
                 document.querySelectorAll(sel).forEach(function(el) { el.remove(); });
+            });
+            // Also remove draggable/resizable classes from seating chart elements
+            document.querySelectorAll('.ui-draggable').forEach(function(el) {
+                el.classList.remove('ui-draggable');
+            });
+            document.querySelectorAll('.ui-draggable-handle').forEach(function(el) {
+                el.classList.remove('ui-draggable-handle');
             });
         }
         

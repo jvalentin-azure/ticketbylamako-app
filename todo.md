@@ -948,3 +948,24 @@
 - [x] Checkout page: mobile-friendly styles applied
 - [x] Order received: notifies app of success
 
+## V5.7 - CRITICAL: Event Page Elements Hidden + Admin Suppression Fix
+
+### Root Cause
+- lamako-mobile-api.php on server was TRUNCATED (3260 lines vs 3512 local) - admin suppression hooks never deployed
+- Auto-login used JS redirect (window.location.href) which didn't reliably set cookies before page load
+- Seating chart button selector was `.tc_seat_chart_button` but actual class is `.tc_seating_map_button`
+
+### Fixes Applied
+- [x] Fix: Add `.tc_seating_map_button` as FIRST selector in CSS whitelist (show button)
+- [x] Fix: Add `.tc_seating_map_button` as FIRST selector in auto-click JS (click the correct button)
+- [x] Fix: Add `.tc_seating_map` and `[class*="tc_seating_map_"]` to popup CSS selectors
+- [x] Fix: Change auto-login redirect from JS (window.location.href) to PHP header('Location:') for reliable cookie timing
+- [x] Fix: Add nocache parameter to bypass Cloudways Varnish/Redis cache
+- [x] Fix: Deploy FULL plugin file to server (was truncated, missing admin suppression hooks)
+- [x] Fix: Strengthen admin hiding CSS (WPBakery, Nextend Social Login, Bridge notices, draggable handles)
+- [x] Fix: Add wp_enqueue_scripts hook to dequeue admin-only scripts for mobile sessions
+- [x] Fix: Add more selectors to JS removeAdminElements (VC notices, NSL admin, draggable classes)
+- [x] Verified: lamako-mobile-cleanup CSS injected on from_app=1 pages ✓
+- [x] Verified: No admin bar HTML rendered ✓
+- [x] Verified: .tc_seating_map_button present on event page ✓
+
