@@ -290,8 +290,9 @@ export default function EventDetailScreen() {
             'footer, .site-footer, #colophon, .footer-wrapper, .absolute-footer,' +
             'nav:not(.tc-nav):not(.woocommerce-pagination), .breadcrumbs, .woocommerce-breadcrumb,' +
             '.sidebar, #sidebar, aside,' +
-            /* Chat widgets */
+            /* Chat widgets - including qlwapp WhatsApp */
             '[class*="whatsapp"], .joinchat, [id*="whatsapp"],' +
+            '.qlwapp-toggle, .qlwapp-box, .qlwapp-container, #qlwapp, [id*="qlwapp"], [class*="qlwapp"],' +
             '[class*="cookie"], [class*="consent"],' +
             '#fkcart-floating-toggler, .fkcart-main-wrapper,' +
             '[class*="tidio"], [id*="tidio"], [class*="chat-widget"],' +
@@ -334,18 +335,21 @@ export default function EventDetailScreen() {
               'img.wp-post-image, .entry-thumbnail, .single-post-thumbnail,' +
               '.qode-event-image, [class*="featured-image"], [class*="event-image"]' +
               '{ display: block !important; width: 100% !important; height: auto !important; max-height: 250px !important; object-fit: cover !important; border-radius: 0 !important; margin: 0 !important; }' +
+              /* Show the gt-inline-tickets section (contains the correct seating chart button) */
+              '.gt-inline-tickets, #gt-inline-tickets' +
+              '{ display: block !important; visibility: visible !important; }' +
               /* Show the Tickera seating chart button */
               '.tc_seating_map_button, button.tc_seating_map_button,' +
-              '.tc_seat_chart_button, .tc_buy_tickets_button, [class*="tc_seat"], [class*="choose-seat"],' +
-              'a[href*="seat"], button[class*="seat"], .tc_open_seat_chart,' +
+              '.tc_seat_chart_button, .tc_buy_tickets_button, [class*="choose-seat"],' +
+              'button[class*="seat"], .tc_open_seat_chart,' +
               '.tc_event_buy_button, .tc_add_to_cart_button' +
               '{ display: block !important; visibility: visible !important; margin: 16px auto !important; padding: 14px 24px !important; font-size: 17px !important; font-weight: 600 !important; text-align: center !important; border-radius: 12px !important; }' +
-              /* Show the Tickera seating chart popup/modal when opened */
+              /* Show the Tickera seating chart popup/modal when opened - DO NOT force position:fixed, let Tickera handle its own layout */
               '.tc_seat_chart_wrap, .tc_seat_chart_modal, .tc_seat_chart_container,' +
               '#tc_seat_chart_modal, [class*="tc_seat_chart"], .tc-seat-chart,' +
               '.tc_seating_chart, #tc_seating_chart, .fancybox-overlay, .fancybox-wrap,' +
               '.tc_seating_map, [class*="tc_seating_map_"], .tc-modal, [id*="tc_seat"]' +
-              '{ display: block !important; visibility: visible !important; position: fixed !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; z-index: 99999 !important; }' +
+              '{ display: block !important; visibility: visible !important; z-index: 99999 !important; }' +
               /* Loading indicator while waiting for auto-click */
               '.lamako-loading-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #fff; display: flex; align-items: center; justify-content: center; flex-direction: column; z-index: 9998; }' +
               '.lamako-loading-spinner { width: 40px; height: 40px; border: 3px solid #e5e7eb; border-top-color: #c79f6c; border-radius: 50%; animation: spin 0.8s linear infinite; }' +
@@ -360,31 +364,46 @@ export default function EventDetailScreen() {
             document.body.appendChild(overlay);
 
             // Auto-click the seating chart button
+            // IMPORTANT: Target the button in .gt-inline-tickets FIRST (this is the correct chart for the event)
+            // The page may have multiple seating chart buttons from copied content (wrong charts)
             function tryClickSeatButton() {
-              var selectors = [
-                '.tc_seating_map_button',
-                'button.tc_seating_map_button',
+              // Priority 1: Button inside gt-inline-tickets (always the correct one for this event)
+              var correctBtn = document.querySelector('.gt-inline-tickets .tc_seating_map_button');
+              if (correctBtn) {
+                var ov = document.querySelector('.lamako-loading-overlay');
+                if (ov) ov.style.display = 'none';
+                correctBtn.click();
+                if (window.ReactNativeWebView) {
+                  window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'seat_chart_opened' }));
+                }
+                return true;
+              }
+              // Priority 2: Last tc_seating_map_button on page (gt-inline-tickets is usually at the bottom)
+              var allBtns = document.querySelectorAll('.tc_seating_map_button');
+              if (allBtns.length > 0) {
+                var btn = allBtns[allBtns.length - 1]; // Last button is usually the correct one
+                var ov = document.querySelector('.lamako-loading-overlay');
+                if (ov) ov.style.display = 'none';
+                btn.click();
+                if (window.ReactNativeWebView) {
+                  window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'seat_chart_opened' }));
+                }
+                return true;
+              }
+              // Priority 3: Any other seat-related button
+              var fallbackSelectors = [
                 '.tc_seat_chart_button',
-                '.tc_buy_tickets_button', 
+                '.tc_buy_tickets_button',
                 '.tc_open_seat_chart',
                 '.tc_event_buy_button',
-                'a[href*="seat-chart"]',
-                'a[href*="seat_chart"]',
-                '.tc_add_to_cart_button',
-                'a[class*="tc_seat"]',
-                'button[class*="seat"]',
-                '.tc_event_content a.button',
-                '.tc_event_content .btn',
-                'a[href*="choose"]'
+                'button[class*="seat"]'
               ];
-              for (var i = 0; i < selectors.length; i++) {
-                var btn = document.querySelector(selectors[i]);
-                if (btn) {
-                  // Remove overlay
+              for (var i = 0; i < fallbackSelectors.length; i++) {
+                var fbBtn = document.querySelector(fallbackSelectors[i]);
+                if (fbBtn) {
                   var ov = document.querySelector('.lamako-loading-overlay');
                   if (ov) ov.style.display = 'none';
-                  // Click the button
-                  btn.click();
+                  fbBtn.click();
                   if (window.ReactNativeWebView) {
                     window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'seat_chart_opened' }));
                   }

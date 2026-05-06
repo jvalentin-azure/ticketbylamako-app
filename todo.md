@@ -969,3 +969,25 @@
 - [x] Verified: No admin bar HTML rendered ✓
 - [x] Verified: .tc_seating_map_button present on event page ✓
 
+## V5.8 - CRITICAL: Wrong Seating Chart + Frozen Page
+
+### Bugs Reported
+- [x] Fix: Wrong seating chart displayed - auto-click now targets .gt-inline-tickets button FIRST (correct chart for event)
+- [x] Fix: Page is frozen/stuck - removed position:fixed CSS on seating chart popup, let Tickera handle its own layout
+- [x] Fix: Prices displayed are incorrect - correct chart (12683) now loads instead of old chart (6946)
+- [x] Fix: Chat widget ("Comment puis-je vous aider?") still visible - added qlwapp selectors to CSS + JS removal
+
+### Root Cause
+- Event page had 4 seating chart buttons: 2 for chart 6946 (old/wrong) + 2 for chart 12683 (correct)
+- JS was clicking the FIRST button found (.tc_seating_map_button) which was the wrong chart
+- CSS forced position:fixed on the popup which broke all interaction
+- qlwapp WhatsApp widget was not being hidden
+
+### Fix Applied
+- App JS: Priority 1 = .gt-inline-tickets .tc_seating_map_button (always correct chart)
+- App JS: Priority 2 = Last button on page (fallback)
+- App CSS: Removed position:fixed on seating chart popup
+- App CSS: Added qlwapp selectors to global hide
+- PHP: Added .qlwapp selectors to CSS + JS removeAdminElements
+- PHP: Deployed to new server (139.84.234.183, user master_nqpwygdfqp)
+

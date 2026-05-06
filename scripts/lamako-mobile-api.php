@@ -3437,7 +3437,9 @@ add_action( 'wp_head', function() {
         .tc-group-wrap { cursor: default !important; }
         .ui-draggable-handle { cursor: default !important; }
         
-        /* Hide chat widgets */
+        /* Hide chat widgets - especially qlwapp WhatsApp */
+        .qlwapp, [class*="qlwapp"], [id*="qlwapp"],
+        .qlwapp-toggle, .qlwapp-box, .qlwapp-container,
         [class*="tidio"], [id*="tidio"], [class*="chat-widget"],
         [class*="crisp"], [id*="crisp"],
         [class*="tawk"], [id*="tawk"],
@@ -3482,7 +3484,9 @@ add_action( 'wp_head', function() {
                 '.bridge-for-woocommerce-notice', '[class*="bridge-notice"]',
                 '.nsl-admin-notice', '[class*="nsl-admin"]',
                 '#wpadminbar', '#adminmenuwrap', '#adminmenuback',
-                '.tc-group-controls', '.ui-rotatable-handle', '.ui-resizable-handle'
+                '.tc-group-controls', '.ui-rotatable-handle', '.ui-resizable-handle',
+                '.qlwapp', '[class*="qlwapp"]', '[id*="qlwapp"]',
+                '#qlwapp-toggle', '.qlwapp-toggle'
             ];
             adminSelectors.forEach(function(sel) {
                 document.querySelectorAll(sel).forEach(function(el) { el.remove(); });
