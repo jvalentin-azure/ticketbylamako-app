@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth-provider";
 import { useThemeContext } from "@/lib/theme-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { LinearGradient } from "expo-linear-gradient";
+import { buildLamakoWhatsAppUrl } from "@/lib/contact";
 
 interface DrawerContentProps {
   onClose?: () => void;
@@ -43,7 +44,7 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
   };
 
   const openWhatsApp = () => {
-    const url = "https://wa.me/261340559099";
+    const url = buildLamakoWhatsAppUrl("Bonjour, je vous contacte depuis l'application TicketByLamako.");
     Linking.openURL(url).catch(() => {});
   };
 

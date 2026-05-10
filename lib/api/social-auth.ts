@@ -1,4 +1,4 @@
-import { Platform } from "react-native";
+﻿import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
@@ -7,6 +7,7 @@ import { User, getStoredToken } from "./auth";
 const SITE_URL = process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
 const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || "";
 const FACEBOOK_APP_ID = process.env.EXPO_PUBLIC_FACEBOOK_APP_ID || "";
+const SITE_URL_BASE = SITE_URL.replace(/\/$/, "");
 
 const TOKEN_KEY = "jwt_token";
 const USER_KEY = "user_data";
@@ -74,7 +75,7 @@ export async function socialLogin(
   const data: SocialLoginResponse = await res.json();
 
   if (!data.success || !data.token) {
-    throw new Error(data.message || "Échec de l'authentification");
+    throw new Error(data.message || "Ã‰chec de l'authentification");
   }
 
   // Store JWT token
@@ -140,80 +141,50 @@ async function generateCodeChallenge(verifier: string): Promise<string> {
 }
 
 /**
- * Google Sign-In using OAuth2 Authorization Code flow with PKCE.
- * This is the recommended approach for mobile apps (implicit flow is deprecated).
+ * Google Sign-In through a HTTPS callback page.
+ * Google web OAuth clients only accept http/https redirect URIs, so WordPress
+ * receives the HTTPS redirect and forwards the fragment back to the app.
  */
 export async function startGoogleLogin(): Promise<{ token: string; email?: string; name?: string; firstName?: string; lastName?: string } | null> {
   if (!GOOGLE_CLIENT_ID) {
     throw new Error("Google Client ID non configuré");
   }
 
-  // Use the app scheme for redirect
-  const redirectUri = Linking.createURL("oauth/google-callback");
+  const appRedirectUri = Linking.createURL("oauth/google-callback");
+  const webRedirectUri = `${SITE_URL_BASE}/lamako-mobile/oauth/google-callback`;
   const state = Math.random().toString(36).substring(7);
 
-  // Generate PKCE code verifier and challenge
-  const codeVerifier = generateCodeVerifier();
-  const codeChallenge = await generateCodeChallenge(codeVerifier);
-
-  // Use authorization code flow with PKCE (not implicit flow)
   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
     `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}` +
-    `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-    `&response_type=code` +
+    `&redirect_uri=${encodeURIComponent(webRedirectUri)}` +
+    `&response_type=token` +
     `&scope=${encodeURIComponent("openid email profile")}` +
     `&state=${state}` +
-    `&code_challenge=${encodeURIComponent(codeChallenge)}` +
-    `&code_challenge_method=S256` +
-    `&access_type=offline` +
     `&prompt=select_account`;
 
-  const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+  const result = await WebBrowser.openAuthSessionAsync(authUrl, appRedirectUri);
 
   if (result.type === "success" && result.url) {
-    // Parse the authorization code from the URL
     const url = new URL(result.url);
-    const code = url.searchParams.get("code") || new URLSearchParams(url.hash.substring(1)).get("code");
+    const fragment = url.hash.substring(1);
+    const params = new URLSearchParams(fragment || url.search.substring(1));
+    const accessToken = params.get("access_token");
 
-    if (code) {
-      // Exchange code for tokens using Google's token endpoint
+    if (accessToken) {
       try {
-        const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({
-            client_id: GOOGLE_CLIENT_ID,
-            code,
-            code_verifier: codeVerifier,
-            grant_type: "authorization_code",
-            redirect_uri: redirectUri,
-          }).toString(),
+        const userInfoRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+          headers: { Authorization: `Bearer ${accessToken}` },
         });
-
-        const tokenData = await tokenRes.json();
-
-        if (tokenData.access_token) {
-          // Get user info from Google
-          const userInfoRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
-            headers: { Authorization: `Bearer ${tokenData.access_token}` },
-          });
-          const userInfo = await userInfoRes.json();
-          return {
-            token: tokenData.access_token,
-            email: userInfo.email,
-            name: userInfo.name,
-            firstName: userInfo.given_name,
-            lastName: userInfo.family_name,
-          };
-        } else if (tokenData.id_token) {
-          // Fallback: use id_token if access_token not available
-          return { token: tokenData.id_token };
-        } else {
-          console.warn("Google token exchange failed:", tokenData);
-          throw new Error(tokenData.error_description || "Échec de l'échange de code Google");
-        }
+        const userInfo = await userInfoRes.json();
+        return {
+          token: accessToken,
+          email: userInfo.email,
+          name: userInfo.name,
+          firstName: userInfo.given_name,
+          lastName: userInfo.family_name,
+        };
       } catch (e: any) {
-        console.warn("Google token exchange error:", e);
+        console.warn("Google userinfo error:", e);
         throw new Error(e.message || "Erreur lors de l'authentification Google");
       }
     }
@@ -221,7 +192,6 @@ export async function startGoogleLogin(): Promise<{ token: string; email?: strin
 
   return null;
 }
-
 /**
  * Apple Sign-In using the native Apple Authentication module.
  */
@@ -262,20 +232,21 @@ export async function startAppleLogin(): Promise<{ token: string; email?: string
  */
 export async function startFacebookLogin(): Promise<{ token: string; email?: string; name?: string } | null> {
   if (!FACEBOOK_APP_ID) {
-    throw new Error("Facebook App ID non configuré");
+    throw new Error("Facebook App ID non configurÃ©");
   }
 
-  const redirectUri = Linking.createURL("oauth/facebook-callback");
+  const appRedirectUri = Linking.createURL("oauth/facebook-callback");
+  const webRedirectUri = `${SITE_URL_BASE}/lamako-mobile/oauth/facebook-callback`;
   const state = Math.random().toString(36).substring(7);
 
   const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?` +
     `client_id=${encodeURIComponent(FACEBOOK_APP_ID)}` +
-    `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+    `&redirect_uri=${encodeURIComponent(webRedirectUri)}` +
     `&response_type=token` +
     `&scope=${encodeURIComponent("email,public_profile")}` +
     `&state=${state}`;
 
-  const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+  const result = await WebBrowser.openAuthSessionAsync(authUrl, appRedirectUri);
 
   if (result.type === "success" && result.url) {
     const url = new URL(result.url);
@@ -301,3 +272,4 @@ export async function startFacebookLogin(): Promise<{ token: string; email?: str
 
   return null;
 }
+

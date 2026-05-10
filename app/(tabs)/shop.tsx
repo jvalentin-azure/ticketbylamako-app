@@ -5,7 +5,7 @@ import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { getShopData, getShopProducts, getShopCategories, type WCProduct, type WCCategory } from "@/lib/api/woocommerce";
+import { getShopData, type WCProduct, type WCCategory } from "@/lib/api/catalog";
 import { formatAriary, decodeHtmlEntities } from "@/lib/format";
 import { useFavorites } from "@/lib/favorites-provider";
 import { PointsBadge } from "@/components/points-badge";
@@ -116,7 +116,7 @@ export default function ShopScreen() {
       </View>
 
       {/* Category Chips */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsContainer}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroller} contentContainerStyle={styles.chipsContainer}>
         <TouchableOpacity
           onPress={() => setSelectedCat(null)}
           style={[styles.chip, {
@@ -152,6 +152,7 @@ export default function ShopScreen() {
           data={filtered}
           numColumns={2}
           columnWrapperStyle={styles.columnWrapper}
+          contentContainerStyle={styles.productListContent}
           keyExtractor={item => String(item.id)}
           renderItem={renderProduct}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.primary} />}
@@ -169,15 +170,17 @@ export default function ShopScreen() {
 }
 
 const styles = StyleSheet.create({
-  headerRow: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
+  headerRow: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 },
   headerTitle: { fontSize: 22, fontWeight: "700" },
-  searchBar: { marginHorizontal: 16, marginBottom: 4, flexDirection: "row", alignItems: "center", borderRadius: 12, paddingHorizontal: 12, borderWidth: 1 },
+  searchBar: { marginHorizontal: 16, marginBottom: 0, flexDirection: "row", alignItems: "center", borderRadius: 12, paddingHorizontal: 12, borderWidth: 1 },
   searchInput: { flex: 1, paddingVertical: 8, paddingHorizontal: 8, fontSize: 15 },
-  chipsContainer: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 10, gap: 8, flexDirection: "row", alignItems: "center" },
+  chipsScroller: { flexGrow: 0, height: 48, maxHeight: 48 },
+  chipsContainer: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8, gap: 8, flexDirection: "row", alignItems: "center" },
   chip: { height: 32, paddingHorizontal: 14, borderRadius: 16, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   chipText: { fontSize: 13, fontWeight: "600", lineHeight: 16 },
   loadingContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
   columnWrapper: { paddingHorizontal: 16, gap: 12 },
+  productListContent: { paddingTop: 4, paddingBottom: 24 },
   productCard: { width: CARD_W, borderRadius: 14, overflow: "hidden", borderWidth: 1, marginBottom: 12 },
   productBody: { padding: 10 },
   productName: { fontSize: 13, fontWeight: "600" },

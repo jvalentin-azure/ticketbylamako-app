@@ -1,4 +1,31 @@
+import { mobileV2Fetch } from "./mobile";
+import type {
+  EventCategory,
+  MobileFields,
+  OrderTicketsResponse,
+  TCEvent,
+  TicketInstance,
+  TicketType,
+  WCCategory,
+  WCOrder,
+  WCProduct,
+} from "@/lib/types/commerce";
+
+export type {
+  EventCategory,
+  MobileFields,
+  OrderTicketsResponse,
+  TCEvent,
+  TicketInstance,
+  TicketType,
+  WCCategory,
+  WCOrder,
+  WCProduct,
+} from "@/lib/types/commerce";
+
 export const SITE_URL = process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
+// Legacy v1 data layer. These public WooCommerce credentials are retained only
+// until screens migrate to JWT-authenticated lamako-mobile/v2 endpoints.
 const CK = process.env.EXPO_PUBLIC_WC_CONSUMER_KEY || "";
 const CS = process.env.EXPO_PUBLIC_WC_CONSUMER_SECRET || "";
 
@@ -17,6 +44,10 @@ function getCached<T>(key: string): T | null {
 
 function setCache(key: string, data: any): void {
   memoryCache[key] = { data, timestamp: Date.now() };
+}
+
+function hasLegacyWooCommerceCredentials(): boolean {
+  return Boolean(CK && CS);
 }
 
 export function invalidateCache(key?: string): void {
@@ -42,6 +73,9 @@ function wpUrl(endpoint: string, params: Record<string, string> = {}): string {
 }
 
 async function wcFetch<T>(endpoint: string, params: Record<string, string> = {}): Promise<T> {
+  if (!hasLegacyWooCommerceCredentials()) {
+    throw new Error("Legacy WooCommerce REST credentials are unavailable in this mobile build");
+  }
   const res = await fetch(wcUrl(endpoint, params));
   if (!res.ok) throw new Error(`WC API error: ${res.status}`);
   return res.json();
@@ -61,9 +95,21 @@ function mobileApiUrl(endpoint: string, params: Record<string, string> = {}): st
   return url.toString();
 }
 
+function mobilePublicApiUrl(endpoint: string, params: Record<string, string> = {}): string {
+  const url = new URL(`${SITE_URL}/wp-json/lamako-mobile/v1/${endpoint}`);
+  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+  return url.toString();
+}
+
 async function mobileApiFetch<T>(endpoint: string, params: Record<string, string> = {}): Promise<T> {
   const res = await fetch(mobileApiUrl(endpoint, params));
   if (!res.ok) throw new Error(`Mobile API error: ${res.status}`);
+  return res.json();
+}
+
+async function mobilePublicApiFetch<T>(endpoint: string, params: Record<string, string> = {}): Promise<T> {
+  const res = await fetch(mobilePublicApiUrl(endpoint, params));
+  if (!res.ok) throw new Error(`Mobile public API error: ${res.status}`);
   return res.json();
 }
 
@@ -122,8 +168,8 @@ export interface CreateOrderResponse {
 }
 
 /**
- * Create a pending WC order from app cart items.
- * Returns a "pay for order" URL that works without session cookies.
+ * @deprecated Legacy v1 write path. Production checkout must use
+ * createMobileCheckout from lamako-mobile/v2 so writes are server-validated.
  */
 export async function createOrder(
   items: CreateOrderItem[],
@@ -163,32 +209,6 @@ export async function registerPushToken(
     console.warn('Failed to register push token with server:', error);
     return { success: false, message: String(error) };
   }
-}
-
-// ---- Ticket Instance Types ----
-
-export interface TicketInstance {
-  instance_id: number;
-  ticket_code: string;
-  product_name: string;
-  product_id: number;
-  price: number;
-  seat_label: string;
-  seat_id: string;
-  event_id: number;
-  event_name: string;
-  event_date: string;
-  event_location: string;
-}
-
-export interface OrderTicketsResponse {
-  order_id: number;
-  order_status: string;
-  order_date: string;
-  billing_name: string;
-  billing_email: string;
-  total: string;
-  tickets: TicketInstance[];
 }
 
 /**
@@ -290,116 +310,6 @@ export function extractTicketsFromOrder(order: WCOrder): TicketInstance[] {
   return tickets;
 }
 
-// ---- Types ----
-
-export interface WCProduct {
-  id: number;
-  name: string;
-  slug: string;
-  permalink: string;
-  price: string;
-  regular_price: string;
-  sale_price: string;
-  description: string;
-  short_description: string;
-  images: { id: number; src: string; alt: string }[];
-  categories: { id: number; name: string; slug: string }[];
-  stock_status: string;
-  type: string;
-  meta_data: { key: string; value: any }[];
-  date_created: string;
-  variations?: number[];
-  attributes?: { id: number; name: string; position: number; visible: boolean; variation: boolean; options: string[] }[];
-}
-
-export interface WCOrder {
-  id: number;
-  status: string;
-  total: string;
-  subtotal?: string;
-  total_tax?: string;
-  discount_total?: string;
-  shipping_total?: string;
-  currency: string;
-  date_created: string;
-  date_completed?: string;
-  date_paid?: string;
-  payment_method?: string;
-  payment_method_title?: string;
-  transaction_id?: string;
-  customer_note?: string;
-  billing: { first_name: string; last_name: string; email: string; phone: string; address_1?: string; city?: string; country?: string };
-  shipping?: { first_name: string; last_name: string; address_1?: string; city?: string; country?: string };
-  line_items: { id: number; name: string; quantity: number; total: string; subtotal?: string; price?: number; product_id: number; sku?: string; meta_data: { key: string; value: any }[] }[];
-  meta_data: { key: string; value: any }[];
-  number?: string;
-}
-
-export interface WCCategory {
-  id: number;
-  name: string;
-  slug: string;
-  count: number;
-  image: { src: string } | null;
-  parent: number;
-}
-
-/**
- * Tickera Event (from wp/v2/tc_events endpoint).
- * Events are WordPress custom post type, NOT WooCommerce products.
- * Ticket products (WC products) link to events via _event_name meta.
- */
-export interface MobileFields {
-  description: string | null;
-  gallery: string[] | null;
-  practical_info: { label: string; value: string }[] | null;
-  event_date_time?: string | null;
-  event_end_date_time?: string | null;
-  event_location?: string | null;
-  event_terms?: string | null;
-  event_logo?: string | null;
-  sponsors_logo?: string | null;
-}
-
-export interface TCEvent {
-  id: number;
-  date: string;
-  slug: string;
-  status: string;
-  title: { rendered: string };
-  content: { rendered: string };
-  featured_media: number;
-  event_category: number[];
-  link: string;
-  // Populated from _embed
-  featuredImage?: string;
-  categoryNames?: string[];
-  // Mobile-specific fields from lamako-mobile-fields plugin
-  mobileFields?: MobileFields;
-  // Computed from ticket products
-  tickets?: TicketType[];
-  minPrice?: number;
-  maxPrice?: number;
-  hasSeatingChart?: boolean;
-}
-
-export interface TicketType {
-  id: number;
-  name: string;
-  price: string;
-  stock_status: string;
-  usesSeating: boolean;
-  eventId: string;
-}
-
-export interface EventCategory {
-  id: number;
-  name: string;
-  slug: string;
-  count: number;
-  parent: number;
-}
-
 // ---- API Functions ----
 
 export async function getProducts(params: Record<string, string> = {}): Promise<WCProduct[]> {
@@ -407,7 +317,12 @@ export async function getProducts(params: Record<string, string> = {}): Promise<
 }
 
 export async function getProduct(id: number): Promise<WCProduct> {
-  return wcFetch<WCProduct>(`products/${id}`);
+  try {
+    return await mobileV2Fetch<WCProduct>(`public/products/${id}`, { requireAuth: false });
+  } catch (error) {
+    if (!hasLegacyWooCommerceCredentials()) throw error;
+    return wcFetch<WCProduct>(`products/${id}`);
+  }
 }
 
 export async function getCategories(): Promise<WCCategory[]> {
@@ -517,6 +432,9 @@ export async function getEventTickets(eventId: number): Promise<TicketType[]> {
   } catch {}
   
   // Slow fallback: fetch all WC products (only if event not found in events-data)
+  if (!hasLegacyWooCommerceCredentials()) {
+    return [];
+  }
   const products = await getProducts({ per_page: "100" });
   return products
     .filter(p => {
@@ -539,6 +457,11 @@ export async function getEventTickets(eventId: number): Promise<TicketType[]> {
  * This combines tc_events with their WC ticket products.
  */
 export async function getEventsWithTickets(): Promise<TCEvent[]> {
+  if (!hasLegacyWooCommerceCredentials()) {
+    const { events } = await getEventsData();
+    return events;
+  }
+
   const [events, products] = await Promise.all([
     getTCEvents(),
     getProducts({ per_page: "100" }),
@@ -634,7 +557,7 @@ export function isTicketProduct(product: WCProduct): boolean {
  * Shop products are in Boutique categories or any product without _tc_is_ticket.
  */
 export async function getShopProducts(params: Record<string, string> = {}): Promise<WCProduct[]> {
-  const products = await getProducts({ per_page: "50", ...params });
+  const products = (await getShopData()).products;
   return products.filter(p => !isTicketProduct(p));
 }
 
@@ -642,7 +565,7 @@ export async function getShopProducts(params: Record<string, string> = {}): Prom
  * Get shop categories (Boutique – Goodies, Boutique – Livres, etc.)
  */
 export async function getShopCategories(): Promise<WCCategory[]> {
-  const cats = await getCategories();
+  const cats = (await getShopData()).categories;
   return cats.filter(c =>
     c.slug.startsWith("boutique-") ||
     c.parent === 123 || // Goodies children
@@ -662,7 +585,7 @@ export async function getShopData(): Promise<{ products: WCProduct[]; categories
   const cached = getCached<{ products: WCProduct[]; categories: WCCategory[] }>('shop-data');
   if (cached) return cached;
   try {
-    const raw = await mobileApiFetch<any>('shop-data');
+    const raw = await mobileV2Fetch<any>('public/shop-data', { requireAuth: false });
     const products: WCProduct[] = (raw.products || []).map((p: any) => ({
       id: p.id,
       name: p.name,
@@ -692,14 +615,54 @@ export async function getShopData(): Promise<{ products: WCProduct[]; categories
     setCache('shop-data', result);
     return result;
   } catch (error) {
-    console.warn('Combined shop-data endpoint failed, falling back to separate calls:', error);
-    const [products, categories] = await Promise.all([
-      getShopProducts({ per_page: "50" }),
-      getShopCategories(),
-    ]);
-    const result = { products, categories };
-    setCache('shop-data', result);
-    return result;
+    console.warn('v2 shop-data endpoint failed, trying legacy public endpoint:', error);
+    try {
+      const raw = await mobilePublicApiFetch<any>('shop-data');
+      const products: WCProduct[] = (raw.products || []).map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        slug: p.slug,
+        permalink: '',
+        price: String(p.price || '0'),
+        regular_price: String(p.regular_price || ''),
+        sale_price: String(p.sale_price || ''),
+        description: '',
+        short_description: '',
+        images: (p.images || []).map((img: any) => ({ id: 0, src: img.src || '', alt: '' })),
+        categories: (p.categories || []).map((c: any) => ({ id: c.id, name: c.name, slug: c.slug || '' })),
+        stock_status: p.stock_status || 'instock',
+        type: 'simple',
+        meta_data: [],
+        date_created: '',
+      }));
+      const categories: WCCategory[] = (raw.categories || []).map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        slug: c.slug,
+        count: c.count || 0,
+        image: null,
+        parent: c.parent || 0,
+      }));
+      const result = { products, categories };
+      setCache('shop-data', result);
+      return result;
+    } catch (legacyError) {
+      if (!hasLegacyWooCommerceCredentials()) throw legacyError;
+      const [products, categories] = await Promise.all([
+        getProducts({ per_page: "50" }).then(items => items.filter(p => !isTicketProduct(p))),
+        getCategories().then(cats => cats.filter(c =>
+          c.slug.startsWith("boutique-") ||
+          c.parent === 123 ||
+          c.parent === 124 ||
+          c.parent === 125 ||
+          c.parent === 126 ||
+          c.parent === 127
+        )),
+      ]);
+      const result = { products, categories };
+      setCache('shop-data', result);
+      return result;
+    }
   }
 }
 
@@ -748,7 +711,7 @@ export async function getHomeData(): Promise<HomeDataResponse> {
   const cached = getCached<HomeDataResponse>('home-data');
   if (cached) return cached;
   try {
-    const raw = await mobileApiFetch<any>('home-data');
+    const raw = await mobileV2Fetch<any>('public/home-data', { requireAuth: false });
     // Normalize events to match TCEvent interface
     const events: TCEvent[] = (raw.events || []).map((e: any) => ({
       id: e.id,
@@ -809,7 +772,8 @@ export async function getHomeData(): Promise<HomeDataResponse> {
     return result;
   } catch (error) {
     // Fallback to separate calls if combined endpoint fails
-    console.warn('Combined home-data endpoint failed, falling back to separate calls:', error);
+    console.warn('v2 home-data endpoint failed, falling back to separate calls:', error);
+    if (!hasLegacyWooCommerceCredentials()) throw error;
     const [events, categories] = await Promise.all([
       getEventsWithTickets(),
       getEventCategories(),
@@ -829,7 +793,7 @@ export async function getEventsData(): Promise<EventsDataResponse> {
   const cached = getCached<EventsDataResponse>('events-data');
   if (cached) return cached;
   try {
-    const raw = await mobileApiFetch<any>('events-data');
+    const raw = await mobileV2Fetch<any>('public/events-data', { requireAuth: false });
     const events: TCEvent[] = (raw.events || []).map((e: any) => ({
       id: e.id,
       date: e.date,
@@ -869,7 +833,8 @@ export async function getEventsData(): Promise<EventsDataResponse> {
     return result;
   } catch (error) {
     // Fallback to separate calls
-    console.warn('Combined events-data endpoint failed, falling back:', error);
+    console.warn('v2 events-data endpoint failed, falling back:', error);
+    if (!hasLegacyWooCommerceCredentials()) throw error;
     const [events, categories] = await Promise.all([
       getEventsWithTickets(),
       getEventCategories(),

@@ -88,7 +88,7 @@ export default function PrivacyScreen() {
         </Text>
         <Text style={[styles.paragraph, { color: colors.foreground }]}>
           Pour toute question concernant cette politique de confidentialité, veuillez nous contacter
-          à info@lamakoevents.mg ou via WhatsApp au +261 34 05 590 99.
+          à info@lamakoevents.mg ou via WhatsApp au +261 38 73 57 728.
         </Text>
 
         <View style={{ height: 40 }} />

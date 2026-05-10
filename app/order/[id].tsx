@@ -4,7 +4,9 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { getOrder, getOrderTickets, extractTicketsFromOrder, type WCOrder, type TicketInstance } from "@/lib/api/woocommerce";
+import { getMobileOrder, getMobileOrderTickets } from "@/lib/api/mobile";
+import { mobileOrderToWCOrder, mobileTicketToTicketInstance } from "@/lib/order-adapters";
+import type { WCOrder, TicketInstance } from "@/lib/types/commerce";
 import { formatAriary, formatDate, decodeHtmlEntities } from "@/lib/format";
 
 const statusMap: Record<string, { label: string; color: string; icon: string }> = {
@@ -16,6 +18,8 @@ const statusMap: Record<string, { label: string; color: string; icon: string }> 
   refunded: { label: "Remboursée", color: "#8B5CF6", icon: "arrow.uturn.left.circle.fill" },
   failed: { label: "Échouée", color: "#EF4444", icon: "xmark.circle.fill" },
 };
+
+const ticketVisibleStatuses = new Set(["completed", "processing", "cs-complete"]);
 
 export default function OrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -29,15 +33,13 @@ export default function OrderDetailScreen() {
     if (!id) return;
     async function load() {
       try {
-        const o = await getOrder(Number(id));
+        const o = mobileOrderToWCOrder(await getMobileOrder(Number(id)));
         setOrder(o);
-        // Try mobile API first for real ticket codes
-        const apiTickets = await getOrderTickets(Number(id));
-        if (apiTickets && apiTickets.tickets.length > 0) {
-          setTickets(apiTickets.tickets);
-        } else {
-          // Fallback: extract from order meta
-          setTickets(extractTicketsFromOrder(o));
+        if (ticketVisibleStatuses.has(o.status)) {
+          const apiTickets = await getMobileOrderTickets(Number(id));
+          if (apiTickets && apiTickets.tickets.length > 0) {
+            setTickets(apiTickets.tickets.map(mobileTicketToTicketInstance));
+          }
         }
       } catch {}
       setLoading(false);

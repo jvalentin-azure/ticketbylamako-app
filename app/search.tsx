@@ -14,7 +14,7 @@ import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { getHomeData, type TCEvent, type WCProduct } from "@/lib/api/woocommerce";
+import { getHomeData, type TCEvent, type WCProduct } from "@/lib/api/catalog";
 import { formatAriary, decodeHtmlEntities, formatDateShort } from "@/lib/format";
 import { PointsBadge } from "@/components/points-badge";
 

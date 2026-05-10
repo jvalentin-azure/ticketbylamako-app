@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Text, View, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Alert, Linking } from "react-native";
+import { Text, View, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from "react-native";
 import { Image } from "expo-image";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
@@ -8,7 +8,8 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useAuth } from "@/lib/auth-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { socialLogin, startGoogleLogin, startAppleLogin, startFacebookLogin, type SocialProvider } from "@/lib/api/social-auth";
+import { socialLogin, startGoogleLogin, startFacebookLogin, type SocialProvider } from "@/lib/api/social-auth";
+import { requestPasswordReset } from "@/lib/api/auth";
 
 export default function LoginScreen() {
   const colors = useColors();
@@ -20,7 +21,10 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [socialLoading, setSocialLoading] = useState<string | null>(null);
+  const [resetLoading, setResetLoading] = useState(false);
   const [error, setError] = useState("");
+  const [resetMessage, setResetMessage] = useState("");
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) { setError("Veuillez remplir tous les champs"); return; }
@@ -38,32 +42,14 @@ export default function LoginScreen() {
     } finally { setLoading(false); }
   };
 
-  const [socialLoading, setSocialLoading] = useState<string | null>(null);
-
-  const handleSocialLogin = async (provider: SocialProvider) => {
+  const handleSocialLogin = async (provider: Extract<SocialProvider, "google" | "facebook">) => {
     setSocialLoading(provider);
     setError("");
     try {
-      let result: { token: string; email?: string; name?: string; firstName?: string; lastName?: string } | null = null;
+      const result: { token: string; email?: string; name?: string; firstName?: string; lastName?: string } | null =
+        provider === "google" ? await startGoogleLogin() : await startFacebookLogin();
+      if (!result) return;
 
-      switch (provider) {
-        case "google":
-          result = await startGoogleLogin();
-          break;
-        case "apple":
-          result = await startAppleLogin();
-          break;
-        case "facebook":
-          result = await startFacebookLogin();
-          break;
-      }
-
-      if (!result) {
-        setSocialLoading(null);
-        return; // User cancelled
-      }
-
-      // Send token to backend for verification and account linking
       const user = await socialLogin(provider, result.token, {
         email: result.email,
         firstName: result.firstName,
@@ -71,7 +57,6 @@ export default function LoginScreen() {
         name: result.name,
       });
 
-      // Update auth state and navigate
       loginWithUser(user);
       if (params.returnTo) {
         router.replace(params.returnTo as any);
@@ -82,6 +67,26 @@ export default function LoginScreen() {
       setError(e.message || `Erreur de connexion ${provider}`);
     } finally {
       setSocialLoading(null);
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    const loginOrEmail = email.trim();
+    setResetMessage("");
+    setError("");
+    if (!loginOrEmail) {
+      setError("Renseignez votre email ou nom d'utilisateur pour recevoir le lien de réinitialisation.");
+      return;
+    }
+
+    setResetLoading(true);
+    try {
+      const message = await requestPasswordReset(loginOrEmail);
+      setResetMessage(message);
+    } catch (e: any) {
+      setError(e.message || "Impossible d'envoyer l'email de réinitialisation");
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -112,38 +117,35 @@ export default function LoginScreen() {
 
           {/* Social Login Buttons */}
           <View style={styles.socialContainer}>
-            {/* Facebook */}
             <TouchableOpacity
               onPress={() => handleSocialLogin("facebook")}
-              style={[styles.socialButton, { backgroundColor: "#1877F2" }]}
+              disabled={!!socialLoading}
+              style={[styles.socialButton, { backgroundColor: "#1877F2", opacity: socialLoading ? 0.7 : 1 }]}
               activeOpacity={0.8}
             >
-              <MaterialIcons name="facebook" size={22} color="#fff" />
+              {socialLoading === "facebook" ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <MaterialIcons name="facebook" size={22} color="#fff" />
+              )}
               <Text style={styles.socialButtonText}>Facebook</Text>
             </TouchableOpacity>
 
-            {/* Apple */}
-            <TouchableOpacity
-              onPress={() => handleSocialLogin("apple")}
-              style={[styles.socialButton, { backgroundColor: scheme === "dark" ? "#fff" : "#000" }]}
-              activeOpacity={0.8}
-            >
-              <MaterialIcons name="apple" size={22} color={scheme === "dark" ? "#000" : "#fff"} />
-              <Text style={[styles.socialButtonText, { color: scheme === "dark" ? "#000" : "#fff" }]}>Apple</Text>
-            </TouchableOpacity>
-
-            {/* Google */}
             <TouchableOpacity
               onPress={() => handleSocialLogin("google")}
-              style={[styles.socialButton, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }]}
+              disabled={!!socialLoading}
+              style={[styles.socialButton, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, opacity: socialLoading ? 0.7 : 1 }]}
               activeOpacity={0.8}
             >
-              <Text style={{ fontSize: 18, fontWeight: "700", color: "#4285F4" }}>G</Text>
+              {socialLoading === "google" ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Text style={styles.googleMark}>G</Text>
+              )}
               <Text style={[styles.socialButtonText, { color: colors.foreground }]}>Google</Text>
             </TouchableOpacity>
           </View>
 
-          {/* Divider */}
           <View style={styles.divider}>
             <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
             <Text style={[styles.dividerText, { color: colors.muted }]}>ou</Text>
@@ -155,6 +157,13 @@ export default function LoginScreen() {
             <View style={[styles.errorBox, { backgroundColor: colors.error + "15" }]}>
               <IconSymbol name="xmark.circle.fill" size={18} color={colors.error} />
               <Text style={{ color: colors.error, fontSize: 13, marginLeft: 8, flex: 1 }}>{error}</Text>
+            </View>
+          ) : null}
+
+          {resetMessage ? (
+            <View style={[styles.errorBox, { backgroundColor: colors.success + "15" }]}>
+              <IconSymbol name="checkmark.circle.fill" size={18} color={colors.success} />
+              <Text style={{ color: colors.success, fontSize: 13, marginLeft: 8, flex: 1 }}>{resetMessage}</Text>
             </View>
           ) : null}
 
@@ -195,6 +204,13 @@ export default function LoginScreen() {
                 <IconSymbol name={showPw ? "eye.slash.fill" : "eye.fill"} size={20} color={colors.muted} />
               </TouchableOpacity>
             </View>
+            <TouchableOpacity onPress={handlePasswordReset} disabled={resetLoading} style={styles.forgotPasswordButton}>
+              {resetLoading ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Text style={[styles.forgotPasswordText, { color: colors.primary }]}>Mot de passe oublié ?</Text>
+              )}
+            </TouchableOpacity>
           </View>
 
           {/* Login button */}
@@ -215,7 +231,7 @@ export default function LoginScreen() {
           </View>
 
           {/* Privacy link */}
-          <TouchableOpacity onPress={() => Linking.openURL("https://www.ticketbylamako.com/politique-de-confidentialite/")} style={styles.privacyLink}>
+          <TouchableOpacity onPress={() => router.push("/privacy" as any)} style={styles.privacyLink}>
             <Text style={{ color: colors.muted, fontSize: 12, textDecorationLine: "underline" }}>Politique de confidentialité</Text>
           </TouchableOpacity>
         </ScrollView>
@@ -258,6 +274,7 @@ const styles = StyleSheet.create({
   },
   socialButton: {
     flex: 1,
+    minHeight: 46,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -269,6 +286,11 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 13,
     fontWeight: "600",
+  },
+  googleMark: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#4285F4",
   },
   divider: {
     flexDirection: "row",
@@ -307,6 +329,17 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 10,
     fontSize: 15,
+  },
+  forgotPasswordButton: {
+    alignSelf: "flex-end",
+    minHeight: 32,
+    justifyContent: "center",
+    paddingTop: 8,
+    paddingHorizontal: 2,
+  },
+  forgotPasswordText: {
+    fontSize: 13,
+    fontWeight: "700",
   },
   loginButton: {
     borderRadius: 14,

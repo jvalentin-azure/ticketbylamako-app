@@ -47,7 +47,13 @@ export function AppHeader({ onMenuPress }: AppHeaderProps) {
         </TouchableOpacity>
 
         {/* Center: Logo */}
-        <View style={styles.logoContainer}>
+        <TouchableOpacity
+          onPress={() => router.replace("/(tabs)/" as any)}
+          style={styles.logoContainer}
+          activeOpacity={0.75}
+          accessibilityRole="button"
+          accessibilityLabel="Retour à l'accueil"
+        >
           <Image
             source={
               scheme === "dark"
@@ -57,7 +63,7 @@ export function AppHeader({ onMenuPress }: AppHeaderProps) {
             style={styles.logo}
             contentFit="contain"
           />
-        </View>
+        </TouchableOpacity>
 
         {/* Right: Search + Notifications + Profile */}
         <View style={styles.rightSection}>

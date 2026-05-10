@@ -16,6 +16,12 @@ interface AuthContextType extends AuthState {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+function syncPushTokenForAuthenticatedUser() {
+  import("./notifications")
+    .then(({ registerPushTokenWithBackend }) => registerPushTokenWithBackend())
+    .catch((error) => console.warn("Push token sync after auth failed:", error));
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>({
     user: null,
@@ -31,6 +37,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const valid = await validateToken();
           if (valid) {
             setState({ user, isLoading: false, isAuthenticated: true });
+            syncPushTokenForAuthenticatedUser();
             return;
           }
         }
@@ -42,11 +49,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (username: string, password: string) => {
     const user = await apiLogin(username, password);
     setState({ user, isLoading: false, isAuthenticated: true });
+    syncPushTokenForAuthenticatedUser();
   }, []);
 
   const register = useCallback(async (email: string, password: string, firstName: string, lastName: string) => {
     const user = await apiRegister(email, password, firstName, lastName);
     setState({ user, isLoading: false, isAuthenticated: true });
+    syncPushTokenForAuthenticatedUser();
   }, []);
 
   const logout = useCallback(async () => {
@@ -56,6 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loginWithUser = useCallback((user: User) => {
     setState({ user, isLoading: false, isAuthenticated: true });
+    syncPushTokenForAuthenticatedUser();
   }, []);
 
   return (

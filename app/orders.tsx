@@ -5,7 +5,9 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/lib/auth-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { getCustomerOrders, type WCOrder } from "@/lib/api/woocommerce";
+import { getMobileOrders } from "@/lib/api/mobile";
+import { mobileOrderToWCOrder } from "@/lib/order-adapters";
+import type { WCOrder } from "@/lib/types/commerce";
 import { formatAriary, formatDate, decodeHtmlEntities } from "@/lib/format";
 
 const statusMap: Record<string, { label: string; color: string; icon: string }> = {
@@ -109,14 +111,28 @@ function OrderCard({ order, colors, onPress }: { order: WCOrder; colors: any; on
 export default function OrdersScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { user, isAuthenticated } = useAuth();
+  const { isAuthenticated } = useAuth();
   const [orders, setOrders] = useState<WCOrder[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user?.id) { setLoading(false); return; }
-    getCustomerOrders(user.id).then(o => { setOrders(o); setLoading(false); }).catch(() => setLoading(false));
-  }, [user?.id]);
+    if (!isAuthenticated) { setLoading(false); return; }
+    let cancelled = false;
+    setLoading(true);
+    getMobileOrders({ limit: 50 })
+      .then(o => {
+        if (!cancelled) setOrders(o.map(mobileOrderToWCOrder));
+      })
+      .catch(() => {
+        if (!cancelled) setOrders([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated]);
 
   if (!isAuthenticated) {
     return (

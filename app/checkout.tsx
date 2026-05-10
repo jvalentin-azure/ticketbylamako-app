@@ -5,7 +5,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useCart } from "@/lib/cart-provider";
 import { getStoredUser } from "@/lib/api/auth";
-import { createOrder, SITE_URL, clearServerCart } from "@/lib/api/woocommerce";
+import { createMobileCheckout, getMobileCheckoutStatus, SITE_URL } from "@/lib/api/mobile";
 import { Confetti } from "@/components/confetti";
 import { CheckoutSkeleton } from "@/components/skeleton-loader";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -13,6 +13,7 @@ import { formatAriary } from "@/lib/format";
 import { notifyPaymentConfirmed } from "@/lib/notifications";
 import { useRewards, estimatePointsForPrice, REDEMPTION_TIERS, type RedeemResult } from "@/lib/rewards-provider";
 import { useAuth } from "@/lib/auth-provider";
+import { parsePaymentReturnUrl } from "@/lib/payment-return";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // WebView for checkout - loads WooCommerce pay-for-order page
@@ -23,14 +24,14 @@ if (Platform.OS !== "web") {
   } catch {}
 }
 
-type CheckoutPhase = "address" | "confirm" | "creating" | "paying" | "success" | "error" | "payment_error";
+type CheckoutPhase = "address" | "confirm" | "creating" | "paying" | "success" | "error" | "payment_error" | "payment_pending";
 
 export default function CheckoutScreen() {
   const colors = useColors();
   const router = useRouter();
   const { items, clearCart, total } = useCart();
   const { currentTier, canRedeem, getDiscountValue, getBestRedemption, redeemPoints, state: rewardsState } = useRewards();
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated } = useAuth();
 
   // Rewards redemption state
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
@@ -51,13 +52,13 @@ export default function CheckoutScreen() {
   const [phase, setPhase] = useState<CheckoutPhase>(hasPhysicalProducts ? "address" : (canShowRedeem ? "confirm" : "creating"));
   const [checkoutUrl, setCheckoutUrl] = useState<string>("");
   const [orderId, setOrderId] = useState<number>(0);
-  const [orderKey, setOrderKey] = useState<string>("");
+  const [checkoutToken, setCheckoutToken] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [paymentErrorMsg, setPaymentErrorMsg] = useState<string>("");
   const [webviewLoading, setWebviewLoading] = useState(true);
   const [retryCount, setRetryCount] = useState(0);
   const MAX_RETRIES = 3;
-  const paymentTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const verificationInFlightRef = useRef(false);
 
   // Auth guard: redirect to login if not authenticated
   useEffect(() => {
@@ -119,7 +120,82 @@ export default function CheckoutScreen() {
     setAppliedDiscount(0);
   };
 
-  // Create WC order
+  const markPaymentSuccess = (confirmedOrderId?: number) => {
+    const finalOrderId = confirmedOrderId || orderId;
+    if (finalOrderId) setOrderId(finalOrderId);
+    setPhase("success");
+    clearCart();
+    notifyPaymentConfirmed(finalOrderId || orderId, formatAriary(total)).catch(() => {});
+  };
+
+  const verifyPaymentBeforeSuccess = async () => {
+    if (verificationInFlightRef.current) return;
+    verificationInFlightRef.current = true;
+
+    try {
+      if (!checkoutToken) {
+        setPaymentErrorMsg("Session de paiement introuvable. Veuillez relancer le paiement depuis votre panier.");
+        setPhase("payment_error");
+        return;
+      }
+
+      const status = await getMobileCheckoutStatus(checkoutToken);
+      const paymentStatus = status.order.paymentStatus;
+
+      if (paymentStatus === "success") {
+        markPaymentSuccess(status.order.id);
+        return;
+      }
+
+      if (paymentStatus === "pending") {
+        setPaymentErrorMsg("Votre paiement est en attente de confirmation. Votre commande est conservée et sera mise à jour automatiquement après validation.");
+        setPhase("payment_pending");
+        return;
+      }
+
+      if (paymentStatus === "expired") {
+        setPaymentErrorMsg("Cette session de paiement a expiré. Veuillez recréer la commande depuis votre panier.");
+        setPhase("payment_error");
+        return;
+      }
+
+      setPaymentErrorMsg("Le paiement n'a pas été confirmé. Votre commande est conservée si vous souhaitez réessayer.");
+      setPhase("payment_error");
+    } catch (err) {
+      console.warn("Payment verification failed:", err);
+      setPaymentErrorMsg("Impossible de vérifier le statut du paiement. Veuillez consulter vos commandes ou réessayer dans quelques instants.");
+      setPhase("payment_error");
+    } finally {
+      verificationInFlightRef.current = false;
+    }
+  };
+
+  const getRecoveryCheckoutUrl = () => {
+    return checkoutUrl;
+  };
+
+  const openVerifiedPaymentReturn = (kind: string, token: string, statusHint?: string) => {
+    if (kind !== "checkout" || !token) return false;
+    if (checkoutToken && token !== checkoutToken) return false;
+
+    router.replace({
+      pathname: "/payment-return",
+      params: {
+        kind,
+        token,
+        status: statusHint || "",
+      },
+    } as any);
+    return true;
+  };
+
+  const handlePaymentReturnUrl = (url: string) => {
+    const parsed = parsePaymentReturnUrl(url);
+    if (!parsed) return false;
+    return openVerifiedPaymentReturn(parsed.kind, parsed.token, parsed.statusHint);
+  };
+
+  // Create WC order / checkout session
   const startOrderCreation = async () => {
     try {
       if (items.length === 0) {
@@ -127,13 +203,20 @@ export default function CheckoutScreen() {
         setPhase("error");
         return;
       }
+
+      if (items.some(item => item.seatLabel)) {
+        setErrorMsg("Les places numérotées doivent être achetées depuis le plan de salle.");
+        setPhase("error");
+        return;
+      }
+
       setPhase("creating");
 
-      const user = await getStoredUser();
+      const storedUser = await getStoredUser();
       const billing: any = {
-        first_name: user?.firstName || "Client",
-        last_name: user?.lastName || "Mobile",
-        email: user?.email || "",
+        first_name: storedUser?.firstName || "Client",
+        last_name: storedUser?.lastName || "Mobile",
+        email: storedUser?.email || "",
         phone: shippingPhone || "",
       };
       if (hasPhysicalProducts) {
@@ -142,20 +225,27 @@ export default function CheckoutScreen() {
         billing.country = "MG";
       }
 
-      const orderItems = items.map(item => ({
-        product_id: item.productId,
-        quantity: item.quantity,
-      }));
+      const result = await createMobileCheckout({
+        items: items.map(item => ({
+          productId: item.productId,
+          quantity: item.quantity,
+          lane: item.isEvent ? "ticket" : "product",
+        })),
+        billing,
+        shipping: hasPhysicalProducts ? billing : undefined,
+        couponCode: appliedCoupon || undefined,
+        source: items.every(item => item.isEvent) ? "ticket" : items.some(item => item.isEvent) ? "mixed_native_cart" : "product",
+      });
 
-      const result = await createOrder(orderItems, billing, user?.id, appliedCoupon || undefined);
-
-      if (result.checkout_url) {
-        setOrderId(result.order_id);
-        setOrderKey(result.order_key || "");
-        setCheckoutUrl(result.checkout_url);
+      if (result.checkoutUrl) {
+        setOrderId(result.orderId);
+        setCheckoutToken(result.checkoutToken);
+        setCheckoutUrl(result.checkoutUrl);
+        setWebviewLoading(true);
+        setRetryCount(0);
         setPhase("paying");
       } else {
-        setErrorMsg("Impossible de créer la commande. Veuillez réessayer.");
+        setErrorMsg("Impossible de créer la session de paiement. Veuillez réessayer.");
         setPhase("error");
       }
     } catch (err: any) {
@@ -174,12 +264,11 @@ export default function CheckoutScreen() {
 
   const handleNavChange = (navState: any) => {
     const url = navState.url || "";
+    if (handlePaymentReturnUrl(url)) return;
+
     // Detect order confirmation (success)
     if (url.includes("order-received") || url.includes("commande-recue") || url.includes("thankyou")) {
-      setPhase("success");
-      clearCart();
-      clearServerCart();
-      notifyPaymentConfirmed(orderId, formatAriary(total)).catch(() => {});
+      verifyPaymentBeforeSuccess();
       return;
     }
     // Detect our custom checkout error param
@@ -208,10 +297,11 @@ export default function CheckoutScreen() {
     if (url.includes("404") || url.includes("page-not-found")) {
       // This happens when Orange Money returns to a non-existent callback URL
       // Inject JS to check if order was actually paid
-      if (webviewRef.current) {
+      const recoveryUrl = getRecoveryCheckoutUrl();
+      if (webviewRef.current && recoveryUrl) {
         webviewRef.current.injectJavaScript(`
           // Redirect to our checkout page to check order status
-          window.location.href = '${SITE_URL}/?lamako_checkout=1&order_id=${orderId}&order_key=${orderKey}';
+          window.location.href = '${recoveryUrl}';
           true;
         `);
       }
@@ -221,9 +311,10 @@ export default function CheckoutScreen() {
     const isHomepage = (url === SITE_URL || url === SITE_URL + "/" || url === SITE_URL + "/en/" || url.match(/^https:\/\/www\.ticketbylamako\.com\/?$/));
     if (isHomepage && !url.includes("lamako_checkout") && !url.includes("order-received")) {
       // After payment gateway, redirect back to our checkout to check status
-      if (webviewRef.current && orderId) {
+      const recoveryUrl = getRecoveryCheckoutUrl();
+      if (webviewRef.current && recoveryUrl) {
         webviewRef.current.injectJavaScript(`
-          window.location.href = '${SITE_URL}/?lamako_checkout=1&order_id=${orderId}&order_key=${orderKey}';
+          window.location.href = '${recoveryUrl}';
           true;
         `);
       }
@@ -234,11 +325,24 @@ export default function CheckoutScreen() {
   const handleWebViewMessage = (event: any) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
+      if (data.source === "lamako-mobile-web") {
+        if (data.version && data.version !== 1) return;
+        if (data.type === "PAYMENT_RESULT" || data.type === "RETURN_TO_APP") {
+          const token = data.payload?.token || checkoutToken;
+          const kind = data.payload?.kind || "checkout";
+          if (openVerifiedPaymentReturn(kind, token, data.payload?.status)) return;
+          verifyPaymentBeforeSuccess();
+          return;
+        }
+        if (data.type === "ERROR") {
+          setPaymentErrorMsg(data.payload?.message || "Erreur de paiement");
+          setPhase("payment_error");
+          return;
+        }
+      }
+
       if (data.type === "payment_success") {
-        setPhase("success");
-        clearCart();
-        clearServerCart();
-        notifyPaymentConfirmed(orderId, formatAriary(total)).catch(() => {});
+        verifyPaymentBeforeSuccess();
       } else if (data.type === "payment_error") {
         setPaymentErrorMsg(data.error || data.message || "Erreur de paiement");
         setPhase("payment_error");
@@ -246,11 +350,7 @@ export default function CheckoutScreen() {
         setPaymentErrorMsg("Le paiement a été annulé ou n'a pas abouti.");
         setPhase("payment_error");
       } else if (data.type === "open_terms") {
-        if (data.url) {
-          import('expo-web-browser').then(mod => {
-            mod.openBrowserAsync(data.url);
-          }).catch(() => {});
-        }
+        router.push("/terms" as any);
       } else if (data.type === "go_back") {
         router.back();
       }
@@ -724,8 +824,37 @@ export default function CheckoutScreen() {
           >
             <Text style={styles.retryBtnText}>Essayer un autre mode de paiement</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => { clearCart(); clearServerCart(orderId); router.back(); }} style={styles.backLink}>
+          <TouchableOpacity onPress={() => { clearCart(); router.back(); }} style={styles.backLink}>
             <Text style={[styles.backLinkText, { color: colors.muted }]}>Abandonner et vider le panier</Text>
+          </TouchableOpacity>
+        </View>
+      </ScreenContainer>
+    );
+  }
+
+  // ---- PAYMENT PENDING phase ----
+  if (phase === "payment_pending") {
+    return (
+      <ScreenContainer edges={["top", "bottom", "left", "right"]}>
+        <View style={[styles.header, { borderBottomColor: colors.border }]}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Paiement en attente</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={styles.centerContent}>
+          <IconSymbol name="clock.fill" size={56} color={colors.warning} />
+          <Text style={[styles.errorTitle, { color: colors.foreground }]}>Confirmation en cours</Text>
+          <Text style={[styles.errorMsg, { color: colors.muted }]}>{paymentErrorMsg}</Text>
+          <TouchableOpacity
+            onPress={() => verifyPaymentBeforeSuccess()}
+            style={[styles.retryBtn, { backgroundColor: colors.primary }]}
+          >
+            <Text style={styles.retryBtnText}>Vérifier maintenant</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.replace("/orders" as any)} style={styles.backLink}>
+            <Text style={[styles.backLinkText, { color: colors.primary }]}>Voir mes commandes</Text>
           </TouchableOpacity>
         </View>
       </ScreenContainer>
@@ -828,6 +957,8 @@ export default function CheckoutScreen() {
         onNavigationStateChange={handleNavChange}
         onShouldStartLoadWithRequest={(request: any) => {
           const url = request.url || "";
+          if (handlePaymentReturnUrl(url)) return false;
+          if (url.startsWith("ticketbylamako://")) return false;
           if (url.startsWith(SITE_URL)) return true;
           if (url.includes("mvola") || url.includes("orange") || url.includes("airtel")) return true;
           if (url.includes("cybersource") || url.includes("visa") || url.includes("mastercard")) return true;

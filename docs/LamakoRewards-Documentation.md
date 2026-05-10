@@ -136,7 +136,7 @@ Les multiplicateurs s'appliquent UNIQUEMENT aux points d'achat (pas aux bonus fi
 ### Authentification
 
 1. **JWT Token** (recommandé) : Header `Authorization: Bearer {token}`. Validé via plugin `jwt-auth`.
-2. **Clé API** (fallback) : Paramètre `api_key`. Utilisé pour les appels non-authentifiés.
+2. **Clé API** (legacy temporaire) : Paramètre `api_key`. A conserver uniquement côté serveur et à retirer de l'app mobile après migration vers `lamako-mobile/v2`.
 
 ### Variables d'environnement
 
@@ -145,10 +145,7 @@ Les multiplicateurs s'appliquent UNIQUEMENT aux points d'achat (pas aux bonus fi
 define( 'LAMAKO_REWARDS_API_KEY', 'votre_cle_secrete_ici' );
 ```
 
-```
-// App mobile (.env)
-EXPO_PUBLIC_REWARDS_API_KEY=votre_cle_secrete_ici
-```
+Ne pas exposer `LAMAKO_REWARDS_API_KEY` dans une variable `EXPO_PUBLIC_*`. Les appels mobiles doivent passer par les endpoints JWT `lamako-mobile/v2`.
 
 ### Rate Limiting
 
@@ -338,7 +335,7 @@ https://www.ticketbylamako.com/wp-json/lamako-rewards/v1
 - [x] Ajouter `LAMAKO_REWARDS_API_KEY` dans `wp-config.php`
 - [x] Créer page `/lamako-rewards` avec shortcode `[lamako_rewards_page]`
 - [x] Flush permaliens (fix EP_PAGES au lieu de EP_ROOT)
-- [x] Configurer `EXPO_PUBLIC_REWARDS_API_KEY` dans l'app
+- [ ] Retirer `EXPO_PUBLIC_REWARDS_API_KEY` des builds mobiles après migration vers `lamako-mobile/v2`
 - [ ] Tester inscription avec code parrain (à valider manuellement)
 - [x] Vérifier accumulation de points après achat
 - [x] Vérifier onglet "Mes Récompenses" dans Mon Compte

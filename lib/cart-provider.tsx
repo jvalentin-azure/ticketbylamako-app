@@ -1,7 +1,6 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from "react";
 import { Alert, AppState, AppStateStatus } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { clearServerCart } from "./api/woocommerce";
 
 export interface CartItem {
   productId: number;
@@ -46,10 +45,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           if (elapsed >= CART_EXPIRY_MS) {
             // Cart expired while app was closed
             persist([]);
-            clearServerCart().catch(() => {});
             Alert.alert(
               "Panier expiré",
-              "Votre panier a été vidé car il est resté inactif trop longtemps. Les places ont été libérées.",
+              "Votre panier a été vidé car il est resté inactif trop longtemps.",
               [{ text: "OK" }]
             );
             return;
@@ -87,10 +85,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         const elapsed = Date.now() - parseInt(timestamp, 10);
         if (elapsed >= CART_EXPIRY_MS) {
           persist([]);
-          clearServerCart().catch(() => {});
           Alert.alert(
             "Panier expiré",
-            "Votre panier a été vidé car il est resté inactif trop longtemps. Les places ont été libérées.",
+            "Votre panier a été vidé car il est resté inactif trop longtemps.",
             [{ text: "OK" }]
           );
         } else {
@@ -107,10 +104,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         if (prev.length > 0) {
           AsyncStorage.setItem(CART_KEY, JSON.stringify([]));
           AsyncStorage.removeItem(CART_TIMESTAMP_KEY);
-          clearServerCart().catch(() => {});
           Alert.alert(
             "Panier expiré",
-            "Votre panier a été vidé automatiquement après 15 minutes d'inactivité. Les places ont été libérées.",
+            "Votre panier a été vidé automatiquement après 15 minutes d'inactivité.",
             [{ text: "OK" }]
           );
           return [];
@@ -189,7 +185,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const clearCart = useCallback(() => {
     persist([]);
-    clearServerCart().catch(() => {});
   }, []);
 
   const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0);

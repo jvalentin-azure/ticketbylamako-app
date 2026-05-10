@@ -103,22 +103,24 @@ describe("V4.8 - Cart Toast & Plugin Redeploy", () => {
     });
   });
 
-  describe("Plugin fixes (esc_url -> esc_js)", () => {
+  describe("Plugin auto-login redirect", () => {
     const pluginPath = path.resolve(__dirname, "../scripts/lamako-mobile-api.php");
     const pluginContent = fs.readFileSync(pluginPath, "utf-8");
 
-    it("should use esc_js for redirect URL in auto-login", () => {
-      expect(pluginContent).toContain("esc_js( $redirect )");
+    const autoLoginStart = pluginContent.indexOf("function lamako_mobile_auto_login");
+    const autoLoginEnd = pluginContent.indexOf("===== MOBILE APP FRONTEND CLEANUP =====");
+    const autoLoginContent = pluginContent.substring(autoLoginStart, autoLoginEnd);
+
+    it("should use HTTP redirect after setting auth cookies in auto-login", () => {
+      expect(autoLoginContent).toContain("wp_set_auth_cookie( $user_id, true )");
+      expect(autoLoginContent).toContain("setcookie( 'lamako_mobile_session'");
+      expect(autoLoginContent).toContain("header( 'Location: ' . $redirect, true, 302 )");
     });
 
-    it("should NOT use esc_url for JavaScript redirect in auto-login", () => {
-      // The auto-login redirect uses esc_js, not esc_url
-      const escJsIdx = pluginContent.indexOf("esc_js( $redirect )");
-      expect(escJsIdx).toBeGreaterThan(-1);
-      // Get surrounding context to verify it's in a window.location.href context
-      const context = pluginContent.substring(Math.max(0, escJsIdx - 80), escJsIdx + 50);
-      expect(context).toContain("window.location.href");
-      expect(context).not.toContain("esc_url");
+    it("should not use JavaScript redirect in auto-login", () => {
+      expect(autoLoginContent).not.toContain("window.location.href =");
+      expect(autoLoginContent).not.toContain("esc_js( $redirect )");
+      expect(autoLoginContent).not.toContain("esc_url( $redirect )");
     });
 
     it("should have checkout CSS to hide theme content", () => {

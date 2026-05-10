@@ -25,6 +25,21 @@ interface JWTResponse {
   user_display_name: string;
 }
 
+interface MobileAuthResponse {
+  success: boolean;
+  token: string;
+  user: {
+    id: number;
+    email: string;
+    display_name: string;
+    first_name: string;
+    last_name: string;
+    role: string;
+    avatar_url?: string;
+  };
+  message?: string;
+}
+
 // Secure storage helpers (fallback to AsyncStorage on web)
 async function secureSet(key: string, value: string) {
   if (Platform.OS === "web") {
@@ -93,12 +108,10 @@ export async function login(username: string, password: string): Promise<User> {
 }
 
 export async function register(email: string, password: string, firstName: string, lastName: string): Promise<User> {
-  // Register via WP REST API
-  const res = await fetch(`${SITE_URL}/wp-json/wp/v2/users`, {
+  const res = await fetch(`${SITE_URL}/wp-json/lamako-mobile/v1/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      username: email,
       email,
       password,
       first_name: firstName,
@@ -111,8 +124,45 @@ export async function register(email: string, password: string, firstName: strin
     throw new Error(err.message || "Erreur lors de l'inscription");
   }
 
-  // Auto-login after registration
-  return login(email, password);
+  const data: MobileAuthResponse = await res.json();
+  if (!data.success || !data.token) {
+    throw new Error(data.message || "Erreur lors de l'inscription");
+  }
+
+  await secureSet(TOKEN_KEY, data.token);
+
+  const roles = data.user.role || "customer";
+  let role: UserRole = "customer";
+  if (roles.includes("administrator")) role = "administrator";
+  else if (roles.includes("shop_manager")) role = "shop_manager";
+
+  const user: User = {
+    id: data.user.id,
+    email: data.user.email,
+    displayName: data.user.display_name,
+    firstName: data.user.first_name || "",
+    lastName: data.user.last_name || "",
+    role,
+    avatar: data.user.avatar_url,
+  };
+
+  await secureSet(USER_KEY, JSON.stringify(user));
+  return user;
+}
+
+export async function requestPasswordReset(loginOrEmail: string): Promise<string> {
+  const res = await fetch(`${SITE_URL}/wp-json/lamako-mobile/v1/password-reset`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ login: loginOrEmail }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.message || "Impossible d'envoyer l'email de réinitialisation");
+  }
+
+  return data.message || "Si un compte existe, un email de réinitialisation vient d'être envoyé.";
 }
 
 export async function getStoredUser(): Promise<User | null> {

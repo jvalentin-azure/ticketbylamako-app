@@ -28,7 +28,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 // CONFIGURATION
 // ============================================================
 
-define( 'LR_API_KEY', defined( 'LAMAKO_REWARDS_API_KEY' ) ? LAMAKO_REWARDS_API_KEY : 'LR_2024_SECURE_KEY_TBL' );
+define( 'LR_API_KEY', defined( 'LAMAKO_REWARDS_API_KEY' ) ? LAMAKO_REWARDS_API_KEY : '' );
 define( 'LR_RATE_LIMIT', 60 ); // requests per minute
 define( 'LR_RATE_WINDOW', 60 ); // seconds
 
@@ -107,7 +107,7 @@ function lr_authenticate_request( $request ) {
 
     // Method 2: API key (legacy, for backward compatibility)
     $api_key = $request->get_param( 'api_key' );
-    if ( $api_key && $api_key === LR_API_KEY ) {
+    if ( $api_key && LR_API_KEY && hash_equals( LR_API_KEY, $api_key ) ) {
         return true;
     }
 

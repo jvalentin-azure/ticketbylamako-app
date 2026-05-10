@@ -4,16 +4,17 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { LAMAKO_EMAIL, LAMAKO_PHONE_DISPLAY, LAMAKO_PHONE_NUMBER, buildLamakoWhatsAppUrl } from "@/lib/contact";
 
-const WHATSAPP_NUMBER = "+261340559099";
 const WHATSAPP_MESSAGE = "Bonjour, j'ai besoin d'aide avec l'application TicketByLamako.";
+const ORGANIZER_MESSAGE = "Bonjour, je suis organisateur et je souhaite que mon événement apparaisse sur TicketByLamako.";
 
 export default function HelpScreen() {
   const colors = useColors();
   const router = useRouter();
 
-  const openWhatsApp = () => {
-    const url = `https://wa.me/${WHATSAPP_NUMBER.replace(/\s/g, "")}?text=${encodeURIComponent(WHATSAPP_MESSAGE)}`;
+  const openWhatsApp = (message = WHATSAPP_MESSAGE) => {
+    const url = buildLamakoWhatsAppUrl(message);
     Linking.canOpenURL(url)
       .then(supported => {
         if (supported) {
@@ -26,7 +27,7 @@ export default function HelpScreen() {
   };
 
   const openEmail = () => {
-    Linking.openURL("mailto:info@lamakoevents.mg?subject=Support TicketByLamako");
+    Linking.openURL(`mailto:${LAMAKO_EMAIL}?subject=Support TicketByLamako`);
   };
 
   return (
@@ -52,13 +53,28 @@ export default function HelpScreen() {
         </View>
 
         {/* WhatsApp CTA */}
-        <TouchableOpacity onPress={openWhatsApp} style={styles.whatsappButton} activeOpacity={0.8}>
+        <TouchableOpacity onPress={() => openWhatsApp()} style={styles.whatsappButton} activeOpacity={0.8}>
           <MaterialIcons name="chat" size={24} color="#fff" />
           <View style={{ flex: 1, marginLeft: 12 }}>
             <Text style={styles.whatsappTitle}>Contactez-nous sur WhatsApp</Text>
             <Text style={styles.whatsappSub}>Réponse rapide garantie</Text>
           </View>
           <IconSymbol name="chevron.right" size={20} color="#fff" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => openWhatsApp(ORGANIZER_MESSAGE)}
+          style={[styles.organizerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          activeOpacity={0.85}
+        >
+          <View style={[styles.organizerIcon, { backgroundColor: colors.primary + "15" }]}>
+            <MaterialIcons name="event-available" size={24} color={colors.primary} />
+          </View>
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={[styles.organizerTitle, { color: colors.foreground }]}>Vous êtes organisateur ?</Text>
+            <Text style={[styles.organizerSub, { color: colors.muted }]}>Vous souhaitez que votre événement apparaisse ici ?</Text>
+          </View>
+          <IconSymbol name="chevron.right" size={18} color={colors.primary} />
         </TouchableOpacity>
 
         {/* FAQ Section */}
@@ -86,13 +102,13 @@ export default function HelpScreen() {
           </View>
           <View style={{ flex: 1, marginLeft: 12 }}>
             <Text style={[styles.contactTitle, { color: colors.foreground }]}>Email</Text>
-            <Text style={[styles.contactSub, { color: colors.muted }]}>info@lamakoevents.mg</Text>
+            <Text style={[styles.contactSub, { color: colors.muted }]}>{LAMAKO_EMAIL}</Text>
           </View>
           <IconSymbol name="chevron.right" size={18} color={colors.muted} />
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={() => Linking.openURL(`tel:${WHATSAPP_NUMBER.replace(/\s/g, "")}`)}
+          onPress={() => Linking.openURL(`tel:${LAMAKO_PHONE_NUMBER}`)}
           style={[styles.contactOption, { backgroundColor: colors.surface, borderColor: colors.border }]}
         >
           <View style={[styles.contactIcon, { backgroundColor: colors.primary + "15" }]}>
@@ -100,12 +116,12 @@ export default function HelpScreen() {
           </View>
           <View style={{ flex: 1, marginLeft: 12 }}>
             <Text style={[styles.contactTitle, { color: colors.foreground }]}>Téléphone</Text>
-            <Text style={[styles.contactSub, { color: colors.muted }]}>{WHATSAPP_NUMBER}</Text>
+            <Text style={[styles.contactSub, { color: colors.muted }]}>{LAMAKO_PHONE_DISPLAY}</Text>
           </View>
           <IconSymbol name="chevron.right" size={18} color={colors.muted} />
         </TouchableOpacity>
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 72 }} />
       </ScrollView>
     </ScreenContainer>
   );
@@ -115,7 +131,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 0.5 },
   backButton: { flexDirection: "row", alignItems: "center", paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10 },
   headerTitle: { fontSize: 17, fontWeight: "700" },
-  content: { padding: 20 },
+  content: { padding: 20, paddingBottom: 120 },
   heroSection: { alignItems: "center", marginBottom: 28 },
   heroIcon: { width: 80, height: 80, borderRadius: 20, alignItems: "center", justifyContent: "center", marginBottom: 16 },
   heroTitle: { fontSize: 20, fontWeight: "700", textAlign: "center" },
@@ -123,6 +139,10 @@ const styles = StyleSheet.create({
   whatsappButton: { flexDirection: "row", alignItems: "center", backgroundColor: "#25D366", borderRadius: 16, padding: 18, marginBottom: 28 },
   whatsappTitle: { color: "#fff", fontSize: 16, fontWeight: "700" },
   whatsappSub: { color: "rgba(255,255,255,0.8)", fontSize: 12, marginTop: 2 },
+  organizerCard: { flexDirection: "row", alignItems: "center", borderRadius: 16, padding: 16, marginBottom: 28, borderWidth: 1 },
+  organizerIcon: { width: 46, height: 46, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  organizerTitle: { fontSize: 15, fontWeight: "700" },
+  organizerSub: { fontSize: 12, lineHeight: 17, marginTop: 2 },
   sectionTitle: { fontSize: 18, fontWeight: "700", marginBottom: 12 },
   faqItem: { borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1 },
   faqQuestion: { fontSize: 14, fontWeight: "600" },

@@ -1,12 +1,14 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "@/lib/auth-provider";
-import Constants from "expo-constants";
-
-// ===== API CONFIGURATION =====
-const API_BASE = "https://www.ticketbylamako.com/wp-json/lamako-rewards/v1";
-// API key from environment variable (set via EXPO_PUBLIC_REWARDS_API_KEY)
-const API_KEY = process.env.EXPO_PUBLIC_REWARDS_API_KEY || (Constants.expoConfig?.extra as any)?.rewardsApiKey || "LR_2024_SECURE_KEY_TBL";
+import {
+  getMobileReferralCode,
+  getMobileRewardsBalance,
+  getMobileRewardsHistory,
+  redeemMobileRewards,
+  registerMobileReferral,
+  validateMobileReferralCode,
+} from "@/lib/api/mobile";
 
 // ===== TIERS (based on Otayo, Live Nation, Ticketmaster benchmarks) =====
 // Conservative model: high thresholds, low cashback (2%), experiential rewards
@@ -147,6 +149,7 @@ export interface RewardTransaction {
   type: "earn" | "redeem";
   amount: number;
   reference: string;
+  orderId?: number;
   description: string;
   date: string; // ISO string
 }
@@ -225,13 +228,12 @@ function generateReferralCode(userId?: string): string {
 // ===== REFERRAL API FUNCTIONS =====
 export async function validateReferralCode(code: string): Promise<{ valid: boolean; referrer_name?: string; bonus?: number }> {
   try {
-    const res = await fetch(`${API_BASE}/referral/validate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code, api_key: API_KEY }),
-    });
-    if (!res.ok) return { valid: false };
-    return await res.json();
+    const result = await validateMobileReferralCode(code);
+    return {
+      valid: result.valid,
+      referrer_name: result.referrerName,
+      bonus: result.bonus,
+    };
   } catch (e) {
     console.warn("Failed to validate referral code:", e);
     return { valid: false };
@@ -240,14 +242,8 @@ export async function validateReferralCode(code: string): Promise<{ valid: boole
 
 export async function registerReferral(refereeUserId: number, referrerCode: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const res = await fetch(`${API_BASE}/referral/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ referee_user_id: refereeUserId, referrer_code: referrerCode, api_key: API_KEY }),
-    });
-    const data = await res.json();
-    if (!res.ok) return { success: false, error: data.message || "Erreur" };
-    return { success: true };
+    const result = await registerMobileReferral(referrerCode);
+    return { success: result.success, error: result.error };
   } catch (e) {
     console.warn("Failed to register referral:", e);
     return { success: false, error: "Erreur réseau" };
@@ -260,21 +256,13 @@ export async function registerReferral(refereeUserId: number, referrerCode: stri
  */
 export async function redeemPointsApi(points: number, wpUserId: number): Promise<RedeemResult> {
   try {
-    const res = await fetch(`${API_BASE}/redeem`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: wpUserId, points, api_key: API_KEY }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      return { success: false, error: data.message || data.code || "Erreur lors de l'échange" };
-    }
+    const data = await redeemMobileRewards(points);
     return {
-      success: true,
-      coupon_code: data.coupon_code,
-      discount_value: data.discount_value,
-      points_deducted: data.points_deducted,
-      new_balance: data.new_balance,
+      success: data.success,
+      coupon_code: data.couponCode,
+      discount_value: data.discountValue,
+      points_deducted: data.pointsDeducted,
+      new_balance: data.newBalance,
     };
   } catch (e: any) {
     console.warn("Failed to redeem points:", e);
@@ -284,9 +272,8 @@ export async function redeemPointsApi(points: number, wpUserId: number): Promise
 
 export async function fetchReferralCode(wpUserId: number): Promise<{ code: string; referral_count: number } | null> {
   try {
-    const res = await fetch(`${API_BASE}/referral/code?user_id=${wpUserId}&api_key=${API_KEY}`);
-    if (!res.ok) return null;
-    return await res.json();
+    const result = await getMobileReferralCode();
+    return { code: result.code, referral_count: result.referralCount };
   } catch (e) {
     console.warn("Failed to fetch referral code:", e);
     return null;
@@ -302,48 +289,63 @@ async function fetchBalance(wpUserId: number): Promise<{
   points_to_next_tier: number;
 } | null> {
   try {
-    const res = await fetch(
-      `${API_BASE}/balance?user_id=${wpUserId}&api_key=${API_KEY}`
-    );
-    if (!res.ok) return null;
-    return await res.json();
+    const balance = await getMobileRewardsBalance();
+    return {
+      balance: balance.balance,
+      total_earned: balance.totalEarned,
+      tier: balance.tier,
+      next_tier: balance.nextTier,
+      points_to_next_tier: balance.pointsToNextTier,
+    };
   } catch (e) {
     console.warn("Failed to fetch rewards balance:", e);
     return null;
   }
 }
 
+function normalizeRewardDescription(item: {
+  type: "earn" | "redeem";
+  amount: number;
+  reference?: string;
+  orderId?: number;
+  description?: string;
+}): string {
+  const raw = (item.description || "").replace(/%[a-zA-Z_]+%/g, "").trim();
+  const ref = item.reference || "";
+  const orderLabel = item.orderId ? `commande #${item.orderId}` : ref.toLowerCase().includes("commande") ? ref.toLowerCase() : "";
+
+  if (/lamako mobile v2 redemption|redemption|redeem/i.test(raw) || /redemption|redeem/i.test(ref)) {
+    const match = raw.match(/(\d+)\s*pts?/i);
+    return match
+      ? `Réduction LamakoRewards: ${Number(match[1]).toLocaleString("fr-FR")} points utilisés`
+      : "Points utilisés pour une réduction LamakoRewards";
+  }
+
+  if (/points for order|product purchase|purchase|order/i.test(raw)) {
+    return orderLabel
+      ? `Achat ${orderLabel}: +${Math.abs(item.amount).toLocaleString("fr-FR")} pts`
+      : `Achat validé: +${Math.abs(item.amount).toLocaleString("fr-FR")} pts`;
+  }
+
+  if (raw) return raw;
+  return item.type === "earn" ? "Points gagnés" : "Points échangés";
+}
+
 async function fetchHistory(wpUserId: number, limit = 20): Promise<RewardTransaction[]> {
   try {
-    const res = await fetch(
-      `${API_BASE}/history?user_id=${wpUserId}&api_key=${API_KEY}&limit=${limit}`
-    );
-    if (!res.ok) return [];
-    const data = await res.json();
-    return (data.history || []).map((item: any) => ({
+    const history = await getMobileRewardsHistory(limit);
+    return history.map(item => ({
       id: item.id.toString(),
-      type: item.points >= 0 ? "earn" : "redeem",
-      amount: Math.abs(item.points),
-      reference: item.type,
-      description: (item.description || '').replace(/%[a-zA-Z_]+%/g, '').trim() || `${item.points >= 0 ? 'Points gagnés' : 'Points échangés'}`,
+      type: item.type,
+      amount: Math.abs(item.amount),
+      reference: item.reference,
+      orderId: item.orderId,
+      description: normalizeRewardDescription(item),
       date: item.date,
     }));
   } catch (e) {
     console.warn("Failed to fetch rewards history:", e);
     return [];
-  }
-}
-
-async function fetchUserByEmail(email: string): Promise<{ user_id: number; balance: number; total_earned: number } | null> {
-  try {
-    const res = await fetch(
-      `${API_BASE}/user-by-email?email=${encodeURIComponent(email)}&api_key=${API_KEY}`
-    );
-    if (!res.ok) return null;
-    return await res.json();
-  } catch (e) {
-    console.warn("Failed to fetch user by email:", e);
-    return null;
   }
 }
 
@@ -380,10 +382,10 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
 
   // Auto-sync when user is authenticated
   useEffect(() => {
-    if (isAuthenticated && user?.email && !isLoading) {
+    if (isAuthenticated && user?.id && !isLoading) {
       syncRewards();
     }
-  }, [isAuthenticated, user?.email, isLoading]);
+  }, [isAuthenticated, user?.id, isLoading]);
 
   // Save state to storage
   const saveState = useCallback(async (newState: RewardsState) => {
@@ -397,24 +399,11 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
 
   // Sync with server API
   const syncRewards = useCallback(async () => {
-    if (!user?.email || isSyncing) return;
+    if (!user?.id || isSyncing) return;
     setIsSyncing(true);
 
     try {
-      // First, find the WP user ID by email
-      let wpUserId = state.wpUserId;
-      if (!wpUserId) {
-        const wpUser = await fetchUserByEmail(user.email);
-        if (wpUser) {
-          wpUserId = wpUser.user_id;
-        }
-      }
-
-      if (!wpUserId) {
-        // User not found on WP - keep local state
-        setIsSyncing(false);
-        return;
-      }
+      const wpUserId = user.id;
 
       // Fetch balance from server
       const balanceData = await fetchBalance(wpUserId);
@@ -425,6 +414,7 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
 
       // Fetch history
       const history = await fetchHistory(wpUserId);
+      const referral = await fetchReferralCode(wpUserId);
 
       // Update state with server data
       const tier = getTierForPoints(balanceData.total_earned);
@@ -439,7 +429,7 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
         pointsToNextTier: balanceData.points_to_next_tier,
         history: history.length > 0 ? history : state.history,
         lastSynced: new Date().toISOString(),
-        referralCode: state.referralCode || generateReferralCode(user?.id?.toString()),
+        referralCode: referral?.code || state.referralCode || generateReferralCode(user?.id?.toString()),
       };
 
       setState(newState);
@@ -449,7 +439,7 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsSyncing(false);
     }
-  }, [user?.email, state.wpUserId, isSyncing, saveState]);
+  }, [user?.id, state, isSyncing, saveState]);
 
   // Check if user can redeem (must have 750+ lifetime pts = 750 000 Ar spent)
   const canRedeem = state.lifetimePoints >= REDEMPTION_MIN_POINTS_LIFETIME;
