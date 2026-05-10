@@ -2,11 +2,8 @@
 import "./scripts/load-env.js";
 import type { ExpoConfig } from "expo/config";
 
-// Bundle ID format: space.manus.<project_name_dots>.<timestamp>
-// e.g., "my-app" created at 2024-01-15 10:30:45 -> "space.manus.my.app.t20240115103045"
-// Bundle ID can only contain letters, numbers, and dots
-// Android requires each dot-separated segment to start with a letter
-const rawBundleId = "space.manus.ticketbylamako.app.t20260426232153";
+// Store identifiers must be final before the first Play Store/App Store upload.
+const rawBundleId = "com.ticketbylamako.app";
 const bundleId =
   rawBundleId
     .replace(/[-_]/g, ".") // Replace hyphens/underscores with dots
@@ -21,11 +18,6 @@ const bundleId =
       return /^[a-zA-Z]/.test(segment) ? segment : "x" + segment;
     })
     .join(".") || "space.manus.app";
-// Extract timestamp from bundle ID and prefix with "manus" for deep link scheme
-// e.g., "space.manus.my.app.t20240115103045" -> "manus20240115103045"
-const timestamp = bundleId.split(".").pop()?.replace(/^t/, "") ?? "";
-const schemeFromBundleId = `manus${timestamp}`;
-
 const env = {
   // App branding - update these values directly (do not use env vars)
   appName: "TicketByLamako",
@@ -33,7 +25,7 @@ const env = {
   // S3 URL of the app logo - set this to the URL returned by generate_image when creating custom logo
   // Leave empty to use the default icon from assets/images/icon.png
   logoUrl: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663365168618/JRJGgJaBkkGJgNIg.png",
-  scheme: schemeFromBundleId,
+  scheme: "ticketbylamako",
   iosBundleId: bundleId,
   androidPackage: bundleId,
 };
@@ -46,10 +38,13 @@ const config: ExpoConfig = {
   icon: "./assets/images/icon.png",
   scheme: env.scheme,
   userInterfaceStyle: "automatic",
-  newArchEnabled: false,
+  newArchEnabled: true,
   ios: {
-    supportsTablet: true,
+    supportsTablet: false,
     bundleIdentifier: env.iosBundleId,
+    runtimeVersion: {
+      policy: "appVersion",
+    },
     "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -63,6 +58,9 @@ const config: ExpoConfig = {
     },
     predictiveBackGestureEnabled: false,
     package: env.androidPackage,
+    runtimeVersion: {
+      policy: "appVersion",
+    },
     permissions: ["POST_NOTIFICATIONS"],
     intentFilters: [
       {
@@ -71,7 +69,7 @@ const config: ExpoConfig = {
         data: [
           {
             scheme: env.scheme,
-            host: "*",
+            host: "payment-return",
           },
         ],
         category: ["BROWSABLE", "DEFAULT"],
@@ -82,6 +80,9 @@ const config: ExpoConfig = {
     bundler: "metro",
     output: "static",
     favicon: "./assets/images/favicon.png",
+  },
+  updates: {
+    url: "https://u.expo.dev/96eeaaef-a035-4bc7-99d8-72b0d36677ef",
   },
   plugins: [
     "expo-router",
@@ -116,6 +117,7 @@ const config: ExpoConfig = {
         android: {
           buildArchs: ["armeabi-v7a", "arm64-v8a"],
           minSdkVersion: 24,
+          targetSdkVersion: 35,
           enableProguardInReleaseBuilds: false,
           enableShrinkResourcesInReleaseBuilds: false,
           largeHeap: true,
@@ -125,6 +127,11 @@ const config: ExpoConfig = {
   ],
   experiments: {
     typedRoutes: true,
+  },
+  extra: {
+    eas: {
+      projectId: "96eeaaef-a035-4bc7-99d8-72b0d36677ef",
+    },
   },
 };
 

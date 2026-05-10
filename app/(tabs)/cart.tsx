@@ -68,7 +68,10 @@ export default function CartScreen() {
     <ScreenContainer edges={["left", "right"]}>
       <View style={styles.headerRowFull}>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>Panier ({itemCount})</Text>
-        <TouchableOpacity onPress={() => Alert.alert("Vider le panier", "Supprimer tous les articles ?", [{ text: "Annuler" }, { text: "Vider", style: "destructive", onPress: clearCart }])}>
+        <TouchableOpacity
+          onPress={() => Alert.alert("Vider le panier", "Supprimer tous les articles ?", [{ text: "Annuler" }, { text: "Vider", style: "destructive", onPress: clearCart }])}
+          style={styles.clearButton}
+        >
           <Text style={[styles.clearText, { color: colors.error }]}>Tout supprimer</Text>
         </TouchableOpacity>
       </View>
@@ -76,7 +79,8 @@ export default function CartScreen() {
       <FlatList
         data={items}
         keyExtractor={(item, i) => `${item.productId}-${item.seatLabel || i}`}
-        contentContainerStyle={{ padding: 16 }}
+        style={styles.cartList}
+        contentContainerStyle={styles.cartListContent}
         renderItem={({ item }) => (
           <View style={[styles.cartItem, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Image source={{ uri: item.image }} style={styles.cartItemImage} contentFit="cover" />
@@ -121,7 +125,7 @@ export default function CartScreen() {
               <View style={[styles.rewardsSummary, { backgroundColor: "#fdf6ee", borderColor: "#e8d5a3" }]}>
                 <View style={styles.rewardsRow}>
                   <View style={styles.rewardsIcon}>
-                    <Text style={styles.rewardsStar}>★</Text>
+                    <IconSymbol name="star.fill" size={16} color="#fff" />
                   </View>
                   <View style={styles.rewardsContent}>
                     <Text style={styles.rewardsTitle}>
@@ -137,7 +141,7 @@ export default function CartScreen() {
                 {canRedeem && availableDiscount > 0 && (
                   <View style={[styles.redeemRow, { borderTopColor: "#e8d5a3" }]}>
                     <Text style={styles.redeemText}>
-                      💰 Vous avez {rewardsState.availablePoints} pts disponibles ({formatAriary(availableDiscount)} de réduction possible)
+                      Vous avez {rewardsState.availablePoints} pts disponibles ({formatAriary(availableDiscount)} de réduction possible)
                     </Text>
                   </View>
                 )}
@@ -147,12 +151,12 @@ export default function CartScreen() {
             {/* Not logged in - encourage login for rewards */}
             {!isAuthenticated && (
               <TouchableOpacity
-                onPress={() => router.push("/login" as any)}
+                onPress={() => router.push("/(auth)/login" as any)}
                 style={[styles.rewardsSummary, { backgroundColor: "#fdf6ee", borderColor: "#e8d5a3" }]}
               >
                 <View style={styles.rewardsRow}>
                   <View style={styles.rewardsIcon}>
-                    <Text style={styles.rewardsStar}>★</Text>
+                    <IconSymbol name="star.fill" size={16} color="#fff" />
                   </View>
                   <View style={styles.rewardsContent}>
                     <Text style={styles.rewardsTitle}>
@@ -179,7 +183,7 @@ export default function CartScreen() {
         }
       />
 
-      <View style={[styles.bottomCta, { borderTopColor: colors.border }]}>
+      <View style={[styles.bottomCta, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
         {!isAuthenticated ? (
           <TouchableOpacity
             onPress={() => router.push("/(auth)/login" as any)}
@@ -203,9 +207,10 @@ export default function CartScreen() {
 }
 
 const styles = StyleSheet.create({
-  headerRow: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
-  headerRowFull: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
+  headerRow: { alignItems: "center", justifyContent: "center", paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
+  headerRowFull: { minHeight: 44, alignItems: "center", justifyContent: "center", paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
   headerTitle: { fontSize: 22, fontWeight: "700" },
+  clearButton: { position: "absolute", right: 16, top: 14 },
   clearText: { fontSize: 13, fontWeight: "600" },
   emptyContainer: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 40 },
   emptyTitle: { fontSize: 18, fontWeight: "600", marginTop: 16 },
@@ -229,14 +234,15 @@ const styles = StyleSheet.create({
   totalValue: { fontSize: 15, fontWeight: "600" },
   grandTotalLabel: { fontSize: 18, fontWeight: "700" },
   grandTotalValue: { fontSize: 20, fontWeight: "800" },
+  cartList: { flex: 1 },
+  cartListContent: { padding: 16, paddingBottom: 24 },
   bottomCta: { padding: 16, paddingBottom: 32, borderTopWidth: 1 },
-  checkoutBtn: { borderRadius: 14, paddingVertical: 16, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 8 },
+  checkoutBtn: { minHeight: 54, borderRadius: 14, paddingVertical: 16, paddingHorizontal: 14, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 8 },
   checkoutBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
   // LamakoRewards styles
   rewardsSummary: { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 12 },
   rewardsRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   rewardsIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: "#f59e0b", alignItems: "center", justifyContent: "center" },
-  rewardsStar: { color: "#fff", fontSize: 14, fontWeight: "700" },
   rewardsContent: { flex: 1 },
   rewardsTitle: { fontSize: 13, fontWeight: "600", color: "#3d2314" },
   rewardsPoints: { fontSize: 14, fontWeight: "700", color: "#b45309" },

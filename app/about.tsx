@@ -1,10 +1,10 @@
 import { Text, View, TouchableOpacity, ScrollView, StyleSheet, Linking, Alert, Image } from "react-native";
 import { useRouter } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { LAMAKO_PHONE_DISPLAY, LAMAKO_PHONE_NUMBER, LAMAKO_WHATSAPP_DISPLAY, buildLamakoWhatsAppUrl } from "@/lib/contact";
 
 const SOCIAL_LINKS = [
   { name: "Facebook", icon: "facebook" as const, url: "https://www.facebook.com/Ticketbylamako", color: "#1877F2" },
@@ -14,7 +14,8 @@ const SOCIAL_LINKS = [
 ];
 
 const CONTACT_INFO = {
-  phone: "+261 34 13 922 92",
+  phone: LAMAKO_PHONE_DISPLAY,
+  whatsapp: LAMAKO_WHATSAPP_DISPLAY,
   email: "info@ticketbylamako.com",
   address: "Lot II T 4 C Betongolo, Antananarivo 101, Madagascar",
   website: "https://www.ticketbylamako.com",
@@ -33,8 +34,8 @@ export default function AboutScreen() {
       .catch(() => Alert.alert("Erreur", "Impossible d'ouvrir ce lien."));
   };
 
-  const openLegalPage = (url: string) => {
-    WebBrowser.openBrowserAsync(url).catch(() => openLink(url));
+  const openLegalPage = (path: "/terms" | "/legal-notice" | "/privacy") => {
+    router.push(path as any);
   };
 
   return (
@@ -101,15 +102,29 @@ export default function AboutScreen() {
         <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Nous contacter</Text>
 
         <TouchableOpacity
-          onPress={() => openLink(`tel:${CONTACT_INFO.phone.replace(/\s/g, "")}`)}
+          onPress={() => openLink(`tel:${LAMAKO_PHONE_NUMBER}`)}
           style={[styles.contactRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
         >
           <View style={[styles.contactIcon, { backgroundColor: colors.primary + "15" }]}>
             <MaterialIcons name="phone" size={20} color={colors.primary} />
           </View>
           <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={[styles.contactLabel, { color: colors.foreground }]}>Téléphone / WhatsApp</Text>
+            <Text style={[styles.contactLabel, { color: colors.foreground }]}>Téléphone</Text>
             <Text style={[styles.contactValue, { color: colors.muted }]}>{CONTACT_INFO.phone}</Text>
+          </View>
+          <IconSymbol name="chevron.right" size={16} color={colors.muted} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => openLink(buildLamakoWhatsAppUrl("Bonjour, je vous contacte depuis l'application TicketByLamako."))}
+          style={[styles.contactRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
+        >
+          <View style={[styles.contactIcon, { backgroundColor: colors.primary + "15" }]}>
+            <MaterialIcons name="chat" size={20} color={colors.primary} />
+          </View>
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={[styles.contactLabel, { color: colors.foreground }]}>WhatsApp</Text>
+            <Text style={[styles.contactValue, { color: colors.muted }]}>{CONTACT_INFO.whatsapp}</Text>
           </View>
           <IconSymbol name="chevron.right" size={16} color={colors.muted} />
         </TouchableOpacity>
@@ -187,7 +202,7 @@ export default function AboutScreen() {
         </View>
 
         <TouchableOpacity
-          onPress={() => openLegalPage("https://www.ticketbylamako.com/conditions-generales-de-vente/")}
+          onPress={() => openLegalPage("/terms")}
           style={[styles.contactRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
         >
           <View style={[styles.contactIcon, { backgroundColor: colors.primary + "15" }]}>
@@ -200,7 +215,7 @@ export default function AboutScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={() => openLegalPage("https://www.ticketbylamako.com/mentions-legales/")}
+          onPress={() => openLegalPage("/legal-notice")}
           style={[styles.contactRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
         >
           <View style={[styles.contactIcon, { backgroundColor: colors.primary + "15" }]}>
@@ -213,7 +228,7 @@ export default function AboutScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={() => openLegalPage("https://www.ticketbylamako.com/politique-de-confidentialite/")}
+          onPress={() => openLegalPage("/privacy")}
           style={[styles.contactRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
         >
           <View style={[styles.contactIcon, { backgroundColor: colors.primary + "15" }]}>

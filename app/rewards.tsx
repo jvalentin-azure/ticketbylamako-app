@@ -213,8 +213,10 @@ export default function RewardsScreen() {
                   />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.txDesc, { color: colors.foreground }]} numberOfLines={1}>{tx.description}</Text>
-                  <Text style={[styles.txDate, { color: colors.muted }]}>{formatDate(tx.date)}</Text>
+                  <Text style={[styles.txDesc, { color: colors.foreground }]} numberOfLines={2}>{tx.description}</Text>
+                  <Text style={[styles.txDate, { color: colors.muted }]}>
+                    {formatDate(tx.date)}{tx.reference ? ` · ${tx.reference}` : ""}
+                  </Text>
                 </View>
                 <Text style={[styles.txAmount, { color: tx.type === "earn" ? colors.success : colors.error }]}>
                   {tx.type === "earn" ? "+" : "-"}{tx.amount} pts
@@ -289,7 +291,7 @@ const styles = StyleSheet.create({
   emptySubText: { fontSize: 12, marginTop: 4, textAlign: "center" },
   txRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 0.5, gap: 10 },
   txIcon: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  txDesc: { fontSize: 13 },
+  txDesc: { fontSize: 13, lineHeight: 18, fontWeight: "600" },
   txDate: { fontSize: 11, marginTop: 2 },
   txAmount: { fontSize: 14, fontWeight: "700" },
 });

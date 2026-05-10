@@ -5,7 +5,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/lib/auth-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { getCustomerOrders, type WCOrder } from "@/lib/api/woocommerce";
+import { getMobileOrders, getMobileOrderTickets } from "@/lib/api/mobile";
 import { formatDateShort, decodeHtmlEntities } from "@/lib/format";
 
 interface TicketItem {
@@ -17,35 +17,58 @@ interface TicketItem {
   status: string;
 }
 
+const ticketVisibleStatuses = new Set(["completed", "processing", "cs-complete"]);
+
 export default function TicketsScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated } = useAuth();
   const [tickets, setTickets] = useState<TicketItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
-    if (!user) { setLoading(false); return; }
+    if (!isAuthenticated) { setLoading(false); return; }
     try {
-      const orders = await getCustomerOrders(user.id);
-      const tix: TicketItem[] = [];
-      for (const order of orders) {
-        for (const item of order.line_items) {
-          const codeMeta = item.meta_data?.find((m: any) => m.key === "Ticket Code" || m.key === "ticket_code" || m.key === "_tc_ticket_code");
-          tix.push({
-            orderId: order.id,
-            ticketCode: codeMeta?.value || `TKT-${order.id}-${item.id}`,
-            eventName: decodeHtmlEntities(item.name),
-            ticketType: item.meta_data?.find((m: any) => m.key === "Ticket Type" || m.key === "_tc_ticket_type_name")?.value || "Standard",
-            date: order.date_created,
-            status: order.status,
+      const orders = await getMobileOrders({ limit: 50 });
+      const ticketGroups = await Promise.all(
+        orders
+          .filter(order => ticketVisibleStatuses.has(order.status) && (order.ticketCount > 0 || order.ticketsReady))
+          .map(async order => {
+            try {
+              const response = await getMobileOrderTickets(order.id);
+              return response.tickets.map(ticket => ({
+                orderId: order.id,
+                ticketCode: ticket.ticketCode,
+                eventName: decodeHtmlEntities(ticket.eventName || ticket.productName),
+                ticketType: decodeHtmlEntities(ticket.productName || "Standard"),
+                date: order.dateCreated || "",
+                status: order.status,
+              }));
+            } catch {
+              return [];
+            }
+          })
+      );
+
+      const tix: TicketItem[] = ticketGroups.flat();
+      if (tix.length === 0) {
+        orders.filter(order => ticketVisibleStatuses.has(order.status) && order.ticketCount > 0).forEach(order => {
+          (order.items || []).forEach(item => {
+            tix.push({
+              orderId: order.id,
+              ticketCode: `TKT-${order.id}-${item.id}`,
+              eventName: decodeHtmlEntities(item.name),
+              ticketType: "Standard",
+              date: order.dateCreated || "",
+              status: order.status,
+            });
           });
-        }
+        });
       }
       setTickets(tix);
     } catch {} finally { setLoading(false); setRefreshing(false); }
-  }, [user]);
+  }, [isAuthenticated]);
 
   useEffect(() => { load(); }, [load]);
 

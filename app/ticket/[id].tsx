@@ -4,7 +4,9 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { getOrder, getOrderTickets, extractTicketsFromOrder, type WCOrder, type TicketInstance } from "@/lib/api/woocommerce";
+import { getMobileOrder, getMobileOrderTickets } from "@/lib/api/mobile";
+import { mobileOrderToWCOrder, mobileTicketToTicketInstance } from "@/lib/order-adapters";
+import type { WCOrder, TicketInstance } from "@/lib/types/commerce";
 import { formatAriary, formatDate, formatDateTime, decodeHtmlEntities } from "@/lib/format";
 import QRCode from "react-native-qrcode-svg";
 
@@ -19,6 +21,8 @@ const statusMap: Record<string, { label: string; color: string }> = {
   refunded: { label: "Remboursé", color: "#8B5CF6" },
   failed: { label: "Échoué", color: "#EF4444" },
 };
+
+const ticketVisibleStatuses = new Set(["completed", "processing", "cs-complete"]);
 
 function TicketCard({ ticket, order, index, total, colors }: { ticket: TicketInstance; order: WCOrder; index: number; total: number; colors: any }) {
   const st = statusMap[order.status] || { label: order.status, color: colors.muted };
@@ -155,17 +159,14 @@ export default function TicketDetailScreen() {
     
     async function loadData() {
       try {
-        const orderData = await getOrder(Number(id));
+        const orderData = mobileOrderToWCOrder(await getMobileOrder(Number(id)));
         setOrder(orderData);
-        
-        // Try the mobile API first for real ticket codes
-        const apiTickets = await getOrderTickets(Number(id));
-        if (apiTickets && apiTickets.tickets.length > 0) {
-          setTickets(apiTickets.tickets);
-        } else {
-          // Fallback: extract from order meta
-          const extracted = extractTicketsFromOrder(orderData);
-          setTickets(extracted);
+
+        if (ticketVisibleStatuses.has(orderData.status)) {
+          const apiTickets = await getMobileOrderTickets(Number(id));
+          if (apiTickets && apiTickets.tickets.length > 0) {
+            setTickets(apiTickets.tickets.map(mobileTicketToTicketInstance));
+          }
         }
       } catch {
         // Minimal fallback

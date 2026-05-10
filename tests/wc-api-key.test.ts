@@ -1,31 +1,17 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
 
-describe("WooCommerce API Key Validation", () => {
-  it("should authenticate with WooCommerce REST API", async () => {
-    const siteUrl = process.env.EXPO_PUBLIC_SITE_URL;
-    const consumerKey = process.env.EXPO_PUBLIC_WC_CONSUMER_KEY;
-    const consumerSecret = process.env.EXPO_PUBLIC_WC_CONSUMER_SECRET;
+describe("mobile v2 commerce client", () => {
+  it("does not depend on WooCommerce consumer credentials", () => {
+    const mobileClient = fs.readFileSync(
+      path.join(process.cwd(), "lib", "api", "mobile.ts"),
+      "utf-8"
+    );
 
-    expect(siteUrl).toBeDefined();
-    expect(consumerKey).toBeDefined();
-    expect(consumerSecret).toBeDefined();
-    expect(consumerKey).toMatch(/^ck_/);
-    expect(consumerSecret).toMatch(/^cs_/);
-
-    // Test the API key by fetching a lightweight endpoint
-    const url = `${siteUrl}/wp-json/wc/v3/products?per_page=1&consumer_key=${consumerKey}&consumer_secret=${consumerSecret}`;
-    
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": "TicketByLamako-App/1.0",
-        "Accept": "application/json",
-      },
-    });
-
-    // Should get 200 (success) not 401 (unauthorized)
-    expect(response.status).toBe(200);
-    
-    const data = await response.json();
-    expect(Array.isArray(data)).toBe(true);
+    expect(mobileClient).toContain("lamako-mobile/v2");
+    expect(mobileClient).toContain("Authorization");
+    expect(mobileClient).not.toContain("EXPO_PUBLIC_WC_CONSUMER_KEY");
+    expect(mobileClient).not.toContain("EXPO_PUBLIC_WC_CONSUMER_SECRET");
   });
 });

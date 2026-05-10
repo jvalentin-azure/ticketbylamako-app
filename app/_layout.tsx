@@ -218,8 +218,11 @@ export default function RootLayout() {
             <Stack.Screen name="order/[id]" />
             <Stack.Screen name="ticket/[id]" />
             <Stack.Screen name="checkout" options={{ presentation: "fullScreenModal" }} />
+            <Stack.Screen name="payment-return" options={{ presentation: "fullScreenModal" }} />
             <Stack.Screen name="orders" />
             <Stack.Screen name="privacy" />
+            <Stack.Screen name="terms" />
+            <Stack.Screen name="legal-notice" />
             <Stack.Screen name="help" />
             <Stack.Screen name="rewards" />
             <Stack.Screen name="favorites" />
@@ -229,6 +232,10 @@ export default function RootLayout() {
             <Stack.Screen name="edit-profile" />
             <Stack.Screen name="notification-settings" />
             <Stack.Screen name="oauth/callback" />
+            <Stack.Screen name="oauth/google-callback" />
+            <Stack.Screen name="oauth/facebook-callback" />
+            <Stack.Screen name="oauth/google_callback" />
+            <Stack.Screen name="oauth/facebook_callback" />
           </Stack>
           <StatusBar style="auto" />
           <RewardsPopup delay={30000} />

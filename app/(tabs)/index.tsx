@@ -10,7 +10,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/lib/auth-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { getHomeData, type TCEvent, type WCProduct } from "@/lib/api/woocommerce";
+import { getHomeData, type TCEvent, type WCProduct } from "@/lib/api/catalog";
 import { formatAriary, formatDateShort, decodeHtmlEntities } from "@/lib/format";
 import { useRewards } from "@/lib/rewards-provider";
 import { useFavorites } from "@/lib/favorites-provider";
@@ -20,6 +20,7 @@ import { notifyNewEvent } from "@/lib/notifications";
 import { setPendingCategory } from "@/lib/filter-state";
 import { PARENT_CATEGORY_COLORS } from "@/constants/category-colors";
 import { PointsBadge } from "@/components/points-badge";
+import { OrganizerEventCta } from "@/components/organizer-event-cta";
 // Cache removed for stock-critical data (events/products) to ensure real-time availability
 
 const { width: SCREEN_W } = Dimensions.get("window");
@@ -263,8 +264,6 @@ export default function HomeScreen() {
           })}
         </View>
 
-
-
         {/* PAST EVENTS - HORIZONTAL SCROLLER (same size as events tab: 220x120) */}
         {pastEvents.length > 0 && (
           <>
@@ -338,6 +337,8 @@ export default function HomeScreen() {
             </View>
           </View>
         )}
+
+        <OrganizerEventCta style={styles.organizerCta} />
 
         {/* LAMAKO REWARDS BANNER */}
         {isAuthenticated && (
@@ -433,6 +434,7 @@ const styles = StyleSheet.create({
   sectionHeaderInline: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
   sectionTitle: { fontSize: 18, fontWeight: "700" },
   seeAll: { fontSize: 13, fontWeight: "600" },
+  organizerCta: { marginHorizontal: 16, marginTop: 20 },
   // Full event cards (same as Events tab)
   eventCardFull: { marginHorizontal: 16, borderRadius: 16, overflow: "hidden", borderWidth: 1 },
   eventCardFullImage: { width: "100%", height: 160 },

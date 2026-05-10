@@ -6,7 +6,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useCart } from "@/lib/cart-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { getProduct, type WCProduct } from "@/lib/api/woocommerce";
+import { getProduct, type WCProduct } from "@/lib/api/catalog";
 import { formatAriary, stripHtml, decodeHtmlEntities } from "@/lib/format";
 import { PointsBadge } from "@/components/points-badge";
 import { useRewards } from "@/lib/rewards-provider";
@@ -61,7 +61,11 @@ export default function ProductDetailScreen() {
         itemName={cartToastName}
         onHide={() => setShowCartToast(false)}
       />
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        style={styles.productScroll}
+        contentContainerStyle={styles.productScrollContent}
+      >
         {/* Image Gallery */}
         <View style={{ position: "relative" }}>
           {allImages.length > 1 ? (
@@ -214,6 +218,8 @@ const styles = StyleSheet.create({
   qtyBtnText: { fontSize: 20, fontWeight: "700" },
   qtyValue: { fontSize: 18, fontWeight: "700", minWidth: 24, textAlign: "center" },
   descText: { fontSize: 14, lineHeight: 22 },
+  productScroll: { flex: 1 },
+  productScrollContent: { paddingBottom: 24 },
   bottomCta: { padding: 16, paddingBottom: 32, borderTopWidth: 1 },
   ctaButton: { borderRadius: 14, paddingVertical: 16, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 8 },
   ctaButtonText: { color: "#fff", fontSize: 16, fontWeight: "700" },

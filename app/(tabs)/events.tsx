@@ -5,12 +5,13 @@ import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { getEventsData, type TCEvent, type EventCategory } from "@/lib/api/woocommerce";
+import { getEventsData, type TCEvent, type EventCategory } from "@/lib/api/catalog";
 import { useFavorites } from "@/lib/favorites-provider";
 import { formatAriary, formatDateShort, decodeHtmlEntities } from "@/lib/format";
 import { consumePendingCategory, subscribeToPendingCategory } from "@/lib/filter-state";
 import { PointsBadge } from "@/components/points-badge";
 import { CATEGORY_COLOR_MAP, PARENT_CATEGORY_COLORS } from "@/constants/category-colors";
+import { OrganizerEventCta } from "@/components/organizer-event-cta";
 // Single optimized endpoint returns events + categories in one request (no cache, always fresh)
 
 export default function EventsScreen() {
@@ -323,8 +324,10 @@ export default function EventsScreen() {
           renderItem={renderEvent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} tintColor={colors.primary} />}
           ListFooterComponent={
-            pastEvents.length > 0 ? (
-              <View style={{ marginTop: 24, marginBottom: 40 }}>
+            <View style={styles.eventsFooter}>
+              <OrganizerEventCta style={styles.organizerCta} />
+              {pastEvents.length > 0 ? (
+              <View style={{ marginTop: 24 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, marginBottom: 12 }}>
                   <Text style={[styles.headerTitle, { color: colors.foreground, fontSize: 18 }]}>Événements passés</Text>
                 </View>
@@ -352,7 +355,8 @@ export default function EventsScreen() {
                   }}
                 />
               </View>
-            ) : null
+              ) : null}
+            </View>
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
@@ -422,6 +426,8 @@ const styles = StyleSheet.create({
   chipsContainer: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 22, gap: 8, flexDirection: "row", alignItems: "center" },
   chip: { height: 32, paddingHorizontal: 14, borderRadius: 16, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   chipText: { fontSize: 13, fontWeight: "600", lineHeight: 16 },
+  eventsFooter: { marginTop: 10, marginBottom: 40 },
+  organizerCta: { marginHorizontal: 16 },
   loadingContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
   eventCard: { marginHorizontal: 16, marginBottom: 14, borderRadius: 16, overflow: "hidden", borderWidth: 1 },
   eventImage: { width: "100%", height: 160 },

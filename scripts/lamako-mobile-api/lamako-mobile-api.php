@@ -18,6 +18,11 @@
 
 if ( ! defined( 'ABSPATH' ) ) exit; // Exit if accessed directly
 
+$lamako_mobile_v2_file = __DIR__ . '/includes/v2-commerce.php';
+if ( file_exists( $lamako_mobile_v2_file ) ) {
+    require_once $lamako_mobile_v2_file;
+}
+
 // ============================================================
 // 0. ALLOW PAY-FOR-ORDER WITHOUT LOGIN (for mobile app checkout)
 // ============================================================

@@ -991,3 +991,30 @@
 - PHP: Added .qlwapp selectors to CSS + JS removeAdminElements
 - PHP: Deployed to new server (139.84.234.183, user master_nqpwygdfqp)
 
+## V5.9 - Auth, Rewards, EAS Update Follow-up (10 May 2026)
+
+### Completed
+- [x] Fix Rewards history false purchase label: registration bonus with `ref=registration` and `ref_id=user_id` no longer appears as `Achat commande #...`
+- [x] Deploy Rewards history fix to production WordPress plugin
+- [x] Fix mobile registration: app no longer calls protected `/wp/v2/users`
+- [x] Add public controlled mobile registration endpoint: `/wp-json/lamako-mobile/v1/register`
+- [x] Add password reset endpoint: `/wp-json/lamako-mobile/v1/password-reset`
+- [x] Add "Mot de passe oublie ?" action on native login screen
+- [x] Add OAuth callback screens for Google/Facebook deep links, including hyphen and underscore route variants
+- [x] Add EAS Update config with `expo-updates` and runtime version policy
+- [x] Publish iOS preview EAS Update: `aa368498-285b-413d-918b-caf18c614ad4`
+- [x] Build Android preview APK versionCode 11: `a6db0b28-999e-4372-97c0-03c8d5f655e9`
+- [x] Validate locally: TypeScript, tests, mobile secret scan
+
+### Still To Verify Manually
+- [ ] Test new account registration from APK v11
+- [ ] Test password reset email delivery from the login screen
+- [ ] Test Google login callback no longer shows unmatched route
+- [ ] Finish Meta/Facebook dashboard requirements: Data Use Checkup, Advanced Access for `email` and `public_profile`, Business Verification, app Live/tester roles
+- [ ] Re-test Facebook login after Meta unlocks the app
+- [ ] Configure Apple credentials for iOS internal distribution/TestFlight
+- [ ] Decide whether to keep EAS Update for Android/iOS preview channel after first native builds include `expo-updates`
+
+### Notes
+- Facebook error `Fonctionnalite indisponible` is currently a Meta dashboard/app review/configuration block, not an app callback code failure.
+- Expo Go tunnel is not reliable from this machine: ngrok returned `remote gone away`; use APK/dev-client/TestFlight for external testers.

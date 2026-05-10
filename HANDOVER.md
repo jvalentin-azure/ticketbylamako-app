@@ -205,13 +205,20 @@ npx eas-cli build --platform ios
 
 See **`ENV_EXAMPLE.md`** in the project root for the complete list with descriptions.
 
-### Critical Variables (app won't work without these)
+### Critical Client Variables
 
 | Variable | Purpose |
 |----------|---------|
 | `EXPO_PUBLIC_SITE_URL` | WordPress site URL |
-| `EXPO_PUBLIC_WC_CONSUMER_KEY` | WooCommerce API key |
-| `EXPO_PUBLIC_WC_CONSUMER_SECRET` | WooCommerce API secret |
+
+### Deprecated Client Variables
+
+These were used by the legacy v1 implementation and must not be shipped in production mobile builds after the v2 migration:
+
+| Variable | Risk |
+|----------|------|
+| `EXPO_PUBLIC_WC_CONSUMER_KEY` | WooCommerce credentials should move server-side. |
+| `EXPO_PUBLIC_WC_CONSUMER_SECRET` | Critical secret exposure in the mobile binary. |
 
 ### Where to Configure
 

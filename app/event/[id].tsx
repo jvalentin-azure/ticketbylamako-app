@@ -6,9 +6,10 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useCart } from "@/lib/cart-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { getTCEvent, getEventTickets, getEventsData, clearServerCart, createOrder, SITE_URL as API_SITE_URL, type TCEvent, type TicketType } from "@/lib/api/woocommerce";
+import { getTCEvent, getEventTickets, getEventsData, clearServerCart, SITE_URL as API_SITE_URL, type TCEvent, type TicketType } from "@/lib/api/catalog";
+import { MOBILE_V2_SEATING_ENABLED } from "@/lib/api/mobile";
 import { useAuth } from "@/lib/auth-provider";
-import { getStoredToken, getStoredUser } from "@/lib/api/auth";
+import { getStoredToken } from "@/lib/api/auth";
 import { useFavorites } from "@/lib/favorites-provider";
 import { formatAriary, formatDate, formatDateShort, stripHtml, decodeHtmlEntities } from "@/lib/format";
 import { LinearGradient } from "expo-linear-gradient";
@@ -16,6 +17,7 @@ import { PointsBadge } from "@/components/points-badge";
 import { CartToast } from "@/components/cart-toast";
 import { SeatingChartSkeleton } from "@/components/skeleton-loader";
 import { Confetti } from "@/components/confetti";
+import { SeatPurchaseFlow } from "@/components/seating/SeatPurchaseFlow";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const SITE_URL = API_SITE_URL;
@@ -198,6 +200,13 @@ export default function EventDetailScreen() {
       return;
     }
     
+    if (MOBILE_V2_SEATING_ENABLED) {
+      setShowSeatingChart(true);
+      setWebviewPhase('seating');
+      setSelectedSeats([]);
+      return;
+    }
+
     setSeatingLoading(true);
     try {
       // CRITICAL: Clear WooCommerce cart + release Tickera seats BEFORE opening seating chart
@@ -244,6 +253,20 @@ export default function EventDetailScreen() {
   };
 
   // Seating Chart WebView - loads the tc_seat_charts page directly (same approach as POS plugin)
+  if (showSeatingChart && event && MOBILE_V2_SEATING_ENABLED) {
+    return (
+      <SeatPurchaseFlow
+        eventId={event.id}
+        eventTitle={name}
+        onClose={() => {
+          setShowSeatingChart(false);
+          setWebviewPhase('seating');
+          setSelectedSeats([]);
+        }}
+      />
+    );
+  }
+
   if (showSeatingChart && event && seatingChartUrl) {
     // BilletClic approach: Load the full event page in WebView
     // User interacts naturally: clicks "CHOISIR MA PLACE" → seating chart popup opens → selects seats → 
@@ -678,7 +701,11 @@ export default function EventDetailScreen() {
         itemName={cartToastName}
         onHide={() => setShowCartToast(false)}
       />
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        style={styles.eventScroll}
+        contentContainerStyle={styles.eventScrollContent}
+      >
         {/* Hero Image / Gallery */}
         <View style={{ position: "relative" }}>
           {allImages.length > 1 ? (
@@ -1081,6 +1108,8 @@ const styles = StyleSheet.create({
   qtyBtnText: { fontSize: 20, fontWeight: "700" },
   qtyValue: { fontSize: 18, fontWeight: "700", minWidth: 24, textAlign: "center" },
   descText: { fontSize: 14, lineHeight: 22 },
+  eventScroll: { flex: 1 },
+  eventScrollContent: { paddingBottom: 24 },
   bottomCta: { padding: 16, paddingBottom: 32, borderTopWidth: 1 },
   ctaButton: { borderRadius: 14, paddingVertical: 16, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 8 },
   ctaButtonText: { color: "#fff", fontSize: 16, fontWeight: "700" },

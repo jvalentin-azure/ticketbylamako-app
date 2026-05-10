@@ -92,7 +92,7 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
 
   try {
     // Get Expo push token
-    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
     const tokenData = await Notifications.getExpoPushTokenAsync({
       projectId: projectId || undefined,
     });
@@ -123,12 +123,11 @@ export async function registerPushTokenWithBackend(userId?: number): Promise<boo
     const storedToken = await AsyncStorage.getItem(PUSH_TOKEN_KEY);
     if (!storedToken) return false;
 
-    const { registerPushToken } = await import("@/lib/api/woocommerce");
-    const result = await registerPushToken(
-      storedToken,
-      userId,
-      Platform.OS
-    );
+    const { registerMobilePushToken } = await import("@/lib/api/mobile");
+    const result = await registerMobilePushToken({
+      token: storedToken,
+      platform: Platform.OS,
+    });
     return result.success;
   } catch (error) {
     console.warn("Failed to register push token with backend:", error);
