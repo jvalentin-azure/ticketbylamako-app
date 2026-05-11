@@ -11,6 +11,7 @@ const SITE_URL_BASE = SITE_URL.replace(/\/$/, "");
 
 const TOKEN_KEY = "jwt_token";
 const USER_KEY = "user_data";
+const OAUTH_STATE_PREFIX = "lamako_oauth_state_";
 
 export type SocialProvider = "google" | "apple" | "facebook";
 
@@ -38,6 +39,55 @@ async function secureSet(key: string, value: string) {
   } else {
     const SecureStore = await import("expo-secure-store");
     await SecureStore.setItemAsync(key, value);
+  }
+}
+
+function createOAuthState(provider: "google" | "facebook", returnUrl: string): { state: string; nonce: string } {
+  const nonce = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  return {
+    nonce,
+    state: JSON.stringify({
+      provider,
+      nonce,
+      returnUrl,
+      ts: Date.now(),
+    }),
+  };
+}
+
+function getOAuthParams(url: string): URLSearchParams {
+  const parsed = new URL(url);
+  const fragment = parsed.hash.startsWith("#") ? parsed.hash.slice(1) : parsed.hash;
+  return new URLSearchParams(fragment || parsed.search.replace(/^\?/, ""));
+}
+
+async function rememberOAuthState(provider: "google" | "facebook", nonce: string) {
+  await AsyncStorage.setItem(`${OAUTH_STATE_PREFIX}${provider}`, nonce);
+}
+
+async function validateOAuthState(provider: "google" | "facebook", params: URLSearchParams) {
+  const returnedState = params.get("state");
+  const expectedNonce = await AsyncStorage.getItem(`${OAUTH_STATE_PREFIX}${provider}`);
+
+  if (!returnedState || !expectedNonce) {
+    throw new Error("Session de connexion expirée. Veuillez réessayer.");
+  }
+
+  let decoded: any = null;
+  try {
+    decoded = JSON.parse(returnedState);
+  } catch {
+    try {
+      decoded = JSON.parse(decodeURIComponent(returnedState));
+    } catch {
+      decoded = null;
+    }
+  }
+
+  await AsyncStorage.removeItem(`${OAUTH_STATE_PREFIX}${provider}`);
+
+  if (!decoded || decoded.provider !== provider || decoded.nonce !== expectedNonce) {
+    throw new Error("Retour de connexion invalide. Veuillez réessayer.");
   }
 }
 
@@ -152,7 +202,8 @@ export async function startGoogleLogin(): Promise<{ token: string; email?: strin
 
   const appRedirectUri = Linking.createURL("oauth/google-callback");
   const webRedirectUri = `${SITE_URL_BASE}/lamako-mobile/oauth/google-callback`;
-  const state = Math.random().toString(36).substring(7);
+  const { state, nonce } = createOAuthState("google", appRedirectUri);
+  await rememberOAuthState("google", nonce);
 
   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
     `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}` +
@@ -165,9 +216,8 @@ export async function startGoogleLogin(): Promise<{ token: string; email?: strin
   const result = await WebBrowser.openAuthSessionAsync(authUrl, appRedirectUri);
 
   if (result.type === "success" && result.url) {
-    const url = new URL(result.url);
-    const fragment = url.hash.substring(1);
-    const params = new URLSearchParams(fragment || url.search.substring(1));
+    const params = getOAuthParams(result.url);
+    await validateOAuthState("google", params);
     const accessToken = params.get("access_token");
 
     if (accessToken) {
@@ -237,7 +287,8 @@ export async function startFacebookLogin(): Promise<{ token: string; email?: str
 
   const appRedirectUri = Linking.createURL("oauth/facebook-callback");
   const webRedirectUri = `${SITE_URL_BASE}/lamako-mobile/oauth/facebook-callback`;
-  const state = Math.random().toString(36).substring(7);
+  const { state, nonce } = createOAuthState("facebook", appRedirectUri);
+  await rememberOAuthState("facebook", nonce);
 
   const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?` +
     `client_id=${encodeURIComponent(FACEBOOK_APP_ID)}` +
@@ -249,9 +300,8 @@ export async function startFacebookLogin(): Promise<{ token: string; email?: str
   const result = await WebBrowser.openAuthSessionAsync(authUrl, appRedirectUri);
 
   if (result.type === "success" && result.url) {
-    const url = new URL(result.url);
-    const fragment = url.hash.substring(1);
-    const params = new URLSearchParams(fragment);
+    const params = getOAuthParams(result.url);
+    await validateOAuthState("facebook", params);
     const accessToken = params.get("access_token");
 
     if (accessToken) {
