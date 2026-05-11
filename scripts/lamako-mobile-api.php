@@ -177,8 +177,34 @@ a { display: inline-flex; align-items: center; justify-content: center; min-heig
 </main>
 <script>
 (function() {
-  var appUrl = "<?php echo esc_js( $app_callback ); ?>";
+  var defaultAppUrl = "<?php echo esc_js( $app_callback ); ?>";
   var suffix = window.location.hash || window.location.search || "";
+  var appUrl = defaultAppUrl;
+
+  function isAllowedReturnUrl(url) {
+    return /^ticketbylamako:\/\/oauth\/(google|facebook)-callback/i.test(url)
+      || /^exp:\/\/.*\/--\/oauth\/(google|facebook)-callback/i.test(url)
+      || /^exps:\/\/.*\/--\/oauth\/(google|facebook)-callback/i.test(url);
+  }
+
+  function getParam(name) {
+    var raw = suffix.charAt(0) === "#" || suffix.charAt(0) === "?" ? suffix.substring(1) : suffix;
+    var params = new URLSearchParams(raw);
+    return params.get(name);
+  }
+
+  try {
+    var state = getParam("state");
+    if (state) {
+      var parsedState = JSON.parse(state);
+      if (parsedState && parsedState.returnUrl && isAllowedReturnUrl(parsedState.returnUrl)) {
+        appUrl = parsedState.returnUrl;
+      }
+    }
+  } catch (e) {
+    appUrl = defaultAppUrl;
+  }
+
   var target = appUrl + suffix;
   var link = document.getElementById("lamako-open-app");
   if (link) link.setAttribute("href", target);
