@@ -1,6 +1,7 @@
 import { Text, View, TouchableOpacity, FlatList, Alert, StyleSheet } from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useCart } from "@/lib/cart-provider";
@@ -13,6 +14,7 @@ import { useAuth } from "@/lib/auth-provider";
 
 export default function CartScreen() {
   const colors = useColors();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { items, removeItem, updateQuantity, clearCart, total, itemCount } = useCart();
   const { state: rewardsState, currentTier, canRedeem, getDiscountValue } = useRewards();
@@ -26,6 +28,7 @@ export default function CartScreen() {
 
   // Calculate potential discount from available points
   const availableDiscount = canRedeem ? getDiscountValue(rewardsState.availablePoints) : 0;
+  const bottomSafePadding = Math.max(insets.bottom, 16) + 12;
 
   const handleCheckout = () => {
     if (items.length === 0) return;
@@ -80,7 +83,7 @@ export default function CartScreen() {
         data={items}
         keyExtractor={(item, i) => `${item.productId}-${item.seatLabel || i}`}
         style={styles.cartList}
-        contentContainerStyle={styles.cartListContent}
+        contentContainerStyle={[styles.cartListContent, { paddingBottom: bottomSafePadding + 16 }]}
         renderItem={({ item }) => (
           <View style={[styles.cartItem, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Image source={{ uri: item.image }} style={styles.cartItemImage} contentFit="cover" />
@@ -183,7 +186,7 @@ export default function CartScreen() {
         }
       />
 
-      <View style={[styles.bottomCta, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
+      <View style={[styles.bottomCta, { borderTopColor: colors.border, backgroundColor: colors.background, paddingBottom: bottomSafePadding }]}>
         {!isAuthenticated ? (
           <TouchableOpacity
             onPress={() => router.push("/(auth)/login" as any)}

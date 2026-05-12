@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { ScrollView, Text, View, TouchableOpacity, ActivityIndicator, Dimensions, StyleSheet, FlatList, Platform, Linking, Share, Alert } from "react-native";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useCart } from "@/lib/cart-provider";
@@ -33,6 +34,7 @@ if (Platform.OS !== "web") {
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useColors();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { addItem, clearCart } = useCart();
   const { isAuthenticated } = useAuth();
@@ -163,6 +165,7 @@ export default function EventDetailScreen() {
   if (gallery && gallery.length > 0) {
     gallery.forEach(img => { if (img && !allImages.includes(img)) allImages.push(img); });
   }
+  const bottomSafePadding = Math.max(insets.bottom, 16) + 12;
 
   const handleAddToCart = () => {
     if (!selectedTicket) return;
@@ -704,7 +707,7 @@ export default function EventDetailScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         style={styles.eventScroll}
-        contentContainerStyle={styles.eventScrollContent}
+        contentContainerStyle={[styles.eventScrollContent, { paddingBottom: bottomSafePadding + 24 }]}
       >
         {/* Hero Image / Gallery */}
         <View style={{ position: "relative" }}>
@@ -1041,7 +1044,7 @@ export default function EventDetailScreen() {
       </ScrollView>
 
       {/* Bottom CTA */}
-      <View style={[styles.bottomCta, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
+      <View style={[styles.bottomCta, { borderTopColor: colors.border, backgroundColor: colors.background, paddingBottom: bottomSafePadding }]}>
         {hasSeating ? (
           <TouchableOpacity
             onPress={handleOpenSeatingChart}

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ScrollView, Text, View, TouchableOpacity, ActivityIndicator, Dimensions, FlatList, StyleSheet } from "react-native";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useCart } from "@/lib/cart-provider";
@@ -17,6 +18,7 @@ const { width: SCREEN_W } = Dimensions.get("window");
 export default function ProductDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useColors();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { addItem } = useCart();
   const [product, setProduct] = useState<WCProduct | null>(null);
@@ -53,6 +55,7 @@ export default function ProductDetailScreen() {
   wcImages.forEach(img => { if (img && !allImages.includes(img)) allImages.push(img); });
 
   const productName = decodeHtmlEntities(product.name);
+  const bottomSafePadding = Math.max(insets.bottom, 16) + 12;
 
   return (
     <ScreenContainer edges={["top", "left", "right"]}>
@@ -64,7 +67,7 @@ export default function ProductDetailScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         style={styles.productScroll}
-        contentContainerStyle={styles.productScrollContent}
+        contentContainerStyle={[styles.productScrollContent, { paddingBottom: bottomSafePadding + 24 }]}
       >
         {/* Image Gallery */}
         <View style={{ position: "relative" }}>
@@ -180,7 +183,7 @@ export default function ProductDetailScreen() {
       </ScrollView>
 
       {/* Bottom CTA */}
-      <View style={[styles.bottomCta, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
+      <View style={[styles.bottomCta, { borderTopColor: colors.border, backgroundColor: colors.background, paddingBottom: bottomSafePadding }]}>
         <TouchableOpacity
           onPress={() => {
             addItem({ productId: product.id, name: productName, price: parseFloat(product.price) || 0, image: allImages[0] || "", quantity: qty, isEvent: false });
