@@ -11,6 +11,7 @@ export interface CartItem {
   isEvent: boolean;
   ticketType?: string;
   seatLabel?: string;
+  lamakoRewardsEnabled?: boolean;
 }
 
 interface CartContextType {

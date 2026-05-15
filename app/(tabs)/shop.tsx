@@ -92,7 +92,7 @@ export default function ShopScreen() {
           {item.categories?.filter(c => c.slug.startsWith("boutique-")).map(c => decodeHtmlEntities(c.name)).join(", ") || ""}
         </Text>
         <Text style={[styles.productPrice, { color: colors.primary }]}>{formatAriary(item.price)}</Text>
-        <PointsBadge price={item.price} />
+        {item.lamakoRewardsEnabled !== false && <PointsBadge price={item.price} />}
       </View>
     </TouchableOpacity>
   );

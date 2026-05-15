@@ -19,15 +19,17 @@ export default function CartScreen() {
   const { items, removeItem, updateQuantity, clearCart, total, itemCount } = useCart();
   const { state: rewardsState, currentTier, canRedeem, getDiscountValue } = useRewards();
   const { isAuthenticated } = useAuth();
+  const rewardEligibleItems = items.filter(item => item.lamakoRewardsEnabled !== false);
+  const allItemsRewardEligible = items.length > 0 && rewardEligibleItems.length === items.length;
 
   // Calculate total points to earn for this cart
-  const totalPointsToEarn = items.reduce((sum, item) => {
+  const totalPointsToEarn = rewardEligibleItems.reduce((sum, item) => {
     const price = typeof item.price === "string" ? parseFloat(item.price) || 0 : item.price;
     return sum + estimatePointsForPrice(price * item.quantity, currentTier.multiplier);
   }, 0);
 
   // Calculate potential discount from available points
-  const availableDiscount = canRedeem ? getDiscountValue(rewardsState.availablePoints) : 0;
+  const availableDiscount = allItemsRewardEligible && canRedeem ? getDiscountValue(rewardsState.availablePoints) : 0;
   const bottomSafePadding = Math.max(insets.bottom, 16) + 12;
 
   const handleCheckout = () => {
@@ -100,7 +102,9 @@ export default function CartScreen() {
               <View style={styles.cartItemFooter}>
                 <View>
                   <Text style={[styles.cartItemPrice, { color: colors.primary }]}>{formatAriary(item.price)}</Text>
-                  <PointsBadge price={typeof item.price === "string" ? parseFloat(item.price) * item.quantity : item.price * item.quantity} />
+                  {item.lamakoRewardsEnabled !== false && (
+                    <PointsBadge price={typeof item.price === "string" ? parseFloat(item.price) * item.quantity : item.price * item.quantity} />
+                  )}
                 </View>
                 <View style={styles.qtyControls}>
                   <TouchableOpacity
@@ -141,10 +145,17 @@ export default function CartScreen() {
                     )}
                   </View>
                 </View>
-                {canRedeem && availableDiscount > 0 && (
+                {allItemsRewardEligible && canRedeem && availableDiscount > 0 && (
                   <View style={[styles.redeemRow, { borderTopColor: "#e8d5a3" }]}>
                     <Text style={styles.redeemText}>
                       Vous avez {rewardsState.availablePoints} pts disponibles ({formatAriary(availableDiscount)} de réduction possible)
+                    </Text>
+                  </View>
+                )}
+                {!allItemsRewardEligible && (
+                  <View style={[styles.redeemRow, { borderTopColor: "#e8d5a3" }]}>
+                    <Text style={styles.redeemText}>
+                      Les points ne sont pas disponibles sur tous les articles de ce panier.
                     </Text>
                   </View>
                 )}
@@ -152,7 +163,7 @@ export default function CartScreen() {
             )}
 
             {/* Not logged in - encourage login for rewards */}
-            {!isAuthenticated && (
+            {!isAuthenticated && rewardEligibleItems.length > 0 && (
               <TouchableOpacity
                 onPress={() => router.push("/(auth)/login" as any)}
                 style={[styles.rewardsSummary, { backgroundColor: "#fdf6ee", borderColor: "#e8d5a3" }]}

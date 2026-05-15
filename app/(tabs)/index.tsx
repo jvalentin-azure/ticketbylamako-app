@@ -330,7 +330,7 @@ export default function HomeScreen() {
                       {decodeHtmlEntities(p.name)}
                     </Text>
                     <Text style={[styles.shopCardPrice, { color: colors.primary }]}>{formatAriary(p.price)}</Text>
-                    <PointsBadge price={p.price} />
+                    {p.lamakoRewardsEnabled !== false && <PointsBadge price={p.price} />}
                   </View>
                 </TouchableOpacity>
               ))}

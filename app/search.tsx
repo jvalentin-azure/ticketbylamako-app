@@ -14,7 +14,7 @@ import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { getHomeData, type TCEvent, type WCProduct } from "@/lib/api/catalog";
+import { getEventsData, getShopData, type TCEvent, type WCProduct } from "@/lib/api/catalog";
 import { formatAriary, decodeHtmlEntities, formatDateShort } from "@/lib/format";
 import { PointsBadge } from "@/components/points-badge";
 
@@ -27,6 +27,7 @@ interface SearchResult {
   image?: string;
   subtitle: string;
   price?: string;
+  lamakoRewardsEnabled?: boolean;
 }
 
 export default function SearchScreen() {
@@ -52,7 +53,10 @@ export default function SearchScreen() {
     let cancelled = false;
     (async () => {
       try {
-        const { events: evts, products: prods } = await getHomeData();
+        const [{ events: evts }, { products: prods }] = await Promise.all([
+          getEventsData(),
+          getShopData(),
+        ]);
         if (!cancelled) {
           setEvents(evts);
           setProducts(prods);
@@ -76,6 +80,7 @@ export default function SearchScreen() {
           title: decodeHtmlEntities(e.title.rendered),
           image: e.featuredImage,
           subtitle: e.categoryNames?.join(", ") || formatDateShort(e.date),
+          lamakoRewardsEnabled: e.lamakoRewardsEnabled !== false,
           price: e.minPrice ? `Dès ${formatAriary(e.minPrice)}` : undefined,
         }))
     : [];
@@ -89,6 +94,7 @@ export default function SearchScreen() {
           title: decodeHtmlEntities(p.name),
           image: p.images?.[0]?.src,
           subtitle: p.categories?.map((c) => c.name).join(", ") || "Boutique",
+          lamakoRewardsEnabled: p.lamakoRewardsEnabled !== false,
           price: p.price ? formatAriary(parseFloat(p.price)) : undefined,
         }))
     : [];
@@ -163,7 +169,7 @@ export default function SearchScreen() {
             <Text style={[styles.cardPrice, { color: colors.primary }]}>{item.price}</Text>
           )}
         </View>
-        {item.price && <PointsBadge price={item.price.replace(/[^0-9]/g, '')} />}
+        {item.price && item.lamakoRewardsEnabled !== false && <PointsBadge price={item.price.replace(/[^0-9]/g, '')} />}
       </View>
     </TouchableOpacity>
   );

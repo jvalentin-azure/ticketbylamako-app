@@ -336,6 +336,58 @@ function lr_credit_referrer_on_purchase( $order_id ) {
 
 add_action( 'woocommerce_order_status_completed', 'lr_award_purchase_points', 10, 1 );
 
+function lr_rewards_enabled_for_post( $post_id, $default = true ) {
+    $keys = array(
+        'lamakoRewardsEnabled',
+        '_lamakoRewardsEnabled',
+        'lamako_rewards_enabled',
+        '_lamako_rewards_enabled',
+        'lamako_mobile_rewards_enabled',
+        '_lamako_mobile_rewards_enabled',
+        'rewards_enabled',
+        '_rewards_enabled',
+    );
+
+    foreach ( $keys as $key ) {
+        $value = get_post_meta( $post_id, $key, true );
+        if ( $value !== '' && $value !== null && $value !== false ) {
+            return ! in_array( strtolower( (string) $value ), array( '0', 'no', 'false', 'off', 'disabled' ), true );
+        }
+    }
+
+    return (bool) apply_filters( 'lamako_rewards_enabled_default', $default, $post_id );
+}
+
+function lr_order_item_rewards_enabled( WC_Order_Item_Product $item ) {
+    $product_id = $item->get_product_id();
+    if ( ! $product_id ) {
+        return false;
+    }
+
+    $product = $item->get_product();
+    $base_id = $product && $product->get_parent_id() ? $product->get_parent_id() : $product_id;
+    $is_ticket = get_post_meta( $base_id, '_tc_is_ticket', true ) === 'yes';
+
+    if ( $is_ticket ) {
+        $event_id = absint( get_post_meta( $base_id, '_event_name', true ) );
+        return $event_id > 0
+            && lr_rewards_enabled_for_post( $event_id, true )
+            && lr_rewards_enabled_for_post( $base_id, true );
+    }
+
+    return lr_rewards_enabled_for_post( $base_id, true );
+}
+
+function lr_get_order_rewardable_total( WC_Order $order ) {
+    $total = 0.0;
+    foreach ( $order->get_items( 'line_item' ) as $item ) {
+        if ( $item instanceof WC_Order_Item_Product && lr_order_item_rewards_enabled( $item ) ) {
+            $total += (float) $item->get_total();
+        }
+    }
+    return max( 0, $total );
+}
+
 function lr_award_purchase_points( $order_id ) {
     $order = wc_get_order( $order_id );
     if ( ! $order ) return;
@@ -347,8 +399,8 @@ function lr_award_purchase_points( $order_id ) {
     $awarded = get_post_meta( $order_id, '_lamako_points_awarded', true );
     if ( $awarded ) return;
     
-    // Calculate base points (1 pt per 1000 Ar)
-    $total = (float) $order->get_total();
+    // Calculate base points only from products/events that participate in LamakoRewards.
+    $total = lr_get_order_rewardable_total( $order );
     $base_points = floor( $total / 1000 );
     
     if ( $base_points <= 0 ) return;

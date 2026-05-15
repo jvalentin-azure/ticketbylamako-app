@@ -1,60 +1,70 @@
-const SITE = 'https://www.ticketbylamako.com';
-const CK = process.env.EXPO_PUBLIC_WC_CONSUMER_KEY || '';
-const CS = process.env.EXPO_PUBLIC_WC_CONSUMER_SECRET || '';
+const SITE = process.env.LAMAKO_SITE_URL || 'https://www.ticketbylamako.com';
+const JWT = process.env.LAMAKO_MOBILE_JWT || '';
+
+async function readJson(url, options = {}) {
+  const res = await fetch(url, options);
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  return { res, data };
+}
 
 async function main() {
-  // Get Tickera tickets via WP REST API
-  const url = `${SITE}/wp-json/wp/v2/tc_tickets?per_page=5`;
-  const res = await fetch(url);
-  console.log('Status:', res.status);
-  if (res.ok) {
-    const data = await res.json();
-    if (Array.isArray(data)) {
-      for (const t of data) {
-        console.log('Ticket #' + t.id, 'title:', t.title?.rendered, 'slug:', t.slug);
-        if (t.meta) {
-          for (const [k, v] of Object.entries(t.meta)) {
-            console.log('  ' + k + ':', JSON.stringify(v).substring(0, 200));
-          }
+  console.log('=== Public Tickera tickets ===');
+  const ticketUrl = `${SITE}/wp-json/wp/v2/tc_tickets?per_page=5`;
+  const { res: ticketRes, data: ticketData } = await readJson(ticketUrl);
+  console.log('Status:', ticketRes.status);
+
+  if (ticketRes.ok && Array.isArray(ticketData)) {
+    for (const ticket of ticketData) {
+      console.log('Ticket #' + ticket.id, 'title:', ticket.title?.rendered, 'slug:', ticket.slug);
+      if (ticket.meta) {
+        for (const [key, value] of Object.entries(ticket.meta)) {
+          console.log('  ' + key + ':', JSON.stringify(value).substring(0, 200));
         }
-        console.log('---');
       }
-    } else {
-      console.log('Response:', JSON.stringify(data).substring(0, 500));
+      console.log('---');
     }
   } else {
-    const text = await res.text();
-    console.log('Error:', text.substring(0, 300));
+    console.log('Response:', JSON.stringify(ticketData).substring(0, 500));
   }
 
-  // Also try to get order with ticket meta
-  console.log('\n=== Orders with ticket meta ===');
-  const oUrl = `${SITE}/wp-json/wc/v3/orders?per_page=10&status=completed&consumer_key=${CK}&consumer_secret=${CS}`;
-  const oRes = await fetch(oUrl);
-  if (oRes.ok) {
-    const orders = await oRes.json();
-    for (const o of orders) {
-      // Check order meta for ticket codes
-      const tcMeta = (o.meta_data || []).filter(m => m.key.includes('tc_') || m.key.includes('ticket'));
-      if (tcMeta.length > 0) {
-        console.log('Order #' + o.id + ':');
-        for (const m of tcMeta) {
-          console.log('  ' + m.key + ' = ' + JSON.stringify(m.value).substring(0, 300));
-        }
-        console.log('---');
-      }
-      // Check line item meta
-      for (const li of o.line_items) {
-        const liMeta = (li.meta_data || []).filter(m => m.key.includes('tc_') || m.key.includes('ticket') || m.key.includes('Ticket'));
-        if (liMeta.length > 0) {
-          console.log('Order #' + o.id + ' item "' + li.name + '" qty=' + li.quantity + ':');
-          for (const m of liMeta) {
-            console.log('  ' + m.key + ' = ' + JSON.stringify(m.value).substring(0, 300));
-          }
-        }
-      }
+  console.log('\n=== Mobile v2 orders/tickets ===');
+  if (!JWT) {
+    console.log('Skipped: set LAMAKO_MOBILE_JWT to inspect authenticated v2 order/ticket data.');
+    return;
+  }
+
+  const orderUrl = `${SITE}/wp-json/lamako-mobile/v2/orders?limit=10`;
+  const { res: orderRes, data: orderData } = await readJson(orderUrl, {
+    headers: { Authorization: `Bearer ${JWT}`, Accept: 'application/json' },
+  });
+  console.log('Status:', orderRes.status);
+
+  if (!orderRes.ok || !Array.isArray(orderData?.orders)) {
+    console.log('Response:', JSON.stringify(orderData).substring(0, 500));
+    return;
+  }
+
+  for (const order of orderData.orders) {
+    console.log(`Order #${order.number || order.id}: ${order.status}, ticketsReady=${order.ticketsReady}`);
+    const ticketsUrl = `${SITE}/wp-json/lamako-mobile/v2/orders/${order.id}/tickets`;
+    const { res: ticketsRes, data: ticketsData } = await readJson(ticketsUrl, {
+      headers: { Authorization: `Bearer ${JWT}`, Accept: 'application/json' },
+    });
+    if (ticketsRes.ok) {
+      console.log('  tickets:', JSON.stringify(ticketsData?.tickets || []).substring(0, 800));
+    } else {
+      console.log('  tickets error:', ticketsRes.status, JSON.stringify(ticketsData).substring(0, 300));
     }
   }
 }
 
-main().catch(e => console.error(e.message));
+main().catch(error => {
+  console.error(error?.message || error);
+  process.exitCode = 1;
+});

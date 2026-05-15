@@ -40,6 +40,12 @@ export interface WCProduct {
   date_created: string;
   variations?: number[];
   attributes?: { id: number; name: string; position: number; visible: boolean; variation: boolean; options: string[] }[];
+  lamakoRewardsEnabled?: boolean;
+  lamako_mobile?: {
+    description: string | null;
+    gallery: string[] | null;
+    practical_info: { label: string; value: string }[] | null;
+  } | null;
 }
 
 export interface WCOrder {
@@ -103,6 +109,7 @@ export interface TCEvent {
   minPrice?: number;
   maxPrice?: number;
   hasSeatingChart?: boolean;
+  lamakoRewardsEnabled?: boolean;
 }
 
 export interface TicketType {
@@ -112,6 +119,7 @@ export interface TicketType {
   stock_status: string;
   usesSeating: boolean;
   eventId: string;
+  lamakoRewardsEnabled?: boolean;
 }
 
 export interface EventCategory {

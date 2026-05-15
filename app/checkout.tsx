@@ -32,6 +32,8 @@ export default function CheckoutScreen() {
   const { items, clearCart, total } = useCart();
   const { currentTier, canRedeem, getDiscountValue, getBestRedemption, redeemPoints, state: rewardsState } = useRewards();
   const { isAuthenticated } = useAuth();
+  const rewardEligibleItems = items.filter(item => item.lamakoRewardsEnabled !== false);
+  const allItemsRewardEligible = items.length > 0 && rewardEligibleItems.length === items.length;
 
   // Rewards redemption state
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
@@ -40,7 +42,7 @@ export default function CheckoutScreen() {
   const [redeemError, setRedeemError] = useState<string | null>(null);
 
   // Calculate total points to earn for this order
-  const totalPointsToEarn = items.reduce((sum, item) => {
+  const totalPointsToEarn = rewardEligibleItems.reduce((sum, item) => {
     const price = typeof item.price === "string" ? parseFloat(item.price) || 0 : item.price;
     return sum + estimatePointsForPrice(price * item.quantity, currentTier.multiplier);
   }, 0);
@@ -48,7 +50,7 @@ export default function CheckoutScreen() {
 
   const hasPhysicalProducts = items.some(i => !i.isEvent);
   // Show confirm phase for events-only if user can redeem points, otherwise go straight to creating
-  const canShowRedeem = canRedeem && rewardsState.availablePoints >= 500 && isAuthenticated;
+  const canShowRedeem = allItemsRewardEligible && canRedeem && rewardsState.availablePoints >= 500 && isAuthenticated;
   const [phase, setPhase] = useState<CheckoutPhase>(hasPhysicalProducts ? "address" : (canShowRedeem ? "confirm" : "creating"));
   const [checkoutUrl, setCheckoutUrl] = useState<string>("");
   const [orderId, setOrderId] = useState<number>(0);
@@ -93,6 +95,10 @@ export default function CheckoutScreen() {
 
   // Handle redeem points
   const handleRedeemPoints = async (points: number) => {
+    if (!allItemsRewardEligible) {
+      setRedeemError("Les points LamakoRewards ne sont pas disponibles pour ce panier.");
+      return;
+    }
     if (!rewardsState.wpUserId) {
       setRedeemError("Impossible de trouver votre compte. Veuillez vous reconnecter.");
       return;
@@ -119,6 +125,13 @@ export default function CheckoutScreen() {
     setAppliedCoupon(null);
     setAppliedDiscount(0);
   };
+
+  useEffect(() => {
+    if (!allItemsRewardEligible && appliedCoupon) {
+      removeCoupon();
+      setRedeemError("La reduction LamakoRewards a ete retiree car ce panier contient un article non eligible.");
+    }
+  }, [allItemsRewardEligible, appliedCoupon]);
 
   const markPaymentSuccess = (confirmedOrderId?: number) => {
     const finalOrderId = confirmedOrderId || orderId;
@@ -518,7 +531,7 @@ export default function CheckoutScreen() {
           </View>
 
           {/* LamakoRewards - Points to earn + Redeem */}
-          {isAuthenticated && (
+          {isAuthenticated && (totalPointsToEarn > 0 || !allItemsRewardEligible || (allItemsRewardEligible && rewardsState.availablePoints >= 500)) && (
             <View style={{ backgroundColor: "#fdf6ee", borderRadius: 12, borderWidth: 1, borderColor: "#e8d5a3", padding: 12, marginTop: 12 }}>
               {/* Points to earn */}
               {totalPointsToEarn > 0 && (
@@ -538,7 +551,7 @@ export default function CheckoutScreen() {
               )}
 
               {/* Redeem section */}
-              {canRedeem && rewardsState.availablePoints >= 500 && !appliedCoupon && (
+              {allItemsRewardEligible && canRedeem && rewardsState.availablePoints >= 500 && !appliedCoupon && (
                 <View style={{ borderTopWidth: totalPointsToEarn > 0 ? 1 : 0, borderTopColor: "#e8d5a3", marginTop: totalPointsToEarn > 0 ? 10 : 0, paddingTop: totalPointsToEarn > 0 ? 10 : 0 }}>
                   <Text style={{ fontSize: 13, fontWeight: "600", color: "#3d2314", marginBottom: 8 }}>
                     Utiliser mes points ({rewardsState.availablePoints} pts)
@@ -572,6 +585,14 @@ export default function CheckoutScreen() {
                 </View>
               )}
 
+              {!allItemsRewardEligible && (
+                <View style={{ borderTopWidth: totalPointsToEarn > 0 ? 1 : 0, borderTopColor: "#e8d5a3", marginTop: totalPointsToEarn > 0 ? 10 : 0, paddingTop: totalPointsToEarn > 0 ? 10 : 0 }}>
+                  <Text style={{ fontSize: 11, color: "#92400e" }}>
+                    Les points LamakoRewards ne sont pas disponibles sur tous les articles de ce panier.
+                  </Text>
+                </View>
+              )}
+
               {/* Applied coupon */}
               {appliedCoupon && (
                 <View style={{ borderTopWidth: totalPointsToEarn > 0 ? 1 : 0, borderTopColor: "#e8d5a3", marginTop: totalPointsToEarn > 0 ? 10 : 0, paddingTop: totalPointsToEarn > 0 ? 10 : 0 }}>
@@ -592,7 +613,7 @@ export default function CheckoutScreen() {
               )}
 
               {/* Not eligible message */}
-              {!canRedeem && rewardsState.availablePoints > 0 && (
+              {allItemsRewardEligible && !canRedeem && rewardsState.availablePoints > 0 && (
                 <View style={{ borderTopWidth: totalPointsToEarn > 0 ? 1 : 0, borderTopColor: "#e8d5a3", marginTop: totalPointsToEarn > 0 ? 10 : 0, paddingTop: totalPointsToEarn > 0 ? 10 : 0 }}>
                   <Text style={{ fontSize: 11, color: "#92400e" }}>
                     Encore {750 - rewardsState.lifetimePoints} pts à accumuler pour débloquer l'échange

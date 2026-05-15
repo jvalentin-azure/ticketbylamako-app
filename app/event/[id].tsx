@@ -62,10 +62,8 @@ export default function EventDetailScreen() {
     if (!id) return;
     const eventId = Number(id);
     
-    // Strategy: Use cached events-data for instant display, fetch full details in parallel
-    // This avoids the slow getProducts(per_page=100) call that was causing 1min+ load times
+    // Strategy: Use compact events-data for instant display, then hydrate full detail.
     getEventsData().then(({ events: allEvents }) => {
-      // Try to get event + tickets from cached data (instant if coming from events list)
       const cachedEvent = allEvents.find(e => e.id === eventId);
       if (cachedEvent) {
         setEvent(cachedEvent);
@@ -86,24 +84,18 @@ export default function EventDetailScreen() {
       }).slice(0, 8);
       setUpcomingEvents(upcoming);
       
-      // If event not found in cache, fall back to individual API calls
-      if (!cachedEvent) {
-        Promise.all([
-          getTCEvent(eventId),
-          getEventTickets(eventId),
-        ]).then(([ev, tix]) => {
-          setEvent(ev);
-          setTickets(tix);
-          if (tix.length === 1) setSelectedTicket(tix[0]);
-          setLoading(false);
-        }).catch(() => setLoading(false));
-      }
+      getTCEvent(eventId).then(ev => {
+        const tix = ev.tickets || [];
+        setEvent(ev);
+        setTickets(tix);
+        if (tix.length === 1) setSelectedTicket(tix[0]);
+        setLoading(false);
+      }).catch(() => {
+        if (!cachedEvent) setLoading(false);
+      });
     }).catch(() => {
-      // If events-data fails, fall back to individual API calls
-      Promise.all([
-        getTCEvent(eventId),
-        getEventTickets(eventId),
-      ]).then(([ev, tix]) => {
+      getTCEvent(eventId).then(ev => {
+        const tix = ev.tickets || [];
         setEvent(ev);
         setTickets(tix);
         if (tix.length === 1) setSelectedTicket(tix[0]);
@@ -177,6 +169,7 @@ export default function EventDetailScreen() {
       image: event.featuredImage || "",
       quantity: qty,
       isEvent: true,
+      lamakoRewardsEnabled: event.lamakoRewardsEnabled !== false && selectedTicket.lamakoRewardsEnabled !== false,
     });
     setCartToastName(itemName);
     setShowCartToast(true);
@@ -839,10 +832,12 @@ export default function EventDetailScreen() {
                   ? formatAriary(tickets[0].price)
                   : formatAriary(Math.min(...tickets.map(t => parseFloat(t.price) || 0)))}
               </Text>
-              <PointsBadge
-                price={tickets.length === 1 ? tickets[0].price : Math.min(...tickets.map(t => parseFloat(t.price) || 0))}
-                compact={false}
-              />
+              {event.lamakoRewardsEnabled !== false && (
+                <PointsBadge
+                  price={tickets.length === 1 ? tickets[0].price : Math.min(...tickets.map(t => parseFloat(t.price) || 0))}
+                  compact={false}
+                />
+              )}
             </View>
           )}
 

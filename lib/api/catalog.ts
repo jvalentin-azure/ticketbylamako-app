@@ -27,11 +27,15 @@ interface HomeDataResponse {
   events: TCEvent[];
   products: WCProduct[];
   categories: EventCategory[];
+  version?: string;
+  generatedAt?: string;
 }
 
 interface EventsDataResponse {
   events: TCEvent[];
   categories: EventCategory[];
+  version?: string;
+  generatedAt?: string;
 }
 
 interface ShopDataResponse {
@@ -62,6 +66,7 @@ function normalizeTicket(raw: any, eventId: number | string): TicketType {
     stock_status: raw?.stock_status || "instock",
     usesSeating: Boolean(raw?.usesSeating),
     eventId: String(raw?.eventId || eventId),
+    lamakoRewardsEnabled: raw?.lamakoRewardsEnabled !== false,
   };
 }
 
@@ -84,6 +89,7 @@ function normalizeEvent(raw: any): TCEvent {
     minPrice: raw?.minPrice || undefined,
     maxPrice: raw?.maxPrice || undefined,
     hasSeatingChart: Boolean(raw?.hasSeatingChart),
+    lamakoRewardsEnabled: raw?.lamakoRewardsEnabled !== false,
   };
 }
 
@@ -112,6 +118,7 @@ function normalizeProduct(raw: any): WCProduct {
     type: raw?.type || "simple",
     meta_data: [],
     date_created: raw?.date_created || "",
+    lamakoRewardsEnabled: raw?.lamakoRewardsEnabled !== false,
     ...(raw?.lamako_mobile ? { lamako_mobile: raw.lamako_mobile } : {}),
   } as WCProduct;
 }
@@ -160,11 +167,16 @@ export async function getHomeData(): Promise<HomeDataResponse> {
   const cached = getCached<HomeDataResponse>("home-data");
   if (cached) return cached;
 
-  const raw = await mobileV2Fetch<any>("public/home-data", { requireAuth: false });
+  const raw = await mobileV2Fetch<any>("public/home-data", {
+    requireAuth: false,
+    params: { summary: true, events_limit: 12, products_limit: 8 },
+  });
   const result: HomeDataResponse = {
     events: (raw?.events || []).map(normalizeEvent),
     products: (raw?.products || []).map(normalizeProduct),
     categories: (raw?.categories || []).map(normalizeEventCategory),
+    version: raw?.version,
+    generatedAt: raw?.generatedAt,
   };
   setCache("home-data", result);
   return result;
@@ -174,10 +186,15 @@ export async function getEventsData(): Promise<EventsDataResponse> {
   const cached = getCached<EventsDataResponse>("events-data");
   if (cached) return cached;
 
-  const raw = await mobileV2Fetch<any>("public/events-data", { requireAuth: false });
+  const raw = await mobileV2Fetch<any>("public/events-data", {
+    requireAuth: false,
+    params: { summary: true, limit: 80 },
+  });
   const result: EventsDataResponse = {
     events: (raw?.events || []).map(normalizeEvent),
     categories: (raw?.categories || []).map(normalizeEventCategory),
+    version: raw?.version,
+    generatedAt: raw?.generatedAt,
   };
   setCache("events-data", result);
   return result;
@@ -201,15 +218,16 @@ export async function getProduct(id: number): Promise<WCProduct> {
 }
 
 export async function getTCEvent(id: number): Promise<TCEvent> {
-  const { events } = await getEventsData();
-  const event = events.find(item => item.id === id);
-  if (!event) throw new Error(`Event ${id} not found`);
+  const cached = getCached<TCEvent>(`event-${id}`);
+  if (cached) return cached;
+
+  const event = normalizeEvent(await mobileV2Fetch<any>(`public/events/${id}`, { requireAuth: false }));
+  setCache(`event-${id}`, event);
   return event;
 }
 
 export async function getEventTickets(eventId: number): Promise<TicketType[]> {
-  const { events } = await getEventsData();
-  return events.find(event => event.id === eventId)?.tickets || [];
+  return (await getTCEvent(eventId)).tickets || [];
 }
 
 export async function getShopProducts(_params: Record<string, string> = {}): Promise<WCProduct[]> {

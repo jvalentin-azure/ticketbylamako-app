@@ -224,7 +224,7 @@ export default function EventsScreen() {
               ) : (
                 <Text style={[styles.price, { color: colors.muted }]}>Prix non défini</Text>
               )}
-              {item.minPrice != null && <PointsBadge price={item.minPrice} />}
+              {item.minPrice != null && item.lamakoRewardsEnabled !== false && <PointsBadge price={item.minPrice} />}
             </View>
             <View style={[styles.buyButton, { backgroundColor: colors.primary }]}>
               <Text style={styles.buyButtonText}>Voir</Text>

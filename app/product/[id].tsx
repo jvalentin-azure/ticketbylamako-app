@@ -129,7 +129,7 @@ export default function ProductDetailScreen() {
           </View>
 
           {/* LamakoRewards Points Badge */}
-          <PointsBadge price={product.price} compact={false} />
+          {product.lamakoRewardsEnabled !== false && <PointsBadge price={product.price} compact={false} />}
 
           {/* Categories */}
           {product.categories && product.categories.length > 0 && (
@@ -186,7 +186,15 @@ export default function ProductDetailScreen() {
       <View style={[styles.bottomCta, { borderTopColor: colors.border, backgroundColor: colors.background, paddingBottom: bottomSafePadding }]}>
         <TouchableOpacity
           onPress={() => {
-            addItem({ productId: product.id, name: productName, price: parseFloat(product.price) || 0, image: allImages[0] || "", quantity: qty, isEvent: false });
+            addItem({
+              productId: product.id,
+              name: productName,
+              price: parseFloat(product.price) || 0,
+              image: allImages[0] || "",
+              quantity: qty,
+              isEvent: false,
+              lamakoRewardsEnabled: product.lamakoRewardsEnabled !== false,
+            });
             setCartToastName(productName);
             setShowCartToast(true);
             setTimeout(() => { router.push("/(tabs)/cart" as any); }, 1200);
