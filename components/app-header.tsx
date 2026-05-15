@@ -1,14 +1,18 @@
-import { View, TouchableOpacity, StyleSheet, Platform } from "react-native";
+import {
+  View,
+  TouchableOpacity,
+  StyleSheet,
+  Platform,
+  Text,
+} from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/use-colors";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useAuth } from "@/lib/auth-provider";
-import { useCart } from "@/lib/cart-provider";
 import { useNotifications } from "@/lib/notifications-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { Text } from "react-native";
 
 interface AppHeaderProps {
   onMenuPress?: () => void;
@@ -20,7 +24,6 @@ export function AppHeader({ onMenuPress }: AppHeaderProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { isAuthenticated, user } = useAuth();
-  const { itemCount } = useCart();
   const { unreadCount } = useNotifications();
 
   const topPadding = Platform.OS === "web" ? 8 : Math.max(insets.top, 8);
@@ -43,7 +46,11 @@ export function AppHeader({ onMenuPress }: AppHeaderProps) {
           style={[styles.iconButton, { backgroundColor: colors.surface }]}
           activeOpacity={0.7}
         >
-          <IconSymbol name="line.3.horizontal" size={22} color={colors.foreground} />
+          <IconSymbol
+            name="line.3.horizontal"
+            size={22}
+            color={colors.foreground}
+          />
         </TouchableOpacity>
 
         {/* Center: Logo */}
@@ -73,7 +80,11 @@ export function AppHeader({ onMenuPress }: AppHeaderProps) {
             style={[styles.iconButton, { backgroundColor: colors.surface }]}
             activeOpacity={0.7}
           >
-            <IconSymbol name="magnifyingglass" size={20} color={colors.foreground} />
+            <IconSymbol
+              name="magnifyingglass"
+              size={20}
+              color={colors.foreground}
+            />
           </TouchableOpacity>
 
           {/* Notification Bell */}

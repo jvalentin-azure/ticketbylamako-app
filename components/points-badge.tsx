@@ -1,6 +1,5 @@
 import { View, Text, StyleSheet } from "react-native";
-import { useColors } from "@/hooks/use-colors";
-import { estimatePointsForPrice, TIERS } from "@/lib/rewards-provider";
+import { estimatePointsForPrice } from "@/lib/rewards-provider";
 
 interface PointsBadgeProps {
   /** Price in Ariary (number or string) */
@@ -16,15 +15,19 @@ interface PointsBadgeProps {
 /**
  * Dynamic LamakoRewards points badge.
  * Shows how many points a user would earn for a given price.
- * 
+ *
  * Usage:
  * ```tsx
  * <PointsBadge price={120000} />           // compact by default
  * <PointsBadge price={120000} compact={false} multiplier={1.25} tierName="Gold" />
  * ```
  */
-export function PointsBadge({ price, compact = true, multiplier = 1, tierName }: PointsBadgeProps) {
-  const colors = useColors();
+export function PointsBadge({
+  price,
+  compact = true,
+  multiplier = 1,
+  tierName,
+}: PointsBadgeProps) {
   const priceNum = typeof price === "string" ? parseFloat(price) || 0 : price;
   const points = estimatePointsForPrice(priceNum, multiplier);
 
@@ -52,7 +55,8 @@ export function PointsBadge({ price, compact = true, multiplier = 1, tierName }:
         </View>
         <View style={styles.detailContent}>
           <Text style={styles.detailTitle}>
-            Gagnez <Text style={styles.detailPoints}>{points} points</Text> LamakoRewards
+            Gagnez <Text style={styles.detailPoints}>{points} points</Text>{" "}
+            LamakoRewards
           </Text>
           {multiplier > 1 && tierName && (
             <Text style={styles.detailBonus}>

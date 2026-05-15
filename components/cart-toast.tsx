@@ -1,7 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Animated, Text, View, StyleSheet, Platform } from "react-native";
 import { useColors } from "@/hooks/use-colors";
-import { IconSymbol } from "@/components/ui/icon-symbol";
 import * as Haptics from "expo-haptics";
 
 interface CartToastProps {
@@ -16,7 +15,12 @@ interface CartToastProps {
  * Shows a checkmark icon, item name, and auto-hides after 1.5 seconds.
  * Triggers a success haptic feedback when shown.
  */
-export function CartToast({ visible, message, itemName, onHide }: CartToastProps) {
+export function CartToast({
+  visible,
+  message,
+  itemName,
+  onHide,
+}: CartToastProps) {
   const colors = useColors();
   const translateY = useRef(new Animated.Value(-100)).current;
   const opacity = useRef(new Animated.Value(0)).current;
@@ -100,16 +104,24 @@ export function CartToast({ visible, message, itemName, onHide }: CartToastProps
         </View>
       </View>
       <View style={styles.textContainer}>
-        <Text style={[styles.title, { color: colors.background }]} numberOfLines={1}>
+        <Text
+          style={[styles.title, { color: colors.background }]}
+          numberOfLines={1}
+        >
           {message || "Ajouté au panier"}
         </Text>
         {itemName && (
-          <Text style={[styles.subtitle, { color: colors.muted }]} numberOfLines={1}>
+          <Text
+            style={[styles.subtitle, { color: colors.muted }]}
+            numberOfLines={1}
+          >
             {itemName}
           </Text>
         )}
       </View>
-      <View style={[styles.cartIcon, { backgroundColor: "rgba(255,255,255,0.15)" }]}>
+      <View
+        style={[styles.cartIcon, { backgroundColor: "rgba(255,255,255,0.15)" }]}
+      >
         <Text style={{ fontSize: 18 }}>🛒</Text>
       </View>
     </Animated.View>

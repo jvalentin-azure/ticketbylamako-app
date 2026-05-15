@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { View, StyleSheet, Dimensions, Platform } from "react-native";
 import Animated, {
   useSharedValue,
@@ -6,12 +6,22 @@ import Animated, {
   withTiming,
   withDelay,
   Easing,
-  runOnJS,
 } from "react-native-reanimated";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 const CONFETTI_COUNT = 50;
-const COLORS = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#FFA07A", "#98D8C8", "#F7DC6F", "#BB8FCE", "#85C1E9", "#F1948A", "#82E0AA"];
+const COLORS = [
+  "#FF6B6B",
+  "#4ECDC4",
+  "#45B7D1",
+  "#FFA07A",
+  "#98D8C8",
+  "#F7DC6F",
+  "#BB8FCE",
+  "#85C1E9",
+  "#F1948A",
+  "#82E0AA",
+];
 
 interface ConfettiPieceProps {
   index: number;
@@ -34,11 +44,26 @@ function ConfettiPiece({ index }: ConfettiPieceProps) {
   const isCircle = Math.random() > 0.5;
 
   useEffect(() => {
-    translateY.value = withDelay(delay, withTiming(SCREEN_H + 50, { duration, easing: Easing.out(Easing.quad) }));
-    translateX.value = withDelay(delay, withTiming(endX - startX, { duration, easing: Easing.inOut(Easing.sin) }));
-    rotate.value = withDelay(delay, withTiming(360 * (2 + Math.random() * 3), { duration }));
-    opacity.value = withDelay(delay + duration * 0.7, withTiming(0, { duration: duration * 0.3 }));
-    scale.value = withDelay(delay, withTiming(0.3, { duration, easing: Easing.in(Easing.quad) }));
+    translateY.value = withDelay(
+      delay,
+      withTiming(SCREEN_H + 50, { duration, easing: Easing.out(Easing.quad) }),
+    );
+    translateX.value = withDelay(
+      delay,
+      withTiming(endX - startX, { duration, easing: Easing.inOut(Easing.sin) }),
+    );
+    rotate.value = withDelay(
+      delay,
+      withTiming(360 * (2 + Math.random() * 3), { duration }),
+    );
+    opacity.value = withDelay(
+      delay + duration * 0.7,
+      withTiming(0, { duration: duration * 0.3 }),
+    );
+    scale.value = withDelay(
+      delay,
+      withTiming(0.3, { duration, easing: Easing.in(Easing.quad) }),
+    );
   }, []);
 
   const animStyle = useAnimatedStyle(() => ({
@@ -75,8 +100,7 @@ interface ConfettiProps {
 }
 
 export function Confetti({ active = true, duration = 4000 }: ConfettiProps) {
-  const [visible, setVisible] = useRef(active).current ? [true, () => {}] : [active, () => {}];
-
+  void duration;
   if (!active) return null;
   if (Platform.OS === "web") return null; // Skip on web to avoid performance issues
 

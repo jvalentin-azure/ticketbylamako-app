@@ -1,24 +1,18 @@
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useCallback } from "react";
 import {
   View,
   Text,
   StyleSheet,
   Dimensions,
   TouchableOpacity,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
-  Platform,
 } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withTiming,
-  withDelay,
   interpolate,
   Extrapolation,
-  Easing,
   useAnimatedScrollHandler,
   runOnJS,
 } from "react-native-reanimated";
@@ -76,12 +70,16 @@ function SlideItem({
 }) {
   // Parallax: shift the image opposite to scroll direction
   const imageAnimatedStyle = useAnimatedStyle(() => {
-    const inputRange = [(index - 1) * width, index * width, (index + 1) * width];
+    const inputRange = [
+      (index - 1) * width,
+      index * width,
+      (index + 1) * width,
+    ];
     const translateX = interpolate(
       scrollX.value,
       inputRange,
       [width * PARALLAX_FACTOR, 0, -width * PARALLAX_FACTOR],
-      Extrapolation.CLAMP
+      Extrapolation.CLAMP,
     );
     return {
       transform: [{ translateX }],
@@ -90,18 +88,22 @@ function SlideItem({
 
   // Text fade-in + slide up when slide becomes active
   const textAnimatedStyle = useAnimatedStyle(() => {
-    const inputRange = [(index - 0.5) * width, index * width, (index + 0.5) * width];
+    const inputRange = [
+      (index - 0.5) * width,
+      index * width,
+      (index + 0.5) * width,
+    ];
     const opacity = interpolate(
       scrollX.value,
       inputRange,
       [0, 1, 0],
-      Extrapolation.CLAMP
+      Extrapolation.CLAMP,
     );
     const translateY = interpolate(
       scrollX.value,
       inputRange,
       [30, 0, -30],
-      Extrapolation.CLAMP
+      Extrapolation.CLAMP,
     );
     return {
       opacity,
@@ -115,7 +117,11 @@ function SlideItem({
       <Animated.View
         style={[
           StyleSheet.absoluteFillObject,
-          { left: -width * PARALLAX_FACTOR, right: -width * PARALLAX_FACTOR, width: width * (1 + 2 * PARALLAX_FACTOR) },
+          {
+            left: -width * PARALLAX_FACTOR,
+            right: -width * PARALLAX_FACTOR,
+            width: width * (1 + 2 * PARALLAX_FACTOR),
+          },
           imageAnimatedStyle,
         ]}
       >
@@ -162,21 +168,23 @@ function DotIndicator({
   scrollX: { value: number };
 }) {
   const dotStyle = useAnimatedStyle(() => {
-    const inputRange = [(index - 1) * width, index * width, (index + 1) * width];
+    const inputRange = [
+      (index - 1) * width,
+      index * width,
+      (index + 1) * width,
+    ];
     const dotWidth = interpolate(
       scrollX.value,
       inputRange,
       [8, 28, 8],
-      Extrapolation.CLAMP
+      Extrapolation.CLAMP,
     );
     const opacity = interpolate(
       scrollX.value,
       inputRange,
       [0.35, 1, 0.35],
-      Extrapolation.CLAMP
+      Extrapolation.CLAMP,
     );
-    const backgroundColor =
-      dotWidth > 14 ? "#c79f6c" : "rgba(255,255,255,0.35)";
     return {
       width: dotWidth,
       opacity,
@@ -185,23 +193,31 @@ function DotIndicator({
 
   // Use two overlapping views for smooth color transition
   const activeStyle = useAnimatedStyle(() => {
-    const inputRange = [(index - 1) * width, index * width, (index + 1) * width];
+    const inputRange = [
+      (index - 1) * width,
+      index * width,
+      (index + 1) * width,
+    ];
     const activeOpacity = interpolate(
       scrollX.value,
       inputRange,
       [0, 1, 0],
-      Extrapolation.CLAMP
+      Extrapolation.CLAMP,
     );
     return { opacity: activeOpacity };
   });
 
   const inactiveStyle = useAnimatedStyle(() => {
-    const inputRange = [(index - 1) * width, index * width, (index + 1) * width];
+    const inputRange = [
+      (index - 1) * width,
+      index * width,
+      (index + 1) * width,
+    ];
     const inactiveOpacity = interpolate(
       scrollX.value,
       inputRange,
       [1, 0, 1],
-      Extrapolation.CLAMP
+      Extrapolation.CLAMP,
     );
     return { opacity: inactiveOpacity };
   });
@@ -289,7 +305,12 @@ export function OnboardingScreen({ onFinish }: OnboardingScreenProps) {
       </Animated.ScrollView>
 
       {/* Bottom controls overlay */}
-      <View style={[styles.controlsContainer, { paddingBottom: Math.max(insets.bottom, 20) + 8 }]}>
+      <View
+        style={[
+          styles.controlsContainer,
+          { paddingBottom: Math.max(insets.bottom, 20) + 8 },
+        ]}
+      >
         {/* Animated dot indicators */}
         <View style={styles.dotsContainer}>
           {SLIDES.map((_, index) => (

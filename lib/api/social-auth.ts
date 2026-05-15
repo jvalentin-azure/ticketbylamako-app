@@ -1,10 +1,11 @@
-﻿import { Platform } from "react-native";
+import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
-import { User, getStoredToken } from "./auth";
+import { User } from "./auth";
 
-const SITE_URL = process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
+const SITE_URL =
+  process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
 const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || "";
 const FACEBOOK_APP_ID = process.env.EXPO_PUBLIC_FACEBOOK_APP_ID || "";
 const SITE_URL_BASE = SITE_URL.replace(/\/$/, "");
@@ -42,7 +43,10 @@ async function secureSet(key: string, value: string) {
   }
 }
 
-function createOAuthState(provider: "google" | "facebook", returnUrl: string): { state: string; nonce: string } {
+function createOAuthState(
+  provider: "google" | "facebook",
+  returnUrl: string,
+): { state: string; nonce: string } {
   const nonce = Math.random().toString(36).slice(2) + Date.now().toString(36);
   return {
     nonce,
@@ -57,17 +61,27 @@ function createOAuthState(provider: "google" | "facebook", returnUrl: string): {
 
 function getOAuthParams(url: string): URLSearchParams {
   const parsed = new URL(url);
-  const fragment = parsed.hash.startsWith("#") ? parsed.hash.slice(1) : parsed.hash;
+  const fragment = parsed.hash.startsWith("#")
+    ? parsed.hash.slice(1)
+    : parsed.hash;
   return new URLSearchParams(fragment || parsed.search.replace(/^\?/, ""));
 }
 
-async function rememberOAuthState(provider: "google" | "facebook", nonce: string) {
+async function rememberOAuthState(
+  provider: "google" | "facebook",
+  nonce: string,
+) {
   await AsyncStorage.setItem(`${OAUTH_STATE_PREFIX}${provider}`, nonce);
 }
 
-async function validateOAuthState(provider: "google" | "facebook", params: URLSearchParams) {
+async function validateOAuthState(
+  provider: "google" | "facebook",
+  params: URLSearchParams,
+) {
   const returnedState = params.get("state");
-  const expectedNonce = await AsyncStorage.getItem(`${OAUTH_STATE_PREFIX}${provider}`);
+  const expectedNonce = await AsyncStorage.getItem(
+    `${OAUTH_STATE_PREFIX}${provider}`,
+  );
 
   if (!returnedState || !expectedNonce) {
     throw new Error("Session de connexion expirée. Veuillez réessayer.");
@@ -86,7 +100,11 @@ async function validateOAuthState(provider: "google" | "facebook", params: URLSe
 
   await AsyncStorage.removeItem(`${OAUTH_STATE_PREFIX}${provider}`);
 
-  if (!decoded || decoded.provider !== provider || decoded.nonce !== expectedNonce) {
+  if (
+    !decoded ||
+    decoded.provider !== provider ||
+    decoded.nonce !== expectedNonce
+  ) {
     throw new Error("Retour de connexion invalide. Veuillez réessayer.");
   }
 }
@@ -101,7 +119,12 @@ async function validateOAuthState(provider: "google" | "facebook", params: URLSe
 export async function socialLogin(
   provider: SocialProvider,
   token: string,
-  userData?: { email?: string; firstName?: string; lastName?: string; name?: string }
+  userData?: {
+    email?: string;
+    firstName?: string;
+    lastName?: string;
+    name?: string;
+  },
 ): Promise<User> {
   // Call the WordPress social login endpoint
   const res = await fetch(`${SITE_URL}/wp-json/lamako-mobile/v1/social-login`, {
@@ -152,50 +175,17 @@ export async function socialLogin(
 }
 
 /**
- * Generate a random code verifier for PKCE
- */
-function generateCodeVerifier(): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
-  let result = "";
-  for (let i = 0; i < 64; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
-}
-
-/**
- * Generate code challenge from verifier (S256 method)
- */
-async function generateCodeChallenge(verifier: string): Promise<string> {
-  if (Platform.OS === "web") {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(verifier);
-    const digest = await crypto.subtle.digest("SHA-256", data);
-    return btoa(String.fromCharCode(...new Uint8Array(digest)))
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_")
-      .replace(/=+$/, "");
-  } else {
-    // On native, use expo-crypto
-    const Crypto = await import("expo-crypto");
-    const digest = await Crypto.digestStringAsync(
-      Crypto.CryptoDigestAlgorithm.SHA256,
-      verifier,
-      { encoding: Crypto.CryptoEncoding.BASE64 }
-    );
-    return digest
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_")
-      .replace(/=+$/, "");
-  }
-}
-
-/**
  * Google Sign-In through a HTTPS callback page.
  * Google web OAuth clients only accept http/https redirect URIs, so WordPress
  * receives the HTTPS redirect and forwards the fragment back to the app.
  */
-export async function startGoogleLogin(): Promise<{ token: string; email?: string; name?: string; firstName?: string; lastName?: string } | null> {
+export async function startGoogleLogin(): Promise<{
+  token: string;
+  email?: string;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
+} | null> {
   if (!GOOGLE_CLIENT_ID) {
     throw new Error("Google Client ID non configuré");
   }
@@ -205,7 +195,8 @@ export async function startGoogleLogin(): Promise<{ token: string; email?: strin
   const { state, nonce } = createOAuthState("google", appRedirectUri);
   await rememberOAuthState("google", nonce);
 
-  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+  const authUrl =
+    `https://accounts.google.com/o/oauth2/v2/auth?` +
     `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}` +
     `&redirect_uri=${encodeURIComponent(webRedirectUri)}` +
     `&response_type=token` +
@@ -222,9 +213,12 @@ export async function startGoogleLogin(): Promise<{ token: string; email?: strin
 
     if (accessToken) {
       try {
-        const userInfoRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
+        const userInfoRes = await fetch(
+          "https://www.googleapis.com/oauth2/v3/userinfo",
+          {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          },
+        );
         const userInfo = await userInfoRes.json();
         return {
           token: accessToken,
@@ -235,7 +229,9 @@ export async function startGoogleLogin(): Promise<{ token: string; email?: strin
         };
       } catch (e: any) {
         console.warn("Google userinfo error:", e);
-        throw new Error(e.message || "Erreur lors de l'authentification Google");
+        throw new Error(
+          e.message || "Erreur lors de l'authentification Google",
+        );
       }
     }
   }
@@ -245,7 +241,12 @@ export async function startGoogleLogin(): Promise<{ token: string; email?: strin
 /**
  * Apple Sign-In using the native Apple Authentication module.
  */
-export async function startAppleLogin(): Promise<{ token: string; email?: string; firstName?: string; lastName?: string } | null> {
+export async function startAppleLogin(): Promise<{
+  token: string;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+} | null> {
   if (Platform.OS === "web") {
     throw new Error("Apple Sign-In n'est pas disponible sur le web");
   }
@@ -280,7 +281,11 @@ export async function startAppleLogin(): Promise<{ token: string; email?: string
 /**
  * Facebook Login using OAuth web flow.
  */
-export async function startFacebookLogin(): Promise<{ token: string; email?: string; name?: string } | null> {
+export async function startFacebookLogin(): Promise<{
+  token: string;
+  email?: string;
+  name?: string;
+} | null> {
   if (!FACEBOOK_APP_ID) {
     throw new Error("Facebook App ID non configurÃ©");
   }
@@ -290,7 +295,8 @@ export async function startFacebookLogin(): Promise<{ token: string; email?: str
   const { state, nonce } = createOAuthState("facebook", appRedirectUri);
   await rememberOAuthState("facebook", nonce);
 
-  const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?` +
+  const authUrl =
+    `https://www.facebook.com/v18.0/dialog/oauth?` +
     `client_id=${encodeURIComponent(FACEBOOK_APP_ID)}` +
     `&redirect_uri=${encodeURIComponent(webRedirectUri)}` +
     `&response_type=token` +
@@ -307,7 +313,9 @@ export async function startFacebookLogin(): Promise<{ token: string; email?: str
     if (accessToken) {
       // Get user info from Facebook
       try {
-        const userInfoRes = await fetch(`https://graph.facebook.com/me?fields=email,name,first_name,last_name&access_token=${accessToken}`);
+        const userInfoRes = await fetch(
+          `https://graph.facebook.com/me?fields=email,name,first_name,last_name&access_token=${accessToken}`,
+        );
         const userInfo = await userInfoRes.json();
         return {
           token: accessToken,
@@ -322,4 +330,3 @@ export async function startFacebookLogin(): Promise<{ token: string; email?: str
 
   return null;
 }
-

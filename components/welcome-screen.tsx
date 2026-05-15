@@ -3,18 +3,14 @@ import {
   View,
   Text,
   StyleSheet,
-  Dimensions,
   TouchableOpacity,
   Animated,
-  Platform,
 } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-
-const { width, height } = Dimensions.get("window");
 
 interface WelcomeScreenProps {
   onExplore: () => void;
@@ -94,14 +90,15 @@ export function WelcomeScreen({ onExplore, onBack }: WelcomeScreenProps) {
       {onBack && (
         <TouchableOpacity
           onPress={onBack}
-          style={[
-            styles.backBtn,
-            { top: Math.max(insets.top, 20) + 8 },
-          ]}
+          style={[styles.backBtn, { top: Math.max(insets.top, 20) + 8 }]}
           activeOpacity={0.7}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
-          <MaterialIcons name="arrow-back-ios" size={18} color="rgba(255,255,255,0.8)" />
+          <MaterialIcons
+            name="arrow-back-ios"
+            size={18}
+            color="rgba(255,255,255,0.8)"
+          />
           <Text style={styles.backBtnText}>Retour</Text>
         </TouchableOpacity>
       )}
@@ -125,7 +122,8 @@ export function WelcomeScreen({ onExplore, onBack }: WelcomeScreenProps) {
             contentFit="contain"
           />
           <Text style={styles.tagline}>
-            Une expérience fluide, du premier clic{"\n"}jusqu'à l'entrée dans la salle
+            Une expérience fluide, du premier clic{"\n"}jusqu'à l'entrée dans la
+            salle
           </Text>
         </View>
 

@@ -1,5 +1,18 @@
 import { useEffect, useState, useRef } from "react";
-import { ScrollView, Text, View, TouchableOpacity, ActivityIndicator, Dimensions, StyleSheet, FlatList, Platform, Linking, Share, Alert } from "react-native";
+import {
+  ScrollView,
+  Text,
+  View,
+  TouchableOpacity,
+  ActivityIndicator,
+  Dimensions,
+  StyleSheet,
+  FlatList,
+  Platform,
+  Linking,
+  Share,
+  Alert,
+} from "react-native";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -7,13 +20,24 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useCart } from "@/lib/cart-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { getTCEvent, getEventTickets, getEventsData, clearServerCart, SITE_URL as API_SITE_URL, type TCEvent, type TicketType } from "@/lib/api/catalog";
+import {
+  getTCEvent,
+  getEventsData,
+  clearServerCart,
+  SITE_URL as API_SITE_URL,
+  type TCEvent,
+  type TicketType,
+} from "@/lib/api/catalog";
 import { MOBILE_V2_SEATING_ENABLED } from "@/lib/api/mobile";
 import { useAuth } from "@/lib/auth-provider";
 import { getStoredToken } from "@/lib/api/auth";
 import { useFavorites } from "@/lib/favorites-provider";
-import { formatAriary, formatDate, formatDateShort, stripHtml, decodeHtmlEntities } from "@/lib/format";
-import { LinearGradient } from "expo-linear-gradient";
+import {
+  formatAriary,
+  formatDate,
+  stripHtml,
+  decodeHtmlEntities,
+} from "@/lib/format";
 import { PointsBadge } from "@/components/points-badge";
 import { CartToast } from "@/components/cart-toast";
 import { SeatingChartSkeleton } from "@/components/skeleton-loader";
@@ -46,14 +70,20 @@ export default function EventDetailScreen() {
   const [showSeatingChart, setShowSeatingChart] = useState(false);
   const [seatingChartUrl, setSeatingChartUrl] = useState<string | null>(null);
   const [seatingLoading, setSeatingLoading] = useState(false);
-  const [webviewPhase, setWebviewPhase] = useState<'seating' | 'checkout' | 'confirmation'>('seating');
+  const [webviewPhase, setWebviewPhase] = useState<
+    "seating" | "checkout" | "confirmation"
+  >("seating");
   const webviewRef = useRef<any>(null);
-  const [seatingReady, setSeatingReady] = useState(false);
   const [galleryIndex, setGalleryIndex] = useState(0);
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const { isFavorite, toggleFavorite } = useFavorites();
   const [upcomingEvents, setUpcomingEvents] = useState<TCEvent[]>([]);
-  const [countdown, setCountdown] = useState<{days: number; hours: number; mins: number; secs: number} | null>(null);
+  const [countdown, setCountdown] = useState<{
+    days: number;
+    hours: number;
+    mins: number;
+    secs: number;
+  } | null>(null);
   const [showFullTerms, setShowFullTerms] = useState(false);
   const [showCartToast, setShowCartToast] = useState(false);
   const [cartToastName, setCartToastName] = useState("");
@@ -61,47 +91,56 @@ export default function EventDetailScreen() {
   useEffect(() => {
     if (!id) return;
     const eventId = Number(id);
-    
+
     // Strategy: Use compact events-data for instant display, then hydrate full detail.
-    getEventsData().then(({ events: allEvents }) => {
-      const cachedEvent = allEvents.find(e => e.id === eventId);
-      if (cachedEvent) {
-        setEvent(cachedEvent);
-        if (cachedEvent.tickets && cachedEvent.tickets.length > 0) {
-          setTickets(cachedEvent.tickets);
-          if (cachedEvent.tickets.length === 1) setSelectedTicket(cachedEvent.tickets[0]);
+    getEventsData()
+      .then(({ events: allEvents }) => {
+        const cachedEvent = allEvents.find((e) => e.id === eventId);
+        if (cachedEvent) {
+          setEvent(cachedEvent);
+          if (cachedEvent.tickets && cachedEvent.tickets.length > 0) {
+            setTickets(cachedEvent.tickets);
+            if (cachedEvent.tickets.length === 1)
+              setSelectedTicket(cachedEvent.tickets[0]);
+          }
+          setLoading(false);
         }
-        setLoading(false);
-      }
-      
-      // Set upcoming events
-      const now = Date.now();
-      const upcoming = allEvents.filter(e => {
-        if (e.id === eventId) return false;
-        const dt = e.mobileFields?.event_date_time;
-        if (!dt) return true;
-        return new Date(dt.replace(' ', 'T')).getTime() > now;
-      }).slice(0, 8);
-      setUpcomingEvents(upcoming);
-      
-      getTCEvent(eventId).then(ev => {
-        const tix = ev.tickets || [];
-        setEvent(ev);
-        setTickets(tix);
-        if (tix.length === 1) setSelectedTicket(tix[0]);
-        setLoading(false);
-      }).catch(() => {
-        if (!cachedEvent) setLoading(false);
+
+        // Set upcoming events
+        const now = Date.now();
+        const upcoming = allEvents
+          .filter((e) => {
+            if (e.id === eventId) return false;
+            const dt = e.mobileFields?.event_date_time;
+            if (!dt) return true;
+            return new Date(dt.replace(" ", "T")).getTime() > now;
+          })
+          .slice(0, 8);
+        setUpcomingEvents(upcoming);
+
+        getTCEvent(eventId)
+          .then((ev) => {
+            const tix = ev.tickets || [];
+            setEvent(ev);
+            setTickets(tix);
+            if (tix.length === 1) setSelectedTicket(tix[0]);
+            setLoading(false);
+          })
+          .catch(() => {
+            if (!cachedEvent) setLoading(false);
+          });
+      })
+      .catch(() => {
+        getTCEvent(eventId)
+          .then((ev) => {
+            const tix = ev.tickets || [];
+            setEvent(ev);
+            setTickets(tix);
+            if (tix.length === 1) setSelectedTicket(tix[0]);
+            setLoading(false);
+          })
+          .catch(() => setLoading(false));
       });
-    }).catch(() => {
-      getTCEvent(eventId).then(ev => {
-        const tix = ev.tickets || [];
-        setEvent(ev);
-        setTickets(tix);
-        if (tix.length === 1) setSelectedTicket(tix[0]);
-        setLoading(false);
-      }).catch(() => setLoading(false));
-    });
   }, [id]);
 
   // Countdown timer (updates every second)
@@ -109,11 +148,17 @@ export default function EventDetailScreen() {
     if (!event) return;
     const dateStr = event.mobileFields?.event_date_time;
     if (!dateStr) return;
-    const eventTime = new Date(dateStr.replace(' ', 'T')).getTime();
-    if (eventTime <= Date.now()) { setCountdown(null); return; }
+    const eventTime = new Date(dateStr.replace(" ", "T")).getTime();
+    if (eventTime <= Date.now()) {
+      setCountdown(null);
+      return;
+    }
     const update = () => {
       const diff = eventTime - Date.now();
-      if (diff <= 0) { setCountdown(null); return; }
+      if (diff <= 0) {
+        setCountdown(null);
+        return;
+      }
       setCountdown({
         days: Math.floor(diff / 86400000),
         hours: Math.floor((diff % 86400000) / 3600000),
@@ -149,19 +194,27 @@ export default function EventDetailScreen() {
   const gallery = event.mobileFields?.gallery;
   const practicalInfo = event.mobileFields?.practical_info;
   const cats = event.categoryNames?.join(", ") || "";
-  const hasSeating = tickets.some(t => t.usesSeating);
+  const hasSeating = tickets.some((t) => t.usesSeating);
 
   // Build image list: featured image + gallery
   const allImages: string[] = [];
   if (event.featuredImage) allImages.push(event.featuredImage);
   if (gallery && gallery.length > 0) {
-    gallery.forEach(img => { if (img && !allImages.includes(img)) allImages.push(img); });
+    gallery.forEach((img) => {
+      if (img && !allImages.includes(img)) allImages.push(img);
+    });
   }
   const bottomSafePadding = Math.max(insets.bottom, 16) + 12;
 
   const handleAddToCart = () => {
     if (!selectedTicket) return;
     const itemName = `${name} - ${selectedTicket.name}`;
+    setCartToastName(itemName);
+    setShowCartToast(true);
+    // Navigate to cart after toast animation
+    setTimeout(() => {
+      router.push("/(tabs)/cart" as any);
+    }, 1200);
     addItem({
       productId: selectedTicket.id,
       name: itemName,
@@ -169,19 +222,15 @@ export default function EventDetailScreen() {
       image: event.featuredImage || "",
       quantity: qty,
       isEvent: true,
-      lamakoRewardsEnabled: event.lamakoRewardsEnabled !== false && selectedTicket.lamakoRewardsEnabled !== false,
+      lamakoRewardsEnabled:
+        event.lamakoRewardsEnabled !== false &&
+        selectedTicket.lamakoRewardsEnabled !== false,
     });
-    setCartToastName(itemName);
-    setShowCartToast(true);
-    // Navigate to cart after toast animation
-    setTimeout(() => {
-      router.push("/(tabs)/cart" as any);
-    }, 1200);
   };
 
   const handleOpenSeatingChart = async () => {
     if (!hasSeating || !event) return;
-    
+
     // REQUIRE AUTH: User must be logged in before opening seating chart
     // This prevents the admin login exposure issue and ensures WC session is linked to user
     if (!isAuthenticated) {
@@ -190,15 +239,18 @@ export default function EventDetailScreen() {
         "Vous devez être connecté pour réserver des sièges.",
         [
           { text: "Annuler", style: "cancel" },
-          { text: "Se connecter", onPress: () => router.push("/(auth)/login" as any) },
-        ]
+          {
+            text: "Se connecter",
+            onPress: () => router.push("/(auth)/login" as any),
+          },
+        ],
       );
       return;
     }
-    
+
     if (MOBILE_V2_SEATING_ENABLED) {
       setShowSeatingChart(true);
-      setWebviewPhase('seating');
+      setWebviewPhase("seating");
       setSelectedSeats([]);
       return;
     }
@@ -210,7 +262,7 @@ export default function EventDetailScreen() {
       try {
         await clearServerCart(undefined, String(event.id));
       } catch (e) {
-        console.warn('Failed to clear server cart before seating:', e);
+        console.warn("Failed to clear server cart before seating:", e);
       }
 
       // BilletClic approach: Load the EVENT PAGE directly in the WebView
@@ -218,7 +270,7 @@ export default function EventDetailScreen() {
       // The user clicks "CHOISIR MA PLACE" → seating popup opens → selects seats →
       // confirms → cart → checkout → payment - ALL within the same WebView session
       const eventPageUrl = event.link || `${SITE_URL}/tc-events/${event.slug}/`;
-      
+
       // Use auto-login URL to pre-authenticate the WebView session
       // This ensures the user is logged in for checkout (no login form exposed)
       const token = await getStoredToken();
@@ -226,23 +278,28 @@ export default function EventDetailScreen() {
       const nocache = `nocache=${Date.now()}`;
       if (token) {
         // The redirect URL will have from_app=1 added by the PHP endpoint
-        const redirectUrl = eventPageUrl + (eventPageUrl.includes('?') ? '&' : '?') + nocache;
+        const redirectUrl =
+          eventPageUrl + (eventPageUrl.includes("?") ? "&" : "?") + nocache;
         const autoLoginUrl = `${SITE_URL}/wp-json/lamako-mobile/v1/auto-login?token=${encodeURIComponent(token)}&redirect=${encodeURIComponent(redirectUrl)}`;
         setSeatingChartUrl(autoLoginUrl);
       } else {
-        const directUrl = eventPageUrl + (eventPageUrl.includes('?') ? '&' : '?') + nocache + '&from_app=1';
+        const directUrl =
+          eventPageUrl +
+          (eventPageUrl.includes("?") ? "&" : "?") +
+          nocache +
+          "&from_app=1";
         setSeatingChartUrl(directUrl);
       }
-      
+
       setShowSeatingChart(true);
-      setWebviewPhase('seating');
+      setWebviewPhase("seating");
       setSelectedSeats([]);
     } catch (e) {
       console.warn("Seating chart open error:", e);
       const eventPageUrl = event.link || `${SITE_URL}/tc-events/${event.slug}/`;
       setSeatingChartUrl(eventPageUrl);
       setShowSeatingChart(true);
-      setWebviewPhase('seating');
+      setWebviewPhase("seating");
     } finally {
       setSeatingLoading(false);
     }
@@ -256,7 +313,7 @@ export default function EventDetailScreen() {
         eventTitle={name}
         onClose={() => {
           setShowSeatingChart(false);
-          setWebviewPhase('seating');
+          setWebviewPhase("seating");
           setSelectedSeats([]);
         }}
       />
@@ -265,7 +322,7 @@ export default function EventDetailScreen() {
 
   if (showSeatingChart && event && seatingChartUrl) {
     // BilletClic approach: Load the full event page in WebView
-    // User interacts naturally: clicks "CHOISIR MA PLACE" → seating chart popup opens → selects seats → 
+    // User interacts naturally: clicks "CHOISIR MA PLACE" → seating chart popup opens → selects seats →
     // confirms → goes to cart → checkout → payment - ALL within the same WebView session
     const injectedJS = `
       (function() {
@@ -497,29 +554,72 @@ export default function EventDetailScreen() {
     `;
 
     // Header title and icon based on current phase
-    const headerTitle = webviewPhase === 'seating' ? 'Billetterie' 
-      : webviewPhase === 'checkout' ? 'Paiement s\u00e9curis\u00e9' 
-      : 'Confirmation';
-    const headerIcon = webviewPhase === 'checkout' ? 'lock.fill' : webviewPhase === 'confirmation' ? 'checkmark.circle.fill' : undefined;
-    
+    const headerTitle =
+      webviewPhase === "seating"
+        ? "Billetterie"
+        : webviewPhase === "checkout"
+          ? "Paiement s\u00e9curis\u00e9"
+          : "Confirmation";
+    const headerIcon =
+      webviewPhase === "checkout"
+        ? "lock.fill"
+        : webviewPhase === "confirmation"
+          ? "checkmark.circle.fill"
+          : undefined;
+
     if (Platform.OS === "web") {
       return (
         <ScreenContainer edges={["top", "left", "right", "bottom"]}>
-          <View style={[styles.seatingHeader, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
-            <TouchableOpacity onPress={() => { setShowSeatingChart(false); }} style={styles.seatingBackBtn}>
-              <IconSymbol name="chevron.left" size={20} color={colors.foreground} />
-              <Text style={[styles.seatingBackText, { color: colors.foreground }]}>Retour</Text>
+          <View
+            style={[
+              styles.seatingHeader,
+              {
+                backgroundColor: colors.background,
+                borderBottomColor: colors.border,
+              },
+            ]}
+          >
+            <TouchableOpacity
+              onPress={() => {
+                setShowSeatingChart(false);
+              }}
+              style={styles.seatingBackBtn}
+            >
+              <IconSymbol
+                name="chevron.left"
+                size={20}
+                color={colors.foreground}
+              />
+              <Text
+                style={[styles.seatingBackText, { color: colors.foreground }]}
+              >
+                Retour
+              </Text>
             </TouchableOpacity>
-            <Text style={[styles.seatingTitle, { color: colors.foreground }]}>Billetterie</Text>
+            <Text style={[styles.seatingTitle, { color: colors.foreground }]}>
+              Billetterie
+            </Text>
             <View style={{ width: 80 }} />
           </View>
-          <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <View
+            style={{
+              flex: 1,
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 20,
+            }}
+          >
             <Text style={{ color: colors.muted, textAlign: "center" }}>
-              La billetterie interactive n'est pas disponible sur le web.{"\n"}Ouvrez l'app sur votre t\u00e9l\u00e9phone ou utilisez le site web.
+              La billetterie interactive n'est pas disponible sur le web.{"\n"}
+              Ouvrez l'app sur votre t\u00e9l\u00e9phone ou utilisez le site
+              web.
             </Text>
             <TouchableOpacity
               onPress={() => Linking.openURL(seatingChartUrl!)}
-              style={[styles.webFallbackBtn, { backgroundColor: colors.primary }]}
+              style={[
+                styles.webFallbackBtn,
+                { backgroundColor: colors.primary },
+              ]}
             >
               <Text style={styles.webFallbackBtnText}>Ouvrir sur le site</Text>
             </TouchableOpacity>
@@ -531,7 +631,9 @@ export default function EventDetailScreen() {
     if (!WebViewComponent) {
       return (
         <ScreenContainer edges={["top", "left", "right", "bottom"]}>
-          <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+          <View
+            style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
+          >
             <Text style={{ color: colors.muted }}>WebView non disponible</Text>
           </View>
         </ScreenContainer>
@@ -540,37 +642,74 @@ export default function EventDetailScreen() {
 
     return (
       <ScreenContainer edges={["top", "left", "right", "bottom"]}>
-        <View style={[styles.seatingHeader, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={() => {
-            if (webviewPhase === 'confirmation') {
-              clearCart();
-              setShowSeatingChart(false);
-              setWebviewPhase('seating');
-              router.replace("/(tabs)/tickets");
-            } else {
-              setShowSeatingChart(false);
-              setWebviewPhase('seating');
-            }
-          }} style={styles.seatingBackBtn}>
-            <IconSymbol name="chevron.left" size={20} color={colors.foreground} />
-            <Text style={[styles.seatingBackText, { color: colors.foreground }]}>
-              {webviewPhase === 'confirmation' ? 'Mes billets' : 'Retour'}
+        <View
+          style={[
+            styles.seatingHeader,
+            {
+              backgroundColor: colors.background,
+              borderBottomColor: colors.border,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            onPress={() => {
+              if (webviewPhase === "confirmation") {
+                clearCart();
+                setShowSeatingChart(false);
+                setWebviewPhase("seating");
+                router.replace("/(tabs)/tickets");
+              } else {
+                setShowSeatingChart(false);
+                setWebviewPhase("seating");
+              }
+            }}
+            style={styles.seatingBackBtn}
+          >
+            <IconSymbol
+              name="chevron.left"
+              size={20}
+              color={colors.foreground}
+            />
+            <Text
+              style={[styles.seatingBackText, { color: colors.foreground }]}
+            >
+              {webviewPhase === "confirmation" ? "Mes billets" : "Retour"}
             </Text>
           </TouchableOpacity>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            {headerIcon && <IconSymbol name={headerIcon as any} size={16} color={webviewPhase === 'checkout' ? colors.success : colors.primary} />}
-            <Text style={[styles.seatingTitle, { color: colors.foreground }]}>{headerTitle}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            {headerIcon && (
+              <IconSymbol
+                name={headerIcon as any}
+                size={16}
+                color={
+                  webviewPhase === "checkout" ? colors.success : colors.primary
+                }
+              />
+            )}
+            <Text style={[styles.seatingTitle, { color: colors.foreground }]}>
+              {headerTitle}
+            </Text>
           </View>
           {/* Seat count badge */}
-          {selectedSeats.length > 0 && webviewPhase === 'seating' ? (
-            <View style={{ backgroundColor: colors.primary, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 }}>
-              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{selectedSeats.length} siège{selectedSeats.length > 1 ? 's' : ''}</Text>
+          {selectedSeats.length > 0 && webviewPhase === "seating" ? (
+            <View
+              style={{
+                backgroundColor: colors.primary,
+                borderRadius: 12,
+                paddingHorizontal: 10,
+                paddingVertical: 4,
+              }}
+            >
+              <Text style={{ color: "#fff", fontSize: 12, fontWeight: "700" }}>
+                {selectedSeats.length} siège
+                {selectedSeats.length > 1 ? "s" : ""}
+              </Text>
             </View>
           ) : (
             <View style={{ width: 80 }} />
           )}
         </View>
-        {webviewPhase === 'confirmation' && <Confetti active={true} />}
+        {webviewPhase === "confirmation" && <Confetti active={true} />}
         <View style={{ flex: 1 }}>
           <WebViewComponent
             ref={webviewRef}
@@ -589,28 +728,39 @@ export default function EventDetailScreen() {
             scrollEnabled={true}
             injectedJavaScript={injectedJS}
             renderLoading={() => (
-              <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}>
+              <View
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                }}
+              >
                 <SeatingChartSkeleton />
               </View>
             )}
             onMessage={(e: any) => {
               try {
                 const data = JSON.parse(e.nativeEvent.data);
-                if (data.type === 'SEATS_CONFIRMED') {
+                if (data.type === "SEATS_CONFIRMED") {
                   // BilletClic approach: Don't intercept - let the user flow naturally
                   // through cart → checkout in the WebView. The auto-login ensures
                   // the user is already authenticated for the entire flow.
                   // Just update the phase for the header UI
-                  setWebviewPhase('checkout');
+                  setWebviewPhase("checkout");
                 }
-                if (data.type === 'checkout_loaded') {
-                  setWebviewPhase('checkout');
+                if (data.type === "checkout_loaded") {
+                  setWebviewPhase("checkout");
                 }
-                if (data.type === 'order_confirmed' || data.type === 'payment_success') {
-                  setWebviewPhase('confirmation');
+                if (
+                  data.type === "order_confirmed" ||
+                  data.type === "payment_success"
+                ) {
+                  setWebviewPhase("confirmation");
                   clearCart();
                 }
-                if (data.type === 'seat_count_update') {
+                if (data.type === "seat_count_update") {
                   setSelectedSeats(data.seats || []);
                 }
               } catch {}
@@ -618,43 +768,67 @@ export default function EventDetailScreen() {
             onNavigationStateChange={(navState: any) => {
               const url = navState.url || "";
               // Detect cart/checkout pages
-              if (url.includes('/cart') || url.includes('/panier') || url.includes('/checkout') || url.includes('/commande') || url.includes('lamako_checkout')) {
-                setWebviewPhase('checkout');
+              if (
+                url.includes("/cart") ||
+                url.includes("/panier") ||
+                url.includes("/checkout") ||
+                url.includes("/commande") ||
+                url.includes("lamako_checkout")
+              ) {
+                setWebviewPhase("checkout");
               }
               // Detect order confirmation page
-              if (url.includes("order-received") || url.includes("commande-recue") || url.includes("thankyou")) {
-                setWebviewPhase('confirmation');
+              if (
+                url.includes("order-received") ||
+                url.includes("commande-recue") ||
+                url.includes("thankyou")
+              ) {
+                setWebviewPhase("confirmation");
                 clearCart();
               }
               // Detect if user navigated back to event page (reset phase)
-              if (url.includes('/tc-events/') || url.includes('/tc_event/') || url.includes('lamako_seat_embed') || url.includes('seat-chart')) {
-                setWebviewPhase('seating');
+              if (
+                url.includes("/tc-events/") ||
+                url.includes("/tc_event/") ||
+                url.includes("lamako_seat_embed") ||
+                url.includes("seat-chart")
+              ) {
+                setWebviewPhase("seating");
               }
               // Handle 404 page after payment gateway return (Orange Money)
               // Instead of just showing confirmation, redirect to lamako_checkout to verify order status
-              if ((url.includes('404') || url.includes('page-not-found')) && webviewPhase === 'checkout') {
+              if (
+                (url.includes("404") || url.includes("page-not-found")) &&
+                webviewPhase === "checkout"
+              ) {
                 // The PHP lamako_checkout handler now checks if order is paid and shows success
-                setWebviewPhase('confirmation');
+                setWebviewPhase("confirmation");
                 clearCart();
               }
               // Handle homepage redirect after payment (gateway return)
-              const isHomepage = url.match(/^https:\/\/www\.ticketbylamako\.com\/?$/);
-              if (isHomepage && webviewPhase === 'checkout') {
-                setWebviewPhase('confirmation');
+              const isHomepage = url.match(
+                /^https:\/\/www\.ticketbylamako\.com\/?$/,
+              );
+              if (isHomepage && webviewPhase === "checkout") {
+                setWebviewPhase("confirmation");
                 clearCart();
               }
             }}
             onShouldStartLoadWithRequest={(request: any) => {
               const url = request.url || "";
               // Allow all HTTPS navigation (payment gateways return to various domains)
-              if (url.startsWith("https://") || url.startsWith("http://")) return true;
-              if (url.startsWith("about:") || url.startsWith("data:")) return true;
+              if (url.startsWith("https://") || url.startsWith("http://"))
+                return true;
+              if (url.startsWith("about:") || url.startsWith("data:"))
+                return true;
               return false;
             }}
           />
           {/* Zoom controls overlay - only show during seating phase */}
-          {webviewPhase === 'seating' && (
-            <View style={{ position: 'absolute', bottom: 80, right: 16, gap: 8 }}>
+          {webviewPhase === "seating" && (
+            <View
+              style={{ position: "absolute", bottom: 80, right: 16, gap: 8 }}
+            >
               <TouchableOpacity
                 onPress={() => {
                   if (webviewRef.current) {
@@ -665,7 +839,21 @@ export default function EventDetailScreen() {
                     `);
                   }
                 }}
-                style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 4 }}
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 22,
+                  backgroundColor: colors.surface,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.15,
+                  shadowRadius: 4,
+                  elevation: 4,
+                }}
               >
                 <IconSymbol name="plus" size={20} color={colors.foreground} />
               </TouchableOpacity>
@@ -679,7 +867,21 @@ export default function EventDetailScreen() {
                     `);
                   }
                 }}
-                style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 4 }}
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 22,
+                  backgroundColor: colors.surface,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.15,
+                  shadowRadius: 4,
+                  elevation: 4,
+                }}
               >
                 <IconSymbol name="minus" size={20} color={colors.foreground} />
               </TouchableOpacity>
@@ -700,7 +902,10 @@ export default function EventDetailScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         style={styles.eventScroll}
-        contentContainerStyle={[styles.eventScrollContent, { paddingBottom: bottomSafePadding + 24 }]}
+        contentContainerStyle={[
+          styles.eventScrollContent,
+          { paddingBottom: bottomSafePadding + 24 },
+        ]}
       >
         {/* Hero Image / Gallery */}
         <View style={{ position: "relative" }}>
@@ -712,12 +917,18 @@ export default function EventDetailScreen() {
                 pagingEnabled
                 showsHorizontalScrollIndicator={false}
                 onMomentumScrollEnd={(e) => {
-                  const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_W);
+                  const idx = Math.round(
+                    e.nativeEvent.contentOffset.x / SCREEN_W,
+                  );
                   setGalleryIndex(idx);
                 }}
                 keyExtractor={(_, i) => String(i)}
                 renderItem={({ item }) => (
-                  <Image source={{ uri: item }} style={{ width: SCREEN_W, height: 280 }} contentFit="cover" />
+                  <Image
+                    source={{ uri: item }}
+                    style={{ width: SCREEN_W, height: 280 }}
+                    contentFit="cover"
+                  />
                 )}
               />
               {/* Gallery dots */}
@@ -725,13 +936,23 @@ export default function EventDetailScreen() {
                 {allImages.map((_, i) => (
                   <View
                     key={i}
-                    style={[styles.dot, { backgroundColor: i === galleryIndex ? "#fff" : "rgba(255,255,255,0.5)" }]}
+                    style={[
+                      styles.dot,
+                      {
+                        backgroundColor:
+                          i === galleryIndex ? "#fff" : "rgba(255,255,255,0.5)",
+                      },
+                    ]}
                   />
                 ))}
               </View>
             </View>
           ) : (
-            <Image source={{ uri: event.featuredImage }} style={{ width: SCREEN_W, height: 280 }} contentFit="cover" />
+            <Image
+              source={{ uri: event.featuredImage }}
+              style={{ width: SCREEN_W, height: 280 }}
+              contentFit="cover"
+            />
           )}
           <TouchableOpacity
             onPress={() => router.back()}
@@ -747,7 +968,9 @@ export default function EventDetailScreen() {
                   await Share.share({
                     title: name,
                     message: `${name} - Découvrez cet événement sur TicketByLamako !\n${event.link || `https://www.ticketbylamako.com/tc-events/${event.slug}/`}`,
-                    url: event.link || `https://www.ticketbylamako.com/tc-events/${event.slug}/`,
+                    url:
+                      event.link ||
+                      `https://www.ticketbylamako.com/tc-events/${event.slug}/`,
                   });
                 } catch {}
               }}
@@ -756,16 +979,29 @@ export default function EventDetailScreen() {
               <IconSymbol name="square.and.arrow.up" size={18} color="#fff" />
             </TouchableOpacity>
             <TouchableOpacity
-              onPress={() => toggleFavorite({ id: event.id, type: "event", name, image: event.featuredImage })}
+              onPress={() =>
+                toggleFavorite({
+                  id: event.id,
+                  type: "event",
+                  name,
+                  image: event.featuredImage,
+                })
+              }
               style={styles.topActionBtn}
             >
-              <IconSymbol name={isFavorite(event.id, "event") ? "heart.fill" : "heart"} size={18} color={isFavorite(event.id, "event") ? "#EF4444" : "#fff"} />
+              <IconSymbol
+                name={isFavorite(event.id, "event") ? "heart.fill" : "heart"}
+                size={18}
+                color={isFavorite(event.id, "event") ? "#EF4444" : "#fff"}
+              />
             </TouchableOpacity>
           </View>
           {hasSeating && (
             <View style={styles.seatingOverlayBadge}>
               <IconSymbol name="mappin" size={12} color="#fff" />
-              <Text style={styles.seatingOverlayText}>Plan de salle disponible</Text>
+              <Text style={styles.seatingOverlayText}>
+                Plan de salle disponible
+              </Text>
             </View>
           )}
         </View>
@@ -775,47 +1011,93 @@ export default function EventDetailScreen() {
           {countdown && (
             <View style={styles.countdownCompact}>
               <Text style={styles.countdownCompactText}>
-                {countdown.days}j {String(countdown.hours).padStart(2,'0')}h {String(countdown.mins).padStart(2,'0')}m {String(countdown.secs).padStart(2,'0')}s
+                {countdown.days}j {String(countdown.hours).padStart(2, "0")}h{" "}
+                {String(countdown.mins).padStart(2, "0")}m{" "}
+                {String(countdown.secs).padStart(2, "0")}s
               </Text>
-              <Text style={styles.countdownCompactLabel}>avant l'événement</Text>
+              <Text style={styles.countdownCompactLabel}>
+                avant l'événement
+              </Text>
             </View>
           )}
 
           {/* Title */}
-          <Text style={[styles.title, { color: colors.foreground }]}>{name}</Text>
+          <Text style={[styles.title, { color: colors.foreground }]}>
+            {name}
+          </Text>
 
           {/* Categories */}
           {cats ? (
             <View style={styles.catsRow}>
               <IconSymbol name="tag.fill" size={14} color={colors.primary} />
-              <Text style={[styles.catsText, { color: colors.primary }]}>{cats}</Text>
+              <Text style={[styles.catsText, { color: colors.primary }]}>
+                {cats}
+              </Text>
             </View>
           ) : null}
 
           {/* Info Row */}
           <View style={styles.infoRow}>
             <View style={styles.infoItem}>
-              <View style={[styles.infoIcon, { backgroundColor: colors.primary + "15" }]}>
+              <View
+                style={[
+                  styles.infoIcon,
+                  { backgroundColor: colors.primary + "15" },
+                ]}
+              >
                 <IconSymbol name="calendar" size={18} color={colors.primary} />
               </View>
               <View style={{ marginLeft: 8 }}>
-                <Text style={[styles.infoLabel, { color: colors.muted }]}>Date</Text>
-                <Text style={[styles.infoValue, { color: colors.foreground }]}>{formatDate(event.date)}</Text>
+                <Text style={[styles.infoLabel, { color: colors.muted }]}>
+                  Date
+                </Text>
+                <Text style={[styles.infoValue, { color: colors.foreground }]}>
+                  {formatDate(event.date)}
+                </Text>
               </View>
             </View>
           </View>
 
           {/* Practical Info Table */}
           {practicalInfo && practicalInfo.length > 0 && (
-            <View style={[styles.practicalInfoBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.sectionTitle, { color: colors.foreground, marginBottom: 12 }]}>Infos pratiques</Text>
+            <View
+              style={[
+                styles.practicalInfoBox,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.sectionTitle,
+                  { color: colors.foreground, marginBottom: 12 },
+                ]}
+              >
+                Infos pratiques
+              </Text>
               {practicalInfo.map((item, idx) => (
                 <View
                   key={idx}
-                  style={[styles.practicalInfoRow, idx < practicalInfo.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }]}
+                  style={[
+                    styles.practicalInfoRow,
+                    idx < practicalInfo.length - 1 && {
+                      borderBottomWidth: 1,
+                      borderBottomColor: colors.border,
+                    },
+                  ]}
                 >
-                  <Text style={[styles.practicalInfoLabel, { color: colors.muted }]}>{item.label}</Text>
-                  <Text style={[styles.practicalInfoValue, { color: colors.foreground }]}>{item.value}</Text>
+                  <Text
+                    style={[styles.practicalInfoLabel, { color: colors.muted }]}
+                  >
+                    {item.label}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.practicalInfoValue,
+                      { color: colors.foreground },
+                    ]}
+                  >
+                    {item.value}
+                  </Text>
                 </View>
               ))}
             </View>
@@ -823,18 +1105,34 @@ export default function EventDetailScreen() {
 
           {/* Price Range */}
           {tickets.length > 0 && (
-            <View style={[styles.priceBox, { backgroundColor: colors.primary + "10", borderColor: colors.primary + "30" }]}>
+            <View
+              style={[
+                styles.priceBox,
+                {
+                  backgroundColor: colors.primary + "10",
+                  borderColor: colors.primary + "30",
+                },
+              ]}
+            >
               <Text style={[styles.priceLabel, { color: colors.primary }]}>
                 {tickets.length === 1 ? "Prix" : "À partir de"}
               </Text>
               <Text style={[styles.priceValue, { color: colors.primary }]}>
                 {tickets.length === 1
                   ? formatAriary(tickets[0].price)
-                  : formatAriary(Math.min(...tickets.map(t => parseFloat(t.price) || 0)))}
+                  : formatAriary(
+                      Math.min(...tickets.map((t) => parseFloat(t.price) || 0)),
+                    )}
               </Text>
               {event.lamakoRewardsEnabled !== false && (
                 <PointsBadge
-                  price={tickets.length === 1 ? tickets[0].price : Math.min(...tickets.map(t => parseFloat(t.price) || 0))}
+                  price={
+                    tickets.length === 1
+                      ? tickets[0].price
+                      : Math.min(
+                          ...tickets.map((t) => parseFloat(t.price) || 0),
+                        )
+                  }
                   compact={false}
                 />
               )}
@@ -845,34 +1143,81 @@ export default function EventDetailScreen() {
           {tickets.length > 0 && (
             <View style={{ marginTop: 20 }}>
               <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-                {hasSeating ? "Types de billets disponibles" : "Types de billets"}
+                {hasSeating
+                  ? "Types de billets disponibles"
+                  : "Types de billets"}
               </Text>
               {hasSeating && (
-                <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 10 }}>
-                  La sélection se fait directement sur le plan de salle ci-dessous
+                <Text
+                  style={{
+                    color: colors.muted,
+                    fontSize: 12,
+                    marginBottom: 10,
+                  }}
+                >
+                  La sélection se fait directement sur le plan de salle
+                  ci-dessous
                 </Text>
               )}
-              {tickets.map(ticket => {
+              {tickets.map((ticket) => {
                 const isSelected = selectedTicket?.id === ticket.id;
                 // For seated events: info-only display (no selection)
                 if (hasSeating) {
                   return (
                     <View
                       key={ticket.id}
-                      style={[styles.ticketOption, {
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
-                      }]}
+                      style={[
+                        styles.ticketOption,
+                        {
+                          backgroundColor: colors.surface,
+                          borderColor: colors.border,
+                        },
+                      ]}
                     >
-                      <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: ticket.usesSeating ? "#c79f6c" : colors.primary, marginRight: 10 }} />
+                      <View
+                        style={{
+                          width: 12,
+                          height: 12,
+                          borderRadius: 6,
+                          backgroundColor: ticket.usesSeating
+                            ? "#c79f6c"
+                            : colors.primary,
+                          marginRight: 10,
+                        }}
+                      />
                       <View style={{ flex: 1 }}>
-                        <Text style={[styles.ticketName, { color: colors.foreground }]}>{decodeHtmlEntities(ticket.name)}</Text>
-                        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}>
+                        <Text
+                          style={[
+                            styles.ticketName,
+                            { color: colors.foreground },
+                          ]}
+                        >
+                          {decodeHtmlEntities(ticket.name)}
+                        </Text>
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            marginTop: 2,
+                          }}
+                        >
                           <IconSymbol name="mappin" size={10} color="#c79f6c" />
-                          <Text style={{ color: "#c79f6c", fontSize: 11, marginLeft: 4 }}>Sélection sur le plan</Text>
+                          <Text
+                            style={{
+                              color: "#c79f6c",
+                              fontSize: 11,
+                              marginLeft: 4,
+                            }}
+                          >
+                            Sélection sur le plan
+                          </Text>
                         </View>
                       </View>
-                      <Text style={[styles.ticketPrice, { color: colors.primary }]}>{formatAriary(ticket.price)}</Text>
+                      <Text
+                        style={[styles.ticketPrice, { color: colors.primary }]}
+                      >
+                        {formatAriary(ticket.price)}
+                      </Text>
                     </View>
                   );
                 }
@@ -880,19 +1225,56 @@ export default function EventDetailScreen() {
                 return (
                   <TouchableOpacity
                     key={ticket.id}
-                    onPress={() => { setSelectedTicket(ticket); setQty(1); }}
-                    style={[styles.ticketOption, {
-                      backgroundColor: isSelected ? colors.primary + "10" : colors.surface,
-                      borderColor: isSelected ? colors.primary : colors.border,
-                    }]}
+                    onPress={() => {
+                      setSelectedTicket(ticket);
+                      setQty(1);
+                    }}
+                    style={[
+                      styles.ticketOption,
+                      {
+                        backgroundColor: isSelected
+                          ? colors.primary + "10"
+                          : colors.surface,
+                        borderColor: isSelected
+                          ? colors.primary
+                          : colors.border,
+                      },
+                    ]}
                   >
-                    <View style={[styles.radio, { borderColor: isSelected ? colors.primary : colors.muted }]}>
-                      {isSelected && <View style={[styles.radioInner, { backgroundColor: colors.primary }]} />}
+                    <View
+                      style={[
+                        styles.radio,
+                        {
+                          borderColor: isSelected
+                            ? colors.primary
+                            : colors.muted,
+                        },
+                      ]}
+                    >
+                      {isSelected && (
+                        <View
+                          style={[
+                            styles.radioInner,
+                            { backgroundColor: colors.primary },
+                          ]}
+                        />
+                      )}
                     </View>
                     <View style={{ flex: 1, marginLeft: 10 }}>
-                      <Text style={[styles.ticketName, { color: colors.foreground }]}>{decodeHtmlEntities(ticket.name)}</Text>
+                      <Text
+                        style={[
+                          styles.ticketName,
+                          { color: colors.foreground },
+                        ]}
+                      >
+                        {decodeHtmlEntities(ticket.name)}
+                      </Text>
                     </View>
-                    <Text style={[styles.ticketPrice, { color: colors.primary }]}>{formatAriary(ticket.price)}</Text>
+                    <Text
+                      style={[styles.ticketPrice, { color: colors.primary }]}
+                    >
+                      {formatAriary(ticket.price)}
+                    </Text>
                   </TouchableOpacity>
                 );
               })}
@@ -904,27 +1286,56 @@ export default function EventDetailScreen() {
             <TouchableOpacity
               onPress={handleOpenSeatingChart}
               disabled={seatingLoading}
-              style={[styles.seatingChartBtn, { backgroundColor: "#663d17", opacity: seatingLoading ? 0.7 : 1 }]}
+              style={[
+                styles.seatingChartBtn,
+                {
+                  backgroundColor: "#663d17",
+                  opacity: seatingLoading ? 0.7 : 1,
+                },
+              ]}
             >
               {seatingLoading ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
                 <IconSymbol name="mappin" size={18} color="#fff" />
               )}
-              <Text style={styles.seatingChartBtnText}>{seatingLoading ? "Chargement..." : "Voir le plan de salle & choisir mon si\u00e8ge"}</Text>
+              <Text style={styles.seatingChartBtnText}>
+                {seatingLoading
+                  ? "Chargement..."
+                  : "Voir le plan de salle & choisir mon si\u00e8ge"}
+              </Text>
             </TouchableOpacity>
           )}
 
           {/* Quantity (for non-seating tickets only) */}
           {selectedTicket && !hasSeating && (
-            <View style={[styles.qtyRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.qtyLabel, { color: colors.foreground }]}>Quantité</Text>
+            <View
+              style={[
+                styles.qtyRow,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+            >
+              <Text style={[styles.qtyLabel, { color: colors.foreground }]}>
+                Quantité
+              </Text>
               <View style={styles.qtyControls}>
-                <TouchableOpacity onPress={() => setQty(q => Math.max(1, q - 1))} style={[styles.qtyBtn, { backgroundColor: colors.border }]}>
-                  <Text style={[styles.qtyBtnText, { color: colors.foreground }]}>-</Text>
+                <TouchableOpacity
+                  onPress={() => setQty((q) => Math.max(1, q - 1))}
+                  style={[styles.qtyBtn, { backgroundColor: colors.border }]}
+                >
+                  <Text
+                    style={[styles.qtyBtnText, { color: colors.foreground }]}
+                  >
+                    -
+                  </Text>
                 </TouchableOpacity>
-                <Text style={[styles.qtyValue, { color: colors.foreground }]}>{qty}</Text>
-                <TouchableOpacity onPress={() => setQty(q => q + 1)} style={[styles.qtyBtn, { backgroundColor: colors.primary }]}>
+                <Text style={[styles.qtyValue, { color: colors.foreground }]}>
+                  {qty}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setQty((q) => q + 1)}
+                  style={[styles.qtyBtn, { backgroundColor: colors.primary }]}
+                >
                   <Text style={[styles.qtyBtnText, { color: "#fff" }]}>+</Text>
                 </TouchableOpacity>
               </View>
@@ -934,8 +1345,12 @@ export default function EventDetailScreen() {
           {/* Description */}
           {desc ? (
             <View style={{ marginTop: 20 }}>
-              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Description</Text>
-              <Text style={[styles.descText, { color: colors.muted }]}>{desc}</Text>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+                Description
+              </Text>
+              <Text style={[styles.descText, { color: colors.muted }]}>
+                {desc}
+              </Text>
             </View>
           ) : null}
 
@@ -943,15 +1358,33 @@ export default function EventDetailScreen() {
 
           {/* CONDITIONS */}
           {event.mobileFields?.event_terms ? (
-            <View style={[styles.conditionsBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Conditions</Text>
-              <Text style={[styles.conditionsTitle, { color: colors.primary }]}>Termes et conditions :</Text>
-              <Text style={[styles.descText, { color: colors.muted }]} numberOfLines={showFullTerms ? undefined : 3}>
+            <View
+              style={[
+                styles.conditionsBox,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+            >
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+                Conditions
+              </Text>
+              <Text style={[styles.conditionsTitle, { color: colors.primary }]}>
+                Termes et conditions :
+              </Text>
+              <Text
+                style={[styles.descText, { color: colors.muted }]}
+                numberOfLines={showFullTerms ? undefined : 3}
+              >
                 {event.mobileFields.event_terms}
               </Text>
               {event.mobileFields.event_terms.length > 150 && (
-                <TouchableOpacity onPress={() => setShowFullTerms(!showFullTerms)}>
-                  <Text style={[styles.showMoreText, { color: colors.primary }]}>{showFullTerms ? 'Voir moins' : 'Voir plus'}</Text>
+                <TouchableOpacity
+                  onPress={() => setShowFullTerms(!showFullTerms)}
+                >
+                  <Text
+                    style={[styles.showMoreText, { color: colors.primary }]}
+                  >
+                    {showFullTerms ? "Voir moins" : "Voir plus"}
+                  </Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -959,30 +1392,62 @@ export default function EventDetailScreen() {
 
           {/* LOCATION ON MAP */}
           {event.mobileFields?.event_location ? (
-            <View style={[styles.locationBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View
+              style={[
+                styles.locationBox,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+            >
               <View style={styles.locationHeader}>
-                <Text style={[styles.sectionTitle, { color: colors.foreground, marginBottom: 0 }]}>Lieu</Text>
-                <TouchableOpacity onPress={() => {
-                  const q = encodeURIComponent(event.mobileFields!.event_location!);
-                  Linking.openURL(Platform.OS === 'ios' ? `maps:?q=${q}` : `geo:0,0?q=${q}`);
-                }}>
-                  <Text style={[styles.getDirections, { color: colors.primary }]}>Itinéraire</Text>
+                <Text
+                  style={[
+                    styles.sectionTitle,
+                    { color: colors.foreground, marginBottom: 0 },
+                  ]}
+                >
+                  Lieu
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    const q = encodeURIComponent(
+                      event.mobileFields!.event_location!,
+                    );
+                    Linking.openURL(
+                      Platform.OS === "ios" ? `maps:?q=${q}` : `geo:0,0?q=${q}`,
+                    );
+                  }}
+                >
+                  <Text
+                    style={[styles.getDirections, { color: colors.primary }]}
+                  >
+                    Itinéraire
+                  </Text>
                 </TouchableOpacity>
               </View>
               <View style={styles.locationRow}>
                 <IconSymbol name="mappin" size={16} color={colors.primary} />
-                <Text style={[styles.locationText, { color: colors.foreground }]}>{event.mobileFields.event_location}</Text>
+                <Text
+                  style={[styles.locationText, { color: colors.foreground }]}
+                >
+                  {event.mobileFields.event_location}
+                </Text>
               </View>
               {/* Static map preview */}
               <TouchableOpacity
                 onPress={() => {
-                  const q = encodeURIComponent(event.mobileFields!.event_location!);
-                  Linking.openURL(Platform.OS === 'ios' ? `maps:?q=${q}` : `geo:0,0?q=${q}`);
+                  const q = encodeURIComponent(
+                    event.mobileFields!.event_location!,
+                  );
+                  Linking.openURL(
+                    Platform.OS === "ios" ? `maps:?q=${q}` : `geo:0,0?q=${q}`,
+                  );
                 }}
                 style={styles.mapPreview}
               >
                 <Image
-                  source={{ uri: `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(event.mobileFields.event_location)}&zoom=15&size=600x200&markers=color:red%7C${encodeURIComponent(event.mobileFields.event_location)}&key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8` }}
+                  source={{
+                    uri: `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(event.mobileFields.event_location)}&zoom=15&size=600x200&markers=color:red%7C${encodeURIComponent(event.mobileFields.event_location)}&key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8`,
+                  }}
                   style={styles.mapImage}
                   contentFit="cover"
                 />
@@ -994,38 +1459,90 @@ export default function EventDetailScreen() {
           {upcomingEvents.length > 0 && (
             <View style={{ marginTop: 24 }}>
               <View style={styles.upcomingHeader}>
-                <Text style={[styles.sectionTitle, { color: colors.foreground, marginBottom: 0 }]}>Événements à venir</Text>
-                <TouchableOpacity onPress={() => router.push('/(tabs)/events' as any)}>
-                  <Text style={[styles.getDirections, { color: colors.primary }]}>Voir tout</Text>
+                <Text
+                  style={[
+                    styles.sectionTitle,
+                    { color: colors.foreground, marginBottom: 0 },
+                  ]}
+                >
+                  Événements à venir
+                </Text>
+                <TouchableOpacity
+                  onPress={() => router.push("/(tabs)/events" as any)}
+                >
+                  <Text
+                    style={[styles.getDirections, { color: colors.primary }]}
+                  >
+                    Voir tout
+                  </Text>
                 </TouchableOpacity>
               </View>
               <FlatList
                 data={upcomingEvents}
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingRight: 16, gap: 12, marginTop: 12 }}
-                keyExtractor={item => String(item.id)}
+                contentContainerStyle={{
+                  paddingRight: 16,
+                  gap: 12,
+                  marginTop: 12,
+                }}
+                keyExtractor={(item) => String(item.id)}
                 renderItem={({ item }) => (
                   <TouchableOpacity
                     activeOpacity={0.8}
                     onPress={() => router.push(`/event/${item.id}` as any)}
-                    style={[styles.upcomingCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                    style={[
+                      styles.upcomingCard,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      },
+                    ]}
                   >
-                    <Image source={{ uri: item.featuredImage }} style={styles.upcomingCardImage} contentFit="cover" />
+                    <Image
+                      source={{ uri: item.featuredImage }}
+                      style={styles.upcomingCardImage}
+                      contentFit="cover"
+                    />
                     <View style={styles.upcomingCardBody}>
-                      <Text style={[styles.upcomingCardTitle, { color: colors.foreground }]} numberOfLines={2}>
+                      <Text
+                        style={[
+                          styles.upcomingCardTitle,
+                          { color: colors.foreground },
+                        ]}
+                        numberOfLines={2}
+                      >
                         {decodeHtmlEntities(item.title.rendered)}
                       </Text>
                       {item.mobileFields?.event_location && (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                          <IconSymbol name="mappin" size={11} color={colors.muted} />
-                          <Text style={{ color: colors.muted, fontSize: 11 }} numberOfLines={1}>
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 4,
+                            marginTop: 4,
+                          }}
+                        >
+                          <IconSymbol
+                            name="mappin"
+                            size={11}
+                            color={colors.muted}
+                          />
+                          <Text
+                            style={{ color: colors.muted, fontSize: 11 }}
+                            numberOfLines={1}
+                          >
                             {item.mobileFields.event_location}
                           </Text>
                         </View>
                       )}
                       {item.minPrice != null && (
-                        <Text style={[styles.upcomingCardPrice, { color: colors.primary }]}>
+                        <Text
+                          style={[
+                            styles.upcomingCardPrice,
+                            { color: colors.primary },
+                          ]}
+                        >
                           Dès {formatAriary(item.minPrice)}
                         </Text>
                       )}
@@ -1039,25 +1556,47 @@ export default function EventDetailScreen() {
       </ScrollView>
 
       {/* Bottom CTA */}
-      <View style={[styles.bottomCta, { borderTopColor: colors.border, backgroundColor: colors.background, paddingBottom: bottomSafePadding }]}>
+      <View
+        style={[
+          styles.bottomCta,
+          {
+            borderTopColor: colors.border,
+            backgroundColor: colors.background,
+            paddingBottom: bottomSafePadding,
+          },
+        ]}
+      >
         {hasSeating ? (
           <TouchableOpacity
             onPress={handleOpenSeatingChart}
             disabled={seatingLoading}
-            style={[styles.ctaButton, { backgroundColor: "#663d17", opacity: seatingLoading ? 0.7 : 1 }]}
+            style={[
+              styles.ctaButton,
+              { backgroundColor: "#663d17", opacity: seatingLoading ? 0.7 : 1 },
+            ]}
           >
             {seatingLoading ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
               <IconSymbol name="mappin" size={20} color="#fff" />
             )}
-            <Text style={styles.ctaButtonText}>{seatingLoading ? "Chargement du plan..." : "Choisir mon si\u00e8ge"}</Text>
+            <Text style={styles.ctaButtonText}>
+              {seatingLoading
+                ? "Chargement du plan..."
+                : "Choisir mon si\u00e8ge"}
+            </Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
             onPress={handleAddToCart}
             disabled={!selectedTicket}
-            style={[styles.ctaButton, { backgroundColor: selectedTicket ? colors.primary : colors.muted, opacity: selectedTicket ? 1 : 0.5 }]}
+            style={[
+              styles.ctaButton,
+              {
+                backgroundColor: selectedTicket ? colors.primary : colors.muted,
+                opacity: selectedTicket ? 1 : 0.5,
+              },
+            ]}
           >
             <IconSymbol name="cart.fill" size={20} color="#fff" />
             <Text style={styles.ctaButtonText}>
@@ -1073,77 +1612,262 @@ export default function EventDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  backButton: { position: "absolute", top: 12, left: 16, width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center" },
-  seatingOverlayBadge: { position: "absolute", bottom: 12, right: 16, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(0,0,0,0.6)", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
+  backButton: {
+    position: "absolute",
+    top: 12,
+    left: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  seatingOverlayBadge: {
+    position: "absolute",
+    bottom: 12,
+    right: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
   seatingOverlayText: { color: "#fff", fontSize: 12, fontWeight: "600" },
   title: { fontSize: 24, fontWeight: "700" },
   catsRow: { flexDirection: "row", alignItems: "center", marginTop: 8, gap: 6 },
   catsText: { fontSize: 13, fontWeight: "600" },
   infoRow: { flexDirection: "row", flexWrap: "wrap", gap: 16, marginTop: 14 },
   infoItem: { flexDirection: "row", alignItems: "center" },
-  infoIcon: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  infoIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   infoLabel: { fontSize: 11 },
   infoValue: { fontSize: 13, fontWeight: "600" },
-  practicalInfoBox: { marginTop: 20, padding: 16, borderRadius: 14, borderWidth: 1 },
-  practicalInfoRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 10 },
+  practicalInfoBox: {
+    marginTop: 20,
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  practicalInfoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 10,
+  },
   practicalInfoLabel: { fontSize: 13, flex: 1 },
-  practicalInfoValue: { fontSize: 13, fontWeight: "600", flex: 1, textAlign: "right" },
+  practicalInfoValue: {
+    fontSize: 13,
+    fontWeight: "600",
+    flex: 1,
+    textAlign: "right",
+  },
   priceBox: { marginTop: 20, padding: 16, borderRadius: 14, borderWidth: 1 },
   priceLabel: { fontSize: 13, fontWeight: "600" },
   priceValue: { fontSize: 28, fontWeight: "800", marginTop: 2 },
   sectionTitle: { fontSize: 16, fontWeight: "700", marginBottom: 10 },
-  ticketOption: { flexDirection: "row", alignItems: "center", padding: 14, borderRadius: 12, borderWidth: 1, marginBottom: 8 },
-  radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, alignItems: "center", justifyContent: "center" },
+  ticketOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  radio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   radioInner: { width: 10, height: 10, borderRadius: 5 },
   ticketName: { fontSize: 14, fontWeight: "600" },
   ticketPrice: { fontSize: 15, fontWeight: "700" },
-  seatingChartBtn: { marginTop: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 14, borderRadius: 12 },
+  seatingChartBtn: {
+    marginTop: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
   seatingChartBtnText: { color: "#fff", fontSize: 14, fontWeight: "700" },
-  qtyRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 20, padding: 14, borderRadius: 12, borderWidth: 1 },
+  qtyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 20,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
   qtyLabel: { fontSize: 15, fontWeight: "600" },
   qtyControls: { flexDirection: "row", alignItems: "center", gap: 16 },
-  qtyBtn: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  qtyBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   qtyBtnText: { fontSize: 20, fontWeight: "700" },
-  qtyValue: { fontSize: 18, fontWeight: "700", minWidth: 24, textAlign: "center" },
+  qtyValue: {
+    fontSize: 18,
+    fontWeight: "700",
+    minWidth: 24,
+    textAlign: "center",
+  },
   descText: { fontSize: 14, lineHeight: 22 },
   eventScroll: { flex: 1 },
   eventScrollContent: { paddingBottom: 24 },
   bottomCta: { padding: 16, paddingBottom: 32, borderTopWidth: 1 },
-  ctaButton: { borderRadius: 14, paddingVertical: 16, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 8 },
+  ctaButton: {
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
+  },
   ctaButtonText: { color: "#fff", fontSize: 16, fontWeight: "700" },
-  galleryDots: { position: "absolute", bottom: 16, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 6 },
+  galleryDots: {
+    position: "absolute",
+    bottom: 16,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 6,
+  },
   dot: { width: 8, height: 8, borderRadius: 4 },
-  seatingHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
+  seatingHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
   seatingBackBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
   seatingBackText: { fontSize: 15 },
   seatingTitle: { fontSize: 16, fontWeight: "700" },
-  webFallbackBtn: { marginTop: 20, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10 },
+  webFallbackBtn: {
+    marginTop: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
   webFallbackBtnText: { color: "#fff", fontSize: 14, fontWeight: "600" },
-  topRightActions: { position: "absolute", top: 12, right: 16, flexDirection: "row", gap: 8 },
-  topActionBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center" },
-  confirmOverlay: { position: "absolute", bottom: 0, left: 0, right: 0, paddingHorizontal: 16, paddingBottom: 24, paddingTop: 10, backgroundColor: "rgba(255,255,255,0.97)", borderTopWidth: 1, borderTopColor: "#E5E7EB", alignItems: "center" },
-  confirmBtn: { width: "100%", paddingVertical: 16, borderRadius: 14, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 4 },
+  topRightActions: {
+    position: "absolute",
+    top: 12,
+    right: 16,
+    flexDirection: "row",
+    gap: 8,
+  },
+  topActionBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  confirmOverlay: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+    paddingTop: 10,
+    backgroundColor: "rgba(255,255,255,0.97)",
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+    alignItems: "center",
+  },
+  confirmBtn: {
+    width: "100%",
+    paddingVertical: 16,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+  },
   confirmBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
   confirmHint: { marginTop: 6, fontSize: 12, textAlign: "center" },
   // Countdown (compact at top)
-  countdownCompact: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: "#663d17" },
-  countdownCompactText: { fontSize: 14, fontWeight: "700", color: "#fff", letterSpacing: 0.5 },
+  countdownCompact: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: "#663d17",
+  },
+  countdownCompactText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#fff",
+    letterSpacing: 0.5,
+  },
   countdownCompactLabel: { fontSize: 12, color: "rgba(255,255,255,0.75)" },
   // Conditions
-  conditionsBox: { marginTop: 20, padding: 16, borderRadius: 14, borderWidth: 1 },
+  conditionsBox: {
+    marginTop: 20,
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
   conditionsTitle: { fontSize: 13, fontWeight: "600", marginBottom: 6 },
   showMoreText: { fontSize: 13, fontWeight: "600", marginTop: 8 },
   // Location
   locationBox: { marginTop: 20, padding: 16, borderRadius: 14, borderWidth: 1 },
-  locationHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
+  locationHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
   getDirections: { fontSize: 13, fontWeight: "600" },
-  locationRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
+  locationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
   locationText: { fontSize: 14, flex: 1 },
   mapPreview: { borderRadius: 10, overflow: "hidden" },
   mapImage: { width: "100%", height: 140, borderRadius: 10 },
   // Upcoming events
-  upcomingHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
-  upcomingCard: { width: 200, borderRadius: 14, overflow: "hidden", borderWidth: 1 },
+  upcomingHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  upcomingCard: {
+    width: 200,
+    borderRadius: 14,
+    overflow: "hidden",
+    borderWidth: 1,
+  },
   upcomingCardImage: { width: 200, height: 110 },
   upcomingCardBody: { padding: 10 },
   upcomingCardTitle: { fontSize: 13, fontWeight: "600" },

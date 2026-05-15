@@ -1,15 +1,24 @@
-import { useState } from "react";
-import { View, Text, TouchableOpacity, FlatList, StyleSheet } from "react-native";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  FlatList,
+  StyleSheet,
+} from "react-native";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { useNotifications, type AppNotification } from "@/lib/notifications-provider";
+import {
+  useNotifications,
+  type AppNotification,
+} from "@/lib/notifications-provider";
 
 export default function NotificationsScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { notifications, unreadCount, markAsRead, markAllAsRead, clearAll } = useNotifications();
+  const { notifications, unreadCount, markAsRead, markAllAsRead } =
+    useNotifications();
 
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -50,28 +59,51 @@ export default function NotificationsScreen() {
       ]}
       activeOpacity={0.7}
     >
-      <View style={[styles.notifIcon, { backgroundColor: item.read ? colors.surface : colors.primary + "20" }]}>
+      <View
+        style={[
+          styles.notifIcon,
+          {
+            backgroundColor: item.read ? colors.surface : colors.primary + "20",
+          },
+        ]}
+      >
         <IconSymbol
           name={
-            item.data?.type === "event_reminder" ? "clock" :
-            item.data?.type === "new_event" ? "star.fill" :
-            item.data?.type === "order_update" ? "bag.fill" :
-            "bell.fill"
+            item.data?.type === "event_reminder"
+              ? "clock"
+              : item.data?.type === "new_event"
+                ? "star.fill"
+                : item.data?.type === "order_update"
+                  ? "bag.fill"
+                  : "bell.fill"
           }
           size={18}
           color={item.read ? colors.muted : colors.primary}
         />
       </View>
       <View style={styles.notifContent}>
-        <Text style={[styles.notifTitle, { color: colors.foreground, fontWeight: item.read ? "500" : "700" }]} numberOfLines={1}>
+        <Text
+          style={[
+            styles.notifTitle,
+            { color: colors.foreground, fontWeight: item.read ? "500" : "700" },
+          ]}
+          numberOfLines={1}
+        >
           {item.title}
         </Text>
-        <Text style={[styles.notifBody, { color: colors.muted }]} numberOfLines={2}>
+        <Text
+          style={[styles.notifBody, { color: colors.muted }]}
+          numberOfLines={2}
+        >
           {item.body}
         </Text>
-        <Text style={[styles.notifTime, { color: colors.muted }]}>{formatTime(item.receivedAt)}</Text>
+        <Text style={[styles.notifTime, { color: colors.muted }]}>
+          {formatTime(item.receivedAt)}
+        </Text>
       </View>
-      {!item.read && <View style={[styles.unreadDot, { backgroundColor: colors.primary }]} />}
+      {!item.read && (
+        <View style={[styles.unreadDot, { backgroundColor: colors.primary }]} />
+      )}
     </TouchableOpacity>
   );
 
@@ -81,13 +113,19 @@ export default function NotificationsScreen() {
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <IconSymbol name="chevron.left" size={20} color={colors.foreground} />
-          <Text style={[styles.backText, { color: colors.foreground }]}>Retour</Text>
+          <Text style={[styles.backText, { color: colors.foreground }]}>
+            Retour
+          </Text>
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.foreground }]}>Notifications</Text>
+        <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+          Notifications
+        </Text>
         <View style={styles.headerRight}>
           {unreadCount > 0 && (
             <TouchableOpacity onPress={markAllAsRead} style={styles.markAllBtn}>
-              <Text style={[styles.markAllText, { color: colors.primary }]}>Tout lire</Text>
+              <Text style={[styles.markAllText, { color: colors.primary }]}>
+                Tout lire
+              </Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity
@@ -104,15 +142,18 @@ export default function NotificationsScreen() {
           <View style={[styles.emptyIcon, { backgroundColor: colors.surface }]}>
             <IconSymbol name="bell.fill" size={40} color={colors.muted} />
           </View>
-          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Aucune notification</Text>
+          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
+            Aucune notification
+          </Text>
           <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
-            Vous recevrez ici les rappels d'événements, les mises à jour de commandes et les nouveautés.
+            Vous recevrez ici les rappels d'événements, les mises à jour de
+            commandes et les nouveautés.
           </Text>
         </View>
       ) : (
         <FlatList
           data={notifications}
-          keyExtractor={item => item.id}
+          keyExtractor={(item) => item.id}
           renderItem={renderNotif}
           showsVerticalScrollIndicator={false}
         />
@@ -136,7 +177,13 @@ const styles = StyleSheet.create({
   headerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
   markAllBtn: { paddingVertical: 4, paddingHorizontal: 8 },
   markAllText: { fontSize: 13, fontWeight: "600" },
-  settingsBtn: { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  settingsBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   notifItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -157,8 +204,20 @@ const styles = StyleSheet.create({
   notifBody: { fontSize: 13, marginTop: 2, lineHeight: 18 },
   notifTime: { fontSize: 11, marginTop: 4 },
   unreadDot: { width: 8, height: 8, borderRadius: 4 },
-  emptyContainer: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32 },
-  emptyIcon: { width: 80, height: 80, borderRadius: 24, alignItems: "center", justifyContent: "center", marginBottom: 16 },
+  emptyContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 32,
+  },
+  emptyIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
   emptyTitle: { fontSize: 18, fontWeight: "700", marginBottom: 8 },
   emptySubtitle: { fontSize: 14, textAlign: "center", lineHeight: 20 },
 });
