@@ -66,6 +66,8 @@ function normalizeTicket(raw: any, eventId: number | string): TicketType {
     stock_status: raw?.stock_status || "instock",
     usesSeating: Boolean(raw?.usesSeating),
     eventId: String(raw?.eventId || eventId),
+    hasCheckoutFields: Boolean(raw?.hasCheckoutFields),
+    requiresCheckoutFields: Boolean(raw?.requiresCheckoutFields),
     lamakoRewardsEnabled: raw?.lamakoRewardsEnabled !== false,
   };
 }

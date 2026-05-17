@@ -222,6 +222,9 @@ export default function EventDetailScreen() {
       image: event.featuredImage || "",
       quantity: qty,
       isEvent: true,
+      eventId: event.id,
+      hasCheckoutFields: selectedTicket.hasCheckoutFields,
+      requiresCheckoutFields: selectedTicket.requiresCheckoutFields,
       lamakoRewardsEnabled:
         event.lamakoRewardsEnabled !== false &&
         selectedTicket.lamakoRewardsEnabled !== false,

@@ -17,9 +17,18 @@ import { useCart } from "@/lib/cart-provider";
 import { getStoredUser } from "@/lib/api/auth";
 import {
   createMobileCheckout,
+  getMobileCheckoutFields,
   getMobileCheckoutStatus,
   SITE_URL,
+  type CheckoutFieldValue,
+  type MobileCheckoutFieldsResponse,
+  type MobileCheckoutItemInput,
 } from "@/lib/api/mobile";
+import {
+  TicketCustomFieldsForm,
+  type BuyerFieldValues,
+  type TicketFieldValues,
+} from "@/components/commerce/TicketCustomFieldsForm";
 import { Confetti } from "@/components/confetti";
 import { CheckoutSkeleton } from "@/components/skeleton-loader";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -32,6 +41,7 @@ import {
 } from "@/lib/rewards-provider";
 import { useAuth } from "@/lib/auth-provider";
 import { parsePaymentReturnUrl } from "@/lib/payment-return";
+import type { CheckoutFieldSchema } from "@/lib/types/commerce";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // WebView for checkout - loads WooCommerce pay-for-order page
@@ -45,6 +55,7 @@ if (Platform.OS !== "web") {
 type CheckoutPhase =
   | "address"
   | "confirm"
+  | "ticket_fields"
   | "creating"
   | "paying"
   | "success"
@@ -96,6 +107,19 @@ export default function CheckoutScreen() {
   const [phase, setPhase] = useState<CheckoutPhase>(
     hasPhysicalProducts ? "address" : canShowRedeem ? "confirm" : "creating",
   );
+  const [checkoutFieldsLoading, setCheckoutFieldsLoading] = useState(
+    items.length > 0,
+  );
+  const [checkoutFields, setCheckoutFields] =
+    useState<MobileCheckoutFieldsResponse | null>(null);
+  const [buyerFieldValues, setBuyerFieldValues] = useState<BuyerFieldValues>(
+    {},
+  );
+  const [ticketFieldValues, setTicketFieldValues] =
+    useState<TicketFieldValues>({});
+  const [ticketFieldErrors, setTicketFieldErrors] = useState<
+    Record<string, string>
+  >({});
   const [checkoutUrl, setCheckoutUrl] = useState<string>("");
   const [orderId, setOrderId] = useState<number>(0);
   const [checkoutToken, setCheckoutToken] = useState<string>("");
@@ -105,6 +129,7 @@ export default function CheckoutScreen() {
   const [retryCount, setRetryCount] = useState(0);
   const MAX_RETRIES = 3;
   const verificationInFlightRef = useRef(false);
+  const autoCheckoutStartedRef = useRef(false);
 
   // Auth guard: redirect to login if not authenticated
   useEffect(() => {
@@ -288,6 +313,170 @@ export default function CheckoutScreen() {
     );
   };
 
+  const checkoutFieldKey = (field: CheckoutFieldSchema) =>
+    field.storageKey || field.key;
+
+  const isFieldValueEmpty = (value: CheckoutFieldValue | undefined) => {
+    if (Array.isArray(value)) return value.length === 0;
+    return !value || !String(value).trim();
+  };
+
+  const buildCheckoutItemInputs = (
+    includeFields = false,
+  ): MobileCheckoutItemInput[] =>
+    items.map((item) => {
+      const payload: MobileCheckoutItemInput = {
+        productId: item.productId,
+        eventId: item.eventId,
+        quantity: item.quantity,
+        lane: item.isEvent ? "ticket" : "product",
+      };
+      if (includeFields && item.isEvent) {
+        payload.attendees = Array.from({ length: item.quantity }).map(
+          (_, index) => ({
+            fields: ticketFieldValues[item.productId]?.[index] || {},
+          }),
+        );
+      }
+      return payload;
+    });
+
+  const applyDefaultTicketFieldValues = async (
+    schema: MobileCheckoutFieldsResponse,
+  ) => {
+    const storedUser = await getStoredUser();
+    const nextBuyerValues: BuyerFieldValues = {};
+    const nextTicketValues: TicketFieldValues = {};
+
+    schema.buyerFields.forEach((field) => {
+      const key = checkoutFieldKey(field);
+      const defaultValue = field.defaultValue || "";
+      if (field.key === "first_name") {
+        nextBuyerValues[key] = storedUser?.firstName || defaultValue;
+      } else if (field.key === "last_name") {
+        nextBuyerValues[key] = storedUser?.lastName || defaultValue;
+      } else if (field.key === "email" || field.key === "confirm_email") {
+        nextBuyerValues[key] = storedUser?.email || defaultValue;
+      } else if (defaultValue) {
+        nextBuyerValues[key] = defaultValue;
+      }
+    });
+
+    schema.items.forEach((fieldItem) => {
+      if (!fieldItem.hasFields) return;
+      nextTicketValues[fieldItem.productId] = {};
+      Array.from({ length: fieldItem.quantity }).forEach((_, index) => {
+        nextTicketValues[fieldItem.productId][index] = {};
+        fieldItem.ownerFields.forEach((field) => {
+          const key = checkoutFieldKey(field);
+          const defaultValue = field.defaultValue || "";
+          if (field.key === "first_name") {
+            nextTicketValues[fieldItem.productId][index][key] =
+              storedUser?.firstName || defaultValue;
+          } else if (field.key === "last_name") {
+            nextTicketValues[fieldItem.productId][index][key] =
+              storedUser?.lastName || defaultValue;
+          } else if (
+            field.key === "owner_email" ||
+            field.key === "owner_confirm_email"
+          ) {
+            nextTicketValues[fieldItem.productId][index][key] =
+              storedUser?.email || defaultValue;
+          } else if (defaultValue) {
+            nextTicketValues[fieldItem.productId][index][key] = defaultValue;
+          }
+        });
+      });
+    });
+
+    setBuyerFieldValues(nextBuyerValues);
+    setTicketFieldValues(nextTicketValues);
+  };
+
+  const validateTicketFields = () => {
+    if (!checkoutFields?.hasFields) return true;
+    const nextErrors: Record<string, string> = {};
+
+    checkoutFields.buyerFields.forEach((field) => {
+      const key = checkoutFieldKey(field);
+      const value = buyerFieldValues[key];
+      if (field.required && isFieldValueEmpty(value)) {
+        nextErrors[`buyer:${key}`] = "Champ requis";
+      }
+    });
+
+    checkoutFields.items.forEach((fieldItem) => {
+      if (!fieldItem.hasFields) return;
+      Array.from({ length: fieldItem.quantity }).forEach((_, index) => {
+        fieldItem.ownerFields.forEach((field) => {
+          const key = checkoutFieldKey(field);
+          const value = ticketFieldValues[fieldItem.productId]?.[index]?.[key];
+          if (field.required && isFieldValueEmpty(value)) {
+            nextErrors[`${fieldItem.productId}:${index}:${key}`] =
+              "Champ requis";
+          }
+          if (
+            !isFieldValueEmpty(value) &&
+            (field.type === "email" || field.validation === "email") &&
+            typeof value === "string" &&
+            !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+          ) {
+            nextErrors[`${fieldItem.productId}:${index}:${key}`] =
+              "Email invalide";
+          }
+        });
+      });
+    });
+
+    setTicketFieldErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const continueAfterPreCheckout = () => {
+    if (checkoutFieldsLoading) return;
+    if (checkoutFields?.hasFields) {
+      setPhase("ticket_fields");
+      return;
+    }
+    startOrderCreation();
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!isAuthenticated || items.length === 0) {
+      setCheckoutFields(null);
+      setCheckoutFieldsLoading(false);
+      return;
+    }
+
+    setCheckoutFieldsLoading(true);
+    getMobileCheckoutFields(buildCheckoutItemInputs(false))
+      .then(async (schema) => {
+        if (cancelled) return;
+        setCheckoutFields(schema);
+        setTicketFieldErrors({});
+        await applyDefaultTicketFieldValues(schema);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.warn("Checkout fields load failed:", err);
+        setCheckoutFields(null);
+        if (items.some((item) => item.hasCheckoutFields)) {
+          setErrorMsg(
+            "Impossible de charger les champs requis pour ce billet. Veuillez reessayer.",
+          );
+          setPhase("error");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCheckoutFieldsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, items]);
+
   // Create WC order / checkout session
   const startOrderCreation = async () => {
     try {
@@ -321,13 +510,10 @@ export default function CheckoutScreen() {
       }
 
       const result = await createMobileCheckout({
-        items: items.map((item) => ({
-          productId: item.productId,
-          quantity: item.quantity,
-          lane: item.isEvent ? "ticket" : "product",
-        })),
+        items: buildCheckoutItemInputs(true),
         billing,
         shipping: hasPhysicalProducts ? billing : undefined,
+        buyerFields: buyerFieldValues,
         couponCode: appliedCoupon || undefined,
         source: items.every((item) => item.isEvent)
           ? "ticket"
@@ -358,10 +544,27 @@ export default function CheckoutScreen() {
 
   // Auto-start order creation for events-only carts (only if no redeem option)
   useEffect(() => {
-    if (!hasPhysicalProducts && !canShowRedeem) {
+    if (
+      !hasPhysicalProducts &&
+      !canShowRedeem &&
+      isAuthenticated &&
+      !checkoutFieldsLoading &&
+      !autoCheckoutStartedRef.current
+    ) {
+      autoCheckoutStartedRef.current = true;
+      if (checkoutFields?.hasFields) {
+        setPhase("ticket_fields");
+        return;
+      }
       startOrderCreation();
     }
-  }, []);
+  }, [
+    canShowRedeem,
+    checkoutFields,
+    checkoutFieldsLoading,
+    hasPhysicalProducts,
+    isAuthenticated,
+  ]);
 
   const handleNavChange = (navState: any) => {
     const url = navState.url || "";
@@ -990,18 +1193,22 @@ export default function CheckoutScreen() {
                 );
                 return;
               }
-              startOrderCreation();
+              continueAfterPreCheckout();
             }}
+            disabled={checkoutFieldsLoading}
             style={{
               backgroundColor: colors.primary,
               borderRadius: 14,
               paddingVertical: 16,
               alignItems: "center",
               marginTop: 12,
+              opacity: checkoutFieldsLoading ? 0.7 : 1,
             }}
           >
             <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>
-              Continuer vers le paiement
+              {checkoutFieldsLoading
+                ? "Verification..."
+                : "Continuer vers le paiement"}
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -1241,20 +1448,21 @@ export default function CheckoutScreen() {
 
           {/* Continue button */}
           <TouchableOpacity
-            onPress={() => {
-              setPhase("creating");
-              startOrderCreation();
-            }}
+            onPress={continueAfterPreCheckout}
+            disabled={checkoutFieldsLoading}
             style={{
               backgroundColor: colors.primary,
               borderRadius: 14,
               paddingVertical: 16,
               alignItems: "center",
               marginTop: 8,
+              opacity: checkoutFieldsLoading ? 0.7 : 1,
             }}
           >
             <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>
-              {appliedCoupon
+              {checkoutFieldsLoading
+                ? "Verification..."
+                : appliedCoupon
                 ? `Payer ${formatAriary(Math.max(0, total - appliedDiscount))}`
                 : "Continuer vers le paiement"}
             </Text>
@@ -1263,10 +1471,8 @@ export default function CheckoutScreen() {
           {/* Skip redeem */}
           {!appliedCoupon && (
             <TouchableOpacity
-              onPress={() => {
-                setPhase("creating");
-                startOrderCreation();
-              }}
+              onPress={continueAfterPreCheckout}
+              disabled={checkoutFieldsLoading}
               style={{ alignItems: "center", paddingVertical: 10 }}
             >
               <Text style={{ color: colors.muted, fontSize: 13 }}>
@@ -1274,6 +1480,116 @@ export default function CheckoutScreen() {
               </Text>
             </TouchableOpacity>
           )}
+        </ScrollView>
+      </ScreenContainer>
+    );
+  }
+
+  // ---- TICKET FIELDS phase ----
+  if (phase === "ticket_fields") {
+    return (
+      <ScreenContainer edges={["top", "bottom", "left", "right"]}>
+        <View style={[styles.header, { borderBottomColor: colors.border }]}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backBtn}
+          >
+            <IconSymbol
+              name="chevron.left"
+              size={24}
+              color={colors.foreground}
+            />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+            Participants
+          </Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <ScrollView contentContainerStyle={{ padding: 20, gap: 16 }}>
+          <View
+            style={{
+              backgroundColor: colors.surface,
+              borderRadius: 12,
+              padding: 14,
+              borderWidth: 1,
+              borderColor: colors.border,
+            }}
+          >
+            <Text
+              style={{
+                color: colors.foreground,
+                fontSize: 14,
+                fontWeight: "700",
+              }}
+            >
+              Recapitulatif
+            </Text>
+            <Text style={{ color: colors.muted, fontSize: 13, marginTop: 6 }}>
+              {items.length} article{items.length > 1 ? "s" : ""} - Total:{" "}
+              {formatAriary(total)}
+            </Text>
+          </View>
+
+          {checkoutFields ? (
+            <TicketCustomFieldsForm
+              cartItems={items}
+              fieldItems={checkoutFields.items}
+              buyerFields={checkoutFields.buyerFields}
+              buyerValues={buyerFieldValues}
+              values={ticketFieldValues}
+              errors={ticketFieldErrors}
+              onBuyerChange={(key, value) => {
+                setBuyerFieldValues((prev) => ({ ...prev, [key]: value }));
+                setTicketFieldErrors((prev) => {
+                  const next = { ...prev };
+                  delete next[`buyer:${key}`];
+                  return next;
+                });
+              }}
+              onChange={(productId, attendeeIndex, key, value) => {
+                setTicketFieldValues((prev) => ({
+                  ...prev,
+                  [productId]: {
+                    ...(prev[productId] || {}),
+                    [attendeeIndex]: {
+                      ...(prev[productId]?.[attendeeIndex] || {}),
+                      [key]: value,
+                    },
+                  },
+                }));
+                setTicketFieldErrors((prev) => {
+                  const next = { ...prev };
+                  delete next[`${productId}:${attendeeIndex}:${key}`];
+                  return next;
+                });
+              }}
+            />
+          ) : (
+            <View style={styles.centerContent}>
+              <ActivityIndicator color={colors.primary} />
+            </View>
+          )}
+
+          <TouchableOpacity
+            onPress={() => {
+              if (!checkoutFields) return;
+              if (!validateTicketFields()) return;
+              startOrderCreation();
+            }}
+            disabled={!checkoutFields}
+            style={{
+              backgroundColor: colors.primary,
+              borderRadius: 14,
+              paddingVertical: 16,
+              alignItems: "center",
+              marginTop: 4,
+              opacity: checkoutFields ? 1 : 0.7,
+            }}
+          >
+            <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>
+              Continuer vers le paiement
+            </Text>
+          </TouchableOpacity>
         </ScrollView>
       </ScreenContainer>
     );

@@ -9,8 +9,11 @@ export interface CartItem {
   quantity: number;
   image: string;
   isEvent: boolean;
+  eventId?: number;
   ticketType?: string;
   seatLabel?: string;
+  hasCheckoutFields?: boolean;
+  requiresCheckoutFields?: boolean;
   lamakoRewardsEnabled?: boolean;
 }
 

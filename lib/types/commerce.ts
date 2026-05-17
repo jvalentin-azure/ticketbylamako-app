@@ -119,7 +119,44 @@ export interface TicketType {
   stock_status: string;
   usesSeating: boolean;
   eventId: string;
+  hasCheckoutFields?: boolean;
+  requiresCheckoutFields?: boolean;
   lamakoRewardsEnabled?: boolean;
+}
+
+export type CheckoutFieldType =
+  | "text"
+  | "number"
+  | "email"
+  | "date"
+  | "textarea"
+  | "select"
+  | "radio"
+  | "checkbox";
+export type CheckoutFieldValue = string | string[];
+
+export interface CheckoutFieldOption {
+  label: string;
+  value: string;
+}
+
+export interface CheckoutFieldSchema {
+  key: string;
+  storageKey: string;
+  label: string;
+  type: CheckoutFieldType;
+  scope: "buyer" | "attendee";
+  required: boolean;
+  visible: boolean;
+  custom: boolean;
+  placeholder?: string;
+  description?: string;
+  defaultValue?: string;
+  validation?: string;
+  min?: string;
+  max?: string;
+  step?: string;
+  options: CheckoutFieldOption[];
 }
 
 export interface EventCategory {

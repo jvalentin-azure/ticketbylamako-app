@@ -1,4 +1,5 @@
 import { getStoredToken } from "./auth";
+import type { CheckoutFieldSchema } from "@/lib/types/commerce";
 
 export const SITE_URL = process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
 export const MOBILE_V2_SEATING_ENABLED =
@@ -86,21 +87,31 @@ export async function mobileV2Fetch<T>(
 }
 
 export type CommerceLane = "product" | "ticket";
+export type CheckoutFieldValue = string | string[];
+
+export interface CheckoutAttendeeInput {
+  fields: Record<string, CheckoutFieldValue>;
+}
 
 export interface MobileCheckoutItemInput {
   productId?: number;
   product_id?: number;
   variationId?: number;
   variation_id?: number;
+  eventId?: number;
+  event_id?: number;
   quantity: number;
   lane?: CommerceLane;
+  attendees?: CheckoutAttendeeInput[];
 }
 
 interface MobileCheckoutItemPayload {
   product_id: number;
   variation_id?: number;
+  event_id?: number;
   quantity: number;
   lane?: CommerceLane;
+  attendees?: CheckoutAttendeeInput[];
 }
 
 export interface MobileAddressInput {
@@ -117,6 +128,7 @@ export interface CreateMobileCheckoutRequest {
   items: MobileCheckoutItemInput[];
   billing?: MobileAddressInput;
   shipping?: MobileAddressInput;
+  buyerFields?: Record<string, CheckoutFieldValue>;
   couponCode?: string;
   source?: "native_cart" | "product" | "ticket" | string;
 }
@@ -129,6 +141,23 @@ export interface CreateMobileCheckoutResponse {
   total: string;
   currency: string;
   itemCount: number;
+}
+
+export interface MobileCheckoutFieldsItem {
+  productId: number;
+  eventId: number;
+  name: string;
+  quantity: number;
+  requiresFields: boolean;
+  hasFields: boolean;
+  ownerFields: CheckoutFieldSchema[];
+}
+
+export interface MobileCheckoutFieldsResponse {
+  buyerFields: CheckoutFieldSchema[];
+  items: MobileCheckoutFieldsItem[];
+  hasFields: boolean;
+  requiresFields: boolean;
 }
 
 export interface CreateMobileSeatingSessionRequest {
@@ -308,12 +337,24 @@ function normalizeCheckoutItems(items: MobileCheckoutItemInput[]): MobileCheckou
   return items.map(item => {
     const productId = item.product_id ?? item.productId ?? 0;
     const variationId = item.variation_id ?? item.variationId;
+    const eventId = item.event_id ?? item.eventId;
     return {
       product_id: productId,
       variation_id: variationId || undefined,
+      event_id: eventId || undefined,
       quantity: item.quantity,
       lane: item.lane,
+      attendees: item.attendees,
     };
+  });
+}
+
+export async function getMobileCheckoutFields(
+  items: MobileCheckoutItemInput[]
+): Promise<MobileCheckoutFieldsResponse> {
+  return mobileV2Fetch<MobileCheckoutFieldsResponse>("checkouts/fields", {
+    method: "POST",
+    body: { items: normalizeCheckoutItems(items) },
   });
 }
 

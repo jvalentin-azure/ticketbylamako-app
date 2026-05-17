@@ -49,6 +49,12 @@ function lamako_mobile_v2_register_routes() {
         'permission_callback' => '__return_true',
     ] );
 
+    register_rest_route( $namespace, '/public/events/(?P<event_id>\d+)/checkout-fields', [
+        'methods'             => WP_REST_Server::READABLE,
+        'callback'            => 'lamako_mobile_v2_public_event_checkout_fields',
+        'permission_callback' => '__return_true',
+    ] );
+
     register_rest_route( $namespace, '/public/shop-data', [
         'methods'             => WP_REST_Server::READABLE,
         'callback'            => 'lamako_mobile_v2_public_shop_data',
@@ -70,6 +76,12 @@ function lamako_mobile_v2_register_routes() {
     register_rest_route( $namespace, '/checkouts/(?P<token>[A-Za-z0-9_-]+)/status', [
         'methods'             => WP_REST_Server::READABLE,
         'callback'            => 'lamako_mobile_v2_get_checkout_status',
+        'permission_callback' => 'lamako_mobile_v2_require_user',
+    ] );
+
+    register_rest_route( $namespace, '/checkouts/fields', [
+        'methods'             => WP_REST_Server::CREATABLE,
+        'callback'            => 'lamako_mobile_v2_get_checkout_fields_for_items',
         'permission_callback' => 'lamako_mobile_v2_require_user',
     ] );
 
@@ -511,6 +523,7 @@ function lamako_mobile_v2_public_ticket_map() {
         if ( ! isset( $map[ $event_id ] ) ) {
             $map[ $event_id ] = [];
         }
+        $checkout_fields = lamako_mobile_v2_checkout_fields_for_ticket( $product_id, $event_id, 1 );
         $map[ $event_id ][] = [
             'id'           => $product_id,
             'name'         => html_entity_decode( $product->get_name(), ENT_QUOTES, 'UTF-8' ),
@@ -518,6 +531,8 @@ function lamako_mobile_v2_public_ticket_map() {
             'stock_status' => $product->get_stock_status(),
             'usesSeating'  => lamako_mobile_v2_truthy_meta( $product_id, [ '_tc_used_for_seatings' ] ),
             'eventId'      => (string) $event_id,
+            'hasCheckoutFields' => ! empty( $checkout_fields['hasFields'] ),
+            'requiresCheckoutFields' => ! empty( $checkout_fields['requiresFields'] ),
             'lamakoRewardsEnabled' => lamako_mobile_v2_rewards_enabled_for_post( $event_id, true ) && lamako_mobile_v2_rewards_enabled_for_post( $product_id, true ),
         ];
     }
@@ -650,6 +665,266 @@ function lamako_mobile_v2_public_event( WP_REST_Request $request ) {
 
     $ticket_map = lamako_mobile_v2_public_ticket_map();
     return rest_ensure_response( lamako_mobile_v2_public_event_summary( $event, $ticket_map, true ) );
+}
+
+function lamako_mobile_v2_standard_owner_field_names() {
+    return [ 'ticket_type_id', 'first_name', 'last_name', 'owner_email', 'owner_confirm_email' ];
+}
+
+function lamako_mobile_v2_standard_buyer_field_names() {
+    return [ 'first_name', 'last_name', 'email', 'confirm_email' ];
+}
+
+function lamako_mobile_v2_field_values( $field ) {
+    if ( ! isset( $field['field_values'] ) ) {
+        return [];
+    }
+
+    $values = $field['field_values'];
+    if ( ! is_array( $values ) ) {
+        $values = explode( ',', (string) $values );
+    }
+
+    $options = [];
+    foreach ( $values as $value ) {
+        if ( is_array( $value ) ) {
+            $option_value = isset( $value['value'] ) ? (string) $value['value'] : (string) ( $value['label'] ?? '' );
+            $option_label = isset( $value['label'] ) ? (string) $value['label'] : $option_value;
+        } else {
+            $option_value = trim( (string) $value );
+            $option_label = $option_value;
+        }
+        if ( $option_value === '' ) {
+            continue;
+        }
+        $options[] = [
+            'label' => html_entity_decode( $option_label, ENT_QUOTES, 'UTF-8' ),
+            'value' => $option_value,
+        ];
+    }
+
+    return $options;
+}
+
+function lamako_mobile_v2_normalize_checkout_field_schema( $field, $scope = 'attendee', array $standard_names = [] ) {
+    if ( ! is_array( $field ) ) {
+        return null;
+    }
+
+    $field_name = sanitize_key( $field['field_name'] ?? '' );
+    $field_type = sanitize_key( $field['field_type'] ?? 'text' );
+    if ( $field_name === '' || in_array( $field_type, [ 'function', 'label', 'script', 'hidden', 'error' ], true ) ) {
+        return null;
+    }
+
+    $supported = [ 'text', 'number', 'email', 'date', 'textarea', 'select', 'radio', 'checkbox' ];
+    if ( ! in_array( $field_type, $supported, true ) ) {
+        $field_type = 'text';
+    }
+
+    $post_field_type = sanitize_key( $field['post_field_type'] ?? ( ! empty( $field['post_meta'] ) || ! isset( $field['post_meta'] ) ? 'post_meta' : '' ) );
+    $storage_key = $field_name . ( $post_field_type ? '_' . $post_field_type : '' );
+    $visible = ! array_key_exists( 'form_visibility', $field ) || filter_var( $field['form_visibility'], FILTER_VALIDATE_BOOLEAN );
+    $options = lamako_mobile_v2_field_values( $field );
+
+    return [
+        'key'           => $field_name,
+        'storageKey'    => $storage_key,
+        'label'         => html_entity_decode( (string) ( $field['field_title'] ?? $field_name ), ENT_QUOTES, 'UTF-8' ),
+        'type'          => $field_type,
+        'scope'         => $scope,
+        'required'      => ! empty( $field['required'] ),
+        'visible'       => $visible,
+        'custom'        => ! in_array( $field_name, $standard_names, true ),
+        'placeholder'   => html_entity_decode( (string) ( $field['field_placeholder'] ?? '' ), ENT_QUOTES, 'UTF-8' ),
+        'description'   => html_entity_decode( (string) ( $field['field_description'] ?? '' ), ENT_QUOTES, 'UTF-8' ),
+        'defaultValue'  => isset( $field['field_default_value'] ) ? (string) $field['field_default_value'] : ( isset( $field['default_value'] ) ? (string) $field['default_value'] : '' ),
+        'validation'    => sanitize_key( $field['validation_type'] ?? '' ),
+        'min'           => isset( $field['field_min'] ) ? (string) $field['field_min'] : '',
+        'max'           => isset( $field['field_max'] ) ? (string) $field['field_max'] : '',
+        'step'          => isset( $field['field_step'] ) ? (string) $field['field_step'] : '',
+        'options'       => $options,
+    ];
+}
+
+function lamako_mobile_v2_cart_form_class() {
+    if ( class_exists( '\Tickera\TC_Cart_Form' ) ) {
+        return '\Tickera\TC_Cart_Form';
+    }
+    if ( class_exists( 'TC_Cart_Form' ) ) {
+        return 'TC_Cart_Form';
+    }
+    return '';
+}
+
+function lamako_mobile_v2_ticket_owner_fields_schema( $ticket_type_id ) {
+    $class_name = lamako_mobile_v2_cart_form_class();
+    if ( $class_name === '' ) {
+        return [];
+    }
+
+    $form = new $class_name( $ticket_type_id );
+    $fields = $form->get_owner_info_fields( $ticket_type_id );
+    $standard = lamako_mobile_v2_standard_owner_field_names();
+    $schema = [];
+
+    foreach ( (array) $fields as $field ) {
+        $normalized = lamako_mobile_v2_normalize_checkout_field_schema( $field, 'attendee', $standard );
+        if ( ! $normalized || empty( $normalized['visible'] ) ) {
+            continue;
+        }
+        $schema[] = $normalized;
+    }
+
+    return $schema;
+}
+
+function lamako_mobile_v2_buyer_fields_schema() {
+    $class_name = lamako_mobile_v2_cart_form_class();
+    if ( $class_name === '' ) {
+        return [];
+    }
+
+    $form = new $class_name();
+    $fields = $form->get_buyer_info_fields();
+    $standard = lamako_mobile_v2_standard_buyer_field_names();
+    $schema = [];
+
+    foreach ( (array) $fields as $field ) {
+        $normalized = lamako_mobile_v2_normalize_checkout_field_schema( $field, 'buyer', $standard );
+        if ( ! $normalized || empty( $normalized['visible'] ) || empty( $normalized['custom'] ) ) {
+            continue;
+        }
+        $schema[] = $normalized;
+    }
+
+    return $schema;
+}
+
+function lamako_mobile_v2_ticket_has_custom_checkout_fields( $ticket_type_id ) {
+    $ticket_type_id = absint( $ticket_type_id );
+    if ( $ticket_type_id <= 0 ) {
+        return false;
+    }
+
+    $post_type = get_post_type( $ticket_type_id );
+    if ( $post_type === 'product_variation' ) {
+        $parent_id = wp_get_post_parent_id( $ticket_type_id );
+        $template_id = get_post_meta( $parent_id, '_owner_form_template', true );
+    } else {
+        $template_id = get_post_meta( $ticket_type_id, '_owner_form_template', true );
+    }
+    if ( ! empty( $template_id ) ) {
+        return true;
+    }
+
+    foreach ( lamako_mobile_v2_ticket_owner_fields_schema( $ticket_type_id ) as $field ) {
+        if ( ! empty( $field['custom'] ) ) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function lamako_mobile_v2_checkout_fields_for_ticket( $ticket_type_id, $event_id = 0, $quantity = 1 ) {
+    $ticket_type_id = absint( $ticket_type_id );
+    $product = function_exists( 'wc_get_product' ) ? wc_get_product( $ticket_type_id ) : null;
+    $has_custom_fields = lamako_mobile_v2_ticket_has_custom_checkout_fields( $ticket_type_id );
+    $owner_fields = $has_custom_fields ? lamako_mobile_v2_ticket_owner_fields_schema( $ticket_type_id ) : [];
+
+    return [
+        'productId'      => $ticket_type_id,
+        'eventId'        => absint( $event_id ),
+        'name'           => $product ? html_entity_decode( $product->get_name(), ENT_QUOTES, 'UTF-8' ) : html_entity_decode( get_the_title( $ticket_type_id ), ENT_QUOTES, 'UTF-8' ),
+        'quantity'       => max( 1, absint( $quantity ) ),
+        'requiresFields' => ! empty( array_filter( $owner_fields, function( $field ) {
+            return ! empty( $field['required'] );
+        } ) ),
+        'hasFields'      => ! empty( $owner_fields ),
+        'ownerFields'    => $owner_fields,
+    ];
+}
+
+function lamako_mobile_v2_public_event_checkout_fields( WP_REST_Request $request ) {
+    $event_id = absint( $request['event_id'] );
+    $event = get_post( $event_id );
+    if ( ! $event || $event->post_type !== 'tc_events' || $event->post_status !== 'publish' ) {
+        return new WP_Error( 'lamako_v2_event_not_found', 'Event not found.', [ 'status' => 404 ] );
+    }
+
+    $ticket_map = lamako_mobile_v2_public_ticket_map();
+    $tickets = [];
+    foreach ( $ticket_map[ $event_id ] ?? [] as $ticket ) {
+        $tickets[] = lamako_mobile_v2_checkout_fields_for_ticket( (int) $ticket['id'], $event_id, 1 );
+    }
+
+    $buyer_fields = lamako_mobile_v2_buyer_fields_schema();
+
+    return rest_ensure_response( [
+        'eventId'        => $event_id,
+        'hasFields'      => ! empty( array_filter( $tickets, function( $ticket ) {
+            return ! empty( $ticket['hasFields'] );
+        } ) ) || ! empty( $buyer_fields ),
+        'requiresFields' => ! empty( array_filter( $tickets, function( $ticket ) {
+            return ! empty( $ticket['requiresFields'] );
+        } ) ) || ! empty( array_filter( $buyer_fields, function( $field ) {
+            return ! empty( $field['required'] );
+        } ) ),
+        'buyerFields'    => $buyer_fields,
+        'tickets'        => $tickets,
+    ] );
+}
+
+function lamako_mobile_v2_get_checkout_fields_for_items( WP_REST_Request $request ) {
+    $body = $request->get_json_params();
+    $body = is_array( $body ) ? $body : [];
+    $items = isset( $body['items'] ) && is_array( $body['items'] ) ? $body['items'] : [];
+
+    if ( empty( $items ) ) {
+        return new WP_Error( 'lamako_v2_items_required', 'Checkout items are required.', [ 'status' => 400 ] );
+    }
+
+    $response_items = [];
+    $has_ticket_items = false;
+    foreach ( $items as $index => $item ) {
+        $validated_item = lamako_mobile_v2_validate_checkout_item( $item, $index );
+        if ( is_wp_error( $validated_item ) ) {
+            return $validated_item;
+        }
+
+        if ( empty( $validated_item['is_ticket'] ) ) {
+            $response_items[] = [
+                'productId'      => (int) $validated_item['base_id'],
+                'eventId'        => 0,
+                'name'           => html_entity_decode( $validated_item['product']->get_name(), ENT_QUOTES, 'UTF-8' ),
+                'quantity'       => (int) $validated_item['quantity'],
+                'requiresFields' => false,
+                'hasFields'      => false,
+                'ownerFields'    => [],
+            ];
+            continue;
+        }
+
+        $has_ticket_items = true;
+        $ticket_type_id = $validated_item['variation_id'] > 0 ? $validated_item['variation_id'] : $validated_item['base_id'];
+        $response_items[] = lamako_mobile_v2_checkout_fields_for_ticket( $ticket_type_id, (int) $validated_item['event_id'], (int) $validated_item['quantity'] );
+    }
+
+    $buyer_fields = $has_ticket_items ? lamako_mobile_v2_buyer_fields_schema() : [];
+
+    return rest_ensure_response( [
+        'buyerFields'    => $buyer_fields,
+        'items'          => $response_items,
+        'hasFields'      => ! empty( array_filter( $response_items, function( $item ) {
+            return ! empty( $item['hasFields'] );
+        } ) ) || ! empty( $buyer_fields ),
+        'requiresFields' => ! empty( array_filter( $response_items, function( $item ) {
+            return ! empty( $item['requiresFields'] );
+        } ) ) || ! empty( array_filter( $buyer_fields, function( $field ) {
+            return ! empty( $field['required'] );
+        } ) ),
+    ] );
 }
 
 function lamako_mobile_v2_public_shop_data( WP_REST_Request $request ) {
@@ -977,6 +1252,240 @@ function lamako_mobile_v2_checkout_allows_rewards_coupon( array $validated_items
     return true;
 }
 
+function lamako_mobile_v2_checkout_value_is_empty( $value ) {
+    if ( is_array( $value ) ) {
+        foreach ( $value as $item ) {
+            if ( trim( (string) $item ) !== '' ) {
+                return false;
+            }
+        }
+        return true;
+    }
+    return trim( (string) $value ) === '';
+}
+
+function lamako_mobile_v2_checkout_field_value_from_payload( array $fields, array $field ) {
+    $key = $field['key'] ?? '';
+    $storage_key = $field['storageKey'] ?? $key;
+    if ( $key !== '' && array_key_exists( $key, $fields ) ) {
+        return $fields[ $key ];
+    }
+    if ( $storage_key !== '' && array_key_exists( $storage_key, $fields ) ) {
+        return $fields[ $storage_key ];
+    }
+    return null;
+}
+
+function lamako_mobile_v2_sanitize_checkout_field_value( $value, array $field ) {
+    $type = $field['type'] ?? 'text';
+    if ( $type === 'checkbox' ) {
+        $values = is_array( $value ) ? $value : explode( ',', (string) $value );
+        $values = array_values( array_filter( array_map( 'sanitize_text_field', $values ), function( $item ) {
+            return trim( (string) $item ) !== '';
+        } ) );
+        return implode( ',', $values );
+    }
+
+    if ( $type === 'textarea' ) {
+        return sanitize_textarea_field( (string) $value );
+    }
+
+    if ( $type === 'email' || ( $field['validation'] ?? '' ) === 'email' ) {
+        return sanitize_email( (string) $value );
+    }
+
+    return sanitize_text_field( (string) $value );
+}
+
+function lamako_mobile_v2_validate_checkout_field_value( $value, array $field, $ticket_type_id = 0, $index = 0 ) {
+    $label = $field['label'] ?? $field['key'] ?? 'Field';
+    if ( ! empty( $field['required'] ) && lamako_mobile_v2_checkout_value_is_empty( $value ) ) {
+        return new WP_Error( 'lamako_v2_checkout_field_required', sprintf( '%s is required for attendee %d.', $label, $index + 1 ), [ 'status' => 400 ] );
+    }
+
+    if ( lamako_mobile_v2_checkout_value_is_empty( $value ) ) {
+        return true;
+    }
+
+    $type = $field['type'] ?? 'text';
+    if ( $type === 'email' || ( $field['validation'] ?? '' ) === 'email' ) {
+        if ( ! is_email( (string) $value ) ) {
+            return new WP_Error( 'lamako_v2_checkout_field_invalid_email', sprintf( '%s must be a valid email.', $label ), [ 'status' => 400 ] );
+        }
+    }
+
+    if ( $type === 'number' && ! is_numeric( $value ) ) {
+        return new WP_Error( 'lamako_v2_checkout_field_invalid_number', sprintf( '%s must be a number.', $label ), [ 'status' => 400 ] );
+    }
+
+    $option_values = array_map( function( $option ) {
+        return (string) ( $option['value'] ?? '' );
+    }, $field['options'] ?? [] );
+    $option_values = array_values( array_filter( $option_values, function( $option ) {
+        return $option !== '';
+    } ) );
+
+    if ( ! empty( $option_values ) && in_array( $type, [ 'select', 'radio' ], true ) && ! in_array( (string) $value, $option_values, true ) ) {
+        return new WP_Error( 'lamako_v2_checkout_field_invalid_option', sprintf( '%s has an invalid value.', $label ), [ 'status' => 400 ] );
+    }
+
+    if ( ! empty( $option_values ) && $type === 'checkbox' ) {
+        $values = is_array( $value ) ? $value : explode( ',', (string) $value );
+        foreach ( $values as $selected ) {
+            $selected = trim( (string) $selected );
+            if ( $selected !== '' && ! in_array( $selected, $option_values, true ) ) {
+                return new WP_Error( 'lamako_v2_checkout_field_invalid_option', sprintf( '%s has an invalid value.', $label ), [ 'status' => 400 ] );
+            }
+        }
+    }
+
+    return true;
+}
+
+function lamako_mobile_v2_prepare_checkout_field_data( array $body, array $validated_items, array $billing ) {
+    $raw_items = isset( $body['items'] ) && is_array( $body['items'] ) ? $body['items'] : [];
+    $buyer_payload = isset( $body['buyerFields'] ) && is_array( $body['buyerFields'] )
+        ? $body['buyerFields']
+        : ( isset( $body['buyer_fields'] ) && is_array( $body['buyer_fields'] ) ? $body['buyer_fields'] : [] );
+
+    $field_data = [
+        'buyer_data' => [],
+        'owner_data' => [],
+        'attendees'  => [],
+    ];
+
+    $has_ticket_items = ! empty( array_filter( $validated_items, function( $item ) {
+        return ! empty( $item['is_ticket'] );
+    } ) );
+
+    if ( $has_ticket_items ) {
+        foreach ( lamako_mobile_v2_buyer_fields_schema() as $field ) {
+            $raw_value = lamako_mobile_v2_checkout_field_value_from_payload( $buyer_payload, $field );
+            $validation = lamako_mobile_v2_validate_checkout_field_value( $raw_value, $field, 0, 0 );
+            if ( is_wp_error( $validation ) ) {
+                return $validation;
+            }
+            if ( ! lamako_mobile_v2_checkout_value_is_empty( $raw_value ) ) {
+                $field_data['buyer_data'][ $field['storageKey'] ] = lamako_mobile_v2_sanitize_checkout_field_value( $raw_value, $field );
+            }
+        }
+    }
+
+    foreach ( $validated_items as $index => $item ) {
+        if ( empty( $item['is_ticket'] ) ) {
+            continue;
+        }
+
+        $ticket_type_id = ! empty( $item['variation_id'] ) ? (int) $item['variation_id'] : (int) $item['base_id'];
+        $schema = lamako_mobile_v2_checkout_fields_for_ticket( $ticket_type_id, (int) $item['event_id'], (int) $item['quantity'] );
+        $owner_fields = $schema['ownerFields'] ?? [];
+        if ( empty( $owner_fields ) ) {
+            continue;
+        }
+
+        $raw_item = isset( $raw_items[ $index ] ) && is_array( $raw_items[ $index ] ) ? $raw_items[ $index ] : [];
+        $attendees = isset( $raw_item['attendees'] ) && is_array( $raw_item['attendees'] ) ? array_values( $raw_item['attendees'] ) : [];
+        $quantity = max( 1, (int) $item['quantity'] );
+
+        for ( $i = 0; $i < $quantity; $i++ ) {
+            $attendee = isset( $attendees[ $i ] ) && is_array( $attendees[ $i ] ) ? $attendees[ $i ] : [];
+            $fields = isset( $attendee['fields'] ) && is_array( $attendee['fields'] ) ? $attendee['fields'] : $attendee;
+
+            $field_data['owner_data']['ticket_type_id_post_meta'][ $ticket_type_id ][ $i ] = (string) $ticket_type_id;
+            $field_data['attendees'][ $ticket_type_id ][ $i ]['ticket_type_id'] = (string) $ticket_type_id;
+
+            foreach ( $owner_fields as $field ) {
+                $raw_value = lamako_mobile_v2_checkout_field_value_from_payload( $fields, $field );
+                if ( lamako_mobile_v2_checkout_value_is_empty( $raw_value ) ) {
+                    if ( $field['key'] === 'first_name' ) {
+                        $raw_value = $billing['first_name'] ?? '';
+                    } elseif ( $field['key'] === 'last_name' ) {
+                        $raw_value = $billing['last_name'] ?? '';
+                    } elseif ( $field['key'] === 'owner_email' || $field['key'] === 'owner_confirm_email' ) {
+                        $raw_value = $billing['email'] ?? '';
+                    }
+                }
+
+                $validation = lamako_mobile_v2_validate_checkout_field_value( $raw_value, $field, $ticket_type_id, $i );
+                if ( is_wp_error( $validation ) ) {
+                    return $validation;
+                }
+
+                if ( lamako_mobile_v2_checkout_value_is_empty( $raw_value ) ) {
+                    continue;
+                }
+
+                $value = lamako_mobile_v2_sanitize_checkout_field_value( $raw_value, $field );
+                $storage_key = $field['storageKey'];
+                $meta_key = preg_replace( '/_post_meta$/', '', $storage_key );
+
+                $field_data['owner_data'][ $storage_key ][ $ticket_type_id ][ $i ] = $value;
+                $field_data['attendees'][ $ticket_type_id ][ $i ][ $meta_key ] = $value;
+            }
+        }
+    }
+
+    return $field_data;
+}
+
+function lamako_mobile_v2_merge_checkout_field_cart_info( WC_Order $order, array $field_data ) {
+    if ( empty( $field_data['owner_data'] ) && ! empty( $field_data['attendees'] ) ) {
+        $field_data['owner_data'] = [];
+        foreach ( (array) $field_data['attendees'] as $ticket_type_id => $attendees ) {
+            foreach ( (array) $attendees as $index => $fields ) {
+                foreach ( (array) $fields as $meta_key => $value ) {
+                    $meta_key = sanitize_key( (string) $meta_key );
+                    if ( $meta_key === '' ) {
+                        continue;
+                    }
+                    $storage_key = preg_match( '/_post_(meta|content)$/', $meta_key )
+                        ? $meta_key
+                        : $meta_key . '_post_meta';
+                    $field_data['owner_data'][ $storage_key ][ (int) $ticket_type_id ][ (int) $index ] = $value;
+                }
+            }
+        }
+    }
+
+    $cart_info = $order->get_meta( 'tc_cart_info' );
+    if ( ! is_array( $cart_info ) ) {
+        $cart_info = [
+            'buyer_data' => [],
+            'owner_data' => [],
+        ];
+    }
+    if ( ! isset( $cart_info['buyer_data'] ) || ! is_array( $cart_info['buyer_data'] ) ) {
+        $cart_info['buyer_data'] = [];
+    }
+    if ( ! isset( $cart_info['owner_data'] ) || ! is_array( $cart_info['owner_data'] ) ) {
+        $cart_info['owner_data'] = [];
+    }
+
+    foreach ( $field_data['buyer_data'] ?? [] as $key => $value ) {
+        $cart_info['buyer_data'][ $key ] = $value;
+    }
+
+    foreach ( $field_data['owner_data'] ?? [] as $key => $ticket_values ) {
+        if ( ! isset( $cart_info['owner_data'][ $key ] ) || ! is_array( $cart_info['owner_data'][ $key ] ) ) {
+            $cart_info['owner_data'][ $key ] = [];
+        }
+        foreach ( (array) $ticket_values as $ticket_type_id => $values ) {
+            $cart_info['owner_data'][ $key ][ $ticket_type_id ] = array_values( (array) $values );
+        }
+    }
+
+    if ( function_exists( 'tickera_sanitize_array' ) ) {
+        $cart_info = tickera_sanitize_array( $cart_info, false, true );
+    }
+
+    $order->update_meta_data( 'tc_cart_info', $cart_info );
+    update_post_meta( $order->get_id(), 'tc_cart_info', $cart_info );
+    if ( ! empty( $field_data['owner_data'] ) || ! empty( $field_data['buyer_data'] ) ) {
+        $order->update_meta_data( '_lamako_has_checkout_fields', 'yes' );
+        update_post_meta( $order->get_id(), '_lamako_has_checkout_fields', 'yes' );
+    }
+}
+
 function lamako_mobile_v2_temporarily_disable_legacy_product_overrides() {
     $removed = [
         'purchasable' => false,
@@ -1042,6 +1551,11 @@ function lamako_mobile_v2_create_checkout( WP_REST_Request $request ) {
         return new WP_Error( 'lamako_v2_rewards_not_available_for_cart', 'LamakoRewards points are not available for one or more items in this cart.', [ 'status' => 403 ] );
     }
 
+    $checkout_field_data = lamako_mobile_v2_prepare_checkout_field_data( $body, $validated, $billing );
+    if ( is_wp_error( $checkout_field_data ) ) {
+        return $checkout_field_data;
+    }
+
     $removed_filters = lamako_mobile_v2_temporarily_disable_legacy_product_overrides();
 
     try {
@@ -1087,7 +1601,7 @@ function lamako_mobile_v2_create_checkout( WP_REST_Request $request ) {
         $order->add_order_note( 'Lamako Mobile v2 checkout session created.' );
         $order->save();
 
-        $ticket_result = lamako_mobile_v2_ensure_ticket_instances_for_order( $order );
+        $ticket_result = lamako_mobile_v2_ensure_ticket_instances_for_order( $order, [], [], $checkout_field_data );
         if ( is_wp_error( $ticket_result ) ) {
             $order->delete( true );
             lamako_mobile_v2_restore_legacy_product_overrides( $removed_filters );
@@ -1780,7 +2294,53 @@ function lamako_mobile_v2_next_ticket_code_slot( $order_id ) {
     return count( $ids ) + 1;
 }
 
-function lamako_mobile_v2_create_ticket_instance_for_item( WC_Order $order, $item_id, $item, $ticket_type_id, $seat = null, array $flow = [] ) {
+function lamako_mobile_v2_apply_ticket_instance_checkout_fields( $ticket_id, array $attendee_fields, WC_Order $order ) {
+    $protected = [
+        'ticket_code'    => true,
+        'ticket_type_id' => true,
+        'event_id'       => true,
+        'item_id'        => true,
+        'chart_id'       => true,
+        'seat_id'        => true,
+        'seat_label'     => true,
+    ];
+
+    $defaults = [
+        'first_name'          => $order->get_billing_first_name(),
+        'last_name'           => $order->get_billing_last_name(),
+        'owner_email'         => $order->get_billing_email(),
+        'owner_confirm_email' => $order->get_billing_email(),
+    ];
+
+    foreach ( $defaults as $key => $value ) {
+        if ( ! array_key_exists( $key, $attendee_fields ) && trim( (string) $value ) !== '' ) {
+            $attendee_fields[ $key ] = $value;
+        }
+    }
+
+    foreach ( $attendee_fields as $key => $value ) {
+        $meta_key = sanitize_key( (string) $key );
+        if ( $meta_key === '' || isset( $protected[ $meta_key ] ) ) {
+            continue;
+        }
+
+        if ( is_array( $value ) ) {
+            $value = implode( ', ', array_map( 'sanitize_text_field', $value ) );
+        }
+
+        if ( $meta_key === 'owner_email' || $meta_key === 'owner_confirm_email' || strpos( $meta_key, 'email' ) !== false ) {
+            $sanitized = sanitize_email( (string) $value );
+        } else {
+            $sanitized = sanitize_text_field( (string) $value );
+        }
+
+        if ( $sanitized !== '' ) {
+            update_post_meta( $ticket_id, $meta_key, $sanitized );
+        }
+    }
+}
+
+function lamako_mobile_v2_create_ticket_instance_for_item( WC_Order $order, $item_id, $item, $ticket_type_id, $seat = null, array $flow = [], array $attendee_fields = [] ) {
     $order_id   = $order->get_id();
     $product_id = (int) $item->get_product_id();
     $event_id   = absint( get_post_meta( $product_id, '_event_name', true ) );
@@ -1788,9 +2348,12 @@ function lamako_mobile_v2_create_ticket_instance_for_item( WC_Order $order, $ite
         $event_id = absint( $flow['event_id'] );
     }
 
-    $owner_name = trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() );
+    $owner_first = trim( (string) ( $attendee_fields['first_name'] ?? $order->get_billing_first_name() ) );
+    $owner_last  = trim( (string) ( $attendee_fields['last_name'] ?? $order->get_billing_last_name() ) );
+    $owner_email = trim( (string) ( $attendee_fields['owner_email'] ?? $order->get_billing_email() ) );
+    $owner_name = trim( $owner_first . ' ' . $owner_last );
     if ( $owner_name === '' ) {
-        $owner_name = $order->get_billing_email();
+        $owner_name = $owner_email;
     }
     if ( $owner_name === '' ) {
         $owner_name = 'Ticket';
@@ -1822,15 +2385,7 @@ function lamako_mobile_v2_create_ticket_instance_for_item( WC_Order $order, $ite
     update_post_meta( $ticket_id, 'event_id', (int) $event_id );
     update_post_meta( $ticket_id, 'item_id', (int) $item_id );
 
-    if ( $order->get_billing_first_name() ) {
-        update_post_meta( $ticket_id, 'first_name', sanitize_text_field( $order->get_billing_first_name() ) );
-    }
-    if ( $order->get_billing_last_name() ) {
-        update_post_meta( $ticket_id, 'last_name', sanitize_text_field( $order->get_billing_last_name() ) );
-    }
-    if ( $order->get_billing_email() ) {
-        update_post_meta( $ticket_id, 'owner_email', sanitize_email( $order->get_billing_email() ) );
-    }
+    lamako_mobile_v2_apply_ticket_instance_checkout_fields( $ticket_id, $attendee_fields, $order );
 
     if ( is_array( $seat ) ) {
         update_post_meta( $ticket_id, 'chart_id', absint( $seat['chart_id'] ?? 0 ) );
@@ -1843,7 +2398,7 @@ function lamako_mobile_v2_create_ticket_instance_for_item( WC_Order $order, $ite
     return (int) $ticket_id;
 }
 
-function lamako_mobile_v2_ensure_ticket_instances_for_order( WC_Order $order, array $seat_cookie = [], array $flow = [] ) {
+function lamako_mobile_v2_ensure_ticket_instances_for_order( WC_Order $order, array $seat_cookie = [], array $flow = [], array $checkout_fields = [] ) {
     $cart_contents = [];
 
     foreach ( $order->get_items() as $item_id => $item ) {
@@ -1870,7 +2425,16 @@ function lamako_mobile_v2_ensure_ticket_instances_for_order( WC_Order $order, ar
 
         while ( count( $instances ) < $quantity ) {
             $next_index = count( $instances );
-            $created    = lamako_mobile_v2_create_ticket_instance_for_item( $order, $item_id, $item, $ticket_type_id, $seats[ $next_index ] ?? null, $flow );
+            $attendee_fields = $checkout_fields['attendees'][ $ticket_type_id ][ $next_index ] ?? [];
+            $created = lamako_mobile_v2_create_ticket_instance_for_item(
+                $order,
+                $item_id,
+                $item,
+                $ticket_type_id,
+                $seats[ $next_index ] ?? null,
+                $flow,
+                is_array( $attendee_fields ) ? $attendee_fields : []
+            );
             if ( is_wp_error( $created ) ) {
                 return $created;
             }
@@ -1881,7 +2445,16 @@ function lamako_mobile_v2_ensure_ticket_instances_for_order( WC_Order $order, ar
         $seat_ids    = [];
         $chart_ids   = [];
         for ( $i = 0; $i < $quantity; $i++ ) {
-            if ( empty( $instances[ $i ] ) || empty( $seats[ $i ] ) ) {
+            if ( empty( $instances[ $i ] ) ) {
+                continue;
+            }
+
+            $attendee_fields = $checkout_fields['attendees'][ $ticket_type_id ][ $i ] ?? [];
+            if ( is_array( $attendee_fields ) && ! empty( $attendee_fields ) ) {
+                lamako_mobile_v2_apply_ticket_instance_checkout_fields( $instances[ $i ], $attendee_fields, $order );
+            }
+
+            if ( empty( $seats[ $i ] ) ) {
                 continue;
             }
 
@@ -1912,13 +2485,20 @@ function lamako_mobile_v2_ensure_ticket_instances_for_order( WC_Order $order, ar
 
     if ( ! empty( $cart_contents ) ) {
         $order->update_meta_data( 'tc_cart_contents', array_filter( $cart_contents ) );
-        $cart_info = $order->get_meta( 'tc_cart_info' );
-        if ( ! is_array( $cart_info ) ) {
-            $order->update_meta_data( 'tc_cart_info', [
-                'buyer_data' => [],
-                'owner_data' => [],
-            ] );
+        if ( ! empty( $checkout_fields['owner_data'] ) || ! empty( $checkout_fields['buyer_data'] ) || ! empty( $checkout_fields['attendees'] ) ) {
+            lamako_mobile_v2_merge_checkout_field_cart_info( $order, $checkout_fields );
+        } else {
+            $cart_info = $order->get_meta( 'tc_cart_info' );
+            if ( ! is_array( $cart_info ) ) {
+                $order->update_meta_data( 'tc_cart_info', [
+                    'buyer_data' => [],
+                    'owner_data' => [],
+                ] );
+            }
         }
+        $order->save();
+    } elseif ( ! empty( $checkout_fields['buyer_data'] ) ) {
+        lamako_mobile_v2_merge_checkout_field_cart_info( $order, $checkout_fields );
         $order->save();
     }
 
