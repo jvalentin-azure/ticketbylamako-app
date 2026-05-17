@@ -42,6 +42,10 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: false,
     bundleIdentifier: env.iosBundleId,
+    associatedDomains: [
+      "applinks:www.ticketbylamako.com",
+      "applinks:ticketbylamako.com",
+    ],
     runtimeVersion: {
       policy: "appVersion",
     },
@@ -70,6 +74,28 @@ const config: ExpoConfig = {
           {
             scheme: env.scheme,
             host: "payment-return",
+          },
+        ],
+        category: ["BROWSABLE", "DEFAULT"],
+      },
+      {
+        action: "VIEW",
+        autoVerify: true,
+        data: [
+          {
+            scheme: "https",
+            host: "www.ticketbylamako.com",
+            pathPrefix: "/lamako-mobile/payment-return",
+          },
+          {
+            scheme: "https",
+            host: "www.ticketbylamako.com",
+            pathPrefix: "/lamako-mobile/payment-failed",
+          },
+          {
+            scheme: "https",
+            host: "www.ticketbylamako.com",
+            pathPrefix: "/lamako-mobile/payment-cancel",
           },
         ],
         category: ["BROWSABLE", "DEFAULT"],

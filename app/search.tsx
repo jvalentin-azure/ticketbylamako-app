@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   TextInput,
   StyleSheet,
-  ActivityIndicator,
   Platform,
 } from "react-native";
 import { Image } from "expo-image";
@@ -14,8 +13,17 @@ import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { getHomeData, type TCEvent, type WCProduct } from "@/lib/api/catalog";
-import { formatAriary, decodeHtmlEntities, formatDateShort } from "@/lib/format";
+import {
+  getEventsData,
+  getShopData,
+  type TCEvent,
+  type WCProduct,
+} from "@/lib/api/catalog";
+import {
+  formatAriary,
+  decodeHtmlEntities,
+  formatDateShort,
+} from "@/lib/format";
 import { PointsBadge } from "@/components/points-badge";
 
 type TabType = "all" | "events" | "products";
@@ -27,6 +35,7 @@ interface SearchResult {
   image?: string;
   subtitle: string;
   price?: string;
+  lamakoRewardsEnabled?: boolean;
 }
 
 export default function SearchScreen() {
@@ -36,7 +45,6 @@ export default function SearchScreen() {
 
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState<TabType>("all");
-  const [loading, setLoading] = useState(false);
   const [events, setEvents] = useState<TCEvent[]>([]);
   const [products, setProducts] = useState<WCProduct[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
@@ -52,7 +60,10 @@ export default function SearchScreen() {
     let cancelled = false;
     (async () => {
       try {
-        const { events: evts, products: prods } = await getHomeData();
+        const [{ events: evts }, { products: prods }] = await Promise.all([
+          getEventsData(),
+          getShopData(),
+        ]);
         if (!cancelled) {
           setEvents(evts);
           setProducts(prods);
@@ -61,44 +72,59 @@ export default function SearchScreen() {
         console.error("Search data load error:", e);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const normalize = (s: string) =>
-    s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    s
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
 
-  const filteredEvents: SearchResult[] = query.length >= 2
-    ? events
-        .filter((e) => normalize(decodeHtmlEntities(e.title.rendered)).includes(normalize(query)))
-        .map((e) => ({
-          id: e.id,
-          type: "event" as const,
-          title: decodeHtmlEntities(e.title.rendered),
-          image: e.featuredImage,
-          subtitle: e.categoryNames?.join(", ") || formatDateShort(e.date),
-          price: e.minPrice ? `Dès ${formatAriary(e.minPrice)}` : undefined,
-        }))
-    : [];
+  const filteredEvents: SearchResult[] =
+    query.length >= 2
+      ? events
+          .filter((e) =>
+            normalize(decodeHtmlEntities(e.title.rendered)).includes(
+              normalize(query),
+            ),
+          )
+          .map((e) => ({
+            id: e.id,
+            type: "event" as const,
+            title: decodeHtmlEntities(e.title.rendered),
+            image: e.featuredImage,
+            subtitle: e.categoryNames?.join(", ") || formatDateShort(e.date),
+            lamakoRewardsEnabled: e.lamakoRewardsEnabled !== false,
+            price: e.minPrice ? `Dès ${formatAriary(e.minPrice)}` : undefined,
+          }))
+      : [];
 
-  const filteredProducts: SearchResult[] = query.length >= 2
-    ? products
-        .filter((p) => normalize(decodeHtmlEntities(p.name)).includes(normalize(query)))
-        .map((p) => ({
-          id: p.id,
-          type: "product" as const,
-          title: decodeHtmlEntities(p.name),
-          image: p.images?.[0]?.src,
-          subtitle: p.categories?.map((c) => c.name).join(", ") || "Boutique",
-          price: p.price ? formatAriary(parseFloat(p.price)) : undefined,
-        }))
-    : [];
+  const filteredProducts: SearchResult[] =
+    query.length >= 2
+      ? products
+          .filter((p) =>
+            normalize(decodeHtmlEntities(p.name)).includes(normalize(query)),
+          )
+          .map((p) => ({
+            id: p.id,
+            type: "product" as const,
+            title: decodeHtmlEntities(p.name),
+            image: p.images?.[0]?.src,
+            subtitle: p.categories?.map((c) => c.name).join(", ") || "Boutique",
+            lamakoRewardsEnabled: p.lamakoRewardsEnabled !== false,
+            price: p.price ? formatAriary(parseFloat(p.price)) : undefined,
+          }))
+      : [];
 
   const results =
     tab === "events"
       ? filteredEvents
       : tab === "products"
-      ? filteredProducts
-      : [...filteredEvents, ...filteredProducts];
+        ? filteredProducts
+        : [...filteredEvents, ...filteredProducts];
 
   const handleSearch = useCallback((text: string) => {
     setQuery(text);
@@ -115,12 +141,24 @@ export default function SearchScreen() {
           router.push(`/product/${item.id}` as any);
         }
       }}
-      style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
+      style={[
+        styles.card,
+        { backgroundColor: colors.surface, borderColor: colors.border },
+      ]}
     >
       {item.image ? (
-        <Image source={{ uri: item.image }} style={styles.cardImage} contentFit="cover" />
+        <Image
+          source={{ uri: item.image }}
+          style={styles.cardImage}
+          contentFit="cover"
+        />
       ) : (
-        <View style={[styles.cardImagePlaceholder, { backgroundColor: colors.border }]}>
+        <View
+          style={[
+            styles.cardImagePlaceholder,
+            { backgroundColor: colors.border },
+          ]}
+        >
           <IconSymbol
             name={item.type === "event" ? "calendar" : "bag.fill"}
             size={24}
@@ -156,14 +194,21 @@ export default function SearchScreen() {
           {item.title}
         </Text>
         <View style={styles.cardFooter}>
-          <Text style={[styles.cardSubtitle, { color: colors.muted }]} numberOfLines={1}>
+          <Text
+            style={[styles.cardSubtitle, { color: colors.muted }]}
+            numberOfLines={1}
+          >
             {item.subtitle}
           </Text>
           {item.price && (
-            <Text style={[styles.cardPrice, { color: colors.primary }]}>{item.price}</Text>
+            <Text style={[styles.cardPrice, { color: colors.primary }]}>
+              {item.price}
+            </Text>
           )}
         </View>
-        {item.price && <PointsBadge price={item.price.replace(/[^0-9]/g, '')} />}
+        {item.price && item.lamakoRewardsEnabled !== false && (
+          <PointsBadge price={item.price.replace(/[^0-9]/g, "")} />
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -175,12 +220,19 @@ export default function SearchScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <IconSymbol name="chevron.left" size={22} color={colors.foreground} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.foreground }]}>Recherche</Text>
+        <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+          Recherche
+        </Text>
         <View style={{ width: 40 }} />
       </View>
 
       {/* Search Bar */}
-      <View style={[styles.searchContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <View
+        style={[
+          styles.searchContainer,
+          { backgroundColor: colors.surface, borderColor: colors.border },
+        ]}
+      >
         <IconSymbol name="magnifyingglass" size={18} color={colors.muted} />
         <TextInput
           ref={inputRef}
@@ -194,8 +246,17 @@ export default function SearchScreen() {
           autoCorrect={false}
         />
         {query.length > 0 && (
-          <TouchableOpacity onPress={() => { setQuery(""); setHasSearched(false); }}>
-            <IconSymbol name="xmark.circle.fill" size={18} color={colors.muted} />
+          <TouchableOpacity
+            onPress={() => {
+              setQuery("");
+              setHasSearched(false);
+            }}
+          >
+            <IconSymbol
+              name="xmark.circle.fill"
+              size={18}
+              color={colors.muted}
+            />
           </TouchableOpacity>
         )}
       </View>
@@ -203,17 +264,32 @@ export default function SearchScreen() {
       {/* Tabs */}
       {hasSearched && (
         <View style={[styles.tabRow, { borderBottomColor: colors.border }]}>
-          {([
-            { key: "all" as TabType, label: "Tous", count: filteredEvents.length + filteredProducts.length },
-            { key: "events" as TabType, label: "Événements", count: filteredEvents.length },
-            { key: "products" as TabType, label: "Produits", count: filteredProducts.length },
-          ]).map((t) => (
+          {[
+            {
+              key: "all" as TabType,
+              label: "Tous",
+              count: filteredEvents.length + filteredProducts.length,
+            },
+            {
+              key: "events" as TabType,
+              label: "Événements",
+              count: filteredEvents.length,
+            },
+            {
+              key: "products" as TabType,
+              label: "Produits",
+              count: filteredProducts.length,
+            },
+          ].map((t) => (
             <TouchableOpacity
               key={t.key}
               onPress={() => setTab(t.key)}
               style={[
                 styles.tab,
-                tab === t.key && { borderBottomColor: colors.primary, borderBottomWidth: 2 },
+                tab === t.key && {
+                  borderBottomColor: colors.primary,
+                  borderBottomWidth: 2,
+                },
               ]}
             >
               <Text
@@ -240,7 +316,8 @@ export default function SearchScreen() {
             Rechercher
           </Text>
           <Text style={[styles.emptySubText, { color: colors.muted }]}>
-            Tapez au moins 2 caractères pour rechercher des événements et produits
+            Tapez au moins 2 caractères pour rechercher des événements et
+            produits
           </Text>
         </View>
       ) : (
@@ -252,7 +329,11 @@ export default function SearchScreen() {
           keyboardShouldPersistTaps="handled"
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <IconSymbol name="magnifyingglass" size={48} color={colors.muted} />
+              <IconSymbol
+                name="magnifyingglass"
+                size={48}
+                color={colors.muted}
+              />
               <Text style={[styles.emptyText, { color: colors.muted }]}>
                 Aucun résultat
               </Text>

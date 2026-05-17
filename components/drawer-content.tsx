@@ -1,9 +1,16 @@
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Linking, Platform } from "react-native";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  StyleSheet,
+  Alert,
+  Linking,
+} from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/use-colors";
-import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useAuth } from "@/lib/auth-provider";
 import { useThemeContext } from "@/lib/theme-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -16,7 +23,6 @@ interface DrawerContentProps {
 
 export function DrawerContent({ onClose }: DrawerContentProps) {
   const colors = useColors();
-  const scheme = useColorScheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { isAuthenticated, user, logout } = useAuth();
@@ -44,7 +50,9 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
   };
 
   const openWhatsApp = () => {
-    const url = buildLamakoWhatsAppUrl("Bonjour, je vous contacte depuis l'application TicketByLamako.");
+    const url = buildLamakoWhatsAppUrl(
+      "Bonjour, je vous contacte depuis l'application TicketByLamako.",
+    );
     Linking.openURL(url).catch(() => {});
   };
 
@@ -54,27 +62,64 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
       items: [
         ...(isAuthenticated
           ? [
-              { icon: "star.fill" as const, label: "LamakoRewards", onPress: () => navigate("/rewards") },
-              { icon: "heart.fill" as const, label: "Mes Favoris", onPress: () => navigate("/favorites") },
-              { icon: "clipboard.fill" as const, label: "Mes Commandes", onPress: () => navigate("/orders") },
+              {
+                icon: "star.fill" as const,
+                label: "LamakoRewards",
+                onPress: () => navigate("/rewards"),
+              },
+              {
+                icon: "heart.fill" as const,
+                label: "Mes Favoris",
+                onPress: () => navigate("/favorites"),
+              },
+              {
+                icon: "clipboard.fill" as const,
+                label: "Mes Commandes",
+                onPress: () => navigate("/orders"),
+              },
             ]
           : []),
         {
           icon: (colorScheme === "dark" ? "sun.max.fill" : "moon.fill") as any,
           label: colorScheme === "dark" ? "Mode Clair" : "Mode Sombre",
-          onPress: () => setColorScheme(colorScheme === "dark" ? "light" : "dark"),
+          onPress: () =>
+            setColorScheme(colorScheme === "dark" ? "light" : "dark"),
         },
-        { icon: "bell.fill" as const, label: "Notifications", onPress: () => navigate("/notification-settings") },
-        { icon: "gearshape.fill" as const, label: "Paramètres", onPress: () => navigate("/notification-settings") },
+        {
+          icon: "bell.fill" as const,
+          label: "Notifications",
+          onPress: () => navigate("/notification-settings"),
+        },
+        {
+          icon: "gearshape.fill" as const,
+          label: "Paramètres",
+          onPress: () => navigate("/notification-settings"),
+        },
       ],
     },
     {
       title: "Support",
       items: [
-        { icon: "text.bubble.fill" as const, label: "WhatsApp", onPress: openWhatsApp },
-        { icon: "questionmark.circle.fill" as const, label: "Aide & Support", onPress: () => navigate("/help") },
-        { icon: "hand.raised.fill" as const, label: "Politique de confidentialité", onPress: () => navigate("/privacy") },
-        { icon: "info.circle.fill" as const, label: "À propos", onPress: () => navigate("/about") },
+        {
+          icon: "text.bubble.fill" as const,
+          label: "WhatsApp",
+          onPress: openWhatsApp,
+        },
+        {
+          icon: "questionmark.circle.fill" as const,
+          label: "Aide & Support",
+          onPress: () => navigate("/help"),
+        },
+        {
+          icon: "hand.raised.fill" as const,
+          label: "Politique de confidentialité",
+          onPress: () => navigate("/privacy"),
+        },
+        {
+          icon: "info.circle.fill" as const,
+          label: "À propos",
+          onPress: () => navigate("/about"),
+        },
       ],
     },
   ];
@@ -122,9 +167,7 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
                 {user.email}
               </Text>
               <View style={styles.roleBadge}>
-                <Text style={styles.roleText}>
-                  Client
-                </Text>
+                <Text style={styles.roleText}>Client</Text>
               </View>
             </View>
           </View>
@@ -161,8 +204,17 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
                 style={[styles.menuItem, { borderBottomColor: colors.border }]}
                 activeOpacity={0.6}
               >
-                <View style={[styles.menuIconBg, { backgroundColor: colors.primary + "12" }]}>
-                  <IconSymbol name={item.icon} size={18} color={colors.primary} />
+                <View
+                  style={[
+                    styles.menuIconBg,
+                    { backgroundColor: colors.primary + "12" },
+                  ]}
+                >
+                  <IconSymbol
+                    name={item.icon}
+                    size={18}
+                    color={colors.primary}
+                  />
                 </View>
                 <Text
                   style={[styles.menuLabel, { color: colors.foreground }]}
@@ -170,7 +222,11 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
                 >
                   {item.label}
                 </Text>
-                <IconSymbol name="chevron.right" size={14} color={colors.muted} />
+                <IconSymbol
+                  name="chevron.right"
+                  size={14}
+                  color={colors.muted}
+                />
               </TouchableOpacity>
             ))}
           </View>
@@ -182,12 +238,17 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
             onPress={handleLogout}
             style={[
               styles.logoutButton,
-              { backgroundColor: colors.error + "10", borderColor: colors.error + "30" },
+              {
+                backgroundColor: colors.error + "10",
+                borderColor: colors.error + "30",
+              },
             ]}
             activeOpacity={0.7}
           >
             <IconSymbol name="power" size={18} color={colors.error} />
-            <Text style={[styles.logoutText, { color: colors.error }]}>Se déconnecter</Text>
+            <Text style={[styles.logoutText, { color: colors.error }]}>
+              Se déconnecter
+            </Text>
           </TouchableOpacity>
         )}
 

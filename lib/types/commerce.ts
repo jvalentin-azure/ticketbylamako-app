@@ -40,6 +40,12 @@ export interface WCProduct {
   date_created: string;
   variations?: number[];
   attributes?: { id: number; name: string; position: number; visible: boolean; variation: boolean; options: string[] }[];
+  lamakoRewardsEnabled?: boolean;
+  lamako_mobile?: {
+    description: string | null;
+    gallery: string[] | null;
+    practical_info: { label: string; value: string }[] | null;
+  } | null;
 }
 
 export interface WCOrder {
@@ -103,6 +109,7 @@ export interface TCEvent {
   minPrice?: number;
   maxPrice?: number;
   hasSeatingChart?: boolean;
+  lamakoRewardsEnabled?: boolean;
 }
 
 export interface TicketType {
@@ -112,6 +119,44 @@ export interface TicketType {
   stock_status: string;
   usesSeating: boolean;
   eventId: string;
+  hasCheckoutFields?: boolean;
+  requiresCheckoutFields?: boolean;
+  lamakoRewardsEnabled?: boolean;
+}
+
+export type CheckoutFieldType =
+  | "text"
+  | "number"
+  | "email"
+  | "date"
+  | "textarea"
+  | "select"
+  | "radio"
+  | "checkbox";
+export type CheckoutFieldValue = string | string[];
+
+export interface CheckoutFieldOption {
+  label: string;
+  value: string;
+}
+
+export interface CheckoutFieldSchema {
+  key: string;
+  storageKey: string;
+  label: string;
+  type: CheckoutFieldType;
+  scope: "buyer" | "attendee";
+  required: boolean;
+  visible: boolean;
+  custom: boolean;
+  placeholder?: string;
+  description?: string;
+  defaultValue?: string;
+  validation?: string;
+  min?: string;
+  max?: string;
+  step?: string;
+  options: CheckoutFieldOption[];
 }
 
 export interface EventCategory {

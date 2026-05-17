@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 // Mock react-native Platform
 vi.mock("react-native", () => ({
@@ -17,7 +17,9 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
 vi.mock("expo-notifications", () => ({
   getPermissionsAsync: vi.fn().mockResolvedValue({ status: "granted" }),
   requestPermissionsAsync: vi.fn().mockResolvedValue({ status: "granted" }),
-  getExpoPushTokenAsync: vi.fn().mockResolvedValue({ data: "ExponentPushToken[test123]" }),
+  getExpoPushTokenAsync: vi
+    .fn()
+    .mockResolvedValue({ data: "ExponentPushToken[test123]" }),
   setNotificationHandler: vi.fn(),
   setNotificationChannelAsync: vi.fn(),
   scheduleNotificationAsync: vi.fn(),
@@ -51,7 +53,8 @@ describe("V2.8 - Push Token Registration API", () => {
     // Mock the fetch for the mobile API
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({ success: true, message: "Token registered" }),
+      json: () =>
+        Promise.resolve({ success: true, message: "Token registered" }),
     });
     global.fetch = mockFetch;
 
@@ -62,7 +65,11 @@ describe("V2.8 - Push Token Registration API", () => {
 
     const { registerPushToken } = await import("../lib/api/woocommerce");
 
-    const result = await registerPushToken("ExponentPushToken[test123]", 42, "ios");
+    const result = await registerPushToken(
+      "ExponentPushToken[test123]",
+      42,
+      "ios",
+    );
 
     expect(result).toBeDefined();
     expect(result.success).toBe(true);
@@ -94,7 +101,11 @@ describe("V2.8 - Push Token Registration API", () => {
     vi.resetModules();
     const { registerPushToken } = await import("../lib/api/woocommerce");
 
-    const result = await registerPushToken("ExponentPushToken[test123]", 0, "android");
+    const result = await registerPushToken(
+      "ExponentPushToken[test123]",
+      0,
+      "android",
+    );
 
     // Should not throw, should return failure
     expect(result).toBeDefined();
@@ -105,11 +116,16 @@ describe("V2.8 - Push Token Registration API", () => {
 describe("V2.8 - Checkout WebView Import", () => {
   it("checkout.tsx uses .default for WebView import (not .WebView)", async () => {
     const fs = await import("fs");
-    const checkoutCode = fs.readFileSync("/home/ubuntu/ticketbylamako-app/app/checkout.tsx", "utf-8");
+    const checkoutCode = fs.readFileSync(
+      "/home/ubuntu/ticketbylamako-app/app/checkout.tsx",
+      "utf-8",
+    );
 
     // Should use .default, not .WebView
     expect(checkoutCode).toContain('require("react-native-webview").default');
-    expect(checkoutCode).not.toContain('require("react-native-webview").WebView');
+    expect(checkoutCode).not.toContain(
+      'require("react-native-webview").WebView',
+    );
 
     // Should have Platform guard
     expect(checkoutCode).toContain('Platform.OS !== "web"');
@@ -119,7 +135,10 @@ describe("V2.8 - Checkout WebView Import", () => {
 describe("V2.8 - CGV Link in About Screen", () => {
   it("about.tsx contains CGV link to WordPress page", async () => {
     const fs = await import("fs");
-    const aboutCode = fs.readFileSync("/home/ubuntu/ticketbylamako-app/app/about.tsx", "utf-8");
+    const aboutCode = fs.readFileSync(
+      "/home/ubuntu/ticketbylamako-app/app/about.tsx",
+      "utf-8",
+    );
 
     // Should have CGV link
     expect(aboutCode).toContain("conditions-generales-de-vente");
@@ -131,7 +150,10 @@ describe("V2.8 - CGV Link in About Screen", () => {
 describe("V2.8 - Seating Chart Fixes", () => {
   it("event detail does not hide .tc_in_cart in CSS injection", async () => {
     const fs = await import("fs");
-    const eventCode = fs.readFileSync("/home/ubuntu/ticketbylamako-app/app/event/[id].tsx", "utf-8");
+    const eventCode = fs.readFileSync(
+      "/home/ubuntu/ticketbylamako-app/app/event/[id].tsx",
+      "utf-8",
+    );
 
     // .tc_in_cart should NOT be in the display:none list
     // It should be styled to be visible (fixed position at bottom)
@@ -141,7 +163,10 @@ describe("V2.8 - Seating Chart Fixes", () => {
 
   it("seat extraction JS uses multiple selectors for robustness", async () => {
     const fs = await import("fs");
-    const eventCode = fs.readFileSync("/home/ubuntu/ticketbylamako-app/app/event/[id].tsx", "utf-8");
+    const eventCode = fs.readFileSync(
+      "/home/ubuntu/ticketbylamako-app/app/event/[id].tsx",
+      "utf-8",
+    );
 
     // Should have multiple seat selectors
     expect(eventCode).toContain("tc_seat_in_cart");
@@ -157,7 +182,10 @@ describe("V2.8 - Seating Chart Fixes", () => {
 describe("V2.8 - Push Notification Tap Handling", () => {
   it("root layout handles order_update and new_event notification types", async () => {
     const fs = await import("fs");
-    const layoutCode = fs.readFileSync("/home/ubuntu/ticketbylamako-app/app/_layout.tsx", "utf-8");
+    const layoutCode = fs.readFileSync(
+      "/home/ubuntu/ticketbylamako-app/app/_layout.tsx",
+      "utf-8",
+    );
 
     // Should handle order_update
     expect(layoutCode).toContain('data?.type === "order_update"');
@@ -174,7 +202,10 @@ describe("V2.8 - Push Notification Tap Handling", () => {
 describe("V2.8 - WordPress Plugin Fixes", () => {
   it("WordPress plugin does not hide .tc_in_cart in seating embed", async () => {
     const fs = await import("fs");
-    const pluginCode = fs.readFileSync("/home/ubuntu/ticketbylamako-app/scripts/lamako-mobile-api.php", "utf-8");
+    const pluginCode = fs.readFileSync(
+      "/home/ubuntu/ticketbylamako-app/scripts/lamako-mobile-api.php",
+      "utf-8",
+    );
 
     // The seating embed CSS should NOT hide .tc_in_cart
     // Check that .tc_in_cart is not in a display:none rule
@@ -189,7 +220,10 @@ describe("V2.8 - WordPress Plugin Fixes", () => {
 
   it("WordPress plugin has push notification endpoints", async () => {
     const fs = await import("fs");
-    const pluginCode = fs.readFileSync("/home/ubuntu/ticketbylamako-app/scripts/lamako-mobile-api.php", "utf-8");
+    const pluginCode = fs.readFileSync(
+      "/home/ubuntu/ticketbylamako-app/scripts/lamako-mobile-api.php",
+      "utf-8",
+    );
 
     // Should have register-push-token endpoint
     expect(pluginCode).toContain("register-push-token");

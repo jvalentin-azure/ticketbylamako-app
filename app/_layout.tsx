@@ -1,6 +1,6 @@
 import "@/global.css";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { Stack, router as expoRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -23,17 +23,28 @@ import type { EdgeInsets, Metrics, Rect } from "react-native-safe-area-context";
 import * as SplashScreen from "expo-splash-screen";
 
 import { trpc, createTRPCClient } from "@/lib/trpc";
-import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-runtime";
+import {
+  initManusRuntime,
+  subscribeSafeAreaInsets,
+} from "@/lib/_core/manus-runtime";
 import { CustomSplash } from "@/components/splash-screen";
 import { LoadingScreen } from "@/components/loading-screen";
 import { RewardsPopup } from "@/components/rewards-popup";
-import { setupNotificationHandler, registerForPushNotificationsAsync, setupAndroidChannel, registerPushTokenWithBackend } from "@/lib/notifications";
+import {
+  setupNotificationHandler,
+  registerForPushNotificationsAsync,
+  setupAndroidChannel,
+  registerPushTokenWithBackend,
+} from "@/lib/notifications";
 import { NotificationsProvider } from "@/lib/notifications-provider";
 import * as Notifications from "expo-notifications";
-import { router as expoRouter } from "expo-router";
 
 // Set up notification handler at module level (before any component renders)
-try { setupNotificationHandler(); } catch (e) { console.warn("Notification handler setup failed:", e); }
+try {
+  setupNotificationHandler();
+} catch (e) {
+  console.warn("Notification handler setup failed:", e);
+}
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
@@ -66,7 +77,11 @@ export default function RootLayout() {
   // Set up push notifications
   useEffect(() => {
     if (Platform.OS === "web") return;
-    try { setupAndroidChannel(); } catch (e) { console.warn("Android channel setup failed:", e); }
+    try {
+      setupAndroidChannel();
+    } catch (e) {
+      console.warn("Android channel setup failed:", e);
+    }
     registerForPushNotificationsAsync().then(async (token) => {
       if (token) {
         // Register with WordPress backend
@@ -80,22 +95,28 @@ export default function RootLayout() {
       }
     });
 
-    const notificationListener = Notifications.addNotificationReceivedListener(notification => {
-      console.log("Notification received:", notification.request.content.title);
-    });
+    const notificationListener = Notifications.addNotificationReceivedListener(
+      (notification) => {
+        console.log(
+          "Notification received:",
+          notification.request.content.title,
+        );
+      },
+    );
 
-    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
-      const data = response.notification.request.content.data;
-      if (data?.type === "event_reminder" && data?.eventId) {
-        expoRouter.push(`/event/${data.eventId}` as any);
-      }
-      if (data?.type === "order_update" && data?.orderId) {
-        expoRouter.push(`/order/${data.orderId}` as any);
-      }
-      if (data?.type === "new_event" && data?.eventId) {
-        expoRouter.push(`/event/${data.eventId}` as any);
-      }
-    });
+    const responseListener =
+      Notifications.addNotificationResponseReceivedListener((response) => {
+        const data = response.notification.request.content.data;
+        if (data?.type === "event_reminder" && data?.eventId) {
+          expoRouter.push(`/event/${data.eventId}` as any);
+        }
+        if (data?.type === "order_update" && data?.orderId) {
+          expoRouter.push(`/order/${data.orderId}` as any);
+        }
+        if (data?.type === "new_event" && data?.eventId) {
+          expoRouter.push(`/event/${data.eventId}` as any);
+        }
+      });
 
     return () => {
       notificationListener.remove();
@@ -110,8 +131,8 @@ export default function RootLayout() {
     if (!fontsLoaded && !fontError) return;
     (async () => {
       try {
-        const AsyncStorageModule = (await import("@react-native-async-storage/async-storage")).default;
-        const { getStoredUser, getStoredToken, validateToken } = await import("@/lib/api/auth");
+        const { getStoredUser, getStoredToken, validateToken } =
+          await import("@/lib/api/auth");
 
         // Check if user has a valid session
         const user = await getStoredUser();
@@ -122,7 +143,9 @@ export default function RootLayout() {
           const isValid = await validateToken();
           if (isValid) {
             // Token is valid, user is truly logged in - skip onboarding
-            console.log("[Onboarding] User logged in with valid token, skipping onboarding");
+            console.log(
+              "[Onboarding] User logged in with valid token, skipping onboarding",
+            );
             setShowSplash(false);
             SplashScreen.hideAsync();
             return;
@@ -135,7 +158,10 @@ export default function RootLayout() {
         setTimeout(() => SplashScreen.hideAsync(), 50);
       } catch (err) {
         // On error (network etc), show onboarding to be safe
-        console.log("[Onboarding] Error during auth check, showing onboarding:", err);
+        console.log(
+          "[Onboarding] Error during auth check, showing onboarding:",
+          err,
+        );
         setShowSplash(true);
         setTimeout(() => SplashScreen.hideAsync(), 50);
       }
@@ -171,7 +197,10 @@ export default function RootLayout() {
 
   // Ensure minimum 8px padding for top and bottom on mobile
   const providerInitialMetrics = useMemo(() => {
-    const metrics = initialWindowMetrics ?? { insets: initialInsets, frame: initialFrame };
+    const metrics = initialWindowMetrics ?? {
+      insets: initialInsets,
+      frame: initialFrame,
+    };
     return {
       ...metrics,
       insets: {
@@ -212,13 +241,22 @@ export default function RootLayout() {
           {/* in order for ios apps tab switching to work properly, use presentation: "fullScreenModal" for login page, whenever you decide to use presentation: "modal*/}
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="(auth)" options={{ presentation: "fullScreenModal" }} />
+            <Stack.Screen
+              name="(auth)"
+              options={{ presentation: "fullScreenModal" }}
+            />
             <Stack.Screen name="event/[id]" />
             <Stack.Screen name="product/[id]" />
             <Stack.Screen name="order/[id]" />
             <Stack.Screen name="ticket/[id]" />
-            <Stack.Screen name="checkout" options={{ presentation: "fullScreenModal" }} />
-            <Stack.Screen name="payment-return" options={{ presentation: "fullScreenModal" }} />
+            <Stack.Screen
+              name="checkout"
+              options={{ presentation: "fullScreenModal" }}
+            />
+            <Stack.Screen
+              name="payment-return"
+              options={{ presentation: "fullScreenModal" }}
+            />
             <Stack.Screen name="orders" />
             <Stack.Screen name="privacy" />
             <Stack.Screen name="terms" />
@@ -274,13 +312,15 @@ export default function RootLayout() {
     <ThemeProvider>
       <AuthProvider>
         <CartProvider>
-            <RewardsProvider>
-              <FavoritesProvider>
-                <NotificationsProvider>
-                  <SafeAreaProvider initialMetrics={providerInitialMetrics}>{content}</SafeAreaProvider>
-                </NotificationsProvider>
-              </FavoritesProvider>
-            </RewardsProvider>
+          <RewardsProvider>
+            <FavoritesProvider>
+              <NotificationsProvider>
+                <SafeAreaProvider initialMetrics={providerInitialMetrics}>
+                  {content}
+                </SafeAreaProvider>
+              </NotificationsProvider>
+            </FavoritesProvider>
+          </RewardsProvider>
         </CartProvider>
       </AuthProvider>
     </ThemeProvider>

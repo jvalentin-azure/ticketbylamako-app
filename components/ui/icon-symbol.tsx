@@ -1,7 +1,7 @@
 // Fallback for using MaterialIcons on Android and web.
 
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { SymbolWeight, SymbolViewProps } from "expo-symbols";
+import { SymbolWeight } from "expo-symbols";
 import { ComponentProps } from "react";
 import { OpaqueColorValue, type StyleProp, type TextStyle } from "react-native";
 
@@ -15,7 +15,7 @@ type IconSymbolName = keyof typeof MAPPING;
  */
 const MAPPING = {
   "house.fill": "home",
-  "calendar": "event",
+  calendar: "event",
   "bag.fill": "shopping-bag",
   "ticket.fill": "confirmation-number",
   "person.fill": "person",
@@ -25,18 +25,18 @@ const MAPPING = {
   "gearshape.fill": "settings",
   "chevron.right": "chevron-right",
   "chevron.left": "chevron-left",
-  "magnifyingglass": "search",
+  magnifyingglass: "search",
   "cart.fill": "shopping-cart",
-  "xmark": "close",
-  "plus": "add",
-  "minus": "remove",
+  xmark: "close",
+  plus: "add",
+  minus: "remove",
   "trash.fill": "delete",
   "square.and.arrow.up": "share",
   "heart.fill": "favorite",
-  "heart": "favorite-border",
+  heart: "favorite-border",
   "star.fill": "star",
-  "mappin": "place",
-  "clock": "schedule",
+  mappin: "place",
+  clock: "schedule",
   "checkmark.circle.fill": "check-circle",
   "xmark.circle.fill": "cancel",
   "exclamationmark.triangle.fill": "warning",
@@ -48,8 +48,8 @@ const MAPPING = {
   "bell.fill": "notifications",
   "arrow.down.circle.fill": "download",
   "eye.fill": "visibility",
-  "pencil": "edit",
-  "power": "logout",
+  pencil: "edit",
+  power: "logout",
   "chevron.left.forwardslash.chevron.right": "code",
   "banknote.fill": "payments",
   "tag.fill": "local-offer",
@@ -69,7 +69,7 @@ const MAPPING = {
   "line.3.horizontal": "menu",
   "lock.fill": "lock",
   "eye.slash.fill": "visibility-off",
-  "globe": "language",
+  globe: "language",
   "shield.fill": "security",
   "text.bubble.fill": "chat",
   "hand.raised.fill": "privacy-tip",
@@ -95,5 +95,7 @@ export function IconSymbol({
   weight?: SymbolWeight;
 }) {
   const mappedName = MAPPING[name as string] || "help-outline";
-  return <MaterialIcons color={color} size={size} name={mappedName} style={style} />;
+  return (
+    <MaterialIcons color={color} size={size} name={mappedName} style={style} />
+  );
 }

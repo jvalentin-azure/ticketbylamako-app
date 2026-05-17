@@ -1,5 +1,13 @@
 import { useState, useEffect } from "react";
-import { Text, View, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from "react-native";
+import {
+  Text,
+  View,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  Alert,
+  ActivityIndicator,
+} from "react-native";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ScreenContainer } from "@/components/screen-container";
@@ -8,7 +16,8 @@ import { useAuth } from "@/lib/auth-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { getStoredToken } from "@/lib/api/auth";
 
-const SITE_URL = process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
+const SITE_URL =
+  process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
 
 export default function EditProfileScreen() {
   const colors = useColors();
@@ -69,9 +78,12 @@ export default function EditProfileScreen() {
       });
       if (!res.ok) throw new Error("Erreur");
       // Save billing info locally for checkout auto-fill
-      await AsyncStorage.setItem("billing_info", JSON.stringify({ phone, address, city }));
+      await AsyncStorage.setItem(
+        "billing_info",
+        JSON.stringify({ phone, address, city }),
+      );
       Alert.alert("Succès", "Profil mis à jour avec succès");
-    } catch (e) {
+    } catch {
       Alert.alert("Erreur", "Impossible de mettre à jour le profil");
     } finally {
       setSaving(false);
@@ -85,24 +97,30 @@ export default function EditProfileScreen() {
       return;
     }
     if (newPassword.length < 6) {
-      Alert.alert("Erreur", "Le mot de passe doit contenir au moins 6 caractères");
+      Alert.alert(
+        "Erreur",
+        "Le mot de passe doit contenir au moins 6 caractères",
+      );
       return;
     }
     setSavingPassword(true);
     try {
       const storedToken = await getStoredToken();
       if (!storedToken) throw new Error("Non authentifié");
-      const res = await fetch(`${SITE_URL}/wp-json/lamako-mobile/v1/change-password`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${storedToken}`,
+      const res = await fetch(
+        `${SITE_URL}/wp-json/lamako-mobile/v1/change-password`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${storedToken}`,
+          },
+          body: JSON.stringify({
+            current_password: currentPassword,
+            new_password: newPassword,
+          }),
         },
-        body: JSON.stringify({
-          current_password: currentPassword,
-          new_password: newPassword,
-        }),
-      });
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Erreur");
       Alert.alert("Succès", "Mot de passe modifié avec succès");
@@ -110,7 +128,10 @@ export default function EditProfileScreen() {
       setNewPassword("");
       setConfirmPassword("");
     } catch (e: any) {
-      Alert.alert("Erreur", e.message || "Impossible de modifier le mot de passe");
+      Alert.alert(
+        "Erreur",
+        e.message || "Impossible de modifier le mot de passe",
+      );
     } finally {
       setSavingPassword(false);
     }
@@ -118,57 +139,152 @@ export default function EditProfileScreen() {
 
   return (
     <ScreenContainer edges={["top", "left", "right"]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 60 }}
+      >
         {/* Header */}
-        <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12 }}>
-          <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 12 }}>
-            <IconSymbol name="chevron.left" size={22} color={colors.foreground} />
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+          }}
+        >
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={{ marginRight: 12 }}
+          >
+            <IconSymbol
+              name="chevron.left"
+              size={22}
+              color={colors.foreground}
+            />
           </TouchableOpacity>
-          <Text style={{ color: colors.foreground, fontSize: 20, fontWeight: "700" }}>Modifier le profil</Text>
+          <Text
+            style={{
+              color: colors.foreground,
+              fontSize: 20,
+              fontWeight: "700",
+            }}
+          >
+            Modifier le profil
+          </Text>
         </View>
 
         {/* Personal Info Section */}
         <View style={{ marginHorizontal: 16, marginTop: 12 }}>
-          <Text style={{ color: colors.foreground, fontSize: 16, fontWeight: "700", marginBottom: 12 }}>Informations personnelles</Text>
+          <Text
+            style={{
+              color: colors.foreground,
+              fontSize: 16,
+              fontWeight: "700",
+              marginBottom: 12,
+            }}
+          >
+            Informations personnelles
+          </Text>
 
-          <View style={{ backgroundColor: colors.surface, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: colors.border, gap: 14 }}>
+          <View
+            style={{
+              backgroundColor: colors.surface,
+              borderRadius: 14,
+              padding: 16,
+              borderWidth: 1,
+              borderColor: colors.border,
+              gap: 14,
+            }}
+          >
             <View>
-              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}>Prénom</Text>
+              <Text
+                style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}
+              >
+                Prénom
+              </Text>
               <TextInput
                 value={firstName}
                 onChangeText={setFirstName}
-                style={{ backgroundColor: colors.background, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: colors.foreground, fontSize: 15, borderWidth: 1, borderColor: colors.border }}
+                style={{
+                  backgroundColor: colors.background,
+                  borderRadius: 10,
+                  paddingHorizontal: 14,
+                  paddingVertical: 12,
+                  color: colors.foreground,
+                  fontSize: 15,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                }}
                 placeholderTextColor={colors.muted}
               />
             </View>
             <View>
-              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}>Nom</Text>
+              <Text
+                style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}
+              >
+                Nom
+              </Text>
               <TextInput
                 value={lastName}
                 onChangeText={setLastName}
-                style={{ backgroundColor: colors.background, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: colors.foreground, fontSize: 15, borderWidth: 1, borderColor: colors.border }}
+                style={{
+                  backgroundColor: colors.background,
+                  borderRadius: 10,
+                  paddingHorizontal: 14,
+                  paddingVertical: 12,
+                  color: colors.foreground,
+                  fontSize: 15,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                }}
                 placeholderTextColor={colors.muted}
               />
             </View>
             <View>
-              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}>Email</Text>
+              <Text
+                style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}
+              >
+                Email
+              </Text>
               <TextInput
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
-                style={{ backgroundColor: colors.background, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: colors.foreground, fontSize: 15, borderWidth: 1, borderColor: colors.border }}
+                style={{
+                  backgroundColor: colors.background,
+                  borderRadius: 10,
+                  paddingHorizontal: 14,
+                  paddingVertical: 12,
+                  color: colors.foreground,
+                  fontSize: 15,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                }}
                 placeholderTextColor={colors.muted}
               />
             </View>
             <View>
-              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}>Téléphone</Text>
+              <Text
+                style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}
+              >
+                Téléphone
+              </Text>
               <TextInput
                 value={phone}
                 onChangeText={setPhone}
                 keyboardType="phone-pad"
                 placeholder="034 XX XXX XX"
-                style={{ backgroundColor: colors.background, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: colors.foreground, fontSize: 15, borderWidth: 1, borderColor: colors.border }}
+                style={{
+                  backgroundColor: colors.background,
+                  borderRadius: 10,
+                  paddingHorizontal: 14,
+                  paddingVertical: 12,
+                  color: colors.foreground,
+                  fontSize: 15,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                }}
                 placeholderTextColor={colors.muted}
               />
             </View>
@@ -176,35 +292,94 @@ export default function EditProfileScreen() {
             <TouchableOpacity
               onPress={handleSaveProfile}
               disabled={saving}
-              style={{ backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 14, alignItems: "center", marginTop: 4, opacity: saving ? 0.6 : 1 }}
+              style={{
+                backgroundColor: colors.primary,
+                borderRadius: 12,
+                paddingVertical: 14,
+                alignItems: "center",
+                marginTop: 4,
+                opacity: saving ? 0.6 : 1,
+              }}
             >
-              {saving ? <ActivityIndicator color="#fff" /> : <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>Enregistrer</Text>}
+              {saving ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text
+                  style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}
+                >
+                  Enregistrer
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
         </View>
 
         {/* Address Section */}
         <View style={{ marginHorizontal: 16, marginTop: 24 }}>
-          <Text style={{ color: colors.foreground, fontSize: 16, fontWeight: "700", marginBottom: 12 }}>Adresse de livraison</Text>
+          <Text
+            style={{
+              color: colors.foreground,
+              fontSize: 16,
+              fontWeight: "700",
+              marginBottom: 12,
+            }}
+          >
+            Adresse de livraison
+          </Text>
 
-          <View style={{ backgroundColor: colors.surface, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: colors.border, gap: 14 }}>
+          <View
+            style={{
+              backgroundColor: colors.surface,
+              borderRadius: 14,
+              padding: 16,
+              borderWidth: 1,
+              borderColor: colors.border,
+              gap: 14,
+            }}
+          >
             <View>
-              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}>Adresse</Text>
+              <Text
+                style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}
+              >
+                Adresse
+              </Text>
               <TextInput
                 value={address}
                 onChangeText={setAddress}
                 placeholder="Rue, numéro..."
-                style={{ backgroundColor: colors.background, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: colors.foreground, fontSize: 15, borderWidth: 1, borderColor: colors.border }}
+                style={{
+                  backgroundColor: colors.background,
+                  borderRadius: 10,
+                  paddingHorizontal: 14,
+                  paddingVertical: 12,
+                  color: colors.foreground,
+                  fontSize: 15,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                }}
                 placeholderTextColor={colors.muted}
               />
             </View>
             <View>
-              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}>Ville</Text>
+              <Text
+                style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}
+              >
+                Ville
+              </Text>
               <TextInput
                 value={city}
                 onChangeText={setCity}
                 placeholder="Antananarivo"
-                style={{ backgroundColor: colors.background, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: colors.foreground, fontSize: 15, borderWidth: 1, borderColor: colors.border }}
+                style={{
+                  backgroundColor: colors.background,
+                  borderRadius: 10,
+                  paddingHorizontal: 14,
+                  paddingVertical: 12,
+                  color: colors.foreground,
+                  fontSize: 15,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                }}
                 placeholderTextColor={colors.muted}
               />
             </View>
@@ -213,36 +388,93 @@ export default function EditProfileScreen() {
 
         {/* Password Section */}
         <View style={{ marginHorizontal: 16, marginTop: 24 }}>
-          <Text style={{ color: colors.foreground, fontSize: 16, fontWeight: "700", marginBottom: 12 }}>Modifier le mot de passe</Text>
+          <Text
+            style={{
+              color: colors.foreground,
+              fontSize: 16,
+              fontWeight: "700",
+              marginBottom: 12,
+            }}
+          >
+            Modifier le mot de passe
+          </Text>
 
-          <View style={{ backgroundColor: colors.surface, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: colors.border, gap: 14 }}>
+          <View
+            style={{
+              backgroundColor: colors.surface,
+              borderRadius: 14,
+              padding: 16,
+              borderWidth: 1,
+              borderColor: colors.border,
+              gap: 14,
+            }}
+          >
             <View>
-              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}>Mot de passe actuel</Text>
+              <Text
+                style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}
+              >
+                Mot de passe actuel
+              </Text>
               <TextInput
                 value={currentPassword}
                 onChangeText={setCurrentPassword}
                 secureTextEntry
-                style={{ backgroundColor: colors.background, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: colors.foreground, fontSize: 15, borderWidth: 1, borderColor: colors.border }}
+                style={{
+                  backgroundColor: colors.background,
+                  borderRadius: 10,
+                  paddingHorizontal: 14,
+                  paddingVertical: 12,
+                  color: colors.foreground,
+                  fontSize: 15,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                }}
                 placeholderTextColor={colors.muted}
               />
             </View>
             <View>
-              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}>Nouveau mot de passe</Text>
+              <Text
+                style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}
+              >
+                Nouveau mot de passe
+              </Text>
               <TextInput
                 value={newPassword}
                 onChangeText={setNewPassword}
                 secureTextEntry
-                style={{ backgroundColor: colors.background, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: colors.foreground, fontSize: 15, borderWidth: 1, borderColor: colors.border }}
+                style={{
+                  backgroundColor: colors.background,
+                  borderRadius: 10,
+                  paddingHorizontal: 14,
+                  paddingVertical: 12,
+                  color: colors.foreground,
+                  fontSize: 15,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                }}
                 placeholderTextColor={colors.muted}
               />
             </View>
             <View>
-              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}>Confirmer le mot de passe</Text>
+              <Text
+                style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}
+              >
+                Confirmer le mot de passe
+              </Text>
               <TextInput
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
                 secureTextEntry
-                style={{ backgroundColor: colors.background, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: colors.foreground, fontSize: 15, borderWidth: 1, borderColor: colors.border }}
+                style={{
+                  backgroundColor: colors.background,
+                  borderRadius: 10,
+                  paddingHorizontal: 14,
+                  paddingVertical: 12,
+                  color: colors.foreground,
+                  fontSize: 15,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                }}
                 placeholderTextColor={colors.muted}
               />
             </View>
@@ -250,9 +482,25 @@ export default function EditProfileScreen() {
             <TouchableOpacity
               onPress={handleChangePassword}
               disabled={savingPassword || !currentPassword || !newPassword}
-              style={{ backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 14, alignItems: "center", marginTop: 4, opacity: (savingPassword || !currentPassword || !newPassword) ? 0.6 : 1 }}
+              style={{
+                backgroundColor: colors.primary,
+                borderRadius: 12,
+                paddingVertical: 14,
+                alignItems: "center",
+                marginTop: 4,
+                opacity:
+                  savingPassword || !currentPassword || !newPassword ? 0.6 : 1,
+              }}
             >
-              {savingPassword ? <ActivityIndicator color="#fff" /> : <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>Changer le mot de passe</Text>}
+              {savingPassword ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text
+                  style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}
+                >
+                  Changer le mot de passe
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
         </View>

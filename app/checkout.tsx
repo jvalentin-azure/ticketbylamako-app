@@ -1,19 +1,47 @@
 import { useState, useEffect, useRef } from "react";
-import { Text, View, TouchableOpacity, ActivityIndicator, Platform, Alert, StyleSheet, TextInput, ScrollView } from "react-native";
+import {
+  Text,
+  View,
+  TouchableOpacity,
+  ActivityIndicator,
+  Platform,
+  Alert,
+  StyleSheet,
+  TextInput,
+  ScrollView,
+} from "react-native";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useCart } from "@/lib/cart-provider";
 import { getStoredUser } from "@/lib/api/auth";
-import { createMobileCheckout, getMobileCheckoutStatus, SITE_URL } from "@/lib/api/mobile";
+import {
+  createMobileCheckout,
+  getMobileCheckoutFields,
+  getMobileCheckoutStatus,
+  SITE_URL,
+  type CheckoutFieldValue,
+  type MobileCheckoutFieldsResponse,
+  type MobileCheckoutItemInput,
+} from "@/lib/api/mobile";
+import {
+  TicketCustomFieldsForm,
+  type BuyerFieldValues,
+  type TicketFieldValues,
+} from "@/components/commerce/TicketCustomFieldsForm";
 import { Confetti } from "@/components/confetti";
 import { CheckoutSkeleton } from "@/components/skeleton-loader";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { formatAriary } from "@/lib/format";
 import { notifyPaymentConfirmed } from "@/lib/notifications";
-import { useRewards, estimatePointsForPrice, REDEMPTION_TIERS, type RedeemResult } from "@/lib/rewards-provider";
+import {
+  useRewards,
+  estimatePointsForPrice,
+  REDEMPTION_TIERS,
+} from "@/lib/rewards-provider";
 import { useAuth } from "@/lib/auth-provider";
 import { parsePaymentReturnUrl } from "@/lib/payment-return";
+import type { CheckoutFieldSchema } from "@/lib/types/commerce";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // WebView for checkout - loads WooCommerce pay-for-order page
@@ -24,14 +52,33 @@ if (Platform.OS !== "web") {
   } catch {}
 }
 
-type CheckoutPhase = "address" | "confirm" | "creating" | "paying" | "success" | "error" | "payment_error" | "payment_pending";
+type CheckoutPhase =
+  | "address"
+  | "confirm"
+  | "ticket_fields"
+  | "creating"
+  | "paying"
+  | "success"
+  | "error"
+  | "payment_error"
+  | "payment_pending";
 
 export default function CheckoutScreen() {
   const colors = useColors();
   const router = useRouter();
   const { items, clearCart, total } = useCart();
-  const { currentTier, canRedeem, getDiscountValue, getBestRedemption, redeemPoints, state: rewardsState } = useRewards();
+  const {
+    currentTier,
+    canRedeem,
+    redeemPoints,
+    state: rewardsState,
+  } = useRewards();
   const { isAuthenticated } = useAuth();
+  const rewardEligibleItems = items.filter(
+    (item) => item.lamakoRewardsEnabled !== false,
+  );
+  const allItemsRewardEligible =
+    items.length > 0 && rewardEligibleItems.length === items.length;
 
   // Rewards redemption state
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
@@ -40,16 +87,39 @@ export default function CheckoutScreen() {
   const [redeemError, setRedeemError] = useState<string | null>(null);
 
   // Calculate total points to earn for this order
-  const totalPointsToEarn = items.reduce((sum, item) => {
-    const price = typeof item.price === "string" ? parseFloat(item.price) || 0 : item.price;
-    return sum + estimatePointsForPrice(price * item.quantity, currentTier.multiplier);
+  const totalPointsToEarn = rewardEligibleItems.reduce((sum, item) => {
+    const price =
+      typeof item.price === "string" ? parseFloat(item.price) || 0 : item.price;
+    return (
+      sum +
+      estimatePointsForPrice(price * item.quantity, currentTier.multiplier)
+    );
   }, 0);
   const webviewRef = useRef<any>(null);
 
-  const hasPhysicalProducts = items.some(i => !i.isEvent);
+  const hasPhysicalProducts = items.some((i) => !i.isEvent);
   // Show confirm phase for events-only if user can redeem points, otherwise go straight to creating
-  const canShowRedeem = canRedeem && rewardsState.availablePoints >= 500 && isAuthenticated;
-  const [phase, setPhase] = useState<CheckoutPhase>(hasPhysicalProducts ? "address" : (canShowRedeem ? "confirm" : "creating"));
+  const canShowRedeem =
+    allItemsRewardEligible &&
+    canRedeem &&
+    rewardsState.availablePoints >= 500 &&
+    isAuthenticated;
+  const [phase, setPhase] = useState<CheckoutPhase>(
+    hasPhysicalProducts ? "address" : canShowRedeem ? "confirm" : "creating",
+  );
+  const [checkoutFieldsLoading, setCheckoutFieldsLoading] = useState(
+    items.length > 0,
+  );
+  const [checkoutFields, setCheckoutFields] =
+    useState<MobileCheckoutFieldsResponse | null>(null);
+  const [buyerFieldValues, setBuyerFieldValues] = useState<BuyerFieldValues>(
+    {},
+  );
+  const [ticketFieldValues, setTicketFieldValues] =
+    useState<TicketFieldValues>({});
+  const [ticketFieldErrors, setTicketFieldErrors] = useState<
+    Record<string, string>
+  >({});
   const [checkoutUrl, setCheckoutUrl] = useState<string>("");
   const [orderId, setOrderId] = useState<number>(0);
   const [checkoutToken, setCheckoutToken] = useState<string>("");
@@ -59,6 +129,7 @@ export default function CheckoutScreen() {
   const [retryCount, setRetryCount] = useState(0);
   const MAX_RETRIES = 3;
   const verificationInFlightRef = useRef(false);
+  const autoCheckoutStartedRef = useRef(false);
 
   // Auth guard: redirect to login if not authenticated
   useEffect(() => {
@@ -66,7 +137,16 @@ export default function CheckoutScreen() {
       Alert.alert(
         "Connexion requise",
         "Vous devez être connecté pour passer une commande.",
-        [{ text: "Se connecter", onPress: () => router.replace({ pathname: "/(auth)/login", params: { returnTo: "/checkout" } } as any) }]
+        [
+          {
+            text: "Se connecter",
+            onPress: () =>
+              router.replace({
+                pathname: "/(auth)/login",
+                params: { returnTo: "/checkout" },
+              } as any),
+          },
+        ],
       );
     }
   }, [isAuthenticated]);
@@ -84,7 +164,8 @@ export default function CheckoutScreen() {
         if (saved) {
           const data = JSON.parse(saved);
           if (data.phone && !shippingPhone) setShippingPhone(data.phone);
-          if (data.address && !shippingAddress) setShippingAddress(data.address);
+          if (data.address && !shippingAddress)
+            setShippingAddress(data.address);
           if (data.city && !shippingCity) setShippingCity(data.city);
         }
       } catch {}
@@ -93,8 +174,16 @@ export default function CheckoutScreen() {
 
   // Handle redeem points
   const handleRedeemPoints = async (points: number) => {
+    if (!allItemsRewardEligible) {
+      setRedeemError(
+        "Les points LamakoRewards ne sont pas disponibles pour ce panier.",
+      );
+      return;
+    }
     if (!rewardsState.wpUserId) {
-      setRedeemError("Impossible de trouver votre compte. Veuillez vous reconnecter.");
+      setRedeemError(
+        "Impossible de trouver votre compte. Veuillez vous reconnecter.",
+      );
       return;
     }
     setIsRedeeming(true);
@@ -107,7 +196,7 @@ export default function CheckoutScreen() {
       } else {
         setRedeemError(result.error || "Erreur lors de l'échange de points.");
       }
-    } catch (e: any) {
+    } catch {
       setRedeemError("Erreur réseau. Veuillez réessayer.");
     } finally {
       setIsRedeeming(false);
@@ -120,12 +209,23 @@ export default function CheckoutScreen() {
     setAppliedDiscount(0);
   };
 
+  useEffect(() => {
+    if (!allItemsRewardEligible && appliedCoupon) {
+      removeCoupon();
+      setRedeemError(
+        "La reduction LamakoRewards a ete retiree car ce panier contient un article non eligible.",
+      );
+    }
+  }, [allItemsRewardEligible, appliedCoupon]);
+
   const markPaymentSuccess = (confirmedOrderId?: number) => {
     const finalOrderId = confirmedOrderId || orderId;
     if (finalOrderId) setOrderId(finalOrderId);
     setPhase("success");
     clearCart();
-    notifyPaymentConfirmed(finalOrderId || orderId, formatAriary(total)).catch(() => {});
+    notifyPaymentConfirmed(finalOrderId || orderId, formatAriary(total)).catch(
+      () => {},
+    );
   };
 
   const verifyPaymentBeforeSuccess = async () => {
@@ -134,7 +234,9 @@ export default function CheckoutScreen() {
 
     try {
       if (!checkoutToken) {
-        setPaymentErrorMsg("Session de paiement introuvable. Veuillez relancer le paiement depuis votre panier.");
+        setPaymentErrorMsg(
+          "Session de paiement introuvable. Veuillez relancer le paiement depuis votre panier.",
+        );
         setPhase("payment_error");
         return;
       }
@@ -148,22 +250,30 @@ export default function CheckoutScreen() {
       }
 
       if (paymentStatus === "pending") {
-        setPaymentErrorMsg("Votre paiement est en attente de confirmation. Votre commande est conservée et sera mise à jour automatiquement après validation.");
+        setPaymentErrorMsg(
+          "Votre paiement est en attente de confirmation. Votre commande est conservée et sera mise à jour automatiquement après validation.",
+        );
         setPhase("payment_pending");
         return;
       }
 
       if (paymentStatus === "expired") {
-        setPaymentErrorMsg("Cette session de paiement a expiré. Veuillez recréer la commande depuis votre panier.");
+        setPaymentErrorMsg(
+          "Cette session de paiement a expiré. Veuillez recréer la commande depuis votre panier.",
+        );
         setPhase("payment_error");
         return;
       }
 
-      setPaymentErrorMsg("Le paiement n'a pas été confirmé. Votre commande est conservée si vous souhaitez réessayer.");
+      setPaymentErrorMsg(
+        "Le paiement n'a pas été confirmé. Votre commande est conservée si vous souhaitez réessayer.",
+      );
       setPhase("payment_error");
     } catch (err) {
       console.warn("Payment verification failed:", err);
-      setPaymentErrorMsg("Impossible de vérifier le statut du paiement. Veuillez consulter vos commandes ou réessayer dans quelques instants.");
+      setPaymentErrorMsg(
+        "Impossible de vérifier le statut du paiement. Veuillez consulter vos commandes ou réessayer dans quelques instants.",
+      );
       setPhase("payment_error");
     } finally {
       verificationInFlightRef.current = false;
@@ -174,7 +284,11 @@ export default function CheckoutScreen() {
     return checkoutUrl;
   };
 
-  const openVerifiedPaymentReturn = (kind: string, token: string, statusHint?: string) => {
+  const openVerifiedPaymentReturn = (
+    kind: string,
+    token: string,
+    statusHint?: string,
+  ) => {
     if (kind !== "checkout" || !token) return false;
     if (checkoutToken && token !== checkoutToken) return false;
 
@@ -192,8 +306,176 @@ export default function CheckoutScreen() {
   const handlePaymentReturnUrl = (url: string) => {
     const parsed = parsePaymentReturnUrl(url);
     if (!parsed) return false;
-    return openVerifiedPaymentReturn(parsed.kind, parsed.token, parsed.statusHint);
+    return openVerifiedPaymentReturn(
+      parsed.kind,
+      parsed.token,
+      parsed.statusHint,
+    );
   };
+
+  const checkoutFieldKey = (field: CheckoutFieldSchema) =>
+    field.storageKey || field.key;
+
+  const isFieldValueEmpty = (value: CheckoutFieldValue | undefined) => {
+    if (Array.isArray(value)) return value.length === 0;
+    return !value || !String(value).trim();
+  };
+
+  const buildCheckoutItemInputs = (
+    includeFields = false,
+  ): MobileCheckoutItemInput[] =>
+    items.map((item) => {
+      const payload: MobileCheckoutItemInput = {
+        productId: item.productId,
+        eventId: item.eventId,
+        quantity: item.quantity,
+        lane: item.isEvent ? "ticket" : "product",
+      };
+      if (includeFields && item.isEvent) {
+        payload.attendees = Array.from({ length: item.quantity }).map(
+          (_, index) => ({
+            fields: ticketFieldValues[item.productId]?.[index] || {},
+          }),
+        );
+      }
+      return payload;
+    });
+
+  const applyDefaultTicketFieldValues = async (
+    schema: MobileCheckoutFieldsResponse,
+  ) => {
+    const storedUser = await getStoredUser();
+    const nextBuyerValues: BuyerFieldValues = {};
+    const nextTicketValues: TicketFieldValues = {};
+
+    schema.buyerFields.forEach((field) => {
+      const key = checkoutFieldKey(field);
+      const defaultValue = field.defaultValue || "";
+      if (field.key === "first_name") {
+        nextBuyerValues[key] = storedUser?.firstName || defaultValue;
+      } else if (field.key === "last_name") {
+        nextBuyerValues[key] = storedUser?.lastName || defaultValue;
+      } else if (field.key === "email" || field.key === "confirm_email") {
+        nextBuyerValues[key] = storedUser?.email || defaultValue;
+      } else if (defaultValue) {
+        nextBuyerValues[key] = defaultValue;
+      }
+    });
+
+    schema.items.forEach((fieldItem) => {
+      if (!fieldItem.hasFields) return;
+      nextTicketValues[fieldItem.productId] = {};
+      Array.from({ length: fieldItem.quantity }).forEach((_, index) => {
+        nextTicketValues[fieldItem.productId][index] = {};
+        fieldItem.ownerFields.forEach((field) => {
+          const key = checkoutFieldKey(field);
+          const defaultValue = field.defaultValue || "";
+          if (field.key === "first_name") {
+            nextTicketValues[fieldItem.productId][index][key] =
+              storedUser?.firstName || defaultValue;
+          } else if (field.key === "last_name") {
+            nextTicketValues[fieldItem.productId][index][key] =
+              storedUser?.lastName || defaultValue;
+          } else if (
+            field.key === "owner_email" ||
+            field.key === "owner_confirm_email"
+          ) {
+            nextTicketValues[fieldItem.productId][index][key] =
+              storedUser?.email || defaultValue;
+          } else if (defaultValue) {
+            nextTicketValues[fieldItem.productId][index][key] = defaultValue;
+          }
+        });
+      });
+    });
+
+    setBuyerFieldValues(nextBuyerValues);
+    setTicketFieldValues(nextTicketValues);
+  };
+
+  const validateTicketFields = () => {
+    if (!checkoutFields?.hasFields) return true;
+    const nextErrors: Record<string, string> = {};
+
+    checkoutFields.buyerFields.forEach((field) => {
+      const key = checkoutFieldKey(field);
+      const value = buyerFieldValues[key];
+      if (field.required && isFieldValueEmpty(value)) {
+        nextErrors[`buyer:${key}`] = "Champ requis";
+      }
+    });
+
+    checkoutFields.items.forEach((fieldItem) => {
+      if (!fieldItem.hasFields) return;
+      Array.from({ length: fieldItem.quantity }).forEach((_, index) => {
+        fieldItem.ownerFields.forEach((field) => {
+          const key = checkoutFieldKey(field);
+          const value = ticketFieldValues[fieldItem.productId]?.[index]?.[key];
+          if (field.required && isFieldValueEmpty(value)) {
+            nextErrors[`${fieldItem.productId}:${index}:${key}`] =
+              "Champ requis";
+          }
+          if (
+            !isFieldValueEmpty(value) &&
+            (field.type === "email" || field.validation === "email") &&
+            typeof value === "string" &&
+            !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+          ) {
+            nextErrors[`${fieldItem.productId}:${index}:${key}`] =
+              "Email invalide";
+          }
+        });
+      });
+    });
+
+    setTicketFieldErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const continueAfterPreCheckout = () => {
+    if (checkoutFieldsLoading) return;
+    if (checkoutFields?.hasFields) {
+      setPhase("ticket_fields");
+      return;
+    }
+    startOrderCreation();
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!isAuthenticated || items.length === 0) {
+      setCheckoutFields(null);
+      setCheckoutFieldsLoading(false);
+      return;
+    }
+
+    setCheckoutFieldsLoading(true);
+    getMobileCheckoutFields(buildCheckoutItemInputs(false))
+      .then(async (schema) => {
+        if (cancelled) return;
+        setCheckoutFields(schema);
+        setTicketFieldErrors({});
+        await applyDefaultTicketFieldValues(schema);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.warn("Checkout fields load failed:", err);
+        setCheckoutFields(null);
+        if (items.some((item) => item.hasCheckoutFields)) {
+          setErrorMsg(
+            "Impossible de charger les champs requis pour ce billet. Veuillez reessayer.",
+          );
+          setPhase("error");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCheckoutFieldsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, items]);
 
   // Create WC order / checkout session
   const startOrderCreation = async () => {
@@ -204,8 +486,10 @@ export default function CheckoutScreen() {
         return;
       }
 
-      if (items.some(item => item.seatLabel)) {
-        setErrorMsg("Les places numérotées doivent être achetées depuis le plan de salle.");
+      if (items.some((item) => item.seatLabel)) {
+        setErrorMsg(
+          "Les places numérotées doivent être achetées depuis le plan de salle.",
+        );
         setPhase("error");
         return;
       }
@@ -226,15 +510,16 @@ export default function CheckoutScreen() {
       }
 
       const result = await createMobileCheckout({
-        items: items.map(item => ({
-          productId: item.productId,
-          quantity: item.quantity,
-          lane: item.isEvent ? "ticket" : "product",
-        })),
+        items: buildCheckoutItemInputs(true),
         billing,
         shipping: hasPhysicalProducts ? billing : undefined,
+        buyerFields: buyerFieldValues,
         couponCode: appliedCoupon || undefined,
-        source: items.every(item => item.isEvent) ? "ticket" : items.some(item => item.isEvent) ? "mixed_native_cart" : "product",
+        source: items.every((item) => item.isEvent)
+          ? "ticket"
+          : items.some((item) => item.isEvent)
+            ? "mixed_native_cart"
+            : "product",
       });
 
       if (result.checkoutUrl) {
@@ -245,7 +530,9 @@ export default function CheckoutScreen() {
         setRetryCount(0);
         setPhase("paying");
       } else {
-        setErrorMsg("Impossible de créer la session de paiement. Veuillez réessayer.");
+        setErrorMsg(
+          "Impossible de créer la session de paiement. Veuillez réessayer.",
+        );
         setPhase("error");
       }
     } catch (err: any) {
@@ -257,17 +544,38 @@ export default function CheckoutScreen() {
 
   // Auto-start order creation for events-only carts (only if no redeem option)
   useEffect(() => {
-    if (!hasPhysicalProducts && !canShowRedeem) {
+    if (
+      !hasPhysicalProducts &&
+      !canShowRedeem &&
+      isAuthenticated &&
+      !checkoutFieldsLoading &&
+      !autoCheckoutStartedRef.current
+    ) {
+      autoCheckoutStartedRef.current = true;
+      if (checkoutFields?.hasFields) {
+        setPhase("ticket_fields");
+        return;
+      }
       startOrderCreation();
     }
-  }, []);
+  }, [
+    canShowRedeem,
+    checkoutFields,
+    checkoutFieldsLoading,
+    hasPhysicalProducts,
+    isAuthenticated,
+  ]);
 
   const handleNavChange = (navState: any) => {
     const url = navState.url || "";
     if (handlePaymentReturnUrl(url)) return;
 
     // Detect order confirmation (success)
-    if (url.includes("order-received") || url.includes("commande-recue") || url.includes("thankyou")) {
+    if (
+      url.includes("order-received") ||
+      url.includes("commande-recue") ||
+      url.includes("thankyou")
+    ) {
       verifyPaymentBeforeSuccess();
       return;
     }
@@ -285,7 +593,13 @@ export default function CheckoutScreen() {
     }
     // DO NOT treat generic URLs with 'cancel'/'failed' as errors if they are payment gateway pages
     // Only treat as error if it's our own site URL with those terms
-    if (url.startsWith(SITE_URL) && (url.includes("cancel") || url.includes("failed") || url.includes("declined") || url.includes("annule"))) {
+    if (
+      url.startsWith(SITE_URL) &&
+      (url.includes("cancel") ||
+        url.includes("failed") ||
+        url.includes("declined") ||
+        url.includes("annule"))
+    ) {
       // Ignore if it's a 404 page or the homepage (gateway return)
       if (!url.includes("404") && !url.match(/ticketbylamako\.com\/?$/)) {
         setPaymentErrorMsg("Le paiement a été annulé ou n'a pas abouti.");
@@ -308,8 +622,16 @@ export default function CheckoutScreen() {
       return;
     }
     // Detect if WebView navigated to homepage (session expired or gateway redirect)
-    const isHomepage = (url === SITE_URL || url === SITE_URL + "/" || url === SITE_URL + "/en/" || url.match(/^https:\/\/www\.ticketbylamako\.com\/?$/));
-    if (isHomepage && !url.includes("lamako_checkout") && !url.includes("order-received")) {
+    const isHomepage =
+      url === SITE_URL ||
+      url === SITE_URL + "/" ||
+      url === SITE_URL + "/en/" ||
+      url.match(/^https:\/\/www\.ticketbylamako\.com\/?$/);
+    if (
+      isHomepage &&
+      !url.includes("lamako_checkout") &&
+      !url.includes("order-received")
+    ) {
       // After payment gateway, redirect back to our checkout to check status
       const recoveryUrl = getRecoveryCheckoutUrl();
       if (webviewRef.current && recoveryUrl) {
@@ -330,7 +652,8 @@ export default function CheckoutScreen() {
         if (data.type === "PAYMENT_RESULT" || data.type === "RETURN_TO_APP") {
           const token = data.payload?.token || checkoutToken;
           const kind = data.payload?.kind || "checkout";
-          if (openVerifiedPaymentReturn(kind, token, data.payload?.status)) return;
+          if (openVerifiedPaymentReturn(kind, token, data.payload?.status))
+            return;
           verifyPaymentBeforeSuccess();
           return;
         }
@@ -462,10 +785,19 @@ export default function CheckoutScreen() {
     return (
       <ScreenContainer edges={["top", "bottom", "left", "right"]}>
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backBtn}
+          >
+            <IconSymbol
+              name="chevron.left"
+              size={24}
+              color={colors.foreground}
+            />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Adresse de livraison</Text>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+            Adresse de livraison
+          </Text>
           <View style={{ width: 40 }} />
         </View>
         <ScrollView contentContainerStyle={{ padding: 20, gap: 16 }}>
@@ -474,43 +806,112 @@ export default function CheckoutScreen() {
           </Text>
 
           <View style={{ gap: 4 }}>
-            <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "600" }}>Téléphone *</Text>
+            <Text
+              style={{
+                color: colors.foreground,
+                fontSize: 13,
+                fontWeight: "600",
+              }}
+            >
+              Téléphone *
+            </Text>
             <TextInput
               value={shippingPhone}
               onChangeText={setShippingPhone}
               keyboardType="phone-pad"
               placeholder="034 XX XXX XX"
-              style={{ backgroundColor: colors.surface, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, color: colors.foreground, fontSize: 15, borderWidth: 1, borderColor: colors.border }}
+              style={{
+                backgroundColor: colors.surface,
+                borderRadius: 12,
+                paddingHorizontal: 14,
+                paddingVertical: 13,
+                color: colors.foreground,
+                fontSize: 15,
+                borderWidth: 1,
+                borderColor: colors.border,
+              }}
               placeholderTextColor={colors.muted}
             />
           </View>
 
           <View style={{ gap: 4 }}>
-            <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "600" }}>Adresse *</Text>
+            <Text
+              style={{
+                color: colors.foreground,
+                fontSize: 13,
+                fontWeight: "600",
+              }}
+            >
+              Adresse *
+            </Text>
             <TextInput
               value={shippingAddress}
               onChangeText={setShippingAddress}
               placeholder="Rue, numéro, quartier..."
-              style={{ backgroundColor: colors.surface, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, color: colors.foreground, fontSize: 15, borderWidth: 1, borderColor: colors.border }}
+              style={{
+                backgroundColor: colors.surface,
+                borderRadius: 12,
+                paddingHorizontal: 14,
+                paddingVertical: 13,
+                color: colors.foreground,
+                fontSize: 15,
+                borderWidth: 1,
+                borderColor: colors.border,
+              }}
               placeholderTextColor={colors.muted}
             />
           </View>
 
           <View style={{ gap: 4 }}>
-            <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "600" }}>Ville *</Text>
+            <Text
+              style={{
+                color: colors.foreground,
+                fontSize: 13,
+                fontWeight: "600",
+              }}
+            >
+              Ville *
+            </Text>
             <TextInput
               value={shippingCity}
               onChangeText={setShippingCity}
               placeholder="Antananarivo"
-              style={{ backgroundColor: colors.surface, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, color: colors.foreground, fontSize: 15, borderWidth: 1, borderColor: colors.border }}
+              style={{
+                backgroundColor: colors.surface,
+                borderRadius: 12,
+                paddingHorizontal: 14,
+                paddingVertical: 13,
+                color: colors.foreground,
+                fontSize: 15,
+                borderWidth: 1,
+                borderColor: colors.border,
+              }}
               placeholderTextColor={colors.muted}
             />
           </View>
 
-          <View style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: colors.border, marginTop: 8 }}>
-            <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "600" }}>Récapitulatif</Text>
+          <View
+            style={{
+              backgroundColor: colors.surface,
+              borderRadius: 12,
+              padding: 14,
+              borderWidth: 1,
+              borderColor: colors.border,
+              marginTop: 8,
+            }}
+          >
+            <Text
+              style={{
+                color: colors.foreground,
+                fontSize: 14,
+                fontWeight: "600",
+              }}
+            >
+              Récapitulatif
+            </Text>
             <Text style={{ color: colors.muted, fontSize: 13, marginTop: 6 }}>
-              {items.length} article{items.length > 1 ? "s" : ""} · Sous-total: {formatAriary(total)}
+              {items.length} article{items.length > 1 ? "s" : ""} · Sous-total:{" "}
+              {formatAriary(total)}
             </Text>
             <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4 }}>
               Les frais d'expédition seront calculés à l'étape suivante.
@@ -518,101 +919,297 @@ export default function CheckoutScreen() {
           </View>
 
           {/* LamakoRewards - Points to earn + Redeem */}
-          {isAuthenticated && (
-            <View style={{ backgroundColor: "#fdf6ee", borderRadius: 12, borderWidth: 1, borderColor: "#e8d5a3", padding: 12, marginTop: 12 }}>
-              {/* Points to earn */}
-              {totalPointsToEarn > 0 && (
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                  <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "#f59e0b", alignItems: "center", justifyContent: "center" }}>
-                    <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>★</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 13, fontWeight: "600", color: "#3d2314" }}>
-                      Gagnez <Text style={{ fontSize: 14, fontWeight: "700", color: "#b45309" }}>{totalPointsToEarn} points</Text> LamakoRewards
-                    </Text>
-                    {currentTier.multiplier > 1 && (
-                      <Text style={{ fontSize: 11, color: "#92400e", marginTop: 2 }}>Bonus {currentTier.name} : x{currentTier.multiplier}</Text>
-                    )}
-                  </View>
-                </View>
-              )}
-
-              {/* Redeem section */}
-              {canRedeem && rewardsState.availablePoints >= 500 && !appliedCoupon && (
-                <View style={{ borderTopWidth: totalPointsToEarn > 0 ? 1 : 0, borderTopColor: "#e8d5a3", marginTop: totalPointsToEarn > 0 ? 10 : 0, paddingTop: totalPointsToEarn > 0 ? 10 : 0 }}>
-                  <Text style={{ fontSize: 13, fontWeight: "600", color: "#3d2314", marginBottom: 8 }}>
-                    Utiliser mes points ({rewardsState.availablePoints} pts)
-                  </Text>
-                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                    {REDEMPTION_TIERS.filter(t => t.points <= rewardsState.availablePoints).map(tier => (
-                      <TouchableOpacity
-                        key={tier.points}
-                        onPress={() => handleRedeemPoints(tier.points)}
-                        disabled={isRedeeming}
-                        style={{ backgroundColor: "#b45309", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, opacity: isRedeeming ? 0.5 : 1 }}
+          {isAuthenticated &&
+            (totalPointsToEarn > 0 ||
+              !allItemsRewardEligible ||
+              (allItemsRewardEligible &&
+                rewardsState.availablePoints >= 500)) && (
+              <View
+                style={{
+                  backgroundColor: "#fdf6ee",
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: "#e8d5a3",
+                  padding: 12,
+                  marginTop: 12,
+                }}
+              >
+                {/* Points to earn */}
+                {totalPointsToEarn > 0 && (
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 10,
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 14,
+                        backgroundColor: "#f59e0b",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: "#fff",
+                          fontSize: 14,
+                          fontWeight: "700",
+                        }}
                       >
-                        <Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>
-                          -{formatAriary(tier.value)}
+                        ★
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={{
+                          fontSize: 13,
+                          fontWeight: "600",
+                          color: "#3d2314",
+                        }}
+                      >
+                        Gagnez{" "}
+                        <Text
+                          style={{
+                            fontSize: 14,
+                            fontWeight: "700",
+                            color: "#b45309",
+                          }}
+                        >
+                          {totalPointsToEarn} points
+                        </Text>{" "}
+                        LamakoRewards
+                      </Text>
+                      {currentTier.multiplier > 1 && (
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            color: "#92400e",
+                            marginTop: 2,
+                          }}
+                        >
+                          Bonus {currentTier.name} : x{currentTier.multiplier}
                         </Text>
-                        <Text style={{ color: "#fde68a", fontSize: 10 }}>
-                          {tier.points} pts
+                      )}
+                    </View>
+                  </View>
+                )}
+
+                {/* Redeem section */}
+                {allItemsRewardEligible &&
+                  canRedeem &&
+                  rewardsState.availablePoints >= 500 &&
+                  !appliedCoupon && (
+                    <View
+                      style={{
+                        borderTopWidth: totalPointsToEarn > 0 ? 1 : 0,
+                        borderTopColor: "#e8d5a3",
+                        marginTop: totalPointsToEarn > 0 ? 10 : 0,
+                        paddingTop: totalPointsToEarn > 0 ? 10 : 0,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 13,
+                          fontWeight: "600",
+                          color: "#3d2314",
+                          marginBottom: 8,
+                        }}
+                      >
+                        Utiliser mes points ({rewardsState.availablePoints} pts)
+                      </Text>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          flexWrap: "wrap",
+                          gap: 8,
+                        }}
+                      >
+                        {REDEMPTION_TIERS.filter(
+                          (t) => t.points <= rewardsState.availablePoints,
+                        ).map((tier) => (
+                          <TouchableOpacity
+                            key={tier.points}
+                            onPress={() => handleRedeemPoints(tier.points)}
+                            disabled={isRedeeming}
+                            style={{
+                              backgroundColor: "#b45309",
+                              borderRadius: 8,
+                              paddingHorizontal: 12,
+                              paddingVertical: 8,
+                              opacity: isRedeeming ? 0.5 : 1,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                color: "#fff",
+                                fontSize: 12,
+                                fontWeight: "600",
+                              }}
+                            >
+                              -{formatAriary(tier.value)}
+                            </Text>
+                            <Text style={{ color: "#fde68a", fontSize: 10 }}>
+                              {tier.points} pts
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                      {isRedeeming && (
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 8,
+                            marginTop: 8,
+                          }}
+                        >
+                          <ActivityIndicator size="small" color="#b45309" />
+                          <Text style={{ fontSize: 12, color: "#92400e" }}>
+                            Échange en cours...
+                          </Text>
+                        </View>
+                      )}
+                      {redeemError && (
+                        <Text
+                          style={{
+                            fontSize: 12,
+                            color: "#dc2626",
+                            marginTop: 6,
+                          }}
+                        >
+                          {redeemError}
+                        </Text>
+                      )}
+                    </View>
+                  )}
+
+                {!allItemsRewardEligible && (
+                  <View
+                    style={{
+                      borderTopWidth: totalPointsToEarn > 0 ? 1 : 0,
+                      borderTopColor: "#e8d5a3",
+                      marginTop: totalPointsToEarn > 0 ? 10 : 0,
+                      paddingTop: totalPointsToEarn > 0 ? 10 : 0,
+                    }}
+                  >
+                    <Text style={{ fontSize: 11, color: "#92400e" }}>
+                      Les points LamakoRewards ne sont pas disponibles sur tous
+                      les articles de ce panier.
+                    </Text>
+                  </View>
+                )}
+
+                {/* Applied coupon */}
+                {appliedCoupon && (
+                  <View
+                    style={{
+                      borderTopWidth: totalPointsToEarn > 0 ? 1 : 0,
+                      borderTopColor: "#e8d5a3",
+                      marginTop: totalPointsToEarn > 0 ? 10 : 0,
+                      paddingTop: totalPointsToEarn > 0 ? 10 : 0,
+                    }}
+                  >
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={{
+                            fontSize: 13,
+                            fontWeight: "700",
+                            color: "#15803d",
+                          }}
+                        >
+                          ✓ Réduction appliquée : -
+                          {formatAriary(appliedDiscount)}
+                        </Text>
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            color: "#92400e",
+                            marginTop: 2,
+                          }}
+                        >
+                          Coupon : {appliedCoupon}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={removeCoupon}
+                        style={{ padding: 6 }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 12,
+                            color: "#dc2626",
+                            fontWeight: "600",
+                          }}
+                        >
+                          Retirer
                         </Text>
                       </TouchableOpacity>
-                    ))}
-                  </View>
-                  {isRedeeming && (
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 }}>
-                      <ActivityIndicator size="small" color="#b45309" />
-                      <Text style={{ fontSize: 12, color: "#92400e" }}>Échange en cours...</Text>
                     </View>
-                  )}
-                  {redeemError && (
-                    <Text style={{ fontSize: 12, color: "#dc2626", marginTop: 6 }}>{redeemError}</Text>
-                  )}
-                </View>
-              )}
+                  </View>
+                )}
 
-              {/* Applied coupon */}
-              {appliedCoupon && (
-                <View style={{ borderTopWidth: totalPointsToEarn > 0 ? 1 : 0, borderTopColor: "#e8d5a3", marginTop: totalPointsToEarn > 0 ? 10 : 0, paddingTop: totalPointsToEarn > 0 ? 10 : 0 }}>
-                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 13, fontWeight: "700", color: "#15803d" }}>
-                        ✓ Réduction appliquée : -{formatAriary(appliedDiscount)}
-                      </Text>
-                      <Text style={{ fontSize: 11, color: "#92400e", marginTop: 2 }}>
-                        Coupon : {appliedCoupon}
+                {/* Not eligible message */}
+                {allItemsRewardEligible &&
+                  !canRedeem &&
+                  rewardsState.availablePoints > 0 && (
+                    <View
+                      style={{
+                        borderTopWidth: totalPointsToEarn > 0 ? 1 : 0,
+                        borderTopColor: "#e8d5a3",
+                        marginTop: totalPointsToEarn > 0 ? 10 : 0,
+                        paddingTop: totalPointsToEarn > 0 ? 10 : 0,
+                      }}
+                    >
+                      <Text style={{ fontSize: 11, color: "#92400e" }}>
+                        Encore {750 - rewardsState.lifetimePoints} pts à
+                        accumuler pour débloquer l'échange
                       </Text>
                     </View>
-                    <TouchableOpacity onPress={removeCoupon} style={{ padding: 6 }}>
-                      <Text style={{ fontSize: 12, color: "#dc2626", fontWeight: "600" }}>Retirer</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-
-              {/* Not eligible message */}
-              {!canRedeem && rewardsState.availablePoints > 0 && (
-                <View style={{ borderTopWidth: totalPointsToEarn > 0 ? 1 : 0, borderTopColor: "#e8d5a3", marginTop: totalPointsToEarn > 0 ? 10 : 0, paddingTop: totalPointsToEarn > 0 ? 10 : 0 }}>
-                  <Text style={{ fontSize: 11, color: "#92400e" }}>
-                    Encore {750 - rewardsState.lifetimePoints} pts à accumuler pour débloquer l'échange
-                  </Text>
-                </View>
-              )}
-            </View>
-          )}
+                  )}
+              </View>
+            )}
 
           <TouchableOpacity
             onPress={() => {
-              if (!shippingAddress.trim() || !shippingCity.trim() || !shippingPhone.trim()) {
-                Alert.alert("Champs requis", "Veuillez remplir tous les champs obligatoires.");
+              if (
+                !shippingAddress.trim() ||
+                !shippingCity.trim() ||
+                !shippingPhone.trim()
+              ) {
+                Alert.alert(
+                  "Champs requis",
+                  "Veuillez remplir tous les champs obligatoires.",
+                );
                 return;
               }
-              startOrderCreation();
+              continueAfterPreCheckout();
             }}
-            style={{ backgroundColor: colors.primary, borderRadius: 14, paddingVertical: 16, alignItems: "center", marginTop: 12 }}
+            disabled={checkoutFieldsLoading}
+            style={{
+              backgroundColor: colors.primary,
+              borderRadius: 14,
+              paddingVertical: 16,
+              alignItems: "center",
+              marginTop: 12,
+              opacity: checkoutFieldsLoading ? 0.7 : 1,
+            }}
           >
-            <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>Continuer vers le paiement</Text>
+            <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>
+              {checkoutFieldsLoading
+                ? "Verification..."
+                : "Continuer vers le paiement"}
+            </Text>
           </TouchableOpacity>
         </ScrollView>
       </ScreenContainer>
@@ -624,37 +1221,114 @@ export default function CheckoutScreen() {
     return (
       <ScreenContainer edges={["top", "bottom", "left", "right"]}>
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backBtn}
+          >
+            <IconSymbol
+              name="chevron.left"
+              size={24}
+              color={colors.foreground}
+            />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Confirmation</Text>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+            Confirmation
+          </Text>
           <View style={{ width: 40 }} />
         </View>
         <ScrollView contentContainerStyle={{ padding: 20, gap: 16 }}>
           {/* Order summary */}
-          <View style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: colors.border }}>
-            <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "600" }}>R\u00e9capitulatif</Text>
+          <View
+            style={{
+              backgroundColor: colors.surface,
+              borderRadius: 12,
+              padding: 14,
+              borderWidth: 1,
+              borderColor: colors.border,
+            }}
+          >
+            <Text
+              style={{
+                color: colors.foreground,
+                fontSize: 14,
+                fontWeight: "600",
+              }}
+            >
+              R\u00e9capitulatif
+            </Text>
             <Text style={{ color: colors.muted, fontSize: 13, marginTop: 6 }}>
-              {items.length} article{items.length > 1 ? "s" : ""} \u00b7 Total: {formatAriary(total)}
+              {items.length} article{items.length > 1 ? "s" : ""} \u00b7 Total:{" "}
+              {formatAriary(total)}
             </Text>
             {appliedCoupon && (
-              <Text style={{ color: "#15803d", fontSize: 13, fontWeight: "600", marginTop: 4 }}>
+              <Text
+                style={{
+                  color: "#15803d",
+                  fontSize: 13,
+                  fontWeight: "600",
+                  marginTop: 4,
+                }}
+              >
                 R\u00e9duction : -{formatAriary(appliedDiscount)}
               </Text>
             )}
           </View>
 
           {/* Redeem section */}
-          <View style={{ backgroundColor: "#fdf6ee", borderRadius: 12, borderWidth: 1, borderColor: "#e8d5a3", padding: 12 }}>
+          <View
+            style={{
+              backgroundColor: "#fdf6ee",
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: "#e8d5a3",
+              padding: 12,
+            }}
+          >
             {/* Points to earn */}
             {totalPointsToEarn > 0 && (
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "#f59e0b", alignItems: "center", justifyContent: "center" }}>
-                  <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>\u2605</Text>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 10,
+                  marginBottom: 10,
+                }}
+              >
+                <View
+                  style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: 14,
+                    backgroundColor: "#f59e0b",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Text
+                    style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}
+                  >
+                    \u2605
+                  </Text>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 13, fontWeight: "600", color: "#3d2314" }}>
-                    Gagnez <Text style={{ fontSize: 14, fontWeight: "700", color: "#b45309" }}>{totalPointsToEarn} points</Text> LamakoRewards
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      fontWeight: "600",
+                      color: "#3d2314",
+                    }}
+                  >
+                    Gagnez{" "}
+                    <Text
+                      style={{
+                        fontSize: 14,
+                        fontWeight: "700",
+                        color: "#b45309",
+                      }}
+                    >
+                      {totalPointsToEarn} points
+                    </Text>{" "}
+                    LamakoRewards
                   </Text>
                 </View>
               </View>
@@ -663,18 +1337,41 @@ export default function CheckoutScreen() {
             {/* Redeem buttons */}
             {!appliedCoupon && (
               <View>
-                <Text style={{ fontSize: 13, fontWeight: "600", color: "#3d2314", marginBottom: 8 }}>
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontWeight: "600",
+                    color: "#3d2314",
+                    marginBottom: 8,
+                  }}
+                >
                   Utiliser mes points ({rewardsState.availablePoints} pts)
                 </Text>
-                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                  {REDEMPTION_TIERS.filter(t => t.points <= rewardsState.availablePoints).map(tier => (
+                <View
+                  style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}
+                >
+                  {REDEMPTION_TIERS.filter(
+                    (t) => t.points <= rewardsState.availablePoints,
+                  ).map((tier) => (
                     <TouchableOpacity
                       key={tier.points}
                       onPress={() => handleRedeemPoints(tier.points)}
                       disabled={isRedeeming}
-                      style={{ backgroundColor: "#b45309", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, opacity: isRedeeming ? 0.5 : 1 }}
+                      style={{
+                        backgroundColor: "#b45309",
+                        borderRadius: 8,
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                        opacity: isRedeeming ? 0.5 : 1,
+                      }}
                     >
-                      <Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>
+                      <Text
+                        style={{
+                          color: "#fff",
+                          fontSize: 12,
+                          fontWeight: "600",
+                        }}
+                      >
                         -{formatAriary(tier.value)}
                       </Text>
                       <Text style={{ color: "#fde68a", fontSize: 10 }}>
@@ -684,30 +1381,66 @@ export default function CheckoutScreen() {
                   ))}
                 </View>
                 {isRedeeming && (
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 }}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 8,
+                      marginTop: 8,
+                    }}
+                  >
                     <ActivityIndicator size="small" color="#b45309" />
-                    <Text style={{ fontSize: 12, color: "#92400e" }}>\u00c9change en cours...</Text>
+                    <Text style={{ fontSize: 12, color: "#92400e" }}>
+                      \u00c9change en cours...
+                    </Text>
                   </View>
                 )}
                 {redeemError && (
-                  <Text style={{ fontSize: 12, color: "#dc2626", marginTop: 6 }}>{redeemError}</Text>
+                  <Text
+                    style={{ fontSize: 12, color: "#dc2626", marginTop: 6 }}
+                  >
+                    {redeemError}
+                  </Text>
                 )}
               </View>
             )}
 
             {/* Applied coupon */}
             {appliedCoupon && (
-              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 13, fontWeight: "700", color: "#15803d" }}>
-                    \u2713 R\u00e9duction appliqu\u00e9e : -{formatAriary(appliedDiscount)}
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      fontWeight: "700",
+                      color: "#15803d",
+                    }}
+                  >
+                    \u2713 R\u00e9duction appliqu\u00e9e : -
+                    {formatAriary(appliedDiscount)}
                   </Text>
-                  <Text style={{ fontSize: 11, color: "#92400e", marginTop: 2 }}>
+                  <Text
+                    style={{ fontSize: 11, color: "#92400e", marginTop: 2 }}
+                  >
                     Coupon : {appliedCoupon}
                   </Text>
                 </View>
                 <TouchableOpacity onPress={removeCoupon} style={{ padding: 6 }}>
-                  <Text style={{ fontSize: 12, color: "#dc2626", fontWeight: "600" }}>Retirer</Text>
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      color: "#dc2626",
+                      fontWeight: "600",
+                    }}
+                  >
+                    Retirer
+                  </Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -715,29 +1448,148 @@ export default function CheckoutScreen() {
 
           {/* Continue button */}
           <TouchableOpacity
-            onPress={() => {
-              setPhase("creating");
-              startOrderCreation();
+            onPress={continueAfterPreCheckout}
+            disabled={checkoutFieldsLoading}
+            style={{
+              backgroundColor: colors.primary,
+              borderRadius: 14,
+              paddingVertical: 16,
+              alignItems: "center",
+              marginTop: 8,
+              opacity: checkoutFieldsLoading ? 0.7 : 1,
             }}
-            style={{ backgroundColor: colors.primary, borderRadius: 14, paddingVertical: 16, alignItems: "center", marginTop: 8 }}
           >
             <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>
-              {appliedCoupon ? `Payer ${formatAriary(Math.max(0, total - appliedDiscount))}` : "Continuer vers le paiement"}
+              {checkoutFieldsLoading
+                ? "Verification..."
+                : appliedCoupon
+                ? `Payer ${formatAriary(Math.max(0, total - appliedDiscount))}`
+                : "Continuer vers le paiement"}
             </Text>
           </TouchableOpacity>
 
           {/* Skip redeem */}
           {!appliedCoupon && (
             <TouchableOpacity
-              onPress={() => {
-                setPhase("creating");
-                startOrderCreation();
-              }}
+              onPress={continueAfterPreCheckout}
+              disabled={checkoutFieldsLoading}
               style={{ alignItems: "center", paddingVertical: 10 }}
             >
-              <Text style={{ color: colors.muted, fontSize: 13 }}>Passer sans utiliser mes points</Text>
+              <Text style={{ color: colors.muted, fontSize: 13 }}>
+                Passer sans utiliser mes points
+              </Text>
             </TouchableOpacity>
           )}
+        </ScrollView>
+      </ScreenContainer>
+    );
+  }
+
+  // ---- TICKET FIELDS phase ----
+  if (phase === "ticket_fields") {
+    return (
+      <ScreenContainer edges={["top", "bottom", "left", "right"]}>
+        <View style={[styles.header, { borderBottomColor: colors.border }]}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backBtn}
+          >
+            <IconSymbol
+              name="chevron.left"
+              size={24}
+              color={colors.foreground}
+            />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+            Participants
+          </Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <ScrollView contentContainerStyle={{ padding: 20, gap: 16 }}>
+          <View
+            style={{
+              backgroundColor: colors.surface,
+              borderRadius: 12,
+              padding: 14,
+              borderWidth: 1,
+              borderColor: colors.border,
+            }}
+          >
+            <Text
+              style={{
+                color: colors.foreground,
+                fontSize: 14,
+                fontWeight: "700",
+              }}
+            >
+              Recapitulatif
+            </Text>
+            <Text style={{ color: colors.muted, fontSize: 13, marginTop: 6 }}>
+              {items.length} article{items.length > 1 ? "s" : ""} - Total:{" "}
+              {formatAriary(total)}
+            </Text>
+          </View>
+
+          {checkoutFields ? (
+            <TicketCustomFieldsForm
+              cartItems={items}
+              fieldItems={checkoutFields.items}
+              buyerFields={checkoutFields.buyerFields}
+              buyerValues={buyerFieldValues}
+              values={ticketFieldValues}
+              errors={ticketFieldErrors}
+              onBuyerChange={(key, value) => {
+                setBuyerFieldValues((prev) => ({ ...prev, [key]: value }));
+                setTicketFieldErrors((prev) => {
+                  const next = { ...prev };
+                  delete next[`buyer:${key}`];
+                  return next;
+                });
+              }}
+              onChange={(productId, attendeeIndex, key, value) => {
+                setTicketFieldValues((prev) => ({
+                  ...prev,
+                  [productId]: {
+                    ...(prev[productId] || {}),
+                    [attendeeIndex]: {
+                      ...(prev[productId]?.[attendeeIndex] || {}),
+                      [key]: value,
+                    },
+                  },
+                }));
+                setTicketFieldErrors((prev) => {
+                  const next = { ...prev };
+                  delete next[`${productId}:${attendeeIndex}:${key}`];
+                  return next;
+                });
+              }}
+            />
+          ) : (
+            <View style={styles.centerContent}>
+              <ActivityIndicator color={colors.primary} />
+            </View>
+          )}
+
+          <TouchableOpacity
+            onPress={() => {
+              if (!checkoutFields) return;
+              if (!validateTicketFields()) return;
+              startOrderCreation();
+            }}
+            disabled={!checkoutFields}
+            style={{
+              backgroundColor: colors.primary,
+              borderRadius: 14,
+              paddingVertical: 16,
+              alignItems: "center",
+              marginTop: 4,
+              opacity: checkoutFields ? 1 : 0.7,
+            }}
+          >
+            <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>
+              Continuer vers le paiement
+            </Text>
+          </TouchableOpacity>
         </ScrollView>
       </ScreenContainer>
     );
@@ -748,17 +1600,29 @@ export default function CheckoutScreen() {
     return (
       <ScreenContainer edges={["top", "bottom", "left", "right"]}>
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backBtn}
+          >
+            <IconSymbol
+              name="chevron.left"
+              size={24}
+              color={colors.foreground}
+            />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Préparation...</Text>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+            Préparation...
+          </Text>
           <View style={{ width: 40 }} />
         </View>
         <View style={styles.centerContent}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={[styles.loadingText, { color: colors.foreground }]}>Création de votre commande...</Text>
+          <Text style={[styles.loadingText, { color: colors.foreground }]}>
+            Création de votre commande...
+          </Text>
           <Text style={[styles.loadingSubtext, { color: colors.muted }]}>
-            {items.length} article{items.length > 1 ? "s" : ""} · {formatAriary(total)}
+            {items.length} article{items.length > 1 ? "s" : ""} ·{" "}
+            {formatAriary(total)}
           </Text>
         </View>
       </ScreenContainer>
@@ -770,24 +1634,42 @@ export default function CheckoutScreen() {
     return (
       <ScreenContainer edges={["top", "bottom", "left", "right"]}>
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backBtn}
+          >
+            <IconSymbol
+              name="chevron.left"
+              size={24}
+              color={colors.foreground}
+            />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Erreur</Text>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+            Erreur
+          </Text>
           <View style={{ width: 40 }} />
         </View>
         <View style={styles.centerContent}>
           <IconSymbol name="xmark.circle.fill" size={56} color={colors.error} />
-          <Text style={[styles.errorTitle, { color: colors.foreground }]}>Impossible de procéder au paiement</Text>
-          <Text style={[styles.errorMsg, { color: colors.muted }]}>{errorMsg}</Text>
+          <Text style={[styles.errorTitle, { color: colors.foreground }]}>
+            Impossible de procéder au paiement
+          </Text>
+          <Text style={[styles.errorMsg, { color: colors.muted }]}>
+            {errorMsg}
+          </Text>
           <TouchableOpacity
             onPress={() => startOrderCreation()}
             style={[styles.retryBtn, { backgroundColor: colors.primary }]}
           >
             <Text style={styles.retryBtnText}>Réessayer</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backLink}>
-            <Text style={[styles.backLinkText, { color: colors.muted }]}>Retour au panier</Text>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backLink}
+          >
+            <Text style={[styles.backLinkText, { color: colors.muted }]}>
+              Retour au panier
+            </Text>
           </TouchableOpacity>
         </View>
       </ScreenContainer>
@@ -799,18 +1681,36 @@ export default function CheckoutScreen() {
     return (
       <ScreenContainer edges={["top", "bottom", "left", "right"]}>
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backBtn}
+          >
+            <IconSymbol
+              name="chevron.left"
+              size={24}
+              color={colors.foreground}
+            />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Paiement échoué</Text>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+            Paiement échoué
+          </Text>
           <View style={{ width: 40 }} />
         </View>
         <View style={styles.centerContent}>
-          <IconSymbol name="exclamationmark.triangle.fill" size={56} color={colors.warning} />
-          <Text style={[styles.errorTitle, { color: colors.foreground }]}>Paiement non abouti</Text>
-          <Text style={[styles.errorMsg, { color: colors.muted }]}>{paymentErrorMsg}</Text>
+          <IconSymbol
+            name="exclamationmark.triangle.fill"
+            size={56}
+            color={colors.warning}
+          />
+          <Text style={[styles.errorTitle, { color: colors.foreground }]}>
+            Paiement non abouti
+          </Text>
+          <Text style={[styles.errorMsg, { color: colors.muted }]}>
+            {paymentErrorMsg}
+          </Text>
           <Text style={[styles.errorHint, { color: colors.muted }]}>
-            Votre commande est conservée. Vous pouvez réessayer avec un autre mode de paiement.
+            Votre commande est conservée. Vous pouvez réessayer avec un autre
+            mode de paiement.
           </Text>
           <TouchableOpacity
             onPress={() => {
@@ -822,10 +1722,20 @@ export default function CheckoutScreen() {
             }}
             style={[styles.retryBtn, { backgroundColor: colors.primary }]}
           >
-            <Text style={styles.retryBtnText}>Essayer un autre mode de paiement</Text>
+            <Text style={styles.retryBtnText}>
+              Essayer un autre mode de paiement
+            </Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => { clearCart(); router.back(); }} style={styles.backLink}>
-            <Text style={[styles.backLinkText, { color: colors.muted }]}>Abandonner et vider le panier</Text>
+          <TouchableOpacity
+            onPress={() => {
+              clearCart();
+              router.back();
+            }}
+            style={styles.backLink}
+          >
+            <Text style={[styles.backLinkText, { color: colors.muted }]}>
+              Abandonner et vider le panier
+            </Text>
           </TouchableOpacity>
         </View>
       </ScreenContainer>
@@ -837,24 +1747,42 @@ export default function CheckoutScreen() {
     return (
       <ScreenContainer edges={["top", "bottom", "left", "right"]}>
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backBtn}
+          >
+            <IconSymbol
+              name="chevron.left"
+              size={24}
+              color={colors.foreground}
+            />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Paiement en attente</Text>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+            Paiement en attente
+          </Text>
           <View style={{ width: 40 }} />
         </View>
         <View style={styles.centerContent}>
           <IconSymbol name="clock.fill" size={56} color={colors.warning} />
-          <Text style={[styles.errorTitle, { color: colors.foreground }]}>Confirmation en cours</Text>
-          <Text style={[styles.errorMsg, { color: colors.muted }]}>{paymentErrorMsg}</Text>
+          <Text style={[styles.errorTitle, { color: colors.foreground }]}>
+            Confirmation en cours
+          </Text>
+          <Text style={[styles.errorMsg, { color: colors.muted }]}>
+            {paymentErrorMsg}
+          </Text>
           <TouchableOpacity
             onPress={() => verifyPaymentBeforeSuccess()}
             style={[styles.retryBtn, { backgroundColor: colors.primary }]}
           >
             <Text style={styles.retryBtnText}>Vérifier maintenant</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.replace("/orders" as any)} style={styles.backLink}>
-            <Text style={[styles.backLinkText, { color: colors.primary }]}>Voir mes commandes</Text>
+          <TouchableOpacity
+            onPress={() => router.replace("/orders" as any)}
+            style={styles.backLink}
+          >
+            <Text style={[styles.backLinkText, { color: colors.primary }]}>
+              Voir mes commandes
+            </Text>
           </TouchableOpacity>
         </View>
       </ScreenContainer>
@@ -867,21 +1795,48 @@ export default function CheckoutScreen() {
       <ScreenContainer edges={["top", "bottom", "left", "right"]}>
         <Confetti active={true} />
         <View style={styles.centerContent}>
-          <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: colors.success + "15", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
-            <IconSymbol name="checkmark.circle.fill" size={56} color={colors.success} />
+          <View
+            style={{
+              width: 80,
+              height: 80,
+              borderRadius: 40,
+              backgroundColor: colors.success + "15",
+              alignItems: "center",
+              justifyContent: "center",
+              marginBottom: 16,
+            }}
+          >
+            <IconSymbol
+              name="checkmark.circle.fill"
+              size={56}
+              color={colors.success}
+            />
           </View>
-          <Text style={[styles.successTitle, { color: colors.foreground }]}>Paiement réussi !</Text>
+          <Text style={[styles.successTitle, { color: colors.foreground }]}>
+            Paiement réussi !
+          </Text>
           <Text style={[styles.successSub, { color: colors.muted }]}>
-            Votre commande #{orderId} a été confirmée.{"\n"}Vous recevrez un email de confirmation.
+            Votre commande #{orderId} a été confirmée.{"\n"}Vous recevrez un
+            email de confirmation.
           </Text>
           {total > 0 && (
-            <Text style={{ fontSize: 24, fontWeight: "800", color: colors.primary, marginTop: 8 }}>
+            <Text
+              style={{
+                fontSize: 24,
+                fontWeight: "800",
+                color: colors.primary,
+                marginTop: 8,
+              }}
+            >
               {formatAriary(total)}
             </Text>
           )}
           <TouchableOpacity
             onPress={() => router.replace("/(tabs)/" as any)}
-            style={[styles.retryBtn, { backgroundColor: colors.primary, marginTop: 24 }]}
+            style={[
+              styles.retryBtn,
+              { backgroundColor: colors.primary, marginTop: 24 },
+            ]}
           >
             <Text style={styles.retryBtnText}>Retour à l'accueil</Text>
           </TouchableOpacity>
@@ -889,7 +1844,9 @@ export default function CheckoutScreen() {
             onPress={() => router.replace("/orders" as any)}
             style={[styles.backLink, { marginTop: 12 }]}
           >
-            <Text style={[styles.backLinkText, { color: colors.primary }]}>Voir mes commandes</Text>
+            <Text style={[styles.backLinkText, { color: colors.primary }]}>
+              Voir mes commandes
+            </Text>
           </TouchableOpacity>
         </View>
       </ScreenContainer>
@@ -901,20 +1858,34 @@ export default function CheckoutScreen() {
     return (
       <ScreenContainer edges={["top", "bottom", "left", "right"]}>
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backBtn}
+          >
+            <IconSymbol
+              name="chevron.left"
+              size={24}
+              color={colors.foreground}
+            />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Paiement sécurisé</Text>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+            Paiement sécurisé
+          </Text>
           <IconSymbol name="lock.fill" size={16} color={colors.success} />
         </View>
         <View style={styles.centerContent}>
           <IconSymbol name="lock.fill" size={48} color={colors.primary} />
-          <Text style={[styles.successTitle, { color: colors.foreground }]}>Paiement sécurisé</Text>
+          <Text style={[styles.successTitle, { color: colors.foreground }]}>
+            Paiement sécurisé
+          </Text>
           <Text style={[styles.successSub, { color: colors.muted }]}>
             Commande #{orderId} · {formatAriary(total)}
           </Text>
           <TouchableOpacity
-            onPress={() => { if (typeof window !== "undefined") window.open(checkoutUrl, "_blank"); }}
+            onPress={() => {
+              if (typeof window !== "undefined")
+                window.open(checkoutUrl, "_blank");
+            }}
             style={[styles.retryBtn, { backgroundColor: colors.primary }]}
           >
             <Text style={styles.retryBtnText}>Ouvrir le paiement</Text>
@@ -927,26 +1898,42 @@ export default function CheckoutScreen() {
   return (
     <ScreenContainer edges={["top", "bottom", "left", "right"]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => {
-          Alert.alert(
-            "Annuler le paiement ?",
-            "Votre commande sera conservée. Vous pourrez la payer plus tard.",
-            [
-              { text: "Continuer le paiement", style: "cancel" },
-              { text: "Quitter", style: "destructive", onPress: () => router.back() },
-            ]
-          );
-        }} style={styles.backBtn}>
+        <TouchableOpacity
+          onPress={() => {
+            Alert.alert(
+              "Annuler le paiement ?",
+              "Votre commande sera conservée. Vous pourrez la payer plus tard.",
+              [
+                { text: "Continuer le paiement", style: "cancel" },
+                {
+                  text: "Quitter",
+                  style: "destructive",
+                  onPress: () => router.back(),
+                },
+              ],
+            );
+          }}
+          style={styles.backBtn}
+        >
           <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <IconSymbol name="lock.fill" size={14} color={colors.success} />
-          <Text style={[styles.headerTitle, { color: colors.foreground, marginLeft: 6 }]}>Paiement sécurisé</Text>
+          <Text
+            style={[
+              styles.headerTitle,
+              { color: colors.foreground, marginLeft: 6 },
+            ]}
+          >
+            Paiement sécurisé
+          </Text>
         </View>
         <View style={{ width: 40 }} />
       </View>
       {webviewLoading && (
-        <View style={[styles.webviewLoader, { backgroundColor: colors.background }]}>
+        <View
+          style={[styles.webviewLoader, { backgroundColor: colors.background }]}
+        >
           <CheckoutSkeleton />
         </View>
       )}
@@ -960,8 +1947,18 @@ export default function CheckoutScreen() {
           if (handlePaymentReturnUrl(url)) return false;
           if (url.startsWith("ticketbylamako://")) return false;
           if (url.startsWith(SITE_URL)) return true;
-          if (url.includes("mvola") || url.includes("orange") || url.includes("airtel")) return true;
-          if (url.includes("cybersource") || url.includes("visa") || url.includes("mastercard")) return true;
+          if (
+            url.includes("mvola") ||
+            url.includes("orange") ||
+            url.includes("airtel")
+          )
+            return true;
+          if (
+            url.includes("cybersource") ||
+            url.includes("visa") ||
+            url.includes("mastercard")
+          )
+            return true;
           if (url.includes("paypal") || url.includes("stripe")) return true;
           if (url.startsWith("https://")) return true;
           return false;
@@ -971,9 +1968,13 @@ export default function CheckoutScreen() {
           const errorCode = nativeEvent?.code || 0;
           const errorDescription = nativeEvent?.description || "";
           // NSURL error -1005 = network connection lost - auto retry
-          if (errorCode === -1005 || errorDescription.includes("-1005") || errorDescription.includes("connection was lost")) {
+          if (
+            errorCode === -1005 ||
+            errorDescription.includes("-1005") ||
+            errorDescription.includes("connection was lost")
+          ) {
             if (retryCount < MAX_RETRIES) {
-              setRetryCount(prev => prev + 1);
+              setRetryCount((prev) => prev + 1);
               // Auto-retry after 2 seconds
               setTimeout(() => {
                 if (webviewRef.current) {
@@ -984,9 +1985,12 @@ export default function CheckoutScreen() {
             }
           }
           // For MVola timeouts - wait longer before declaring failure (45s)
-          if (checkoutUrl.includes("mvola") || errorDescription.includes("timeout")) {
+          if (
+            checkoutUrl.includes("mvola") ||
+            errorDescription.includes("timeout")
+          ) {
             if (retryCount < MAX_RETRIES) {
-              setRetryCount(prev => prev + 1);
+              setRetryCount((prev) => prev + 1);
               setTimeout(() => {
                 if (webviewRef.current) {
                   webviewRef.current.reload();
@@ -996,7 +2000,9 @@ export default function CheckoutScreen() {
             }
           }
           // Only show error after retries exhausted
-          setPaymentErrorMsg(`Erreur réseau (${errorCode}): ${errorDescription}. Veuillez vérifier votre connexion et réessayer.`);
+          setPaymentErrorMsg(
+            `Erreur réseau (${errorCode}): ${errorDescription}. Veuillez vérifier votre connexion et réessayer.`,
+          );
           setPhase("payment_error");
         }}
         injectedJavaScript={checkoutInjectedJS}
@@ -1013,21 +2019,74 @@ export default function CheckoutScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
-  headerCenter: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center" },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  headerCenter: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   headerTitle: { fontSize: 17, fontWeight: "700" },
   backBtn: { width: 40, alignItems: "flex-start" },
-  centerContent: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32 },
+  centerContent: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+  },
   loadingText: { fontSize: 17, fontWeight: "600", marginTop: 20 },
   loadingSubtext: { fontSize: 14, marginTop: 6 },
-  errorTitle: { fontSize: 18, fontWeight: "700", marginTop: 16, textAlign: "center" },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginTop: 16,
+    textAlign: "center",
+  },
   errorMsg: { fontSize: 14, marginTop: 8, textAlign: "center" },
-  errorHint: { fontSize: 13, marginTop: 12, textAlign: "center", lineHeight: 18 },
-  retryBtn: { borderRadius: 14, paddingVertical: 14, paddingHorizontal: 32, marginTop: 20 },
-  retryBtnText: { color: "#fff", fontSize: 15, fontWeight: "700", textAlign: "center" },
+  errorHint: {
+    fontSize: 13,
+    marginTop: 12,
+    textAlign: "center",
+    lineHeight: 18,
+  },
+  retryBtn: {
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    marginTop: 20,
+  },
+  retryBtnText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
+    textAlign: "center",
+  },
   backLink: { marginTop: 16 },
   backLinkText: { fontSize: 14 },
-  successTitle: { fontSize: 20, fontWeight: "700", marginTop: 16, textAlign: "center" },
-  successSub: { fontSize: 14, marginTop: 8, textAlign: "center", lineHeight: 20 },
-  webviewLoader: { position: "absolute", top: 60, left: 0, right: 0, zIndex: 10, alignItems: "center" },
+  successTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    marginTop: 16,
+    textAlign: "center",
+  },
+  successSub: {
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  webviewLoader: {
+    position: "absolute",
+    top: 60,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    alignItems: "center",
+  },
 });

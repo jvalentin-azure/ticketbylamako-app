@@ -1,4 +1,11 @@
-import { Text, View, TouchableOpacity, FlatList, Alert, StyleSheet } from "react-native";
+import {
+  Text,
+  View,
+  TouchableOpacity,
+  FlatList,
+  Alert,
+  StyleSheet,
+} from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -8,26 +15,44 @@ import { useCart } from "@/lib/cart-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { formatAriary, decodeHtmlEntities } from "@/lib/format";
 import { PointsBadge } from "@/components/points-badge";
-import { useRewards } from "@/lib/rewards-provider";
-import { estimatePointsForPrice } from "@/lib/rewards-provider";
+import { useRewards, estimatePointsForPrice } from "@/lib/rewards-provider";
+
 import { useAuth } from "@/lib/auth-provider";
 
 export default function CartScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { items, removeItem, updateQuantity, clearCart, total, itemCount } = useCart();
-  const { state: rewardsState, currentTier, canRedeem, getDiscountValue } = useRewards();
+  const { items, removeItem, updateQuantity, clearCart, total, itemCount } =
+    useCart();
+  const {
+    state: rewardsState,
+    currentTier,
+    canRedeem,
+    getDiscountValue,
+  } = useRewards();
   const { isAuthenticated } = useAuth();
+  const rewardEligibleItems = items.filter(
+    (item) => item.lamakoRewardsEnabled !== false,
+  );
+  const allItemsRewardEligible =
+    items.length > 0 && rewardEligibleItems.length === items.length;
 
   // Calculate total points to earn for this cart
-  const totalPointsToEarn = items.reduce((sum, item) => {
-    const price = typeof item.price === "string" ? parseFloat(item.price) || 0 : item.price;
-    return sum + estimatePointsForPrice(price * item.quantity, currentTier.multiplier);
+  const totalPointsToEarn = rewardEligibleItems.reduce((sum, item) => {
+    const price =
+      typeof item.price === "string" ? parseFloat(item.price) || 0 : item.price;
+    return (
+      sum +
+      estimatePointsForPrice(price * item.quantity, currentTier.multiplier)
+    );
   }, 0);
 
   // Calculate potential discount from available points
-  const availableDiscount = canRedeem ? getDiscountValue(rewardsState.availablePoints) : 0;
+  const availableDiscount =
+    allItemsRewardEligible && canRedeem
+      ? getDiscountValue(rewardsState.availablePoints)
+      : 0;
   const bottomSafePadding = Math.max(insets.bottom, 16) + 12;
 
   const handleCheckout = () => {
@@ -38,8 +63,15 @@ export default function CartScreen() {
         "Vous devez être connecté pour passer une commande. Connectez-vous ou créez un compte pour continuer.",
         [
           { text: "Annuler", style: "cancel" },
-          { text: "Se connecter", onPress: () => router.push({ pathname: "/(auth)/login", params: { returnTo: "/checkout" } } as any) },
-        ]
+          {
+            text: "Se connecter",
+            onPress: () =>
+              router.push({
+                pathname: "/(auth)/login",
+                params: { returnTo: "/checkout" },
+              } as any),
+          },
+        ],
       );
       return;
     }
@@ -50,12 +82,18 @@ export default function CartScreen() {
     return (
       <ScreenContainer edges={["left", "right"]}>
         <View style={styles.headerRow}>
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Panier</Text>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+            Panier
+          </Text>
         </View>
         <View style={styles.emptyContainer}>
           <IconSymbol name="cart.fill" size={64} color={colors.muted} />
-          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Votre panier est vide</Text>
-          <Text style={[styles.emptySub, { color: colors.muted }]}>Parcourez nos événements et notre boutique pour ajouter des articles</Text>
+          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
+            Votre panier est vide
+          </Text>
+          <Text style={[styles.emptySub, { color: colors.muted }]}>
+            Parcourez nos événements et notre boutique pour ajouter des articles
+          </Text>
           <TouchableOpacity
             onPress={() => router.push("/(tabs)/" as any)}
             style={[styles.emptyBtn, { backgroundColor: colors.primary }]}
@@ -70,12 +108,21 @@ export default function CartScreen() {
   return (
     <ScreenContainer edges={["left", "right"]}>
       <View style={styles.headerRowFull}>
-        <Text style={[styles.headerTitle, { color: colors.foreground }]}>Panier ({itemCount})</Text>
+        <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+          Panier ({itemCount})
+        </Text>
         <TouchableOpacity
-          onPress={() => Alert.alert("Vider le panier", "Supprimer tous les articles ?", [{ text: "Annuler" }, { text: "Vider", style: "destructive", onPress: clearCart }])}
+          onPress={() =>
+            Alert.alert("Vider le panier", "Supprimer tous les articles ?", [
+              { text: "Annuler" },
+              { text: "Vider", style: "destructive", onPress: clearCart },
+            ])
+          }
           style={styles.clearButton}
         >
-          <Text style={[styles.clearText, { color: colors.error }]}>Tout supprimer</Text>
+          <Text style={[styles.clearText, { color: colors.error }]}>
+            Tout supprimer
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -83,38 +130,100 @@ export default function CartScreen() {
         data={items}
         keyExtractor={(item, i) => `${item.productId}-${item.seatLabel || i}`}
         style={styles.cartList}
-        contentContainerStyle={[styles.cartListContent, { paddingBottom: bottomSafePadding + 16 }]}
+        contentContainerStyle={[
+          styles.cartListContent,
+          { paddingBottom: bottomSafePadding + 16 },
+        ]}
         renderItem={({ item }) => (
-          <View style={[styles.cartItem, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Image source={{ uri: item.image }} style={styles.cartItemImage} contentFit="cover" />
+          <View
+            style={[
+              styles.cartItem,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
+            <Image
+              source={{ uri: item.image }}
+              style={styles.cartItemImage}
+              contentFit="cover"
+            />
             <View style={styles.cartItemBody}>
               <View>
-                <Text style={[styles.cartItemName, { color: colors.foreground }]} numberOfLines={2}>{decodeHtmlEntities(item.name)}</Text>
+                <Text
+                  style={[styles.cartItemName, { color: colors.foreground }]}
+                  numberOfLines={2}
+                >
+                  {decodeHtmlEntities(item.name)}
+                </Text>
                 {item.isEvent && (
                   <View style={styles.ticketBadge}>
-                    <IconSymbol name="ticket.fill" size={12} color={colors.primary} />
-                    <Text style={[styles.ticketBadgeText, { color: colors.primary }]}>Billet{item.seatLabel ? ` - ${item.seatLabel}` : ""}</Text>
+                    <IconSymbol
+                      name="ticket.fill"
+                      size={12}
+                      color={colors.primary}
+                    />
+                    <Text
+                      style={[
+                        styles.ticketBadgeText,
+                        { color: colors.primary },
+                      ]}
+                    >
+                      Billet{item.seatLabel ? ` - ${item.seatLabel}` : ""}
+                    </Text>
                   </View>
                 )}
               </View>
               <View style={styles.cartItemFooter}>
                 <View>
-                  <Text style={[styles.cartItemPrice, { color: colors.primary }]}>{formatAriary(item.price)}</Text>
-                  <PointsBadge price={typeof item.price === "string" ? parseFloat(item.price) * item.quantity : item.price * item.quantity} />
+                  <Text
+                    style={[styles.cartItemPrice, { color: colors.primary }]}
+                  >
+                    {formatAriary(item.price)}
+                  </Text>
+                  {item.lamakoRewardsEnabled !== false && (
+                    <PointsBadge
+                      price={
+                        typeof item.price === "string"
+                          ? parseFloat(item.price) * item.quantity
+                          : item.price * item.quantity
+                      }
+                    />
+                  )}
                 </View>
                 <View style={styles.qtyControls}>
                   <TouchableOpacity
-                    onPress={() => item.quantity <= 1 ? removeItem(item.productId, item.seatLabel) : updateQuantity(item.productId, item.quantity - 1, item.seatLabel)}
+                    onPress={() =>
+                      item.quantity <= 1
+                        ? removeItem(item.productId, item.seatLabel)
+                        : updateQuantity(
+                            item.productId,
+                            item.quantity - 1,
+                            item.seatLabel,
+                          )
+                    }
                     style={[styles.qtyBtn, { backgroundColor: colors.border }]}
                   >
-                    <Text style={[styles.qtyBtnText, { color: colors.foreground }]}>{item.quantity <= 1 ? "×" : "-"}</Text>
+                    <Text
+                      style={[styles.qtyBtnText, { color: colors.foreground }]}
+                    >
+                      {item.quantity <= 1 ? "×" : "-"}
+                    </Text>
                   </TouchableOpacity>
-                  <Text style={[styles.qtyValue, { color: colors.foreground }]}>{item.quantity}</Text>
+                  <Text style={[styles.qtyValue, { color: colors.foreground }]}>
+                    {item.quantity}
+                  </Text>
                   <TouchableOpacity
-                    onPress={() => updateQuantity(item.productId, item.quantity + 1, item.seatLabel)}
+                    onPress={() =>
+                      updateQuantity(
+                        item.productId,
+                        item.quantity + 1,
+                        item.seatLabel,
+                      )
+                    }
                     style={[styles.qtyBtn, { backgroundColor: colors.primary }]}
                   >
-                    <Text style={[styles.qtyBtnText, { color: "#fff" }]}>+</Text>
+                    <Text style={[styles.qtyBtnText, { color: "#fff" }]}>
+                      +
+                    </Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -125,14 +234,23 @@ export default function CartScreen() {
           <View style={{ marginTop: 8 }}>
             {/* LamakoRewards Summary */}
             {isAuthenticated && totalPointsToEarn > 0 && (
-              <View style={[styles.rewardsSummary, { backgroundColor: "#fdf6ee", borderColor: "#e8d5a3" }]}>
+              <View
+                style={[
+                  styles.rewardsSummary,
+                  { backgroundColor: "#fdf6ee", borderColor: "#e8d5a3" },
+                ]}
+              >
                 <View style={styles.rewardsRow}>
                   <View style={styles.rewardsIcon}>
                     <IconSymbol name="star.fill" size={16} color="#fff" />
                   </View>
                   <View style={styles.rewardsContent}>
                     <Text style={styles.rewardsTitle}>
-                      Gagnez <Text style={styles.rewardsPoints}>{totalPointsToEarn} points</Text> avec cette commande
+                      Gagnez{" "}
+                      <Text style={styles.rewardsPoints}>
+                        {totalPointsToEarn} points
+                      </Text>{" "}
+                      avec cette commande
                     </Text>
                     {currentTier.multiplier > 1 && (
                       <Text style={styles.rewardsBonus}>
@@ -141,10 +259,26 @@ export default function CartScreen() {
                     )}
                   </View>
                 </View>
-                {canRedeem && availableDiscount > 0 && (
-                  <View style={[styles.redeemRow, { borderTopColor: "#e8d5a3" }]}>
+                {allItemsRewardEligible &&
+                  canRedeem &&
+                  availableDiscount > 0 && (
+                    <View
+                      style={[styles.redeemRow, { borderTopColor: "#e8d5a3" }]}
+                    >
+                      <Text style={styles.redeemText}>
+                        Vous avez {rewardsState.availablePoints} pts disponibles
+                        ({formatAriary(availableDiscount)} de réduction
+                        possible)
+                      </Text>
+                    </View>
+                  )}
+                {!allItemsRewardEligible && (
+                  <View
+                    style={[styles.redeemRow, { borderTopColor: "#e8d5a3" }]}
+                  >
                     <Text style={styles.redeemText}>
-                      Vous avez {rewardsState.availablePoints} pts disponibles ({formatAriary(availableDiscount)} de réduction possible)
+                      Les points ne sont pas disponibles sur tous les articles
+                      de ce panier.
                     </Text>
                   </View>
                 )}
@@ -152,10 +286,13 @@ export default function CartScreen() {
             )}
 
             {/* Not logged in - encourage login for rewards */}
-            {!isAuthenticated && (
+            {!isAuthenticated && rewardEligibleItems.length > 0 && (
               <TouchableOpacity
                 onPress={() => router.push("/(auth)/login" as any)}
-                style={[styles.rewardsSummary, { backgroundColor: "#fdf6ee", borderColor: "#e8d5a3" }]}
+                style={[
+                  styles.rewardsSummary,
+                  { backgroundColor: "#fdf6ee", borderColor: "#e8d5a3" },
+                ]}
               >
                 <View style={styles.rewardsRow}>
                   <View style={styles.rewardsIcon}>
@@ -163,7 +300,8 @@ export default function CartScreen() {
                   </View>
                   <View style={styles.rewardsContent}>
                     <Text style={styles.rewardsTitle}>
-                      Connectez-vous pour gagner des <Text style={styles.rewardsPoints}>LamakoRewards</Text>
+                      Connectez-vous pour gagner des{" "}
+                      <Text style={styles.rewardsPoints}>LamakoRewards</Text>
                     </Text>
                     <Text style={styles.rewardsBonus}>
                       1 point par 1 000 Ar dépensé
@@ -175,25 +313,46 @@ export default function CartScreen() {
             )}
 
             <View style={[styles.totalRow, { borderTopColor: colors.border }]}>
-              <Text style={[styles.totalLabel, { color: colors.muted }]}>Sous-total</Text>
-              <Text style={[styles.totalValue, { color: colors.foreground }]}>{formatAriary(total)}</Text>
+              <Text style={[styles.totalLabel, { color: colors.muted }]}>
+                Sous-total
+              </Text>
+              <Text style={[styles.totalValue, { color: colors.foreground }]}>
+                {formatAriary(total)}
+              </Text>
             </View>
             <View style={[styles.totalRow, { borderTopColor: colors.border }]}>
-              <Text style={[styles.grandTotalLabel, { color: colors.foreground }]}>Total</Text>
-              <Text style={[styles.grandTotalValue, { color: colors.primary }]}>{formatAriary(total)}</Text>
+              <Text
+                style={[styles.grandTotalLabel, { color: colors.foreground }]}
+              >
+                Total
+              </Text>
+              <Text style={[styles.grandTotalValue, { color: colors.primary }]}>
+                {formatAriary(total)}
+              </Text>
             </View>
           </View>
         }
       />
 
-      <View style={[styles.bottomCta, { borderTopColor: colors.border, backgroundColor: colors.background, paddingBottom: bottomSafePadding }]}>
+      <View
+        style={[
+          styles.bottomCta,
+          {
+            borderTopColor: colors.border,
+            backgroundColor: colors.background,
+            paddingBottom: bottomSafePadding,
+          },
+        ]}
+      >
         {!isAuthenticated ? (
           <TouchableOpacity
             onPress={() => router.push("/(auth)/login" as any)}
             style={[styles.checkoutBtn, { backgroundColor: "#b45309" }]}
           >
             <IconSymbol name="person.fill" size={18} color="#fff" />
-            <Text style={styles.checkoutBtnText}>Se connecter pour commander</Text>
+            <Text style={styles.checkoutBtnText}>
+              Se connecter pour commander
+            </Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
@@ -210,29 +369,78 @@ export default function CartScreen() {
 }
 
 const styles = StyleSheet.create({
-  headerRow: { alignItems: "center", justifyContent: "center", paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
-  headerRowFull: { minHeight: 44, alignItems: "center", justifyContent: "center", paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
+  headerRow: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
+  },
+  headerRowFull: {
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
+  },
   headerTitle: { fontSize: 22, fontWeight: "700" },
   clearButton: { position: "absolute", right: 16, top: 14 },
   clearText: { fontSize: 13, fontWeight: "600" },
-  emptyContainer: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 40 },
+  emptyContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 40,
+  },
   emptyTitle: { fontSize: 18, fontWeight: "600", marginTop: 16 },
   emptySub: { fontSize: 14, textAlign: "center", marginTop: 8 },
-  emptyBtn: { borderRadius: 12, paddingVertical: 12, paddingHorizontal: 28, marginTop: 20 },
+  emptyBtn: {
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    marginTop: 20,
+  },
   emptyBtnText: { color: "#fff", fontSize: 14, fontWeight: "700" },
-  cartItem: { flexDirection: "row", borderRadius: 14, borderWidth: 1, padding: 12, marginBottom: 12 },
+  cartItem: {
+    flexDirection: "row",
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 12,
+  },
   cartItemImage: { width: 72, height: 72, borderRadius: 10 },
   cartItemBody: { flex: 1, marginLeft: 12, justifyContent: "space-between" },
   cartItemName: { fontSize: 14, fontWeight: "600" },
   ticketBadge: { flexDirection: "row", alignItems: "center", marginTop: 2 },
   ticketBadgeText: { fontSize: 11, marginLeft: 4 },
-  cartItemFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  cartItemFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   cartItemPrice: { fontSize: 15, fontWeight: "700" },
   qtyControls: { flexDirection: "row", alignItems: "center", gap: 10 },
-  qtyBtn: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  qtyBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   qtyBtnText: { fontSize: 16, fontWeight: "700" },
-  qtyValue: { fontSize: 14, fontWeight: "700", minWidth: 16, textAlign: "center" },
-  totalRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 12, borderTopWidth: 1 },
+  qtyValue: {
+    fontSize: 14,
+    fontWeight: "700",
+    minWidth: 16,
+    textAlign: "center",
+  },
+  totalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    borderTopWidth: 1,
+  },
   totalLabel: { fontSize: 15 },
   totalValue: { fontSize: 15, fontWeight: "600" },
   grandTotalLabel: { fontSize: 18, fontWeight: "700" },
@@ -240,12 +448,33 @@ const styles = StyleSheet.create({
   cartList: { flex: 1 },
   cartListContent: { padding: 16, paddingBottom: 24 },
   bottomCta: { padding: 16, paddingBottom: 32, borderTopWidth: 1 },
-  checkoutBtn: { minHeight: 54, borderRadius: 14, paddingVertical: 16, paddingHorizontal: 14, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 8 },
+  checkoutBtn: {
+    minHeight: 54,
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
+  },
   checkoutBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
   // LamakoRewards styles
-  rewardsSummary: { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 12 },
+  rewardsSummary: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 12,
+  },
   rewardsRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  rewardsIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: "#f59e0b", alignItems: "center", justifyContent: "center" },
+  rewardsIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#f59e0b",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   rewardsContent: { flex: 1 },
   rewardsTitle: { fontSize: 13, fontWeight: "600", color: "#3d2314" },
   rewardsPoints: { fontSize: 14, fontWeight: "700", color: "#b45309" },
