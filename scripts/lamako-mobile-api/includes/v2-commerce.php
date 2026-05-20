@@ -27,6 +27,7 @@ add_action( 'woocommerce_checkout_order_created', 'lamako_mobile_v2_link_seating
 add_filter( 'woocommerce_get_return_url', 'lamako_mobile_v2_payment_return_url', 10000, 2 );
 add_filter( 'woocommerce_get_cancel_order_url', 'lamako_mobile_v2_payment_cancel_url', 10000, 2 );
 add_filter( 'tc_seat_chart_add_to_cart_url', 'lamako_mobile_v2_seating_cart_url', 10000 );
+add_filter( 'woocommerce_coupon_is_valid', 'lamako_mobile_v2_rewards_coupon_is_valid_for_cart', 20, 2 );
 
 function lamako_mobile_v2_register_routes() {
     $namespace = 'lamako-mobile/v2';
@@ -187,6 +188,30 @@ function lamako_mobile_v2_truthy_meta( $post_id, array $keys ) {
     return in_array( strtolower( (string) $value ), [ '1', 'yes', 'true', 'on' ], true );
 }
 
+function lamako_mobile_v2_rewards_enabled_meta_keys() {
+    return [
+        'tbl_post_event_lamako_rewards_enabled',
+        '_tbl_post_event_lamako_rewards_enabled',
+        'tbl_lamako_rewards_enabled',
+        '_tbl_lamako_rewards_enabled',
+        '_lper_lamako_rewards_enabled',
+        'lper_lamako_rewards_enabled',
+        'lamakoRewardsEnabled',
+        '_lamakoRewardsEnabled',
+        'lamako_rewards_enabled',
+        '_lamako_rewards_enabled',
+        'lamako_mobile_rewards_enabled',
+        '_lamako_mobile_rewards_enabled',
+        'rewards_enabled',
+        '_rewards_enabled',
+    ];
+}
+
+function lamako_mobile_v2_event_rewards_enabled( $event_id ) {
+    $event_id = absint( $event_id );
+    return $event_id > 0 && lamako_mobile_v2_truthy_meta( $event_id, lamako_mobile_v2_rewards_enabled_meta_keys() );
+}
+
 function lamako_mobile_v2_rewards_enabled_for_post( $post_id, $default = true ) {
     $value = lamako_mobile_v2_meta_first( $post_id, [
         'lamakoRewardsEnabled',
@@ -204,6 +229,117 @@ function lamako_mobile_v2_rewards_enabled_for_post( $post_id, $default = true ) 
     }
 
     return ! in_array( strtolower( (string) $value ), [ '0', 'no', 'false', 'off', 'disabled' ], true );
+}
+
+function lamako_mobile_v2_parse_event_timestamp( $value, $end_of_day = false ) {
+    if ( is_array( $value ) ) {
+        $value = $value['date'] ?? $value['datetime'] ?? $value['value'] ?? '';
+    }
+
+    $value = trim( (string) $value );
+    if ( $value === '' ) {
+        return 0;
+    }
+
+    if ( is_numeric( $value ) ) {
+        $timestamp = (int) $value;
+        return $timestamp > 0 ? $timestamp : 0;
+    }
+
+    if ( $end_of_day && preg_match( '/^\d{4}-\d{2}-\d{2}$/', $value ) ) {
+        $value .= ' 23:59:59';
+    }
+
+    $timezone = function_exists( 'wp_timezone' ) ? wp_timezone() : new DateTimeZone( 'UTC' );
+    try {
+        $date = new DateTimeImmutable( $value, $timezone );
+        return $date->getTimestamp();
+    } catch ( Exception $e ) {
+        $timestamp = strtotime( $value );
+        return $timestamp ? (int) $timestamp : 0;
+    }
+}
+
+function lamako_mobile_v2_get_event_end_timestamp( $event_id ) {
+    $event_id = absint( $event_id );
+    if ( $event_id <= 0 ) {
+        return 0;
+    }
+
+    if ( function_exists( 'tbl_event_template_get_event_end_timestamp' ) ) {
+        return (int) tbl_event_template_get_event_end_timestamp( $event_id );
+    }
+
+    $end_keys = [
+        'event_end_date_time',
+        '_event_end_date_time',
+        'event_end_datetime',
+        'event_end_date',
+        '_event_end_date',
+        'event_end',
+        'tc_event_end_date',
+        '_tc_event_end_date',
+        '_EventEndDate',
+    ];
+
+    foreach ( $end_keys as $key ) {
+        $timestamp = lamako_mobile_v2_parse_event_timestamp( get_post_meta( $event_id, $key, true ), true );
+        if ( $timestamp > 0 ) {
+            return $timestamp;
+        }
+    }
+
+    $start_keys = [
+        'event_date_time',
+        '_event_date_time',
+        'event_start_date_time',
+        'event_start_datetime',
+        'event_date',
+        'event_start_date',
+        '_event_start_date',
+        'event_start',
+        'tc_event_date',
+        '_tc_event_date',
+        '_EventStartDate',
+    ];
+
+    foreach ( $start_keys as $key ) {
+        $timestamp = lamako_mobile_v2_parse_event_timestamp( get_post_meta( $event_id, $key, true ), true );
+        if ( $timestamp > 0 ) {
+            return $timestamp;
+        }
+    }
+
+    return 0;
+}
+
+function lamako_mobile_v2_is_past_event( $event_id ) {
+    $event_id = absint( $event_id );
+    if ( $event_id <= 0 ) {
+        return false;
+    }
+
+    if ( function_exists( 'tbl_event_template_is_past_event' ) ) {
+        return (bool) tbl_event_template_is_past_event( $event_id );
+    }
+
+    $event_timestamp = lamako_mobile_v2_get_event_end_timestamp( $event_id );
+    if ( ! $event_timestamp ) {
+        return false;
+    }
+
+    $now = function_exists( 'current_time' ) ? (int) current_time( 'timestamp' ) : time();
+    return $event_timestamp < $now;
+}
+
+function lamako_mobile_v2_event_closed_payload( $event_id ) {
+    $is_past = lamako_mobile_v2_is_past_event( $event_id );
+    return [
+        'isPastEvent'      => $is_past,
+        'salesClosed'      => $is_past,
+        'ticketingStatus'  => $is_past ? 'ended' : 'available',
+        'ticketingMessage' => $is_past ? 'Cet événement est terminé.' : '',
+    ];
 }
 
 function lamako_mobile_v2_catalog_version( array $post_types ) {
@@ -520,6 +656,7 @@ function lamako_mobile_v2_public_ticket_map() {
             continue;
         }
 
+        $closed = lamako_mobile_v2_event_closed_payload( $event_id );
         if ( ! isset( $map[ $event_id ] ) ) {
             $map[ $event_id ] = [];
         }
@@ -533,7 +670,11 @@ function lamako_mobile_v2_public_ticket_map() {
             'eventId'      => (string) $event_id,
             'hasCheckoutFields' => ! empty( $checkout_fields['hasFields'] ),
             'requiresCheckoutFields' => ! empty( $checkout_fields['requiresFields'] ),
-            'lamakoRewardsEnabled' => lamako_mobile_v2_rewards_enabled_for_post( $event_id, true ) && lamako_mobile_v2_rewards_enabled_for_post( $product_id, true ),
+            'purchasable'  => ! $closed['salesClosed'],
+            'salesClosed'  => $closed['salesClosed'],
+            'ticketingStatus' => $closed['ticketingStatus'],
+            'ticketingMessage' => $closed['ticketingMessage'],
+            'lamakoRewardsEnabled' => lamako_mobile_v2_event_rewards_enabled( $event_id ) && lamako_mobile_v2_rewards_enabled_for_post( $product_id, true ),
         ];
     }
     return $map;
@@ -550,6 +691,7 @@ function lamako_mobile_v2_public_event_mobile_fields( $event_id, $include_detail
         'event_terms'         => null,
         'event_logo'          => lamako_mobile_v2_image_url_from_value( lamako_mobile_v2_meta_first( $event_id, [ 'event_logo', '_event_logo' ], '' ) ),
         'sponsors_logo'       => null,
+        'lamako_rewards_enabled' => lamako_mobile_v2_event_rewards_enabled( $event_id ),
     ];
 
     if ( $include_details ) {
@@ -596,6 +738,7 @@ function lamako_mobile_v2_public_event_summary( WP_Post $event, array $ticket_ma
 
     $thumb_id = get_post_thumbnail_id( $event_id );
     $featured = $thumb_id ? wp_get_attachment_image_url( $thumb_id, 'large' ) : '';
+    $closed = lamako_mobile_v2_event_closed_payload( $event_id );
 
     return [
         'id'              => $event_id,
@@ -616,7 +759,11 @@ function lamako_mobile_v2_public_event_summary( WP_Post $event, array $ticket_ma
         'hasSeatingChart' => ! empty( array_filter( $tickets, function( $ticket ) {
             return ! empty( $ticket['usesSeating'] );
         } ) ) || lamako_mobile_v2_find_chart_for_event( $event_id ) > 0,
-        'lamakoRewardsEnabled' => lamako_mobile_v2_rewards_enabled_for_post( $event_id, true ),
+        'lamakoRewardsEnabled' => lamako_mobile_v2_event_rewards_enabled( $event_id ),
+        'isPastEvent'     => $closed['isPastEvent'],
+        'salesClosed'     => $closed['salesClosed'],
+        'ticketingStatus' => $closed['ticketingStatus'],
+        'ticketingMessage' => $closed['ticketingMessage'],
     ];
 }
 
@@ -1192,6 +1339,10 @@ function lamako_mobile_v2_validate_checkout_item( $raw_item, $index ) {
             return new WP_Error( 'lamako_v2_ticket_event_missing', 'Ticket product is not linked to a valid event.', [ 'status' => 400 ] );
         }
 
+        if ( lamako_mobile_v2_is_past_event( (int) $event_id ) ) {
+            return new WP_Error( 'lamako_v2_event_ended', 'Cet événement est terminé.', [ 'status' => 409 ] );
+        }
+
         if ( class_exists( '\Tickera\TC_Ticket' ) && method_exists( '\Tickera\TC_Ticket', 'is_sales_available' ) ) {
             $available = \Tickera\TC_Ticket::is_sales_available( $base_id );
             if ( ! $available ) {
@@ -1217,30 +1368,59 @@ function lamako_mobile_v2_validate_checkout_item( $raw_item, $index ) {
         'is_ticket'    => $is_ticket,
         'event_id'     => $event_id ? (int) $event_id : 0,
         'rewards_enabled' => $is_ticket
-            ? ( $event_id ? lamako_mobile_v2_rewards_enabled_for_post( (int) $event_id, true ) : false )
+            ? ( $event_id ? lamako_mobile_v2_event_rewards_enabled( (int) $event_id ) : false )
             : lamako_mobile_v2_rewards_enabled_for_post( $base_id, true ),
     ];
 }
 
-function lamako_mobile_v2_is_rewards_coupon( $coupon_code ) {
-    if ( $coupon_code === '' || ! class_exists( 'WC_Coupon' ) ) {
-        return false;
-    }
-
-    try {
-        $coupon = new WC_Coupon( $coupon_code );
-        if ( ! $coupon->get_id() ) {
-            return false;
-        }
-
-        $code        = strtoupper( (string) $coupon->get_code() );
+function lamako_mobile_v2_is_rewards_coupon( $coupon ) {
+    if ( $coupon instanceof WC_Coupon ) {
+        $code = $coupon->get_code();
         $description = strtolower( (string) $coupon->get_description() );
-        return strpos( $code, 'LR-' ) === 0
-            || strpos( $description, 'lamako mobile v2 rewards' ) !== false
-            || strpos( $description, 'lamakorewards' ) !== false;
-    } catch ( Exception $e ) {
+    } else {
+        $code = sanitize_text_field( (string) $coupon );
+        $description = '';
+        if ( class_exists( 'WC_Coupon' ) && $code !== '' ) {
+            try {
+                $wc_coupon = new WC_Coupon( $code );
+                if ( $wc_coupon->get_id() ) {
+                    $description = strtolower( (string) $wc_coupon->get_description() );
+                }
+            } catch ( Exception $e ) {
+                $description = '';
+            }
+        }
+    }
+
+    $code = trim( (string) $code );
+    if ( $code === '' ) {
         return false;
     }
+
+    return stripos( $code, 'LR-' ) === 0
+        || stripos( $code, 'LAMAKO-REWARD' ) === 0
+        || strpos( $description, 'lamako mobile v2 rewards' ) !== false
+        || strpos( $description, 'lamakorewards' ) !== false
+        || strpos( $description, 'rewards coupon' ) !== false;
+}
+
+function lamako_mobile_v2_validate_rewards_coupon_events( $coupon_code, array $event_ids ) {
+    if ( ! lamako_mobile_v2_is_rewards_coupon( $coupon_code ) ) {
+        return true;
+    }
+
+    $event_ids = array_values( array_unique( array_filter( array_map( 'absint', $event_ids ) ) ) );
+    foreach ( $event_ids as $event_id ) {
+        if ( ! lamako_mobile_v2_event_rewards_enabled( $event_id ) ) {
+            return new WP_Error(
+                'lamako_v2_rewards_not_enabled_for_event',
+                'LamakoRewards is not enabled for this event.',
+                [ 'status' => 422 ]
+            );
+        }
+    }
+
+    return true;
 }
 
 function lamako_mobile_v2_checkout_allows_rewards_coupon( array $validated_items ) {
@@ -1250,6 +1430,27 @@ function lamako_mobile_v2_checkout_allows_rewards_coupon( array $validated_items
         }
     }
     return true;
+}
+
+function lamako_mobile_v2_rewards_coupon_is_valid_for_cart( $valid, $coupon ) {
+    if ( ! $valid || ! lamako_mobile_v2_is_rewards_coupon( $coupon ) || ! function_exists( 'WC' ) || ! WC()->cart ) {
+        return $valid;
+    }
+
+    foreach ( WC()->cart->get_cart() as $item ) {
+        $product = isset( $item['data'] ) && $item['data'] instanceof WC_Product ? $item['data'] : null;
+        if ( ! $product ) {
+            continue;
+        }
+
+        $base_id = lamako_mobile_v2_product_base_id( $product, $product->get_id() );
+        $event_id = absint( get_post_meta( $base_id, '_event_name', true ) );
+        if ( $event_id > 0 && ! lamako_mobile_v2_event_rewards_enabled( $event_id ) ) {
+            return false;
+        }
+    }
+
+    return $valid;
 }
 
 function lamako_mobile_v2_checkout_value_is_empty( $value ) {
@@ -1532,6 +1733,9 @@ function lamako_mobile_v2_create_checkout( WP_REST_Request $request ) {
         }
         $validated[] = $validated_item;
     }
+    $checkout_event_ids = array_values( array_unique( array_filter( array_map( function( $item ) {
+        return absint( $item['event_id'] ?? 0 );
+    }, $validated ) ) ) );
 
     $user_id = get_current_user_id();
     $user    = get_user_by( 'id', $user_id );
@@ -1546,6 +1750,13 @@ function lamako_mobile_v2_create_checkout( WP_REST_Request $request ) {
     $shipping   = $body['shipping'] ?? [];
     $source     = sanitize_text_field( $body['source'] ?? 'native_cart' );
     $coupon     = sanitize_text_field( $body['couponCode'] ?? $body['coupon_code'] ?? '' );
+
+    if ( $coupon !== '' ) {
+        $rewards_event_check = lamako_mobile_v2_validate_rewards_coupon_events( $coupon, $checkout_event_ids );
+        if ( is_wp_error( $rewards_event_check ) ) {
+            return $rewards_event_check;
+        }
+    }
 
     if ( $coupon !== '' && lamako_mobile_v2_is_rewards_coupon( $coupon ) && ! lamako_mobile_v2_checkout_allows_rewards_coupon( $validated ) ) {
         return new WP_Error( 'lamako_v2_rewards_not_available_for_cart', 'LamakoRewards points are not available for one or more items in this cart.', [ 'status' => 403 ] );
@@ -1592,12 +1803,18 @@ function lamako_mobile_v2_create_checkout( WP_REST_Request $request ) {
         $order->calculate_totals();
         $order->set_status( 'pending' );
         $order->set_created_via( 'lamako_mobile_v2' );
+        $order->update_meta_data( '_lamako_order_channel', 'mobile' );
         $order->update_meta_data( '_lamako_mobile_order', 'yes' );
         $order->update_meta_data( '_lamako_mobile_v2', 'yes' );
         $order->update_meta_data( '_lamako_checkout_source', $source );
         $order->update_meta_data( '_lamako_rewards_enabled', lamako_mobile_v2_checkout_allows_rewards_coupon( $validated ) ? 'yes' : 'partial' );
         $order->update_meta_data( '_lamako_v2_checkout_token_hash', $token_hash );
         $order->update_meta_data( '_lamako_v2_checkout_expires_at', gmdate( 'c', $expires_at ) );
+        if ( $coupon !== '' && lamako_mobile_v2_is_rewards_coupon( $coupon ) ) {
+            $order->update_meta_data( '_lamako_rewards_coupon', 'yes' );
+            $order->update_meta_data( '_lamako_rewards_coupon_code', $coupon );
+            $order->update_meta_data( '_lamako_rewards_discount_amount', (float) $order->get_discount_total() );
+        }
         $order->add_order_note( 'Lamako Mobile v2 checkout session created.' );
         $order->save();
 
@@ -1639,6 +1856,10 @@ function lamako_mobile_v2_create_seating_session( WP_REST_Request $request ) {
     $event = get_post( $event_id );
     if ( ! $event || $event->post_type !== 'tc_events' || $event->post_status !== 'publish' ) {
         return new WP_Error( 'lamako_v2_event_not_found', 'Event not found.', [ 'status' => 404 ] );
+    }
+
+    if ( lamako_mobile_v2_is_past_event( $event_id ) ) {
+        return new WP_Error( 'lamako_v2_event_ended', 'Cet événement est terminé.', [ 'status' => 409 ] );
     }
 
     $chart_id = lamako_mobile_v2_find_chart_for_event( $event_id );
@@ -2854,6 +3075,7 @@ function lamako_mobile_v2_mark_seating_order( $order, $data ) {
         $order->set_customer_id( $user_id );
     }
     $order->set_created_via( 'lamako_mobile_seating_v2' );
+    $order->update_meta_data( '_lamako_order_channel', 'mobile' );
     $order->update_meta_data( '_lamako_mobile_order', 'yes' );
     $order->update_meta_data( '_lamako_mobile_v2', 'yes' );
     $order->update_meta_data( '_lamako_checkout_source', 'seating' );

@@ -1,4 +1,11 @@
-import { createContext, useContext, useState, useCallback, useRef, useEffect } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+} from "react";
 import { Alert, AppState, AppStateStatus } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -15,13 +22,21 @@ export interface CartItem {
   hasCheckoutFields?: boolean;
   requiresCheckoutFields?: boolean;
   lamakoRewardsEnabled?: boolean;
+  purchasable?: boolean;
+  salesClosed?: boolean;
+  ticketingStatus?: string;
+  ticketingMessage?: string;
 }
 
 interface CartContextType {
   items: CartItem[];
   addItem: (item: Omit<CartItem, "quantity"> & { quantity?: number }) => void;
   removeItem: (productId: number, seatLabel?: string) => void;
-  updateQuantity: (productId: number, quantity: number, seatLabel?: string) => void;
+  updateQuantity: (
+    productId: number,
+    quantity: number,
+    seatLabel?: string,
+  ) => void;
   clearCart: () => void;
   total: number;
   itemCount: number;
@@ -52,7 +67,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             Alert.alert(
               "Panier expiré",
               "Votre panier a été vidé car il est resté inactif trop longtemps.",
-              [{ text: "OK" }]
+              [{ text: "OK" }],
             );
             return;
           }
@@ -70,7 +85,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const handleAppStateChange = (nextState: AppStateStatus) => {
-    if (appState.current.match(/active/) && nextState.match(/inactive|background/)) {
+    if (
+      appState.current.match(/active/) &&
+      nextState.match(/inactive|background/)
+    ) {
       // App going to background - record timestamp
       AsyncStorage.setItem(CART_TIMESTAMP_KEY, String(Date.now()));
     } else if (nextState === "active") {
@@ -92,7 +110,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           Alert.alert(
             "Panier expiré",
             "Votre panier a été vidé car il est resté inactif trop longtemps.",
-            [{ text: "OK" }]
+            [{ text: "OK" }],
           );
         } else {
           startTimer(CART_EXPIRY_MS - elapsed);
@@ -104,14 +122,14 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const startTimer = (ms: number = CART_EXPIRY_MS) => {
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
-      setItems(prev => {
+      setItems((prev) => {
         if (prev.length > 0) {
           AsyncStorage.setItem(CART_KEY, JSON.stringify([]));
           AsyncStorage.removeItem(CART_TIMESTAMP_KEY);
           Alert.alert(
             "Panier expiré",
             "Votre panier a été vidé automatiquement après 15 minutes d'inactivité.",
-            [{ text: "OK" }]
+            [{ text: "OK" }],
           );
           return [];
         }
@@ -136,30 +154,43 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const addItem = useCallback((item: Omit<CartItem, "quantity"> & { quantity?: number }) => {
-    setItems(prev => {
-      const key = item.seatLabel ? `${item.productId}-${item.seatLabel}` : String(item.productId);
-      const existing = prev.find(i => {
-        const iKey = i.seatLabel ? `${i.productId}-${i.seatLabel}` : String(i.productId);
-        return iKey === key;
-      });
+  const addItem = useCallback(
+    (item: Omit<CartItem, "quantity"> & { quantity?: number }) => {
+      setItems((prev) => {
+        const key = item.seatLabel
+          ? `${item.productId}-${item.seatLabel}`
+          : String(item.productId);
+        const existing = prev.find((i) => {
+          const iKey = i.seatLabel
+            ? `${i.productId}-${i.seatLabel}`
+            : String(i.productId);
+          return iKey === key;
+        });
 
-      let next: CartItem[];
-      if (existing && !item.seatLabel) {
-        next = prev.map(i => i.productId === item.productId ? { ...i, quantity: i.quantity + (item.quantity || 1) } : i);
-      } else {
-        next = [...prev, { ...item, quantity: item.quantity || 1 }];
-      }
-      AsyncStorage.setItem(CART_KEY, JSON.stringify(next));
-      AsyncStorage.setItem(CART_TIMESTAMP_KEY, String(Date.now()));
-      startTimer();
-      return next;
-    });
-  }, []);
+        let next: CartItem[];
+        if (existing && !item.seatLabel) {
+          next = prev.map((i) =>
+            i.productId === item.productId
+              ? { ...i, quantity: i.quantity + (item.quantity || 1) }
+              : i,
+          );
+        } else {
+          next = [...prev, { ...item, quantity: item.quantity || 1 }];
+        }
+        AsyncStorage.setItem(CART_KEY, JSON.stringify(next));
+        AsyncStorage.setItem(CART_TIMESTAMP_KEY, String(Date.now()));
+        startTimer();
+        return next;
+      });
+    },
+    [],
+  );
 
   const removeItem = useCallback((productId: number, seatLabel?: string) => {
-    setItems(prev => {
-      const next = prev.filter(i => !(i.productId === productId && i.seatLabel === seatLabel));
+    setItems((prev) => {
+      const next = prev.filter(
+        (i) => !(i.productId === productId && i.seatLabel === seatLabel),
+      );
       AsyncStorage.setItem(CART_KEY, JSON.stringify(next));
       if (next.length > 0) {
         resetTimer();
@@ -171,21 +202,32 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const updateQuantity = useCallback((productId: number, quantity: number, seatLabel?: string) => {
-    setItems(prev => {
-      const next = quantity <= 0
-        ? prev.filter(i => !(i.productId === productId && i.seatLabel === seatLabel))
-        : prev.map(i => (i.productId === productId && i.seatLabel === seatLabel) ? { ...i, quantity } : i);
-      AsyncStorage.setItem(CART_KEY, JSON.stringify(next));
-      if (next.length > 0) {
-        resetTimer();
-      } else {
-        if (timerRef.current) clearTimeout(timerRef.current);
-        AsyncStorage.removeItem(CART_TIMESTAMP_KEY);
-      }
-      return next;
-    });
-  }, []);
+  const updateQuantity = useCallback(
+    (productId: number, quantity: number, seatLabel?: string) => {
+      setItems((prev) => {
+        const next =
+          quantity <= 0
+            ? prev.filter(
+                (i) =>
+                  !(i.productId === productId && i.seatLabel === seatLabel),
+              )
+            : prev.map((i) =>
+                i.productId === productId && i.seatLabel === seatLabel
+                  ? { ...i, quantity }
+                  : i,
+              );
+        AsyncStorage.setItem(CART_KEY, JSON.stringify(next));
+        if (next.length > 0) {
+          resetTimer();
+        } else {
+          if (timerRef.current) clearTimeout(timerRef.current);
+          AsyncStorage.removeItem(CART_TIMESTAMP_KEY);
+        }
+        return next;
+      });
+    },
+    [],
+  );
 
   const clearCart = useCallback(() => {
     persist([]);
@@ -195,7 +237,17 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
 
   return (
-    <CartContext.Provider value={{ items, addItem, removeItem, updateQuantity, clearCart, total, itemCount }}>
+    <CartContext.Provider
+      value={{
+        items,
+        addItem,
+        removeItem,
+        updateQuantity,
+        clearCart,
+        total,
+        itemCount,
+      }}
+    >
       {children}
     </CartContext.Provider>
   );

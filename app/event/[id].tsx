@@ -55,6 +55,23 @@ if (Platform.OS !== "web") {
   } catch {}
 }
 
+function isEventSalesClosed(event?: TCEvent | null) {
+  return (
+    event?.salesClosed === true ||
+    event?.isPastEvent === true ||
+    event?.ticketingStatus === "ended"
+  );
+}
+
+function isTicketAvailable(ticket?: TicketType | null) {
+  return (
+    !!ticket &&
+    ticket.purchasable !== false &&
+    ticket.salesClosed !== true &&
+    ticket.ticketingStatus !== "ended"
+  );
+}
+
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useColors();
@@ -100,8 +117,9 @@ export default function EventDetailScreen() {
           setEvent(cachedEvent);
           if (cachedEvent.tickets && cachedEvent.tickets.length > 0) {
             setTickets(cachedEvent.tickets);
-            if (cachedEvent.tickets.length === 1)
-              setSelectedTicket(cachedEvent.tickets[0]);
+            const firstAvailable = cachedEvent.tickets.find(isTicketAvailable);
+            if (cachedEvent.tickets.length === 1 && firstAvailable)
+              setSelectedTicket(firstAvailable);
           }
           setLoading(false);
         }
@@ -123,7 +141,9 @@ export default function EventDetailScreen() {
             const tix = ev.tickets || [];
             setEvent(ev);
             setTickets(tix);
-            if (tix.length === 1) setSelectedTicket(tix[0]);
+            const firstAvailable = tix.find(isTicketAvailable);
+            if (tix.length === 1 && firstAvailable)
+              setSelectedTicket(firstAvailable);
             setLoading(false);
           })
           .catch(() => {
@@ -136,7 +156,9 @@ export default function EventDetailScreen() {
             const tix = ev.tickets || [];
             setEvent(ev);
             setTickets(tix);
-            if (tix.length === 1) setSelectedTicket(tix[0]);
+            const firstAvailable = tix.find(isTicketAvailable);
+            if (tix.length === 1 && firstAvailable)
+              setSelectedTicket(firstAvailable);
             setLoading(false);
           })
           .catch(() => setLoading(false));
@@ -171,6 +193,13 @@ export default function EventDetailScreen() {
     return () => clearInterval(interval);
   }, [event]);
 
+  useEffect(() => {
+    if (!event || !selectedTicket) return;
+    if (isEventSalesClosed(event) || !isTicketAvailable(selectedTicket)) {
+      setSelectedTicket(null);
+    }
+  }, [event, selectedTicket]);
+
   if (loading) {
     return (
       <ScreenContainer className="flex-1 items-center justify-center">
@@ -195,6 +224,8 @@ export default function EventDetailScreen() {
   const practicalInfo = event.mobileFields?.practical_info;
   const cats = event.categoryNames?.join(", ") || "";
   const hasSeating = tickets.some((t) => t.usesSeating);
+  const eventClosed = isEventSalesClosed(event);
+  const closedMessage = event.ticketingMessage || "Cet événement est terminé.";
 
   // Build image list: featured image + gallery
   const allImages: string[] = [];
@@ -208,6 +239,10 @@ export default function EventDetailScreen() {
 
   const handleAddToCart = () => {
     if (!selectedTicket) return;
+    if (eventClosed || !isTicketAvailable(selectedTicket)) {
+      Alert.alert("Billetterie fermée", closedMessage);
+      return;
+    }
     const itemName = `${name} - ${selectedTicket.name}`;
     setCartToastName(itemName);
     setShowCartToast(true);
@@ -228,11 +263,19 @@ export default function EventDetailScreen() {
       lamakoRewardsEnabled:
         event.lamakoRewardsEnabled !== false &&
         selectedTicket.lamakoRewardsEnabled !== false,
+      purchasable: selectedTicket.purchasable,
+      salesClosed: selectedTicket.salesClosed,
+      ticketingStatus: selectedTicket.ticketingStatus,
+      ticketingMessage: selectedTicket.ticketingMessage,
     });
   };
 
   const handleOpenSeatingChart = async () => {
     if (!hasSeating || !event) return;
+    if (eventClosed) {
+      Alert.alert("Billetterie fermée", closedMessage);
+      return;
+    }
 
     // REQUIRE AUTH: User must be logged in before opening seating chart
     // This prevents the admin login exposure issue and ensures WC session is linked to user
@@ -1142,6 +1185,18 @@ export default function EventDetailScreen() {
             </View>
           )}
 
+          {eventClosed && (
+            <View
+              style={[
+                styles.closedNotice,
+                { backgroundColor: "#fef2f2", borderColor: "#fecaca" },
+              ]}
+            >
+              <IconSymbol name="xmark.circle.fill" size={18} color="#b91c1c" />
+              <Text style={styles.closedNoticeText}>{closedMessage}</Text>
+            </View>
+          )}
+
           {/* Ticket Types */}
           {tickets.length > 0 && (
             <View style={{ marginTop: 20 }}>
@@ -1164,6 +1219,7 @@ export default function EventDetailScreen() {
               )}
               {tickets.map((ticket) => {
                 const isSelected = selectedTicket?.id === ticket.id;
+                const ticketClosed = eventClosed || !isTicketAvailable(ticket);
                 // For seated events: info-only display (no selection)
                 if (hasSeating) {
                   return (
@@ -1174,6 +1230,7 @@ export default function EventDetailScreen() {
                         {
                           backgroundColor: colors.surface,
                           borderColor: colors.border,
+                          opacity: ticketClosed ? 0.55 : 1,
                         },
                       ]}
                     >
@@ -1212,7 +1269,9 @@ export default function EventDetailScreen() {
                               marginLeft: 4,
                             }}
                           >
-                            Sélection sur le plan
+                            {ticketClosed
+                              ? "Billetterie fermée"
+                              : "Sélection sur le plan"}
                           </Text>
                         </View>
                       </View>
@@ -1229,9 +1288,11 @@ export default function EventDetailScreen() {
                   <TouchableOpacity
                     key={ticket.id}
                     onPress={() => {
+                      if (ticketClosed) return;
                       setSelectedTicket(ticket);
                       setQty(1);
                     }}
+                    disabled={ticketClosed}
                     style={[
                       styles.ticketOption,
                       {
@@ -1241,6 +1302,7 @@ export default function EventDetailScreen() {
                         borderColor: isSelected
                           ? colors.primary
                           : colors.border,
+                        opacity: ticketClosed ? 0.55 : 1,
                       },
                     ]}
                   >
@@ -1272,6 +1334,11 @@ export default function EventDetailScreen() {
                       >
                         {decodeHtmlEntities(ticket.name)}
                       </Text>
+                      {ticketClosed && (
+                        <Text style={styles.ticketClosedText}>
+                          {ticket.ticketingMessage || closedMessage}
+                        </Text>
+                      )}
                     </View>
                     <Text
                       style={[styles.ticketPrice, { color: colors.primary }]}
@@ -1288,12 +1355,12 @@ export default function EventDetailScreen() {
           {hasSeating && (
             <TouchableOpacity
               onPress={handleOpenSeatingChart}
-              disabled={seatingLoading}
+              disabled={seatingLoading || eventClosed}
               style={[
                 styles.seatingChartBtn,
                 {
                   backgroundColor: "#663d17",
-                  opacity: seatingLoading ? 0.7 : 1,
+                  opacity: seatingLoading || eventClosed ? 0.7 : 1,
                 },
               ]}
             >
@@ -1303,9 +1370,11 @@ export default function EventDetailScreen() {
                 <IconSymbol name="mappin" size={18} color="#fff" />
               )}
               <Text style={styles.seatingChartBtnText}>
-                {seatingLoading
-                  ? "Chargement..."
-                  : "Voir le plan de salle & choisir mon si\u00e8ge"}
+                {eventClosed
+                  ? "Billetterie fermée"
+                  : seatingLoading
+                    ? "Chargement..."
+                    : "Voir le plan de salle & choisir mon siège"}
               </Text>
             </TouchableOpacity>
           )}
@@ -1572,10 +1641,13 @@ export default function EventDetailScreen() {
         {hasSeating ? (
           <TouchableOpacity
             onPress={handleOpenSeatingChart}
-            disabled={seatingLoading}
+            disabled={seatingLoading || eventClosed}
             style={[
               styles.ctaButton,
-              { backgroundColor: "#663d17", opacity: seatingLoading ? 0.7 : 1 },
+              {
+                backgroundColor: eventClosed ? colors.muted : "#663d17",
+                opacity: seatingLoading ? 0.7 : 1,
+              },
             ]}
           >
             {seatingLoading ? (
@@ -1584,28 +1656,46 @@ export default function EventDetailScreen() {
               <IconSymbol name="mappin" size={20} color="#fff" />
             )}
             <Text style={styles.ctaButtonText}>
-              {seatingLoading
-                ? "Chargement du plan..."
-                : "Choisir mon si\u00e8ge"}
+              {eventClosed
+                ? "Billetterie fermée"
+                : seatingLoading
+                  ? "Chargement du plan..."
+                  : "Choisir mon siège"}
             </Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
             onPress={handleAddToCart}
-            disabled={!selectedTicket}
+            disabled={
+              !selectedTicket ||
+              eventClosed ||
+              !isTicketAvailable(selectedTicket)
+            }
             style={[
               styles.ctaButton,
               {
-                backgroundColor: selectedTicket ? colors.primary : colors.muted,
-                opacity: selectedTicket ? 1 : 0.5,
+                backgroundColor:
+                  selectedTicket &&
+                  !eventClosed &&
+                  isTicketAvailable(selectedTicket)
+                    ? colors.primary
+                    : colors.muted,
+                opacity:
+                  selectedTicket &&
+                  !eventClosed &&
+                  isTicketAvailable(selectedTicket)
+                    ? 1
+                    : 0.5,
               },
             ]}
           >
             <IconSymbol name="cart.fill" size={20} color="#fff" />
             <Text style={styles.ctaButtonText}>
-              {selectedTicket
-                ? `Ajouter au panier - ${formatAriary(Number(selectedTicket.price) * qty)}`
-                : "S\u00e9lectionnez un billet"}
+              {eventClosed
+                ? "Billetterie fermée"
+                : selectedTicket && isTicketAvailable(selectedTicket)
+                  ? `Ajouter au panier - ${formatAriary(Number(selectedTicket.price) * qty)}`
+                  : "S\u00e9lectionnez un billet"}
             </Text>
           </TouchableOpacity>
         )}
@@ -1675,6 +1765,21 @@ const styles = StyleSheet.create({
   priceBox: { marginTop: 20, padding: 16, borderRadius: 14, borderWidth: 1 },
   priceLabel: { fontSize: 13, fontWeight: "600" },
   priceValue: { fontSize: 28, fontWeight: "800", marginTop: 2 },
+  closedNotice: {
+    marginTop: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+  },
+  closedNoticeText: {
+    flex: 1,
+    color: "#991b1b",
+    fontSize: 13,
+    fontWeight: "700",
+  },
   sectionTitle: { fontSize: 16, fontWeight: "700", marginBottom: 10 },
   ticketOption: {
     flexDirection: "row",
@@ -1694,6 +1799,12 @@ const styles = StyleSheet.create({
   },
   radioInner: { width: 10, height: 10, borderRadius: 5 },
   ticketName: { fontSize: 14, fontWeight: "600" },
+  ticketClosedText: {
+    color: "#991b1b",
+    fontSize: 12,
+    fontWeight: "600",
+    marginTop: 3,
+  },
   ticketPrice: { fontSize: 15, fontWeight: "700" },
   seatingChartBtn: {
     marginTop: 16,

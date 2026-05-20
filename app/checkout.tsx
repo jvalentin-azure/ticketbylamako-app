@@ -77,6 +77,12 @@ export default function CheckoutScreen() {
   const rewardEligibleItems = items.filter(
     (item) => item.lamakoRewardsEnabled !== false,
   );
+  const closedItems = items.filter(
+    (item) =>
+      item.salesClosed === true ||
+      item.purchasable === false ||
+      item.ticketingStatus === "ended",
+  );
   const allItemsRewardEligible =
     items.length > 0 && rewardEligibleItems.length === items.length;
 
@@ -115,8 +121,9 @@ export default function CheckoutScreen() {
   const [buyerFieldValues, setBuyerFieldValues] = useState<BuyerFieldValues>(
     {},
   );
-  const [ticketFieldValues, setTicketFieldValues] =
-    useState<TicketFieldValues>({});
+  const [ticketFieldValues, setTicketFieldValues] = useState<TicketFieldValues>(
+    {},
+  );
   const [ticketFieldErrors, setTicketFieldErrors] = useState<
     Record<string, string>
   >({});
@@ -486,6 +493,14 @@ export default function CheckoutScreen() {
         return;
       }
 
+      if (closedItems.length > 0) {
+        setErrorMsg(
+          "Un ou plusieurs billets de votre panier ne sont plus disponibles. Supprimez-les avant de continuer.",
+        );
+        setPhase("error");
+        return;
+      }
+
       if (items.some((item) => item.seatLabel)) {
         setErrorMsg(
           "Les places numérotées doivent être achetées depuis le plan de salle.",
@@ -537,7 +552,25 @@ export default function CheckoutScreen() {
       }
     } catch (err: any) {
       console.error("Create order error:", err);
-      setErrorMsg(err?.message || "Erreur lors de la création de la commande");
+      if (
+        err?.code === "lamako_v2_event_ended" ||
+        err?.code === "lamako_v2_ticket_sales_closed"
+      ) {
+        setErrorMsg(
+          "Cet événement est terminé. Le billet n'est plus disponible.",
+        );
+      } else if (
+        err?.code === "lamako_v2_rewards_not_enabled_for_event" ||
+        err?.code === "lamako_v2_rewards_not_available_for_cart"
+      ) {
+        setErrorMsg(
+          "Les points LamakoRewards ne sont pas disponibles pour un des articles de ce panier.",
+        );
+      } else {
+        setErrorMsg(
+          err?.message || "Erreur lors de la création de la commande",
+        );
+      }
       setPhase("error");
     }
   };
@@ -1463,8 +1496,8 @@ export default function CheckoutScreen() {
               {checkoutFieldsLoading
                 ? "Verification..."
                 : appliedCoupon
-                ? `Payer ${formatAriary(Math.max(0, total - appliedDiscount))}`
-                : "Continuer vers le paiement"}
+                  ? `Payer ${formatAriary(Math.max(0, total - appliedDiscount))}`
+                  : "Continuer vers le paiement"}
             </Text>
           </TouchableOpacity>
 

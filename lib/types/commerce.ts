@@ -39,7 +39,14 @@ export interface WCProduct {
   meta_data: { key: string; value: any }[];
   date_created: string;
   variations?: number[];
-  attributes?: { id: number; name: string; position: number; visible: boolean; variation: boolean; options: string[] }[];
+  attributes?: {
+    id: number;
+    name: string;
+    position: number;
+    visible: boolean;
+    variation: boolean;
+    options: string[];
+  }[];
   lamakoRewardsEnabled?: boolean;
   lamako_mobile?: {
     description: string | null;
@@ -64,9 +71,33 @@ export interface WCOrder {
   payment_method_title?: string;
   transaction_id?: string;
   customer_note?: string;
-  billing: { first_name: string; last_name: string; email: string; phone: string; address_1?: string; city?: string; country?: string };
-  shipping?: { first_name: string; last_name: string; address_1?: string; city?: string; country?: string };
-  line_items: { id: number; name: string; quantity: number; total: string; subtotal?: string; price?: number; product_id: number; sku?: string; meta_data: { key: string; value: any }[] }[];
+  billing: {
+    first_name: string;
+    last_name: string;
+    email: string;
+    phone: string;
+    address_1?: string;
+    city?: string;
+    country?: string;
+  };
+  shipping?: {
+    first_name: string;
+    last_name: string;
+    address_1?: string;
+    city?: string;
+    country?: string;
+  };
+  line_items: {
+    id: number;
+    name: string;
+    quantity: number;
+    total: string;
+    subtotal?: string;
+    price?: number;
+    product_id: number;
+    sku?: string;
+    meta_data: { key: string; value: any }[];
+  }[];
   meta_data: { key: string; value: any }[];
   number?: string;
 }
@@ -110,6 +141,10 @@ export interface TCEvent {
   maxPrice?: number;
   hasSeatingChart?: boolean;
   lamakoRewardsEnabled?: boolean;
+  isPastEvent?: boolean;
+  salesClosed?: boolean;
+  ticketingStatus?: "available" | "ended" | string;
+  ticketingMessage?: string;
 }
 
 export interface TicketType {
@@ -122,6 +157,10 @@ export interface TicketType {
   hasCheckoutFields?: boolean;
   requiresCheckoutFields?: boolean;
   lamakoRewardsEnabled?: boolean;
+  purchasable?: boolean;
+  salesClosed?: boolean;
+  ticketingStatus?: "available" | "ended" | string;
+  ticketingMessage?: string;
 }
 
 export type CheckoutFieldType =

@@ -65,10 +65,15 @@ export default function EventsScreen() {
       ev.forEach((e) => {
         const dateStr = e.mobileFields?.event_date_time || e.date;
         const eventDate = new Date(dateStr);
-        if (eventDate >= now) {
-          upcoming.push(e);
-        } else {
+        if (
+          e.salesClosed === true ||
+          e.isPastEvent === true ||
+          e.ticketingStatus === "ended" ||
+          eventDate < now
+        ) {
           past.push(e);
+        } else {
+          upcoming.push(e);
         }
       });
       setEvents(upcoming);
@@ -218,6 +223,10 @@ export default function EventsScreen() {
   const renderEvent = ({ item }: { item: TCEvent }) => {
     const name = decodeHtmlEntities(item.title.rendered);
     const cats = item.categoryNames?.join(", ") || "";
+    const salesClosed =
+      item.salesClosed === true ||
+      item.isPastEvent === true ||
+      item.ticketingStatus === "ended";
     return (
       <TouchableOpacity
         activeOpacity={0.8}
@@ -257,6 +266,11 @@ export default function EventsScreen() {
             <Text style={styles.seatingBadgeText}>Plan de salle</Text>
           </View>
         )}
+        {salesClosed && (
+          <View style={styles.closedBadge}>
+            <Text style={styles.closedBadgeText}>Terminé</Text>
+          </View>
+        )}
         <View style={styles.eventBody}>
           <Text
             style={[styles.eventTitle, { color: colors.foreground }]}
@@ -285,7 +299,11 @@ export default function EventsScreen() {
           </View>
           <View style={styles.priceRow}>
             <View style={{ flex: 1 }}>
-              {item.minPrice != null ? (
+              {salesClosed ? (
+                <Text style={[styles.price, { color: colors.muted }]}>
+                  Billetterie fermée
+                </Text>
+              ) : item.minPrice != null ? (
                 <Text style={[styles.price, { color: colors.primary }]}>
                   {item.minPrice === item.maxPrice
                     ? formatAriary(item.minPrice)
@@ -723,6 +741,16 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   seatingBadgeText: { color: "#fff", fontSize: 10, fontWeight: "600" },
+  closedBadge: {
+    position: "absolute",
+    top: 12,
+    left: 12,
+    backgroundColor: "#991b1b",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  closedBadgeText: { color: "#fff", fontSize: 10, fontWeight: "700" },
   eventBody: { padding: 14 },
   eventTitle: { fontSize: 16, fontWeight: "700" },
   metaRow: {

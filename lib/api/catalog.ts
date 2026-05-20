@@ -68,7 +68,11 @@ function normalizeTicket(raw: any, eventId: number | string): TicketType {
     eventId: String(raw?.eventId || eventId),
     hasCheckoutFields: Boolean(raw?.hasCheckoutFields),
     requiresCheckoutFields: Boolean(raw?.requiresCheckoutFields),
-    lamakoRewardsEnabled: raw?.lamakoRewardsEnabled !== false,
+    lamakoRewardsEnabled: raw?.lamakoRewardsEnabled === true,
+    purchasable: raw?.purchasable !== false && raw?.salesClosed !== true,
+    salesClosed: Boolean(raw?.salesClosed),
+    ticketingStatus: raw?.ticketingStatus || "available",
+    ticketingMessage: raw?.ticketingMessage || "",
   };
 }
 
@@ -87,11 +91,17 @@ function normalizeEvent(raw: any): TCEvent {
     featuredImage: raw?.featuredImage || undefined,
     categoryNames: raw?.categoryNames || [],
     mobileFields: raw?.mobileFields || undefined,
-    tickets: (raw?.tickets || []).map((ticket: any) => normalizeTicket(ticket, eventId)),
+    tickets: (raw?.tickets || []).map((ticket: any) =>
+      normalizeTicket(ticket, eventId),
+    ),
     minPrice: raw?.minPrice || undefined,
     maxPrice: raw?.maxPrice || undefined,
     hasSeatingChart: Boolean(raw?.hasSeatingChart),
-    lamakoRewardsEnabled: raw?.lamakoRewardsEnabled !== false,
+    lamakoRewardsEnabled: raw?.lamakoRewardsEnabled === true,
+    isPastEvent: Boolean(raw?.isPastEvent),
+    salesClosed: Boolean(raw?.salesClosed),
+    ticketingStatus: raw?.ticketingStatus || "available",
+    ticketingMessage: raw?.ticketingMessage || "",
   };
 }
 
@@ -111,11 +121,13 @@ function normalizeProduct(raw: any): WCProduct {
       src: String(image?.src || ""),
       alt: String(image?.alt || ""),
     })),
-    categories: (raw?.categories || []).filter(Boolean).map((category: any) => ({
-      id: Number(category?.id || 0),
-      name: String(category?.name || ""),
-      slug: String(category?.slug || ""),
-    })),
+    categories: (raw?.categories || [])
+      .filter(Boolean)
+      .map((category: any) => ({
+        id: Number(category?.id || 0),
+        name: String(category?.name || ""),
+        slug: String(category?.slug || ""),
+      })),
     stock_status: raw?.stock_status || "instock",
     type: raw?.type || "simple",
     meta_data: [],
@@ -162,7 +174,7 @@ export function invalidateCatalogCache(key?: string): void {
     delete memoryCache[key];
     return;
   }
-  Object.keys(memoryCache).forEach(cacheKey => delete memoryCache[cacheKey]);
+  Object.keys(memoryCache).forEach((cacheKey) => delete memoryCache[cacheKey]);
 }
 
 export async function getHomeData(): Promise<HomeDataResponse> {
@@ -206,7 +218,9 @@ export async function getShopData(): Promise<ShopDataResponse> {
   const cached = getCached<ShopDataResponse>("shop-data");
   if (cached) return cached;
 
-  const raw = await mobileV2Fetch<any>("public/shop-data", { requireAuth: false });
+  const raw = await mobileV2Fetch<any>("public/shop-data", {
+    requireAuth: false,
+  });
   const result: ShopDataResponse = {
     products: (raw?.products || []).map(normalizeProduct),
     categories: (raw?.categories || []).map(normalizeShopCategory),
@@ -216,14 +230,18 @@ export async function getShopData(): Promise<ShopDataResponse> {
 }
 
 export async function getProduct(id: number): Promise<WCProduct> {
-  return normalizeProduct(await mobileV2Fetch<any>(`public/products/${id}`, { requireAuth: false }));
+  return normalizeProduct(
+    await mobileV2Fetch<any>(`public/products/${id}`, { requireAuth: false }),
+  );
 }
 
 export async function getTCEvent(id: number): Promise<TCEvent> {
   const cached = getCached<TCEvent>(`event-${id}`);
   if (cached) return cached;
 
-  const event = normalizeEvent(await mobileV2Fetch<any>(`public/events/${id}`, { requireAuth: false }));
+  const event = normalizeEvent(
+    await mobileV2Fetch<any>(`public/events/${id}`, { requireAuth: false }),
+  );
   setCache(`event-${id}`, event);
   return event;
 }
@@ -232,7 +250,9 @@ export async function getEventTickets(eventId: number): Promise<TicketType[]> {
   return (await getTCEvent(eventId)).tickets || [];
 }
 
-export async function getShopProducts(_params: Record<string, string> = {}): Promise<WCProduct[]> {
+export async function getShopProducts(
+  _params: Record<string, string> = {},
+): Promise<WCProduct[]> {
   void _params;
   return (await getShopData()).products;
 }
@@ -241,7 +261,10 @@ export async function getShopCategories(): Promise<WCCategory[]> {
   return (await getShopData()).categories.filter(isBoutiqueCategory);
 }
 
-export async function clearServerCart(orderId?: number, chartId?: string): Promise<void> {
+export async function clearServerCart(
+  orderId?: number,
+  chartId?: string,
+): Promise<void> {
   void orderId;
   void chartId;
 }

@@ -35,6 +35,12 @@ export default function CartScreen() {
   const rewardEligibleItems = items.filter(
     (item) => item.lamakoRewardsEnabled !== false,
   );
+  const closedItems = items.filter(
+    (item) =>
+      item.salesClosed === true ||
+      item.purchasable === false ||
+      item.ticketingStatus === "ended",
+  );
   const allItemsRewardEligible =
     items.length > 0 && rewardEligibleItems.length === items.length;
 
@@ -57,6 +63,13 @@ export default function CartScreen() {
 
   const handleCheckout = () => {
     if (items.length === 0) return;
+    if (closedItems.length > 0) {
+      Alert.alert(
+        "Billetterie fermée",
+        "Un ou plusieurs billets de votre panier ne sont plus disponibles. Supprimez-les avant de continuer.",
+      );
+      return;
+    }
     if (!isAuthenticated) {
       Alert.alert(
         "Connexion requise",
@@ -171,6 +184,13 @@ export default function CartScreen() {
                     </Text>
                   </View>
                 )}
+                {(item.salesClosed ||
+                  item.purchasable === false ||
+                  item.ticketingStatus === "ended") && (
+                  <Text style={styles.closedItemText}>
+                    {item.ticketingMessage || "Cet événement est terminé."}
+                  </Text>
+                )}
               </View>
               <View style={styles.cartItemFooter}>
                 <View>
@@ -233,6 +253,24 @@ export default function CartScreen() {
         ListFooterComponent={
           <View style={{ marginTop: 8 }}>
             {/* LamakoRewards Summary */}
+            {closedItems.length > 0 && (
+              <View
+                style={[
+                  styles.closedCartWarning,
+                  { backgroundColor: "#fef2f2", borderColor: "#fecaca" },
+                ]}
+              >
+                <IconSymbol
+                  name="xmark.circle.fill"
+                  size={18}
+                  color="#b91c1c"
+                />
+                <Text style={styles.closedCartWarningText}>
+                  Supprimez les billets fermés ou terminés avant de commander.
+                </Text>
+              </View>
+            )}
+
             {isAuthenticated && totalPointsToEarn > 0 && (
               <View
                 style={[
@@ -357,10 +395,22 @@ export default function CartScreen() {
         ) : (
           <TouchableOpacity
             onPress={handleCheckout}
-            style={[styles.checkoutBtn, { backgroundColor: colors.primary }]}
+            disabled={closedItems.length > 0}
+            style={[
+              styles.checkoutBtn,
+              {
+                backgroundColor:
+                  closedItems.length > 0 ? colors.muted : colors.primary,
+                opacity: closedItems.length > 0 ? 0.65 : 1,
+              },
+            ]}
           >
             <IconSymbol name="lock.fill" size={18} color="#fff" />
-            <Text style={styles.checkoutBtnText}>Passer la commande</Text>
+            <Text style={styles.checkoutBtnText}>
+              {closedItems.length > 0
+                ? "Retirer les billets fermés"
+                : "Passer la commande"}
+            </Text>
           </TouchableOpacity>
         )}
       </View>
@@ -414,6 +464,12 @@ const styles = StyleSheet.create({
   cartItemName: { fontSize: 14, fontWeight: "600" },
   ticketBadge: { flexDirection: "row", alignItems: "center", marginTop: 2 },
   ticketBadgeText: { fontSize: 11, marginLeft: 4 },
+  closedItemText: {
+    color: "#991b1b",
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 4,
+  },
   cartItemFooter: {
     flexDirection: "row",
     alignItems: "center",
@@ -447,6 +503,21 @@ const styles = StyleSheet.create({
   grandTotalValue: { fontSize: 20, fontWeight: "800" },
   cartList: { flex: 1 },
   cartListContent: { padding: 16, paddingBottom: 24 },
+  closedCartWarning: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  closedCartWarningText: {
+    flex: 1,
+    color: "#991b1b",
+    fontSize: 13,
+    fontWeight: "700",
+  },
   bottomCta: { padding: 16, paddingBottom: 32, borderTopWidth: 1 },
   checkoutBtn: {
     minHeight: 54,

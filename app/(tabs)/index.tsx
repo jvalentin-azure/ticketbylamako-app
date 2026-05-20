@@ -40,6 +40,13 @@ const HERO_H = 220;
 
 /** Check if an event is upcoming (event_date_time > now) */
 function isUpcoming(event: TCEvent): boolean {
+  if (
+    event.salesClosed === true ||
+    event.isPastEvent === true ||
+    event.ticketingStatus === "ended"
+  ) {
+    return false;
+  }
   const dateStr = event.mobileFields?.event_date_time;
   if (!dateStr) {
     // Fallback: use post date, assume events published in last 60 days are upcoming
