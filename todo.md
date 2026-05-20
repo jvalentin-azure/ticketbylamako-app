@@ -10,7 +10,8 @@
 - [x] Block native checkout when closed/ended tickets remain in the local cart.
 - [x] Deploy reconciled `lamako-mobile-api` plugin to staging, then production.
 - [x] Smoke test production routes: `events-data`, `public/events/{id}`, `checkout-fields`, `checkouts/fields`, `checkouts`, `seating-sessions`.
-- [ ] Build new Android APK/AAB and iOS dev build after plugin deploy is verified.
+- [x] Build Android preview APK `fe997bbf-57b7-46cb-9c1b-5e698e539f98` from commit `1820c59`.
+- [ ] Build Android production AAB and iOS dev/store builds after device QA.
 
 ## Phase 1: Setup & Branding
 
