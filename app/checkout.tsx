@@ -11,7 +11,7 @@ import { CheckoutSkeleton } from "@/components/skeleton-loader";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { formatAriary } from "@/lib/format";
 import { notifyPaymentConfirmed } from "@/lib/notifications";
-import { useRewards, estimatePointsForPrice, REDEMPTION_TIERS, type RedeemResult } from "@/lib/rewards-provider";
+import { useRewards, estimatePointsForPriceWithConfig } from "@/lib/rewards-provider";
 import { useAuth } from "@/lib/auth-provider";
 import { parsePaymentReturnUrl } from "@/lib/payment-return";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -26,11 +26,18 @@ if (Platform.OS !== "web") {
 
 type CheckoutPhase = "address" | "confirm" | "creating" | "paying" | "success" | "error" | "payment_error" | "payment_pending";
 
+function getCheckoutErrorMessage(err: any) {
+  if (err?.code === "lamako_v2_rewards_not_participating") {
+    return "Les reductions Rewards sont disponibles uniquement sur les evenements participants.";
+  }
+  return err?.message || "Erreur lors de la creation de la commande";
+}
+
 export default function CheckoutScreen() {
   const colors = useColors();
   const router = useRouter();
   const { items, clearCart, total } = useCart();
-  const { currentTier, canRedeem, getDiscountValue, getBestRedemption, redeemPoints, state: rewardsState } = useRewards();
+  const { config: rewardsConfig, currentTier, canRedeem, redemptionTiers, minimumRedeemPoints, pointsUntilRedemption, redeemPoints, state: rewardsState } = useRewards();
   const { isAuthenticated } = useAuth();
 
   // Rewards redemption state
@@ -42,13 +49,14 @@ export default function CheckoutScreen() {
   // Calculate total points to earn for this order
   const totalPointsToEarn = items.reduce((sum, item) => {
     const price = typeof item.price === "string" ? parseFloat(item.price) || 0 : item.price;
-    return sum + estimatePointsForPrice(price * item.quantity, currentTier.multiplier);
+    return sum + estimatePointsForPriceWithConfig(price * item.quantity, rewardsConfig, currentTier.multiplier);
   }, 0);
   const webviewRef = useRef<any>(null);
 
   const hasPhysicalProducts = items.some(i => !i.isEvent);
+  const allItemsExplicitlyRewardsEligible = items.length > 0 && items.every(item => item.rewardsRedeemEnabled === true);
   // Show confirm phase for events-only if user can redeem points, otherwise go straight to creating
-  const canShowRedeem = canRedeem && rewardsState.availablePoints >= 500 && isAuthenticated;
+  const canShowRedeem = rewardsConfig.enabled && canRedeem && rewardsState.availablePoints >= minimumRedeemPoints && isAuthenticated && allItemsExplicitlyRewardsEligible;
   const [phase, setPhase] = useState<CheckoutPhase>(hasPhysicalProducts ? "address" : (canShowRedeem ? "confirm" : "creating"));
   const [checkoutUrl, setCheckoutUrl] = useState<string>("");
   const [orderId, setOrderId] = useState<number>(0);
@@ -250,7 +258,7 @@ export default function CheckoutScreen() {
       }
     } catch (err: any) {
       console.error("Create order error:", err);
-      setErrorMsg(err?.message || "Erreur lors de la création de la commande");
+      setErrorMsg(getCheckoutErrorMessage(err));
       setPhase("error");
     }
   };
@@ -521,7 +529,7 @@ export default function CheckoutScreen() {
           {isAuthenticated && (
             <View style={{ backgroundColor: "#fdf6ee", borderRadius: 12, borderWidth: 1, borderColor: "#e8d5a3", padding: 12, marginTop: 12 }}>
               {/* Points to earn */}
-              {totalPointsToEarn > 0 && (
+              {rewardsConfig.enabled && totalPointsToEarn > 0 && (
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                   <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "#f59e0b", alignItems: "center", justifyContent: "center" }}>
                     <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>★</Text>
@@ -538,13 +546,13 @@ export default function CheckoutScreen() {
               )}
 
               {/* Redeem section */}
-              {canRedeem && rewardsState.availablePoints >= 500 && !appliedCoupon && (
+              {canShowRedeem && !appliedCoupon && (
                 <View style={{ borderTopWidth: totalPointsToEarn > 0 ? 1 : 0, borderTopColor: "#e8d5a3", marginTop: totalPointsToEarn > 0 ? 10 : 0, paddingTop: totalPointsToEarn > 0 ? 10 : 0 }}>
                   <Text style={{ fontSize: 13, fontWeight: "600", color: "#3d2314", marginBottom: 8 }}>
-                    Utiliser mes points ({rewardsState.availablePoints} pts)
+                    Utiliser mes points ({rewardsState.availablePoints} pts) sur les offres participantes
                   </Text>
                   <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                    {REDEMPTION_TIERS.filter(t => t.points <= rewardsState.availablePoints).map(tier => (
+                    {redemptionTiers.filter(t => t.points <= rewardsState.availablePoints).map(tier => (
                       <TouchableOpacity
                         key={tier.points}
                         onPress={() => handleRedeemPoints(tier.points)}
@@ -572,6 +580,14 @@ export default function CheckoutScreen() {
                 </View>
               )}
 
+              {rewardsConfig.enabled && canRedeem && !allItemsExplicitlyRewardsEligible && !appliedCoupon && (
+                <View style={{ borderTopWidth: totalPointsToEarn > 0 ? 1 : 0, borderTopColor: "#e8d5a3", marginTop: totalPointsToEarn > 0 ? 10 : 0, paddingTop: totalPointsToEarn > 0 ? 10 : 0 }}>
+                  <Text style={{ fontSize: 11, color: "#92400e" }}>
+                    Vos points sont debloques. Les reductions Rewards sont utilisables uniquement sur les offres participantes.
+                  </Text>
+                </View>
+              )}
+
               {/* Applied coupon */}
               {appliedCoupon && (
                 <View style={{ borderTopWidth: totalPointsToEarn > 0 ? 1 : 0, borderTopColor: "#e8d5a3", marginTop: totalPointsToEarn > 0 ? 10 : 0, paddingTop: totalPointsToEarn > 0 ? 10 : 0 }}>
@@ -592,10 +608,10 @@ export default function CheckoutScreen() {
               )}
 
               {/* Not eligible message */}
-              {!canRedeem && rewardsState.availablePoints > 0 && (
+              {rewardsConfig.enabled && !canRedeem && rewardsState.availablePoints > 0 && (
                 <View style={{ borderTopWidth: totalPointsToEarn > 0 ? 1 : 0, borderTopColor: "#e8d5a3", marginTop: totalPointsToEarn > 0 ? 10 : 0, paddingTop: totalPointsToEarn > 0 ? 10 : 0 }}>
                   <Text style={{ fontSize: 11, color: "#92400e" }}>
-                    Encore {750 - rewardsState.lifetimePoints} pts à accumuler pour débloquer l'échange
+                    Plus que {pointsUntilRedemption.toLocaleString("fr-FR")} pts pour debloquer vos reductions Rewards
                   </Text>
                 </View>
               )}
@@ -647,7 +663,7 @@ export default function CheckoutScreen() {
           {/* Redeem section */}
           <View style={{ backgroundColor: "#fdf6ee", borderRadius: 12, borderWidth: 1, borderColor: "#e8d5a3", padding: 12 }}>
             {/* Points to earn */}
-            {totalPointsToEarn > 0 && (
+            {rewardsConfig.enabled && totalPointsToEarn > 0 && (
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 }}>
                 <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "#f59e0b", alignItems: "center", justifyContent: "center" }}>
                   <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>\u2605</Text>
@@ -664,10 +680,10 @@ export default function CheckoutScreen() {
             {!appliedCoupon && (
               <View>
                 <Text style={{ fontSize: 13, fontWeight: "600", color: "#3d2314", marginBottom: 8 }}>
-                  Utiliser mes points ({rewardsState.availablePoints} pts)
+                  Utiliser mes points ({rewardsState.availablePoints} pts) sur les offres participantes
                 </Text>
                 <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                  {REDEMPTION_TIERS.filter(t => t.points <= rewardsState.availablePoints).map(tier => (
+                  {redemptionTiers.filter(t => t.points <= rewardsState.availablePoints).map(tier => (
                     <TouchableOpacity
                       key={tier.points}
                       onPress={() => handleRedeemPoints(tier.points)}

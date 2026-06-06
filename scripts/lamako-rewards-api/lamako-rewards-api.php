@@ -63,6 +63,325 @@ define( 'LR_MULTIPLIER_GOLD', 1.25 );
 define( 'LR_MULTIPLIER_PLATINUM', 1.5 );
 define( 'LR_MULTIPLIER_DIAMOND', 2.0 );
 
+define( 'LR_CONFIG_OPTION', 'lamako_rewards_config_v1' );
+define( 'LR_AUDIT_LOG_OPTION', 'lamako_rewards_audit_log_v1' );
+
+function lr_rewards_array_merge_recursive_distinct( array $base, array $override ) {
+    foreach ( $override as $key => $value ) {
+        if ( is_array( $value ) && isset( $base[ $key ] ) && is_array( $base[ $key ] ) ) {
+            $base[ $key ] = lr_rewards_array_merge_recursive_distinct( $base[ $key ], $value );
+        } else {
+            $base[ $key ] = $value;
+        }
+    }
+
+    return $base;
+}
+
+function lr_rewards_default_config() {
+    return array(
+        'version' => 1,
+        'program' => array(
+            'enabled' => true,
+            'signup_bonus_points' => LR_REGISTRATION_BONUS,
+            'earn_rate' => array(
+                'points' => LR_POINTS_PER_1000AR,
+                'amount_ariary' => 1000,
+            ),
+            'minimum_redeem_points' => LR_REDEMPTION_MIN_LIFETIME,
+            'redemption_options' => array(
+                array( 'points' => 1000, 'amount_ariary' => 20000 ),
+                array( 'points' => 2000, 'amount_ariary' => 40000 ),
+            ),
+            'referral' => array(
+                'referrer_points' => LR_REFERRAL_BONUS,
+                'referred_points' => LR_REFEREE_BONUS,
+            ),
+            'earning_actions' => array(
+                'profile_completed_points' => LR_PROFILE_BONUS,
+                'daily_login_points' => LR_LOGIN_BONUS,
+                'first_purchase_points' => LR_FIRST_PURCHASE_BONUS,
+                'event_attendance_points' => LR_ATTENDANCE_BONUS,
+                'review_points' => LR_REVIEW_BONUS,
+                'social_share_points' => LR_SHARE_BONUS,
+                'newsletter_points' => LR_NEWSLETTER_BONUS,
+                'birthday_points' => LR_BIRTHDAY_BONUS,
+            ),
+            'tiers' => array(
+                array(
+                    'id' => 'fan',
+                    'name' => 'Fan',
+                    'min_points' => LR_TIER_FAN,
+                    'multiplier' => LR_MULTIPLIER_FAN,
+                    'benefits' => array( 'Acces au programme de fidelite', '1 point par 1 000 Ar depense', 'Historique des points et transactions', 'Code de parrainage personnel' ),
+                ),
+                array(
+                    'id' => 'silver',
+                    'name' => 'Silver',
+                    'min_points' => LR_TIER_SILVER,
+                    'multiplier' => LR_MULTIPLIER_SILVER,
+                    'benefits' => array( 'Reductions membres selon disponibilite', 'Acces prioritaire aux preventes selon disponibilite', 'Offres speciales par notification', 'Support prioritaire selon disponibilite' ),
+                ),
+                array(
+                    'id' => 'gold',
+                    'name' => 'Gold',
+                    'min_points' => LR_TIER_GOLD,
+                    'multiplier' => LR_MULTIPLIER_GOLD,
+                    'benefits' => array( 'x1.25 points sur chaque achat eligible', 'Invitations selon disponibilite', 'Early access selon disponibilite', 'Cadeaux ponctuels selon operations' ),
+                ),
+                array(
+                    'id' => 'platinum',
+                    'name' => 'Platinum',
+                    'min_points' => LR_TIER_PLATINUM,
+                    'multiplier' => LR_MULTIPLIER_PLATINUM,
+                    'benefits' => array( 'x1.5 points sur chaque achat eligible', 'Surclassements selon disponibilite', 'Acces VIP selon disponibilite', 'Support dedie selon disponibilite' ),
+                ),
+                array(
+                    'id' => 'diamond',
+                    'name' => 'Diamond',
+                    'min_points' => LR_TIER_DIAMOND,
+                    'multiplier' => LR_MULTIPLIER_DIAMOND,
+                    'benefits' => array( 'x2 points sur chaque achat eligible', 'Experiences exclusives selon disponibilite', 'Meet and greet selon disponibilite', 'Conciergerie evenementielle selon disponibilite', 'Invitations privees selon disponibilite' ),
+                ),
+            ),
+            'points_expire' => false,
+        ),
+        'visibility' => array(
+            'show_global_cta' => true,
+            'show_product_badges' => true,
+            'show_event_badges' => true,
+            'show_badges_only_when_redeem_available' => true,
+            'distinguish_earn_from_redeem' => true,
+        ),
+        'popup' => array(
+            'web' => array(
+                'enabled' => true,
+                'audience' => 'guests',
+                'delay_seconds' => 8,
+                'frequency_days' => 7,
+                'max_impressions_per_user' => 3,
+                'pages' => array( 'home', 'shop', 'event', 'product', 'cart' ),
+                'exclude_pages' => array( 'checkout_payment_step' ),
+                'cta_url' => '/lamako-rewards/',
+            ),
+            'mobile' => array(
+                'enabled' => true,
+                'audience' => 'guests',
+                'delay_seconds' => 12,
+                'frequency_days' => 7,
+                'max_impressions_per_user' => 3,
+                'cta_route' => '/rewards',
+            ),
+        ),
+        'notifications' => array(
+            'email' => array( 'enabled' => true ),
+            'push' => array( 'enabled' => true ),
+            'in_app' => array( 'enabled' => true ),
+            'daily_email_cap' => 2,
+            'daily_push_cap' => 2,
+            'quiet_hours_enabled' => true,
+            'quiet_hours_start' => '21:00',
+            'quiet_hours_end' => '08:00',
+            'respect_user_preferences' => true,
+        ),
+        'copy' => array(
+            'headline' => 'Rejoignez Lamako Rewards',
+            'signup_bonus' => 'Recevez 100 points de bienvenue',
+            'earn_message' => 'Gagnez des points sur vos achats eligibles.',
+            'redeem_message' => 'Utilisez vos points sur les evenements et offres participants Lamako Rewards.',
+            'minimum_redeem_message' => 'Les reductions Rewards sont debloquees a partir de 750 points.',
+            'points_to_redeem_message' => 'Plus que {{points_to_redeem}} points pour debloquer vos reductions Rewards.',
+            'non_participating_event_message' => 'Vous gagnez des points avec votre achat, mais les reductions Rewards ne sont pas disponibles sur cet evenement.',
+            'participating_event_message' => 'Points gagnes + reduction Rewards disponible.',
+        ),
+    );
+}
+
+function lr_rewards_get_config() {
+    $stored = get_option( LR_CONFIG_OPTION, array() );
+    if ( ! is_array( $stored ) ) {
+        $stored = array();
+    }
+
+    return lr_rewards_array_merge_recursive_distinct( lr_rewards_default_config(), $stored );
+}
+
+function lr_rewards_config_get( $path, $fallback = null ) {
+    $value = lr_rewards_get_config();
+    foreach ( explode( '.', (string) $path ) as $segment ) {
+        if ( is_array( $value ) && array_key_exists( $segment, $value ) ) {
+            $value = $value[ $segment ];
+        } else {
+            return $fallback;
+        }
+    }
+
+    return $value;
+}
+
+function lr_rewards_public_config( $platform = 'web' ) {
+    $config = lr_rewards_get_config();
+    $platform = in_array( $platform, array( 'web', 'mobile' ), true ) ? $platform : 'web';
+    $config['platform'] = $platform;
+    $config['server_time'] = current_time( 'c' );
+
+    return $config;
+}
+
+function lr_rewards_minimum_redeem_points() {
+    return (int) lr_rewards_config_get( 'program.minimum_redeem_points', LR_REDEMPTION_MIN_LIFETIME );
+}
+
+function lr_rewards_redemption_options() {
+    $options = lr_rewards_config_get( 'program.redemption_options', array() );
+    return is_array( $options ) ? $options : array();
+}
+
+function lr_rewards_redemption_value( $points ) {
+    $points = (int) $points;
+    foreach ( lr_rewards_redemption_options() as $option ) {
+        $option_points = (int) ( $option['points'] ?? 0 );
+        if ( $option_points === $points ) {
+            return (int) ( $option['amount_ariary'] ?? $option['value'] ?? 0 );
+        }
+    }
+
+    return 0;
+}
+
+function lr_rewards_tiers() {
+    $tiers = lr_rewards_config_get( 'program.tiers', array() );
+    return is_array( $tiers ) ? $tiers : array();
+}
+
+function lr_rewards_earning_actions() {
+    $actions = lr_rewards_config_get( 'program.earning_actions', array() );
+    return is_array( $actions ) ? $actions : array();
+}
+
+function lr_rewards_admin_can_manage() {
+    return current_user_can( 'manage_woocommerce' ) || current_user_can( 'manage_options' );
+}
+
+function lr_rewards_sanitize_bool( $value ) {
+    return in_array( strtolower( (string) $value ), array( '1', 'true', 'yes', 'on' ), true );
+}
+
+function lr_rewards_sanitize_string_list( $value ) {
+    if ( is_string( $value ) ) {
+        $value = preg_split( '/[\r\n,]+/', $value );
+    }
+    if ( ! is_array( $value ) ) {
+        return array();
+    }
+
+    $items = array();
+    foreach ( $value as $item ) {
+        $item = sanitize_key( trim( (string) $item ) );
+        if ( $item !== '' ) {
+            $items[] = $item;
+        }
+    }
+
+    return array_values( array_unique( $items ) );
+}
+
+function lr_rewards_sanitize_config( $config ) {
+    $defaults = lr_rewards_default_config();
+    if ( ! is_array( $config ) ) {
+        return $defaults;
+    }
+
+    $config = lr_rewards_array_merge_recursive_distinct( $defaults, $config );
+
+    $config['program']['enabled'] = ! empty( $config['program']['enabled'] );
+    $config['program']['signup_bonus_points'] = max( 0, absint( $config['program']['signup_bonus_points'] ) );
+    $config['program']['minimum_redeem_points'] = max( 750, absint( $config['program']['minimum_redeem_points'] ) );
+    $config['program']['earn_rate']['points'] = max( 1, absint( $config['program']['earn_rate']['points'] ) );
+    $config['program']['earn_rate']['amount_ariary'] = max( 1, absint( $config['program']['earn_rate']['amount_ariary'] ) );
+    $config['program']['referral']['referrer_points'] = max( 0, absint( $config['program']['referral']['referrer_points'] ) );
+    $config['program']['referral']['referred_points'] = max( 0, absint( $config['program']['referral']['referred_points'] ) );
+    $config['program']['points_expire'] = ! empty( $config['program']['points_expire'] );
+
+    foreach ( array( 'profile_completed_points', 'daily_login_points', 'first_purchase_points', 'event_attendance_points', 'review_points', 'social_share_points', 'newsletter_points', 'birthday_points' ) as $key ) {
+        $config['program']['earning_actions'][ $key ] = max( 0, absint( $config['program']['earning_actions'][ $key ] ?? 0 ) );
+    }
+
+    $redemption_options = array();
+    foreach ( (array) ( $config['program']['redemption_options'] ?? array() ) as $option ) {
+        $points = absint( $option['points'] ?? 0 );
+        $amount = absint( $option['amount_ariary'] ?? $option['value'] ?? 0 );
+        if ( $points >= (int) $config['program']['minimum_redeem_points'] && $amount > 0 ) {
+            $redemption_options[] = array(
+                'points' => $points,
+                'amount_ariary' => $amount,
+            );
+        }
+    }
+    $config['program']['redemption_options'] = ! empty( $redemption_options ) ? $redemption_options : $defaults['program']['redemption_options'];
+
+    foreach ( array( 'show_global_cta', 'show_product_badges', 'show_event_badges', 'show_badges_only_when_redeem_available', 'distinguish_earn_from_redeem' ) as $key ) {
+        $config['visibility'][ $key ] = ! empty( $config['visibility'][ $key ] );
+    }
+
+    foreach ( array( 'web', 'mobile' ) as $channel ) {
+        $config['popup'][ $channel ]['enabled'] = ! empty( $config['popup'][ $channel ]['enabled'] );
+        $audience = sanitize_key( $config['popup'][ $channel ]['audience'] ?? 'guests' );
+        $config['popup'][ $channel ]['audience'] = in_array( $audience, array( 'guests', 'authenticated', 'all' ), true ) ? $audience : 'guests';
+        $config['popup'][ $channel ]['delay_seconds'] = max( 0, absint( $config['popup'][ $channel ]['delay_seconds'] ?? 0 ) );
+        $config['popup'][ $channel ]['frequency_days'] = max( 1, absint( $config['popup'][ $channel ]['frequency_days'] ?? 7 ) );
+        $config['popup'][ $channel ]['max_impressions_per_user'] = max( 0, absint( $config['popup'][ $channel ]['max_impressions_per_user'] ?? 3 ) );
+    }
+    $config['popup']['web']['pages'] = lr_rewards_sanitize_string_list( $config['popup']['web']['pages'] ?? array() );
+    $config['popup']['web']['exclude_pages'] = lr_rewards_sanitize_string_list( $config['popup']['web']['exclude_pages'] ?? array() );
+    $config['popup']['web']['cta_url'] = esc_url_raw( $config['popup']['web']['cta_url'] ?? '/lamako-rewards/' );
+    $config['popup']['mobile']['cta_route'] = sanitize_text_field( $config['popup']['mobile']['cta_route'] ?? '/rewards' );
+
+    foreach ( array( 'email', 'push', 'in_app' ) as $channel ) {
+        $config['notifications'][ $channel ]['enabled'] = ! empty( $config['notifications'][ $channel ]['enabled'] );
+    }
+    $config['notifications']['daily_email_cap'] = max( 0, absint( $config['notifications']['daily_email_cap'] ?? 2 ) );
+    $config['notifications']['daily_push_cap'] = max( 0, absint( $config['notifications']['daily_push_cap'] ?? 2 ) );
+    $config['notifications']['quiet_hours_enabled'] = ! empty( $config['notifications']['quiet_hours_enabled'] );
+    $config['notifications']['quiet_hours_start'] = sanitize_text_field( $config['notifications']['quiet_hours_start'] ?? '21:00' );
+    $config['notifications']['quiet_hours_end'] = sanitize_text_field( $config['notifications']['quiet_hours_end'] ?? '08:00' );
+    $config['notifications']['respect_user_preferences'] = ! empty( $config['notifications']['respect_user_preferences'] );
+
+    foreach ( (array) $config['copy'] as $key => $value ) {
+        $config['copy'][ $key ] = sanitize_text_field( $value );
+    }
+
+    return $config;
+}
+
+function lr_rewards_update_config( array $config, $source = 'admin' ) {
+    $sanitized = lr_rewards_sanitize_config( $config );
+    update_option( LR_CONFIG_OPTION, $sanitized, false );
+    lr_rewards_audit_log( 'config_updated', array( 'source' => sanitize_key( $source ) ) );
+    return $sanitized;
+}
+
+function lr_rewards_audit_log( $action, array $details = array() ) {
+    $logs = get_option( LR_AUDIT_LOG_OPTION, array() );
+    if ( ! is_array( $logs ) ) {
+        $logs = array();
+    }
+
+    array_unshift( $logs, array(
+        'time' => current_time( 'mysql' ),
+        'user_id' => get_current_user_id(),
+        'action' => sanitize_key( $action ),
+        'details' => $details,
+    ) );
+
+    update_option( LR_AUDIT_LOG_OPTION, array_slice( $logs, 0, 100 ), false );
+}
+
+function lr_rewards_get_audit_log() {
+    $logs = get_option( LR_AUDIT_LOG_OPTION, array() );
+    return is_array( $logs ) ? $logs : array();
+}
+
 // ============================================================
 // RATE LIMITING
 // ============================================================
@@ -83,6 +402,249 @@ function lr_check_rate_limit() {
     
     set_transient( $transient_key, (int) $current + 1, LR_RATE_WINDOW );
     return true;
+}
+
+// ============================================================
+// ADMIN CONTROL CENTER
+// ============================================================
+
+add_action( 'admin_menu', 'lr_rewards_register_admin_page' );
+
+function lr_rewards_register_admin_page() {
+    add_menu_page(
+        'Lamako Rewards',
+        'Lamako Rewards',
+        'manage_woocommerce',
+        'lamako-rewards-control-center',
+        'lr_rewards_render_admin_page',
+        'dashicons-awards',
+        56
+    );
+}
+
+function lr_rewards_admin_notice( $message, $type = 'success' ) {
+    printf(
+        '<div class="notice notice-%s is-dismissible"><p>%s</p></div>',
+        esc_attr( $type ),
+        esc_html( $message )
+    );
+}
+
+function lr_rewards_admin_apply_basic_post( array $config ) {
+    $program = isset( $_POST['program'] ) && is_array( $_POST['program'] ) ? wp_unslash( $_POST['program'] ) : array();
+    $popup = isset( $_POST['popup'] ) && is_array( $_POST['popup'] ) ? wp_unslash( $_POST['popup'] ) : array();
+    $visibility = isset( $_POST['visibility'] ) && is_array( $_POST['visibility'] ) ? wp_unslash( $_POST['visibility'] ) : array();
+    $copy = isset( $_POST['copy'] ) && is_array( $_POST['copy'] ) ? wp_unslash( $_POST['copy'] ) : array();
+
+    $config['program']['enabled'] = ! empty( $program['enabled'] );
+    $config['program']['signup_bonus_points'] = absint( $program['signup_bonus_points'] ?? 100 );
+    $config['program']['minimum_redeem_points'] = absint( $program['minimum_redeem_points'] ?? 750 );
+    $config['program']['earn_rate']['points'] = absint( $program['earn_rate_points'] ?? 1 );
+    $config['program']['earn_rate']['amount_ariary'] = absint( $program['earn_rate_amount_ariary'] ?? 1000 );
+    $config['program']['referral']['referrer_points'] = absint( $program['referrer_points'] ?? 75 );
+    $config['program']['referral']['referred_points'] = absint( $program['referred_points'] ?? 25 );
+
+    $redemption_lines = isset( $program['redemption_options'] ) ? explode( "\n", sanitize_textarea_field( $program['redemption_options'] ) ) : array();
+    $redemption_options = array();
+    foreach ( $redemption_lines as $line ) {
+        if ( preg_match( '/^\s*(\d+)\s*[:=,]\s*(\d+)\s*$/', $line, $matches ) ) {
+            $redemption_options[] = array(
+                'points' => absint( $matches[1] ),
+                'amount_ariary' => absint( $matches[2] ),
+            );
+        }
+    }
+    if ( ! empty( $redemption_options ) ) {
+        $config['program']['redemption_options'] = $redemption_options;
+    }
+
+    foreach ( array( 'show_global_cta', 'show_product_badges', 'show_event_badges', 'show_badges_only_when_redeem_available', 'distinguish_earn_from_redeem' ) as $key ) {
+        $config['visibility'][ $key ] = ! empty( $visibility[ $key ] );
+    }
+
+    foreach ( array( 'web', 'mobile' ) as $channel ) {
+        $channel_payload = isset( $popup[ $channel ] ) && is_array( $popup[ $channel ] ) ? $popup[ $channel ] : array();
+        $config['popup'][ $channel ]['enabled'] = ! empty( $channel_payload['enabled'] );
+        $config['popup'][ $channel ]['audience'] = sanitize_key( $channel_payload['audience'] ?? 'guests' );
+        $config['popup'][ $channel ]['delay_seconds'] = absint( $channel_payload['delay_seconds'] ?? ( $channel === 'web' ? 8 : 12 ) );
+        $config['popup'][ $channel ]['frequency_days'] = absint( $channel_payload['frequency_days'] ?? 7 );
+        $config['popup'][ $channel ]['max_impressions_per_user'] = absint( $channel_payload['max_impressions_per_user'] ?? 3 );
+    }
+    $config['popup']['web']['pages'] = sanitize_text_field( $popup['web']['pages'] ?? 'home,shop,event,product,cart' );
+    $config['popup']['web']['exclude_pages'] = sanitize_text_field( $popup['web']['exclude_pages'] ?? 'checkout_payment_step' );
+    $config['popup']['web']['cta_url'] = esc_url_raw( $popup['web']['cta_url'] ?? '/lamako-rewards/' );
+    $config['popup']['mobile']['cta_route'] = sanitize_text_field( $popup['mobile']['cta_route'] ?? '/rewards' );
+
+    foreach ( array( 'headline', 'signup_bonus', 'earn_message', 'redeem_message', 'minimum_redeem_message', 'points_to_redeem_message', 'non_participating_event_message', 'participating_event_message' ) as $key ) {
+        if ( isset( $copy[ $key ] ) ) {
+            $config['copy'][ $key ] = sanitize_text_field( $copy[ $key ] );
+        }
+    }
+
+    return $config;
+}
+
+function lr_rewards_handle_admin_post() {
+    if ( empty( $_POST['lr_rewards_action'] ) ) {
+        return;
+    }
+    if ( ! lr_rewards_admin_can_manage() ) {
+        wp_die( esc_html__( 'Permission denied.', 'lamako-rewards' ) );
+    }
+    check_admin_referer( 'lr_rewards_control_center' );
+
+    $action = sanitize_key( wp_unslash( $_POST['lr_rewards_action'] ) );
+    if ( $action === 'reset_defaults' ) {
+        delete_option( LR_CONFIG_OPTION );
+        lr_rewards_audit_log( 'config_reset_defaults' );
+        lr_rewards_admin_notice( 'Configuration Rewards restauree aux valeurs par defaut.' );
+        return;
+    }
+
+    $config = lr_rewards_get_config();
+    if ( $action === 'save_basic' ) {
+        lr_rewards_update_config( lr_rewards_admin_apply_basic_post( $config ), 'admin_basic' );
+        lr_rewards_admin_notice( 'Configuration Rewards sauvegardee.' );
+        return;
+    }
+
+    if ( $action === 'save_json' ) {
+        $raw_json = isset( $_POST['lr_rewards_config_json'] ) ? wp_unslash( $_POST['lr_rewards_config_json'] ) : '';
+        $decoded = json_decode( $raw_json, true );
+        if ( ! is_array( $decoded ) ) {
+            lr_rewards_admin_notice( 'JSON invalide. Aucun changement applique.', 'error' );
+            return;
+        }
+        lr_rewards_update_config( $decoded, 'admin_json' );
+        lr_rewards_admin_notice( 'Configuration JSON importee et sauvegardee.' );
+    }
+}
+
+function lr_rewards_render_admin_page() {
+    if ( ! lr_rewards_admin_can_manage() ) {
+        wp_die( esc_html__( 'Permission denied.', 'lamako-rewards' ) );
+    }
+
+    lr_rewards_handle_admin_post();
+    $config = lr_rewards_get_config();
+    $redemption_lines = array();
+    foreach ( lr_rewards_redemption_options() as $option ) {
+        $redemption_lines[] = (int) ( $option['points'] ?? 0 ) . ':' . (int) ( $option['amount_ariary'] ?? $option['value'] ?? 0 );
+    }
+    $logs = lr_rewards_get_audit_log();
+    ?>
+    <div class="wrap lr-admin">
+        <h1>Lamako Rewards Control Center</h1>
+        <p>Controle centralise des regles Rewards consommees par le web, l'app mobile, les popups et le checkout.</p>
+
+        <style>
+            .lr-admin-grid { display:grid; grid-template-columns: minmax(0, 1.2fr) minmax(320px, .8fr); gap:20px; align-items:start; }
+            .lr-admin-card { background:#fff; border:1px solid #dcdcde; border-radius:8px; padding:16px; margin:0 0 16px; }
+            .lr-admin-card h2 { margin-top:0; }
+            .lr-admin-row { display:grid; grid-template-columns: 220px minmax(0, 1fr); gap:12px; align-items:center; margin:10px 0; }
+            .lr-admin-row input[type="number"], .lr-admin-row input[type="text"], .lr-admin-row select, .lr-admin-row textarea { width:100%; max-width:520px; }
+            .lr-admin-row textarea { min-height:74px; font-family:monospace; }
+            .lr-admin-json { width:100%; min-height:360px; font-family:monospace; }
+            .lr-admin-log { margin:0; padding-left:18px; max-height:260px; overflow:auto; }
+            @media (max-width: 1100px) { .lr-admin-grid { grid-template-columns:1fr; } .lr-admin-row { grid-template-columns:1fr; } }
+        </style>
+
+        <div class="lr-admin-grid">
+            <div>
+                <form method="post">
+                    <?php wp_nonce_field( 'lr_rewards_control_center' ); ?>
+                    <input type="hidden" name="lr_rewards_action" value="save_basic">
+
+                    <div class="lr-admin-card">
+                        <h2>Programme global</h2>
+                        <label><input type="checkbox" name="program[enabled]" value="1" <?php checked( ! empty( $config['program']['enabled'] ) ); ?>> Programme Rewards actif</label>
+                        <div class="lr-admin-row"><label>Bonus inscription</label><input type="number" name="program[signup_bonus_points]" value="<?php echo esc_attr( $config['program']['signup_bonus_points'] ); ?>"></div>
+                        <div class="lr-admin-row"><label>Taux gain points</label><input type="number" name="program[earn_rate_points]" value="<?php echo esc_attr( $config['program']['earn_rate']['points'] ); ?>"></div>
+                        <div class="lr-admin-row"><label>Montant Ariary par point</label><input type="number" name="program[earn_rate_amount_ariary]" value="<?php echo esc_attr( $config['program']['earn_rate']['amount_ariary'] ); ?>"></div>
+                        <div class="lr-admin-row"><label>Minimum echange</label><input type="number" name="program[minimum_redeem_points]" min="750" value="<?php echo esc_attr( $config['program']['minimum_redeem_points'] ); ?>"></div>
+                        <div class="lr-admin-row"><label>Parrain</label><input type="number" name="program[referrer_points]" value="<?php echo esc_attr( $config['program']['referral']['referrer_points'] ); ?>"></div>
+                        <div class="lr-admin-row"><label>Filleul</label><input type="number" name="program[referred_points]" value="<?php echo esc_attr( $config['program']['referral']['referred_points'] ); ?>"></div>
+                        <div class="lr-admin-row"><label>Conversions officielles</label><textarea name="program[redemption_options]" placeholder="1000:20000"><?php echo esc_textarea( implode( "\n", $redemption_lines ) ); ?></textarea></div>
+                        <p class="description">Format: un couple points:ariary par ligne. Les lignes sous le minimum d'echange sont ignorees.</p>
+                    </div>
+
+                    <div class="lr-admin-card">
+                        <h2>Badges et visibilite</h2>
+                        <?php foreach ( array(
+                            'show_global_cta' => 'CTA global',
+                            'show_product_badges' => 'Badges produits',
+                            'show_event_badges' => 'Badges evenements',
+                            'show_badges_only_when_redeem_available' => 'Badges reduction uniquement si utilisable',
+                            'distinguish_earn_from_redeem' => 'Distinguer points gagnes et reduction utilisable',
+                        ) as $key => $label ) : ?>
+                            <label style="display:block;margin:8px 0;"><input type="checkbox" name="visibility[<?php echo esc_attr( $key ); ?>]" value="1" <?php checked( ! empty( $config['visibility'][ $key ] ) ); ?>> <?php echo esc_html( $label ); ?></label>
+                        <?php endforeach; ?>
+                    </div>
+
+                    <div class="lr-admin-card">
+                        <h2>Popups</h2>
+                        <?php foreach ( array( 'web' => 'Web', 'mobile' => 'Mobile' ) as $channel => $label ) : ?>
+                            <h3><?php echo esc_html( $label ); ?></h3>
+                            <label><input type="checkbox" name="popup[<?php echo esc_attr( $channel ); ?>][enabled]" value="1" <?php checked( ! empty( $config['popup'][ $channel ]['enabled'] ) ); ?>> Actif</label>
+                            <div class="lr-admin-row"><label>Audience</label><select name="popup[<?php echo esc_attr( $channel ); ?>][audience]">
+                                <?php foreach ( array( 'guests' => 'Invites', 'authenticated' => 'Connectes', 'all' => 'Tous' ) as $value => $text ) : ?>
+                                    <option value="<?php echo esc_attr( $value ); ?>" <?php selected( $config['popup'][ $channel ]['audience'], $value ); ?>><?php echo esc_html( $text ); ?></option>
+                                <?php endforeach; ?>
+                            </select></div>
+                            <div class="lr-admin-row"><label>Delai secondes</label><input type="number" name="popup[<?php echo esc_attr( $channel ); ?>][delay_seconds]" value="<?php echo esc_attr( $config['popup'][ $channel ]['delay_seconds'] ); ?>"></div>
+                            <div class="lr-admin-row"><label>Frequence jours</label><input type="number" name="popup[<?php echo esc_attr( $channel ); ?>][frequency_days]" value="<?php echo esc_attr( $config['popup'][ $channel ]['frequency_days'] ); ?>"></div>
+                            <div class="lr-admin-row"><label>Max impressions</label><input type="number" name="popup[<?php echo esc_attr( $channel ); ?>][max_impressions_per_user]" value="<?php echo esc_attr( $config['popup'][ $channel ]['max_impressions_per_user'] ); ?>"></div>
+                        <?php endforeach; ?>
+                        <div class="lr-admin-row"><label>Pages web incluses</label><input type="text" name="popup[web][pages]" value="<?php echo esc_attr( implode( ',', (array) $config['popup']['web']['pages'] ) ); ?>"></div>
+                        <div class="lr-admin-row"><label>Pages web exclues</label><input type="text" name="popup[web][exclude_pages]" value="<?php echo esc_attr( implode( ',', (array) $config['popup']['web']['exclude_pages'] ) ); ?>"></div>
+                        <div class="lr-admin-row"><label>CTA web</label><input type="text" name="popup[web][cta_url]" value="<?php echo esc_attr( $config['popup']['web']['cta_url'] ); ?>"></div>
+                        <div class="lr-admin-row"><label>Route mobile</label><input type="text" name="popup[mobile][cta_route]" value="<?php echo esc_attr( $config['popup']['mobile']['cta_route'] ); ?>"></div>
+                    </div>
+
+                    <div class="lr-admin-card">
+                        <h2>Textes principaux</h2>
+                        <?php foreach ( array( 'headline', 'signup_bonus', 'earn_message', 'redeem_message', 'minimum_redeem_message', 'points_to_redeem_message', 'non_participating_event_message', 'participating_event_message' ) as $key ) : ?>
+                            <div class="lr-admin-row"><label><?php echo esc_html( $key ); ?></label><input type="text" name="copy[<?php echo esc_attr( $key ); ?>]" value="<?php echo esc_attr( $config['copy'][ $key ] ?? '' ); ?>"></div>
+                        <?php endforeach; ?>
+                    </div>
+
+                    <?php submit_button( 'Sauvegarder la configuration Rewards' ); ?>
+                </form>
+            </div>
+
+            <div>
+                <div class="lr-admin-card">
+                    <h2>JSON config</h2>
+                    <form method="post">
+                        <?php wp_nonce_field( 'lr_rewards_control_center' ); ?>
+                        <input type="hidden" name="lr_rewards_action" value="save_json">
+                        <textarea class="lr-admin-json" name="lr_rewards_config_json"><?php echo esc_textarea( wp_json_encode( $config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) ); ?></textarea>
+                        <?php submit_button( 'Importer JSON', 'secondary' ); ?>
+                    </form>
+                </div>
+
+                <div class="lr-admin-card">
+                    <h2>Rollback rapide</h2>
+                    <p>Ce bouton restaure les defaults serveur sans supprimer les points utilisateurs.</p>
+                    <form method="post" onsubmit="return confirm('Restaurer les valeurs Rewards par defaut ?');">
+                        <?php wp_nonce_field( 'lr_rewards_control_center' ); ?>
+                        <input type="hidden" name="lr_rewards_action" value="reset_defaults">
+                        <?php submit_button( 'Reset defaults Rewards', 'delete' ); ?>
+                    </form>
+                </div>
+
+                <div class="lr-admin-card">
+                    <h2>Audit log</h2>
+                    <ol class="lr-admin-log">
+                        <?php foreach ( $logs as $log ) : ?>
+                            <li><strong><?php echo esc_html( $log['time'] ?? '' ); ?></strong> - <?php echo esc_html( $log['action'] ?? '' ); ?> - user #<?php echo esc_html( (string) ( $log['user_id'] ?? 0 ) ); ?></li>
+                        <?php endforeach; ?>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+    <?php
 }
 
 // ============================================================
@@ -446,6 +1008,33 @@ if ( ! wp_next_scheduled( 'lr_daily_cron' ) ) {
 
 add_action( 'rest_api_init', function() {
     $namespace = 'lamako-rewards/v1';
+
+    // GET /config
+    register_rest_route( $namespace, '/config', array(
+        'methods' => 'GET',
+        'callback' => 'lr_api_get_config',
+        'permission_callback' => '__return_true',
+        'args' => array(
+            'platform' => array(
+                'sanitize_callback' => 'sanitize_key',
+                'default' => 'web',
+            ),
+        ),
+    ) );
+
+    // GET/POST /admin/config
+    register_rest_route( $namespace, '/admin/config', array(
+        array(
+            'methods' => 'GET',
+            'callback' => 'lr_api_admin_get_config',
+            'permission_callback' => 'lr_api_admin_permission',
+        ),
+        array(
+            'methods' => 'POST',
+            'callback' => 'lr_api_admin_update_config',
+            'permission_callback' => 'lr_api_admin_permission',
+        ),
+    ) );
     
     // GET /balance
     register_rest_route( $namespace, '/balance', array(
@@ -503,6 +1092,35 @@ add_action( 'rest_api_init', function() {
         'permission_callback' => '__return_true',
     ) );
 });
+
+// ----- CONFIG -----
+function lr_api_get_config( $request ) {
+    $platform = sanitize_key( $request->get_param( 'platform' ) ?: 'web' );
+    return rest_ensure_response( lr_rewards_public_config( $platform ) );
+}
+
+function lr_api_admin_permission() {
+    return lr_rewards_admin_can_manage();
+}
+
+function lr_api_admin_get_config( $request ) {
+    return rest_ensure_response( array(
+        'config' => lr_rewards_get_config(),
+        'audit_log' => lr_rewards_get_audit_log(),
+    ) );
+}
+
+function lr_api_admin_update_config( $request ) {
+    $body = $request->get_json_params();
+    if ( ! is_array( $body ) ) {
+        return new WP_Error( 'invalid_config', 'JSON body must be an object.', array( 'status' => 400 ) );
+    }
+
+    $config = isset( $body['config'] ) && is_array( $body['config'] ) ? $body['config'] : $body;
+    return rest_ensure_response( array(
+        'config' => lr_rewards_update_config( $config, 'admin_rest' ),
+    ) );
+}
 
 // ----- BALANCE -----
 function lr_api_get_balance( $request ) {
@@ -613,6 +1231,71 @@ function lr_api_redeem_points( $request ) {
     if ( ! $user_id || ! $points ) {
         return new WP_Error( 'missing_params', 'user_id and points are required.', array( 'status' => 400 ) );
     }
+
+    $minimum_redeem_points = lr_rewards_minimum_redeem_points();
+    $total_earned = lr_get_total_earned( $user_id );
+    if ( $total_earned < $minimum_redeem_points ) {
+        return new WP_Error( 'tier_too_low',
+            sprintf(
+                'L echange de points est disponible a partir de %d pts cumules (= %s Ar depenses). Il vous manque %d pts.',
+                $minimum_redeem_points,
+                number_format( $minimum_redeem_points * 1000, 0, ',', ' ' ),
+                $minimum_redeem_points - $total_earned
+            ),
+            array( 'status' => 403 )
+        );
+    }
+
+    $discount_value = lr_rewards_redemption_value( $points );
+    if ( $discount_value <= 0 ) {
+        $valid_points = array_map( function( $option ) {
+            return (int) ( $option['points'] ?? 0 );
+        }, lr_rewards_redemption_options() );
+        $valid_points = array_values( array_filter( $valid_points ) );
+        return new WP_Error( 'invalid_points', 'Points must be one of: ' . implode( ', ', $valid_points ) . '.', array( 'status' => 400 ) );
+    }
+
+    if ( ! function_exists( 'mycred_get_users_balance' ) ) {
+        return new WP_Error( 'mycred_missing', 'myCred plugin not active.', array( 'status' => 500 ) );
+    }
+
+    $balance = mycred_get_users_balance( $user_id );
+    if ( $balance < $minimum_redeem_points ) {
+        return new WP_Error(
+            'minimum_balance_required',
+            sprintf( 'Les reductions Rewards sont debloquees a partir de %d points disponibles.', $minimum_redeem_points ),
+            array( 'status' => 403 )
+        );
+    }
+
+    if ( $balance < $points ) {
+        return new WP_Error( 'insufficient_points', 'Solde insuffisant.', array( 'status' => 400 ) );
+    }
+
+    mycred_subtract( 'redemption', $user_id, $points,
+        sprintf( 'Echange %d pts vers %s Ar de reduction', $points, number_format( $discount_value, 0, ',', ' ' ) )
+    );
+
+    $coupon_code = 'LR-' . strtoupper( wp_generate_password( 8, false ) );
+
+    $coupon = new WC_Coupon();
+    $coupon->set_code( $coupon_code );
+    $coupon->set_discount_type( 'fixed_cart' );
+    $coupon->set_amount( $discount_value );
+    $coupon->set_usage_limit( 1 );
+    $coupon->set_usage_limit_per_user( 1 );
+    $coupon->set_date_expires( strtotime( '+30 days' ) );
+    $coupon->set_description( sprintf( 'LamakoRewards - %d points echanges par user #%d', $points, $user_id ) );
+    $coupon->save();
+
+    return rest_ensure_response( array(
+        'success' => true,
+        'coupon_code' => $coupon_code,
+        'discount_value' => $discount_value,
+        'points_deducted' => $points,
+        'new_balance' => mycred_get_users_balance( $user_id ),
+        'expires' => date( 'c', strtotime( '+30 days' ) ),
+    ) );
     
     // Check minimum lifetime points for redemption (750 pts = 750 000 Ar spent)
     $total_earned = lr_get_total_earned( $user_id );
@@ -627,10 +1310,10 @@ function lr_api_redeem_points( $request ) {
         );
     }
     
-    // Validate redemption tiers (fixed rate: 20 Ar/pt = 2% cashback)
-    $valid_tiers = array( 500, 1000, 2000, 5000 );
+    // Validate redemption tiers from the official Rewards config.
+    $valid_tiers = array( 1000, 2000 );
     if ( ! in_array( $points, $valid_tiers ) ) {
-        return new WP_Error( 'invalid_points', 'Points must be one of: 500, 1000, 2000, 5000.', array( 'status' => 400 ) );
+        return new WP_Error( 'invalid_points', 'Points must be one of: 1000, 2000.', array( 'status' => 400 ) );
     }
     
     // Check balance
@@ -643,8 +1326,8 @@ function lr_api_redeem_points( $request ) {
         return new WP_Error( 'insufficient_points', 'Solde insuffisant.', array( 'status' => 400 ) );
     }
     
-    // Calculate discount value (fixed rate: 20 Ar per point = 2% cashback)
-    $values = array( 500 => 10000, 1000 => 20000, 2000 => 40000, 5000 => 100000 );
+    // Calculate discount value from the official Rewards config.
+    $values = array( 1000 => 20000, 2000 => 40000 );
     $discount_value = $values[ $points ];
     
     // Deduct points
@@ -752,6 +1435,31 @@ function lr_api_get_referral_code( $request ) {
 
 // ----- TIERS INFO -----
 function lr_api_get_tiers( $request ) {
+    $earning_actions = lr_rewards_earning_actions();
+
+    return rest_ensure_response( array(
+        'tiers' => lr_rewards_tiers(),
+        'earn_rules' => array(
+            'purchase' => '1 pt / 1 000 Ar',
+            'registration' => (int) lr_rewards_config_get( 'program.signup_bonus_points', LR_REGISTRATION_BONUS ) . ' pts',
+            'daily_login' => (int) ( $earning_actions['daily_login_points'] ?? LR_LOGIN_BONUS ) . ' pts',
+            'attendance' => (int) ( $earning_actions['event_attendance_points'] ?? LR_ATTENDANCE_BONUS ) . ' pts',
+            'review' => (int) ( $earning_actions['review_points'] ?? LR_REVIEW_BONUS ) . ' pts',
+            'referral' => (int) lr_rewards_config_get( 'program.referral.referrer_points', LR_REFERRAL_BONUS ) . ' pts',
+            'referee_bonus' => (int) lr_rewards_config_get( 'program.referral.referred_points', LR_REFEREE_BONUS ) . ' pts',
+            'birthday' => (int) ( $earning_actions['birthday_points'] ?? LR_BIRTHDAY_BONUS ) . ' pts',
+            'share' => (int) ( $earning_actions['social_share_points'] ?? LR_SHARE_BONUS ) . ' pts',
+            'newsletter' => (int) ( $earning_actions['newsletter_points'] ?? LR_NEWSLETTER_BONUS ) . ' pts',
+        ),
+        'minimum_redeem_points' => lr_rewards_minimum_redeem_points(),
+        'redemption' => array_map( function( $option ) {
+            return array(
+                'points' => (int) ( $option['points'] ?? 0 ),
+                'value' => (int) ( $option['amount_ariary'] ?? $option['value'] ?? 0 ),
+            );
+        }, lr_rewards_redemption_options() ),
+    ) );
+
     return rest_ensure_response( array(
         'tiers' => array(
             array(
@@ -807,10 +1515,8 @@ function lr_api_get_tiers( $request ) {
             'share' => LR_SHARE_BONUS . ' pts',
         ),
         'redemption' => array(
-            array( 'points' => 500, 'value' => 10000 ),
             array( 'points' => 1000, 'value' => 20000 ),
             array( 'points' => 2000, 'value' => 40000 ),
-            array( 'points' => 5000, 'value' => 100000 ),
         ),
     ) );
 }
@@ -1039,17 +1745,15 @@ function lr_shortcode_rewards_page() {
             <h2 class="lr-section-title">Échanger vos points</h2>
             <p class="lr-section-subtitle">Convertissez vos points en réductions sur vos prochains achats</p>
             <div class="lr-redeem-note">
-                <strong>Condition :</strong> Le cashback est débloqué dès 750 000 Ar dépensés au total (= 750 points cumulés). Taux fixe : 20 Ar par point (2% de retour).
+                <strong>Condition :</strong> Les reductions Rewards sont debloquees a partir de 750 points disponibles et s utilisent uniquement sur les evenements et offres participants Lamako Rewards.
             </div>
             <table class="lr-redeem-table">
                 <thead>
                     <tr><th>Points échangés</th><th>Réduction obtenue</th><th>Taux</th></tr>
                 </thead>
                 <tbody>
-                    <tr><td><strong>500 pts</strong></td><td>10 000 Ar</td><td>20 Ar/pt</td></tr>
                     <tr><td><strong>1 000 pts</strong></td><td>20 000 Ar</td><td>20 Ar/pt</td></tr>
                     <tr><td><strong>2 000 pts</strong></td><td>40 000 Ar</td><td>20 Ar/pt</td></tr>
-                    <tr><td><strong>5 000 pts</strong></td><td>100 000 Ar</td><td>20 Ar/pt</td></tr>
                 </tbody>
             </table>
         </div>
@@ -1103,7 +1807,7 @@ function lr_shortcode_rewards_page() {
                     <span class="lr-faq-arrow">▼</span>
                 </div>
                 <div class="lr-faq-answer">
-                    <p>Le cashback est débloqué dès que vous avez dépensé <strong>750 000 Ar au total</strong> sur la plateforme (soit 750 points cumulés à vie). Cela correspond à environ 5 à 7 événements. Une fois ce seuil atteint, vous pouvez échanger vos points à tout moment au taux de 20 Ar par point.</p>
+                    <p>Les reductions Rewards sont debloquees a partir de <strong>750 points disponibles</strong>. Elles sont utilisables uniquement sur les evenements et offres participants Lamako Rewards.</p>
                 </div>
             </div>
 
@@ -1242,7 +1946,7 @@ function lr_shortcode_checkout_popup() {
             <button onclick="document.getElementById('lr-checkout-popup').style.display='none'" style="position:absolute; top:12px; right:16px; background:none; border:none; font-size:1.5em; cursor:pointer;">&times;</button>
             <img src="https://www.ticketbylamako.com/wp-content/uploads/2026/04/LamakoRewards_Dark.png" alt="LamakoRewards" style="height:40px; width:auto; margin-bottom:16px;">
             <h3 style="margin-bottom:8px; font-family:Raleway,-apple-system,sans-serif; color:#3d2314;">Rejoignez LamakoRewards !</h3>
-            <p style="color:#666; font-size:0.9em; margin-bottom:16px; font-family:Raleway,-apple-system,sans-serif;">Créez un compte et gagnez <strong>50 points bonus</strong> + des points sur cet achat. Échangez-les contre du <strong>cashback</strong> !</p>
+            <p style="color:#666; font-size:0.9em; margin-bottom:16px; font-family:Raleway,-apple-system,sans-serif;">Creez un compte et gagnez <strong>100 points bonus</strong> + des points sur vos achats eligibles. Les reductions sont disponibles a partir de 750 points sur les evenements participants.</p>
             <a href="<?php echo wp_registration_url(); ?>" style="display:block; background:linear-gradient(135deg,#3d2314,#663d17); color:white; padding:14px; border-radius:8px; text-decoration:none; font-weight:600; margin-bottom:8px; font-family:Raleway,-apple-system,sans-serif;">S'inscrire gratuitement</a>
             <button onclick="document.getElementById('lr-checkout-popup').style.display='none'" style="background:none; border:none; color:#666; cursor:pointer; font-size:0.9em; font-family:Raleway,-apple-system,sans-serif;">Non merci, continuer sans compte</button>
         </div>
@@ -1452,14 +2156,14 @@ function lr_account_rewards_content() {
         </div>
         <?php endif; ?>
         
-        <!-- Cashback status -->
+        <!-- Rewards reduction status -->
         <div style="background:<?php echo $can_redeem ? '#f0fdf4' : '#fef3c7'; ?>; padding:20px 24px; border-radius:12px; margin-bottom:28px; border:1px solid <?php echo $can_redeem ? '#bbf7d0' : '#fde68a'; ?>;">
             <?php if ( $can_redeem ) : ?>
-                <div style="font-weight:700; color:#166534; margin-bottom:4px;">✅ Cashback débloqué</div>
-                <div style="font-size:0.9em; color:#15803d;">Vous pouvez échanger vos points contre des réductions. Taux : 20 Ar par point.</div>
+                <div style="font-weight:700; color:#166534; margin-bottom:4px;">Reduction Rewards debloquee</div>
+                <div style="font-size:0.9em; color:#15803d;">Vos points peuvent etre utilises sur les evenements et offres participants Lamako Rewards.</div>
             <?php else : ?>
-                <div style="font-weight:700; color:#92400e; margin-bottom:4px;">🔒 Cashback verrouillé</div>
-                <div style="font-size:0.9em; color:#a16207;">Débloqué dès <?php echo number_format( LR_REDEMPTION_MIN_LIFETIME, 0, ',', ' ' ); ?> pts cumulés (= <?php echo number_format( LR_REDEMPTION_MIN_LIFETIME * 1000, 0, ',', ' ' ); ?> Ar dépensés). Il vous manque <strong><?php echo number_format( LR_REDEMPTION_MIN_LIFETIME - $total_earned, 0, ',', ' ' ); ?> pts</strong>.</div>
+                <div style="font-weight:700; color:#92400e; margin-bottom:4px;">Reduction Rewards verrouillee</div>
+                <div style="font-size:0.9em; color:#a16207;">Les reductions Rewards sont debloquees a partir de <?php echo number_format( lr_rewards_minimum_redeem_points(), 0, ',', ' ' ); ?> points disponibles. Il vous manque <strong><?php echo number_format( max( 0, lr_rewards_minimum_redeem_points() - $balance ), 0, ',', ' ' ); ?> pts</strong>.</div>
             <?php endif; ?>
         </div>
         
@@ -1511,7 +2215,7 @@ function lr_homepage_cta_banner() {
         transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
     ">
         <img src="<?php echo esc_url( $logo_white ); ?>" alt="LamakoRewards" style="height:36px; width:auto;">
-        <span style="font-size:1em; font-weight:600;">Gagnez des points à chaque achat et profitez de cashback exclusif !</span>
+        <span style="font-size:1em; font-weight:600;">Gagnez des points sur vos achats eligibles et suivez votre progression Rewards.</span>
         <a href="/lamako-rewards" style="
             background: white;
             color: #3d2314;
@@ -1590,7 +2294,7 @@ function lr_send_welcome_email( $user_id ) {
                 </div>
                 
                 <p style="color:#333; font-size:1em; line-height:1.6; margin-bottom:16px;">
-                    Vous faites maintenant partie du programme <strong>LamakoRewards</strong> ! Gagnez des points sur chaque achat de billets et produits, et convertissez-les en <strong>cashback</strong>.
+                    Vous faites maintenant partie du programme <strong>LamakoRewards</strong> ! Gagnez des points sur vos achats eligibles, puis utilisez-les en reduction sur les evenements et offres participants.
                 </p>
                 
                 <h3 style="color:#3d2314; margin:24px 0 12px; font-weight:700;">Comment ca marche :</h3>
@@ -1608,8 +2312,8 @@ function lr_send_welcome_email( $user_id ) {
                         <td style="padding:10px 0; text-align:right; font-weight:700; color:#b45309;">+10 pts</td>
                     </tr>
                     <tr>
-                        <td style="padding:10px 0;">Cashback (des 750 000 Ar depenses)</td>
-                        <td style="padding:10px 0; text-align:right; font-weight:700; color:#b45309;">2% en Ar</td>
+                        <td style="padding:10px 0;">Reductions Rewards</td>
+                        <td style="padding:10px 0; text-align:right; font-weight:700; color:#b45309;">Des 750 pts disponibles</td>
                     </tr>
                 </table>
                 
@@ -1857,12 +2561,12 @@ function lr_tickera_event_badge( $content ) {
     
     // Main text
     $badge .= '<p style="color:#ffffff; font-size:15px; font-weight:600; line-height:1.5; margin:0 0 10px; max-width:320px; margin-left:auto; margin-right:auto;">';
-    $badge .= 'Profitez de reductions et recompenses<br>en gagnant des points !';
+    $badge .= 'Gagnez des points sur vos achats eligibles<br>et suivez votre progression Rewards.';
     $badge .= '</p>';
     
     // Features line
     $badge .= '<p style="color:rgba(255,255,255,0.65); font-size:12px; font-weight:500; margin:0 0 22px; letter-spacing:0.3px;">';
-    $badge .= 'Billets gratuits &bull; Cashback &bull; Evenements exclusifs';
+    $badge .= 'Reductions des 750 pts &bull; Offres participantes &bull; Statut membre';
     $badge .= '</p>';
     
     if ( ! is_user_logged_in() ) {

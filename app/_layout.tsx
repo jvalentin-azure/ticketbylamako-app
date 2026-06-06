@@ -238,7 +238,7 @@ export default function RootLayout() {
             <Stack.Screen name="oauth/facebook_callback" />
           </Stack>
           <StatusBar style="auto" />
-          <RewardsPopup delay={30000} />
+          <RewardsPopup />
         </QueryClientProvider>
       </trpc.Provider>
     </GestureHandlerRootView>

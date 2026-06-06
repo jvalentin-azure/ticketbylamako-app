@@ -262,6 +262,46 @@ export interface MobileRewardsBalance {
   canRedeem: boolean;
 }
 
+export interface MobileRewardsConfig {
+  version: number;
+  platform: "web" | "mobile";
+  program: {
+    enabled: boolean;
+    signup_bonus_points: number;
+    earn_rate: {
+      points: number;
+      amount_ariary: number;
+    };
+    minimum_redeem_points: number;
+    redemption_options: Array<{
+      points: number;
+      amount_ariary: number;
+    }>;
+    referral: {
+      referrer_points: number;
+      referred_points: number;
+    };
+    tiers?: Array<{
+      id: string;
+      name: string;
+      min_points: number;
+      multiplier: number;
+      benefits?: string[];
+    }>;
+  };
+  popup?: {
+    mobile?: {
+      enabled: boolean;
+      audience: "guests" | "authenticated" | "all" | string;
+      delay_seconds: number;
+      frequency_days: number;
+      max_impressions_per_user?: number;
+      cta_route?: string;
+    };
+  };
+  copy?: Record<string, string>;
+}
+
 export interface MobileRewardTransaction {
   id: string;
   type: "earn" | "redeem";
@@ -396,6 +436,12 @@ export async function registerMobilePushToken(
 
 export async function getMobileRewardsBalance(): Promise<MobileRewardsBalance> {
   return mobileV2Fetch<MobileRewardsBalance>("rewards/balance");
+}
+
+export async function getMobileRewardsConfig(): Promise<MobileRewardsConfig> {
+  return mobileV2Fetch<MobileRewardsConfig>("rewards/config", {
+    requireAuth: false,
+  });
 }
 
 export async function getMobileRewardsHistory(limit = 20): Promise<MobileRewardTransaction[]> {

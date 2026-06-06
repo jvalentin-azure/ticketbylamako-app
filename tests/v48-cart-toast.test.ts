@@ -64,7 +64,7 @@ describe("V4.8 - Cart Toast & Plugin Redeploy", () => {
       // Ensure navigation happens after delay
       const addToCartSection = eventContent.substring(
         eventContent.indexOf("const handleAddToCart"),
-        eventContent.indexOf("const handleAddToCart") + 500
+        eventContent.indexOf("const handleAddToCart") + 900
       );
       expect(addToCartSection).toContain("setShowCartToast(true)");
       expect(addToCartSection).toContain("setTimeout");

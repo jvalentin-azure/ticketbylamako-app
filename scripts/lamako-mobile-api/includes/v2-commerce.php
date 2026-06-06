@@ -115,6 +115,12 @@ function lamako_mobile_v2_register_routes() {
         'permission_callback' => 'lamako_mobile_v2_require_user',
     ] );
 
+    register_rest_route( $namespace, '/rewards/config', [
+        'methods'             => WP_REST_Server::READABLE,
+        'callback'            => 'lamako_mobile_v2_rewards_config',
+        'permission_callback' => '__return_true',
+    ] );
+
     register_rest_route( $namespace, '/rewards/history', [
         'methods'             => WP_REST_Server::READABLE,
         'callback'            => 'lamako_mobile_v2_rewards_history',
@@ -2523,6 +2529,49 @@ function lamako_mobile_v2_rewards_balance() {
     ] );
 }
 
+function lamako_mobile_v2_rewards_config( WP_REST_Request $request ) {
+    if ( function_exists( 'lr_rewards_public_config' ) ) {
+        return rest_ensure_response( lr_rewards_public_config( 'mobile' ) );
+    }
+
+    return rest_ensure_response( [
+        'version' => 1,
+        'platform' => 'mobile',
+        'program' => [
+            'enabled' => true,
+            'signup_bonus_points' => 100,
+            'earn_rate' => [
+                'points' => 1,
+                'amount_ariary' => 1000,
+            ],
+            'minimum_redeem_points' => 750,
+            'redemption_options' => [
+                [ 'points' => 1000, 'amount_ariary' => 20000 ],
+                [ 'points' => 2000, 'amount_ariary' => 40000 ],
+            ],
+            'referral' => [
+                'referrer_points' => 75,
+                'referred_points' => 25,
+            ],
+        ],
+        'popup' => [
+            'mobile' => [
+                'enabled' => true,
+                'audience' => 'guests',
+                'delay_seconds' => 12,
+                'frequency_days' => 7,
+                'max_impressions_per_user' => 3,
+                'cta_route' => '/rewards',
+            ],
+        ],
+        'copy' => [
+            'earn_message' => 'Gagnez des points sur vos achats eligibles.',
+            'redeem_message' => 'Utilisez vos points sur les evenements et offres participants Lamako Rewards.',
+            'minimum_redeem_message' => 'Les reductions Rewards sont debloquees a partir de 750 points.',
+        ],
+    ] );
+}
+
 function lamako_mobile_v2_rewards_is_order_ref( $ref, $description = '' ) {
     $ref         = strtolower( (string) $ref );
     $description = strtolower( (string) $description );
@@ -2660,17 +2709,34 @@ function lamako_mobile_v2_rewards_redeem( WP_REST_Request $request ) {
     $user_id = get_current_user_id();
     $points  = absint( $body['points'] ?? 0 );
 
-    $valid_tiers = [ 500 => 10000, 1000 => 20000, 2000 => 40000, 5000 => 100000 ];
+    $minimum_redeem_points = function_exists( 'lr_rewards_minimum_redeem_points' ) ? lr_rewards_minimum_redeem_points() : 750;
+    $valid_tiers = [];
+    if ( function_exists( 'lr_rewards_redemption_options' ) ) {
+        foreach ( lr_rewards_redemption_options() as $option ) {
+            $option_points = absint( $option['points'] ?? 0 );
+            $option_value  = absint( $option['amount_ariary'] ?? $option['value'] ?? 0 );
+            if ( $option_points > 0 && $option_value > 0 ) {
+                $valid_tiers[ $option_points ] = $option_value;
+            }
+        }
+    }
+    if ( empty( $valid_tiers ) ) {
+        $valid_tiers = [ 1000 => 20000, 2000 => 40000 ];
+    }
+
     if ( ! isset( $valid_tiers[ $points ] ) ) {
         return new WP_Error( 'lamako_v2_invalid_reward_points', 'Invalid redemption tier.', [ 'status' => 400 ] );
     }
 
     $total_earned = function_exists( 'lr_get_total_earned' ) ? lr_get_total_earned( $user_id ) : (float) get_user_meta( $user_id, 'mycred_default_total', true );
-    if ( defined( 'LR_REDEMPTION_MIN_LIFETIME' ) && $total_earned < LR_REDEMPTION_MIN_LIFETIME ) {
+    if ( $total_earned < $minimum_redeem_points ) {
         return new WP_Error( 'lamako_v2_rewards_locked', 'Rewards redemption is not unlocked for this account.', [ 'status' => 403 ] );
     }
 
     $balance = mycred_get_users_balance( $user_id );
+    if ( $balance < $minimum_redeem_points ) {
+        return new WP_Error( 'lamako_v2_rewards_minimum_balance_required', 'Rewards redemption requires at least 750 available points.', [ 'status' => 403 ] );
+    }
     if ( $balance < $points ) {
         return new WP_Error( 'lamako_v2_insufficient_points', 'Insufficient rewards balance.', [ 'status' => 400 ] );
     }

@@ -1,24 +1,22 @@
-import { Text, View, TouchableOpacity, ScrollView, StyleSheet, Dimensions, Image } from "react-native";
+import { Text, View, TouchableOpacity, ScrollView, StyleSheet, Image } from "react-native";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { useRewards, TIERS, type TierInfo } from "@/lib/rewards-provider";
+import { useRewards } from "@/lib/rewards-provider";
 import { useAuth } from "@/lib/auth-provider";
 import { LinearGradient } from "expo-linear-gradient";
 
 const rewardsLogoDark = require("@/assets/images/lamako-rewards-dark.png");
 const rewardsLogoWhite = require("@/assets/images/lamako-rewards-white.png");
 
-const { width: SCREEN_W } = Dimensions.get("window");
-
 export default function RewardsScreen() {
   const colors = useColors();
   const colorScheme = useColorScheme();
   const router = useRouter();
   const { isAuthenticated } = useAuth();
-  const { state, currentTier, nextTier, progressToNextTier, pointsToNextTier, canRedeem, pointsUntilRedemption, getDiscountValue, syncRewards, isSyncing } = useRewards();
+  const { state, config, tiers, currentTier, nextTier, progressToNextTier, pointsToNextTier, canRedeem, pointsUntilRedemption, getDiscountValue, syncRewards, isSyncing } = useRewards();
 
   const formatDate = (iso: string) => {
     const d = new Date(iso);
@@ -65,13 +63,13 @@ export default function RewardsScreen() {
           <Text style={styles.pointsValue}>{state.availablePoints.toLocaleString("fr-FR")}</Text>
           {canRedeem ? (
             <Text style={styles.pointsSub}>
-              = {getDiscountValue(state.availablePoints).toLocaleString("fr-FR")} Ar de réduction
+              {getDiscountValue(state.availablePoints).toLocaleString("fr-FR")} Ar utilisables sur les offres participantes
             </Text>
           ) : (
             <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4 }}>
               <Text style={{ fontSize: 16, marginRight: 6 }}>🔒</Text>
               <Text style={[styles.pointsSub, { color: "rgba(255,255,255,0.9)" }]}>
-                Encore {pointsUntilRedemption.toLocaleString("fr-FR")} pts pour débloquer l'échange
+                Plus que {pointsUntilRedemption.toLocaleString("fr-FR")} pts pour debloquer vos reductions
               </Text>
             </View>
           )}
@@ -121,7 +119,7 @@ export default function RewardsScreen() {
                 <IconSymbol name="cart.fill" size={20} color={colors.primary} />
               </View>
               <Text style={[styles.howTitle, { color: colors.foreground }]}>Achetez</Text>
-              <Text style={[styles.howDesc, { color: colors.muted }]}>1 pt / 1000 Ar</Text>
+              <Text style={[styles.howDesc, { color: colors.muted }]}>{config.earnRules.purchaseRate} pt / {config.earnRules.purchaseUnit.toLocaleString("fr-FR")} Ar</Text>
             </View>
             <View style={styles.howItem}>
               <View style={[styles.howIcon, { backgroundColor: "#FFD700" + "20" }]}>
@@ -135,7 +133,7 @@ export default function RewardsScreen() {
                 <IconSymbol name="gift.fill" size={20} color={colors.success} />
               </View>
               <Text style={[styles.howTitle, { color: colors.foreground }]}>Échangez</Text>
-              <Text style={[styles.howDesc, { color: colors.muted }]}>Dès 750 000 Ar dépensés{"\n"}500 pts = 10 000 Ar</Text>
+              <Text style={[styles.howDesc, { color: colors.muted }]}>Des {config.minimumRedeemPoints.toLocaleString("fr-FR")} pts disponibles{"\n"}Offres participantes uniquement</Text>
             </View>
           </View>
         </View>
@@ -143,7 +141,7 @@ export default function RewardsScreen() {
         {/* Tiers */}
         <View style={styles.tiersSection}>
           <Text style={[styles.sectionTitle, { color: colors.foreground, marginBottom: 12 }]}>Niveaux</Text>
-          {TIERS.map((tier, idx) => (
+          {tiers.map((tier, idx) => (
             <View
               key={tier.id}
               style={[
@@ -185,7 +183,7 @@ export default function RewardsScreen() {
           <View style={[styles.referralCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Parrainage</Text>
             <Text style={[styles.referralDesc, { color: colors.muted }]}>
-              Partagez votre code et gagnez 75 pts quand un ami fait son premier achat !
+              Parrainez un ami : vous gagnez {config.earnRules.referralBonus} pts quand il effectue son premier achat, et votre filleul recoit {config.earnRules.refereeBonus} pts bonus.
             </Text>
             <View style={[styles.codeBox, { backgroundColor: colors.background, borderColor: colors.border }]}>
               <Text style={[styles.codeText, { color: colors.primary }]}>{state.referralCode}</Text>

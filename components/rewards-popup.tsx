@@ -2,41 +2,56 @@ import { useEffect, useRef, useState } from "react";
 import { View, Text, Animated, StyleSheet, TouchableOpacity, Dimensions, Modal } from "react-native";
 import { Image } from "expo-image";
 import { router } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "@/lib/auth-provider";
+import { useRewards } from "@/lib/rewards-provider";
 
 const { width } = Dimensions.get("window");
-// In-memory flag - resets every app launch (no AsyncStorage persistence)
+const POPUP_STORAGE_KEY = "@lamako_rewards_popup_state";
 let rewardsPopupShownThisSession = false;
 
 interface RewardsPopupProps {
-  delay?: number; // ms before showing (default 30000 = 30s)
+  delay?: number;
 }
 
-/**
- * LamakoRewards popup - shows 30s after the user enters the app
- * if they are NOT logged in (i.e. they chose "Explorer").
- * Only shows once per app session.
- */
 export function RewardsPopup({ delay = 30000 }: RewardsPopupProps) {
   const [visible, setVisible] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
   const { isAuthenticated } = useAuth();
+  const { config, canRedeem, pointsUntilRedemption, isConfigReady } = useRewards();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    // Don't show if user is already logged in
-    if (isAuthenticated) return;
+    const popupConfig = config.popup;
+    if (!isConfigReady) return;
+    if (!config.enabled) return;
+    if (!popupConfig.mobileEnabled) return;
+    if (popupConfig.mobileAudience === "guests" && isAuthenticated) return;
+    if (popupConfig.mobileAudience === "authenticated" && !isAuthenticated) return;
 
-    // Start the 30s timer
     timerRef.current = setTimeout(async () => {
-      // Check if already shown this session (in-memory only)
       if (rewardsPopupShownThisSession) return;
 
-      // Mark as shown for this session
-      rewardsPopupShownThisSession = true;
+      const stored = await AsyncStorage.getItem(POPUP_STORAGE_KEY);
+      const popupState = stored ? (JSON.parse(stored) as { lastClosedAt?: string; impressions?: number }) : {};
+      const lastClosedAt = popupState.lastClosedAt ? new Date(popupState.lastClosedAt).getTime() : 0;
+      const frequencyMs = popupConfig.mobileFrequencyDays * 24 * 60 * 60 * 1000;
+      const impressions = popupState.impressions || 0;
 
-      // Show popup
+      if (lastClosedAt && Date.now() - lastClosedAt < frequencyMs) return;
+      if (popupConfig.mobileMaxImpressions > 0 && impressions >= popupConfig.mobileMaxImpressions) return;
+
+      rewardsPopupShownThisSession = true;
+      await AsyncStorage.setItem(
+        POPUP_STORAGE_KEY,
+        JSON.stringify({
+          ...popupState,
+          impressions: impressions + 1,
+          lastShownAt: new Date().toISOString(),
+        })
+      );
+
       setVisible(true);
       Animated.parallel([
         Animated.timing(fadeAnim, {
@@ -51,14 +66,15 @@ export function RewardsPopup({ delay = 30000 }: RewardsPopupProps) {
           useNativeDriver: true,
         }),
       ]).start();
-    }, delay);
+    }, config.popup.mobileDelayMs || delay);
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [isAuthenticated, delay]);
+  }, [config.enabled, config.popup, isAuthenticated, isConfigReady, delay, fadeAnim, scaleAnim]);
 
   const handleClose = () => {
+    AsyncStorage.mergeItem(POPUP_STORAGE_KEY, JSON.stringify({ lastClosedAt: new Date().toISOString() })).catch(() => {});
     Animated.timing(fadeAnim, {
       toValue: 0,
       duration: 200,
@@ -68,7 +84,8 @@ export function RewardsPopup({ delay = 30000 }: RewardsPopupProps) {
 
   const handleJoin = () => {
     handleClose();
-    setTimeout(() => router.push("/(auth)/register" as any), 200);
+    const destination = isAuthenticated ? config.popup.mobileCtaRoute || "/rewards" : "/(auth)/register";
+    setTimeout(() => router.push(destination as any), 200);
   };
 
   const handleLogin = () => {
@@ -78,18 +95,25 @@ export function RewardsPopup({ delay = 30000 }: RewardsPopupProps) {
 
   if (!visible) return null;
 
+  const title = isAuthenticated && !canRedeem
+    ? `Plus que ${pointsUntilRedemption.toLocaleString("fr-FR")} points pour debloquer vos reductions Rewards.`
+    : config.copy.earnMessage;
+  const subtitle = isAuthenticated
+    ? (canRedeem
+      ? config.copy.redeemMessage
+      : `Vos reductions sont debloquees a partir de ${config.minimumRedeemPoints} points et utilisables sur les offres participantes.`)
+    : `Recevez ${config.earnRules.registrationBonus} points de bienvenue. Reductions disponibles a partir de ${config.minimumRedeemPoints} points sur les offres participantes.`;
+
   return (
     <Modal transparent visible={visible} animationType="none" statusBarTranslucent>
       <View style={styles.backdrop}>
         <Animated.View style={[styles.card, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
-          {/* Close button */}
           <TouchableOpacity onPress={handleClose} style={styles.closeBtn} activeOpacity={0.7}>
             <View style={styles.closeBtnInner}>
-              <Text style={styles.closeBtnText}>✕</Text>
+              <Text style={styles.closeBtnText}>x</Text>
             </View>
           </TouchableOpacity>
 
-          {/* Background image */}
           <Image
             source={require("@/assets/images/rewards-bg.jpg")}
             style={StyleSheet.absoluteFillObject}
@@ -97,7 +121,6 @@ export function RewardsPopup({ delay = 30000 }: RewardsPopupProps) {
           />
           <View style={styles.cardOverlay} />
 
-          {/* Content */}
           <View style={styles.content}>
             <Image
               source={require("@/assets/images/lamako-rewards-white.png")}
@@ -105,24 +128,20 @@ export function RewardsPopup({ delay = 30000 }: RewardsPopupProps) {
               contentFit="contain"
             />
             <Text style={styles.rewardsLabel}>Rewards</Text>
-
-            <Text style={styles.title}>
-              Profitez de réductions et récompenses{"\n"}en gagnant des points !
-            </Text>
-
-            <Text style={styles.features}>
-              Billets gratuits • Cashback • Événements exclusifs
-            </Text>
+            <Text style={styles.title}>{title}</Text>
+            <Text style={styles.features}>{subtitle}</Text>
 
             <TouchableOpacity onPress={handleJoin} style={styles.joinBtn} activeOpacity={0.85}>
-              <Text style={styles.joinBtnText}>Rejoindre maintenant !</Text>
+              <Text style={styles.joinBtnText}>{isAuthenticated ? "Voir mes Rewards" : "Rejoindre maintenant"}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={handleLogin} style={styles.loginLink} activeOpacity={0.7}>
-              <Text style={styles.loginLinkText}>
-                Déjà un compte ? <Text style={styles.loginLinkAccent}>Se connecter</Text>
-              </Text>
-            </TouchableOpacity>
+            {!isAuthenticated && (
+              <TouchableOpacity onPress={handleLogin} style={styles.loginLink} activeOpacity={0.7}>
+                <Text style={styles.loginLinkText}>
+                  Deja un compte ? <Text style={styles.loginLinkAccent}>Se connecter</Text>
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </Animated.View>
       </View>
