@@ -52,8 +52,13 @@ export default function ProfileScreen() {
       onPress: () => router.push("/notification-settings" as any),
     },
     {
+      icon: "hand.raised.fill" as const,
+      label: "Confidentialite et donnees",
+      onPress: () => router.push("/privacy-data" as any),
+    },
+    {
       icon: "info.circle.fill" as const,
-      label: "À propos",
+      label: "A propos",
       onPress: () => router.push("/about" as any),
     },
   ];
