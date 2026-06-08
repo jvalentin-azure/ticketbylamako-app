@@ -22,6 +22,7 @@ export default function ProfileScreen() {
     ] : []),
     { icon: scheme === "dark" ? "sun.max.fill" as const : "moon.fill" as const, label: scheme === "dark" ? "Mode Clair" : "Mode Sombre", onPress: () => setScheme(scheme === "dark" ? "light" : "dark") },
     { icon: "bell.fill" as const, label: "Notifications", onPress: () => router.push("/notification-settings" as any) },
+    { icon: "hand.raised.fill" as const, label: "Confidentialite et donnees", onPress: () => router.push("/privacy-data" as any) },
     { icon: "info.circle.fill" as const, label: "À propos", onPress: () => router.push("/about" as any) },
   ];
 

@@ -46,7 +46,15 @@ const config: ExpoConfig = {
       policy: "appVersion",
     },
     "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false,
+          "NSExceptionDomains": {
+            "localhost": {
+              "NSExceptionAllowsInsecureHTTPLoads": true
+            }
+          }
+        }
       }
   },
   android: {
@@ -58,10 +66,21 @@ const config: ExpoConfig = {
     },
     predictiveBackGestureEnabled: false,
     package: env.androidPackage,
+    allowBackup: false,
     runtimeVersion: {
       policy: "appVersion",
     },
     permissions: ["POST_NOTIFICATIONS"],
+    blockedPermissions: [
+      "android.permission.SYSTEM_ALERT_WINDOW",
+      "android.permission.CAMERA",
+      "android.permission.RECORD_AUDIO",
+      "android.permission.MODIFY_AUDIO_SETTINGS",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.WRITE_EXTERNAL_STORAGE",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+    ],
     intentFilters: [
       {
         action: "VIEW",
@@ -86,19 +105,6 @@ const config: ExpoConfig = {
   },
   plugins: [
     "expo-router",
-    [
-      "expo-audio",
-      {
-        microphonePermission: "Allow $(PRODUCT_NAME) to access your microphone.",
-      },
-    ],
-    [
-      "expo-video",
-      {
-        supportsBackgroundPlayback: true,
-        supportsPictureInPicture: true,
-      },
-    ],
     [
       "expo-splash-screen",
       {

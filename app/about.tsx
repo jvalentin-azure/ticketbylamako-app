@@ -16,8 +16,8 @@ const SOCIAL_LINKS = [
 const CONTACT_INFO = {
   phone: LAMAKO_PHONE_DISPLAY,
   whatsapp: LAMAKO_WHATSAPP_DISPLAY,
-  email: "info@ticketbylamako.com",
-  address: "Lot II T 4 C Betongolo, Antananarivo 101, Madagascar",
+  email: "info@lamakoevents.mg",
+  address: "Betongolo, Antananarivo 101, Madagascar",
   website: "https://www.ticketbylamako.com",
 };
 
@@ -185,7 +185,7 @@ export default function AboutScreen() {
           <Text style={[styles.legalText, { color: colors.muted }]}>
             <Text style={{ fontWeight: "600", color: colors.foreground }}>Éditeur : </Text>
             Lamako Events{"\n"}
-            Lot II T 4 C Betongolo, Antananarivo 101, Madagascar{"\n"}
+            Betongolo, Antananarivo 101, Madagascar{"\n"}
             NIF : 5000 539 678{"\n"}
             STAT : 70203 11 2011 0 05174
           </Text>

@@ -32,7 +32,7 @@ export default function TermsScreen() {
         },
         {
           title: "Contact",
-          body: "Pour toute question liée à une commande, contactez TicketByLamako à info@ticketbylamako.com ou via WhatsApp au +261 38 73 57 728.",
+          body: "Pour toute question liée à une commande, contactez Lamako Events à info@lamakoevents.mg ou par téléphone au (+261) 34 13 922 92.",
         },
       ]}
     />
