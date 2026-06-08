@@ -395,9 +395,24 @@ function lr_award_purchase_points( $order_id ) {
     $customer_id = $order->get_customer_id();
     if ( ! $customer_id ) return;
     
-    // Check if points already awarded for this order
-    $awarded = get_post_meta( $order_id, '_lamako_points_awarded', true );
-    if ( $awarded ) return;
+    // Check if points already awarded for this order.
+    $awarded  = (int) $order->get_meta( '_lamako_points_awarded', true );
+    $reversed = (int) $order->get_meta( '_lamako_points_reversed', true );
+    if ( $awarded > 0 && $reversed <= 0 ) return;
+
+    if ( $awarded > 0 && $reversed > 0 ) {
+        if ( function_exists( 'mycred_add' ) ) {
+            mycred_add( 'purchase_reinstated', $customer_id, $reversed,
+                sprintf( 'Commande #%d reactivee - recrédit points Rewards', $order_id )
+            );
+        }
+
+        $order->delete_meta_data( '_lamako_points_reversed' );
+        $order->delete_meta_data( '_lamako_points_reversed_at' );
+        $order->delete_meta_data( '_lamako_points_reversal_status' );
+        $order->save();
+        return;
+    }
     
     // Calculate base points only from products/events that participate in LamakoRewards.
     $total = lr_get_order_rewardable_total( $order );
@@ -418,9 +433,74 @@ function lr_award_purchase_points( $order_id ) {
         );
     }
     
-    // Mark order as processed
-    update_post_meta( $order_id, '_lamako_points_awarded', $final_points );
-    update_post_meta( $order_id, '_lamako_points_multiplier', $multiplier );
+    // Mark order as processed.
+    $order->update_meta_data( '_lamako_points_awarded', $final_points );
+    $order->update_meta_data( '_lamako_points_multiplier', $multiplier );
+    $order->save();
+}
+
+add_action( 'woocommerce_order_status_cancelled', 'lr_reverse_purchase_points_on_order_close', 20, 1 );
+add_action( 'woocommerce_order_status_refunded', 'lr_reverse_purchase_points_on_order_close', 20, 1 );
+add_action( 'woocommerce_order_status_failed', 'lr_reverse_purchase_points_on_order_close', 20, 1 );
+
+function lr_get_external_order_points_to_reverse( $order_id, $customer_id ) {
+    global $wpdb;
+
+    $table = $wpdb->prefix . 'myCRED_log';
+    $exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+    if ( $exists !== $table ) {
+        return 0;
+    }
+
+    return (float) $wpdb->get_var(
+        $wpdb->prepare(
+            "SELECT COALESCE(SUM(creds), 0) FROM {$table} WHERE user_id = %d AND ref_id = %d AND creds > 0 AND ref <> %s",
+            $customer_id,
+            $order_id,
+            'purchase_reversal'
+        )
+    );
+}
+
+function lr_reverse_purchase_points_on_order_close( $order_id ) {
+    $order = wc_get_order( $order_id );
+    if ( ! $order ) return;
+
+    $customer_id = $order->get_customer_id();
+    if ( ! $customer_id ) return;
+
+    $awarded = (int) $order->get_meta( '_lamako_points_awarded', true );
+    $already_reversed = (int) $order->get_meta( '_lamako_points_reversed', true );
+    $own_points_to_reverse = max( 0, $awarded - max( 0, $already_reversed ) );
+
+    $external_awarded = lr_get_external_order_points_to_reverse( $order_id, $customer_id );
+    $external_reversed = (float) $order->get_meta( '_lamako_points_external_reversed', true );
+    $external_points_to_reverse = max( 0, $external_awarded - max( 0, $external_reversed ) );
+
+    $points_to_reverse = $own_points_to_reverse + $external_points_to_reverse;
+    if ( $points_to_reverse <= 0 ) return;
+
+    if ( function_exists( 'mycred_subtract' ) ) {
+        mycred_subtract( 'purchase_reversal', $customer_id, $points_to_reverse,
+            sprintf( 'Commande #%d %s - retrait points Rewards', $order_id, $order->get_status() )
+        );
+    } elseif ( function_exists( 'mycred_add' ) ) {
+        mycred_add( 'purchase_reversal', $customer_id, -1 * $points_to_reverse,
+            sprintf( 'Commande #%d %s - retrait points Rewards', $order_id, $order->get_status() )
+        );
+    } else {
+        return;
+    }
+
+    if ( $own_points_to_reverse > 0 ) {
+        $order->update_meta_data( '_lamako_points_reversed', $awarded );
+    }
+    if ( $external_points_to_reverse > 0 ) {
+        $order->update_meta_data( '_lamako_points_external_reversed', $external_awarded );
+    }
+    $order->update_meta_data( '_lamako_points_reversed_at', current_time( 'mysql' ) );
+    $order->update_meta_data( '_lamako_points_reversal_status', $order->get_status() );
+    $order->save();
 }
 
 // ============================================================

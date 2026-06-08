@@ -116,8 +116,13 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
           onPress: () => navigate("/privacy"),
         },
         {
+          icon: "shield.fill" as const,
+          label: "Confidentialite et donnees",
+          onPress: () => navigate("/privacy-data"),
+        },
+        {
           icon: "info.circle.fill" as const,
-          label: "À propos",
+          label: "A propos",
           onPress: () => navigate("/about"),
         },
       ],

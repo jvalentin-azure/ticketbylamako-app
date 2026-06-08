@@ -8,7 +8,7 @@ export default function LegalNoticeScreen() {
       sections={[
         {
           title: "Éditeur",
-          body: "TicketByLamako est édité par Lamako Events, Lot II T 4 C Betongolo, Antananarivo 101, Madagascar. NIF : 5000 539 678. STAT : 70203 11 2011 0 05174.",
+          body: "TicketByLamako est édité par Lamako Events, Betongolo, Antananarivo 101, Madagascar. NIF : 5000 539 678. STAT : 70203 11 2011 0 05174.",
         },
         {
           title: "Directeur de la publication",
@@ -16,7 +16,7 @@ export default function LegalNoticeScreen() {
         },
         {
           title: "Contact",
-          body: "Email : info@ticketbylamako.com. Téléphone / WhatsApp : +261 38 73 57 728.",
+          body: "Email : info@lamakoevents.mg. Téléphone : (+261) 34 13 922 92.",
         },
         {
           title: "Hébergement",

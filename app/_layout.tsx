@@ -259,6 +259,7 @@ export default function RootLayout() {
             />
             <Stack.Screen name="orders" />
             <Stack.Screen name="privacy" />
+            <Stack.Screen name="privacy-data" />
             <Stack.Screen name="terms" />
             <Stack.Screen name="legal-notice" />
             <Stack.Screen name="help" />
