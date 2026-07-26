@@ -137,6 +137,9 @@ export default function CheckoutScreen() {
   const MAX_RETRIES = 3;
   const verificationInFlightRef = useRef(false);
   const autoCheckoutStartedRef = useRef(false);
+  const paymentReturnHandledRef = useRef(false);
+  const paymentRecoveryAttemptedRef = useRef(false);
+  const lastNavigationUrlRef = useRef("");
 
   // Auth guard: redirect to login if not authenticated
   useEffect(() => {
@@ -298,6 +301,8 @@ export default function CheckoutScreen() {
   ) => {
     if (kind !== "checkout" || !token) return false;
     if (checkoutToken && token !== checkoutToken) return false;
+    if (paymentReturnHandledRef.current) return true;
+    paymentReturnHandledRef.current = true;
 
     router.replace({
       pathname: "/payment-return",
@@ -541,6 +546,9 @@ export default function CheckoutScreen() {
         setOrderId(result.orderId);
         setCheckoutToken(result.checkoutToken);
         setCheckoutUrl(result.checkoutUrl);
+        paymentReturnHandledRef.current = false;
+        paymentRecoveryAttemptedRef.current = false;
+        lastNavigationUrlRef.current = "";
         setWebviewLoading(true);
         setRetryCount(0);
         setPhase("paying");
@@ -601,6 +609,8 @@ export default function CheckoutScreen() {
 
   const handleNavChange = (navState: any) => {
     const url = navState.url || "";
+    if (!url || lastNavigationUrlRef.current === url) return;
+    lastNavigationUrlRef.current = url;
     if (handlePaymentReturnUrl(url)) return;
 
     // Detect order confirmation (success)
@@ -642,15 +652,12 @@ export default function CheckoutScreen() {
     }
     // If we land on a 404 page or homepage after payment gateway return, check order status
     if (url.includes("404") || url.includes("page-not-found")) {
-      // This happens when Orange Money returns to a non-existent callback URL
-      // Inject JS to check if order was actually paid
-      const recoveryUrl = getRecoveryCheckoutUrl();
-      if (webviewRef.current && recoveryUrl) {
-        webviewRef.current.injectJavaScript(`
-          // Redirect to our checkout page to check order status
-          window.location.href = '${recoveryUrl}';
-          true;
-        `);
+      if (!paymentRecoveryAttemptedRef.current) {
+        paymentRecoveryAttemptedRef.current = true;
+        setPaymentErrorMsg(
+          "Retour paiement reçu. Vérification sécurisée de votre commande...",
+        );
+        setTimeout(() => verifyPaymentBeforeSuccess(), 1200);
       }
       return;
     }
@@ -665,13 +672,12 @@ export default function CheckoutScreen() {
       !url.includes("lamako_checkout") &&
       !url.includes("order-received")
     ) {
-      // After payment gateway, redirect back to our checkout to check status
-      const recoveryUrl = getRecoveryCheckoutUrl();
-      if (webviewRef.current && recoveryUrl) {
-        webviewRef.current.injectJavaScript(`
-          window.location.href = '${recoveryUrl}';
-          true;
-        `);
+      if (!paymentRecoveryAttemptedRef.current) {
+        paymentRecoveryAttemptedRef.current = true;
+        setPaymentErrorMsg(
+          "Retour paiement reçu. Vérification sécurisée de votre commande...",
+        );
+        setTimeout(() => verifyPaymentBeforeSuccess(), 1200);
       }
       return;
     }
@@ -2032,11 +2038,11 @@ export default function CheckoutScreen() {
               return;
             }
           }
-          // Only show error after retries exhausted
+          // After retries, an existing order can still be processing in the gateway.
           setPaymentErrorMsg(
-            `Erreur réseau (${errorCode}): ${errorDescription}. Veuillez vérifier votre connexion et réessayer.`,
+            `Le paiement met plus de temps que prévu (${errorCode}). Si vous avez validé le paiement, vérifiez la commande dans quelques instants.`,
           );
-          setPhase("payment_error");
+          setPhase(orderId ? "payment_pending" : "payment_error");
         }}
         injectedJavaScript={checkoutInjectedJS}
         onMessage={handleWebViewMessage}

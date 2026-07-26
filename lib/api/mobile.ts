@@ -28,6 +28,7 @@ interface MobileFetchOptions {
   body?: unknown;
   token?: string | null;
   requireAuth?: boolean;
+  timeoutMs?: number;
 }
 
 function mobileV2Url(endpoint: string, params: Record<string, QueryValue> = {}): string {
@@ -68,11 +69,33 @@ export async function mobileV2Fetch<T>(
   if (token) headers.Authorization = `Bearer ${token}`;
   if (options.body !== undefined) headers["Content-Type"] = "application/json";
 
-  const res = await fetch(mobileV2Url(endpoint, options.params), {
-    method: options.method || (options.body !== undefined ? "POST" : "GET"),
-    headers,
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-  });
+  const controller =
+    typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeoutMs = options.timeoutMs ?? 30000;
+  const timeout = controller
+    ? setTimeout(() => controller.abort(), timeoutMs)
+    : null;
+
+  let res: Response;
+  try {
+    res = await fetch(mobileV2Url(endpoint, options.params), {
+      method: options.method || (options.body !== undefined ? "POST" : "GET"),
+      headers,
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      signal: controller?.signal,
+    });
+  } catch (error: any) {
+    if (error?.name === "AbortError") {
+      throw new MobileApiError(
+        "La requête a expiré. Vérifiez votre connexion puis réessayez.",
+        408,
+        "request_timeout"
+      );
+    }
+    throw error;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 
   const data = await parseResponse(res);
   if (!res.ok) {

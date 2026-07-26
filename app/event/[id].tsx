@@ -246,10 +246,10 @@ export default function EventDetailScreen() {
     const itemName = `${name} - ${selectedTicket.name}`;
     setCartToastName(itemName);
     setShowCartToast(true);
-    // Navigate to cart after toast animation
+    // Keep the confirmation visible without making add-to-cart feel sluggish.
     setTimeout(() => {
       router.push("/(tabs)/cart" as any);
-    }, 1200);
+    }, 650);
     addItem({
       productId: selectedTicket.id,
       name: itemName,
