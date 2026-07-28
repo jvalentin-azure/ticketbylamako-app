@@ -28,6 +28,7 @@
       }
     },
     "production": {
+      "channel": "production",
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_SITE_URL": "https://www.ticketbylamako.com",
@@ -38,6 +39,13 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "android": {
+        "track": "internal"
+      },
+      "ios": {
+        "ascAppId": "6793957219"
+      }
+    }
   }
 }

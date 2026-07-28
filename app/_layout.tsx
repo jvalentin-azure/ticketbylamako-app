@@ -251,11 +251,19 @@ export default function RootLayout() {
             <Stack.Screen name="ticket/[id]" />
             <Stack.Screen
               name="checkout"
-              options={{ presentation: "fullScreenModal" }}
+              options={{
+                presentation: "modal",
+                statusBarHidden: false,
+                statusBarStyle: "dark",
+              }}
             />
             <Stack.Screen
               name="payment-return"
-              options={{ presentation: "fullScreenModal" }}
+              options={{
+                presentation: "modal",
+                statusBarHidden: false,
+                statusBarStyle: "dark",
+              }}
             />
             <Stack.Screen name="orders" />
             <Stack.Screen name="privacy" />
@@ -316,7 +324,7 @@ export default function RootLayout() {
           <RewardsProvider>
             <FavoritesProvider>
               <NotificationsProvider>
-                <SafeAreaProvider initialMetrics={providerInitialMetrics}>
+                <SafeAreaProvider>
                   {content}
                 </SafeAreaProvider>
               </NotificationsProvider>
