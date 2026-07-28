@@ -607,6 +607,12 @@ export default function CheckoutScreen() {
     isAuthenticated,
   ]);
 
+  useEffect(() => {
+    if (phase !== "paying" || !webviewLoading) return;
+    const timer = setTimeout(() => setWebviewLoading(false), 3500);
+    return () => clearTimeout(timer);
+  }, [checkoutUrl, phase, webviewLoading]);
+
   const handleNavChange = (navState: any) => {
     const url = navState.url || "";
     if (!url || lastNavigationUrlRef.current === url) return;
@@ -803,7 +809,6 @@ export default function CheckoutScreen() {
       setTimeout(cleanup, 800);
       setTimeout(cleanup, 1500);
       setTimeout(cleanup, 3000);
-      setInterval(cleanup, 5000);
       function checkSuccess() {
         var u = window.location.href;
         if (u.indexOf('order-received') > -1 || u.indexOf('commande-recue') > -1 || u.indexOf('thankyou') > -1) {
@@ -813,8 +818,10 @@ export default function CheckoutScreen() {
         }
       }
       window.addEventListener('load', checkSuccess);
-      var obs = new MutationObserver(checkSuccess);
-      obs.observe(document.body, { childList: true, subtree: true });
+      if (document.body && window.MutationObserver) {
+        var obs = new MutationObserver(checkSuccess);
+        obs.observe(document.body, { childList: true, subtree: true });
+      }
     })();
     true;
   `;
@@ -1971,6 +1978,7 @@ export default function CheckoutScreen() {
       </View>
       {webviewLoading && (
         <View
+          pointerEvents="none"
           style={[styles.webviewLoader, { backgroundColor: colors.background }]}
         >
           <CheckoutSkeleton />
@@ -1979,6 +1987,11 @@ export default function CheckoutScreen() {
       <WebViewComponent
         ref={webviewRef}
         source={{ uri: checkoutUrl }}
+        onLoadProgress={(event: any) => {
+          if (event.nativeEvent?.progress >= 0.35) {
+            setWebviewLoading(false);
+          }
+        }}
         onLoadEnd={() => setWebviewLoading(false)}
         onNavigationStateChange={handleNavChange}
         onShouldStartLoadWithRequest={(request: any) => {
@@ -2049,9 +2062,9 @@ export default function CheckoutScreen() {
         style={{ flex: 1 }}
         javaScriptEnabled
         domStorageEnabled
-        startInLoadingState
         sharedCookiesEnabled
         thirdPartyCookiesEnabled
+        keyboardDisplayRequiresUserAction={false}
       />
     </ScreenContainer>
   );
