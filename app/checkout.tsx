@@ -43,6 +43,7 @@ import { useAuth } from "@/lib/auth-provider";
 import { parsePaymentReturnUrl } from "@/lib/payment-return";
 import type { CheckoutFieldSchema } from "@/lib/types/commerce";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { isAllowedWebViewUrl } from "@/lib/webview-policy";
 
 // WebView for checkout - loads WooCommerce pay-for-order page
 let WebViewComponent: any = null;
@@ -288,10 +289,6 @@ export default function CheckoutScreen() {
     } finally {
       verificationInFlightRef.current = false;
     }
-  };
-
-  const getRecoveryCheckoutUrl = () => {
-    return checkoutUrl;
   };
 
   const openVerifiedPaymentReturn = (
@@ -1998,22 +1995,7 @@ export default function CheckoutScreen() {
           const url = request.url || "";
           if (handlePaymentReturnUrl(url)) return false;
           if (url.startsWith("ticketbylamako://")) return false;
-          if (url.startsWith(SITE_URL)) return true;
-          if (
-            url.includes("mvola") ||
-            url.includes("orange") ||
-            url.includes("airtel")
-          )
-            return true;
-          if (
-            url.includes("cybersource") ||
-            url.includes("visa") ||
-            url.includes("mastercard")
-          )
-            return true;
-          if (url.includes("paypal") || url.includes("stripe")) return true;
-          if (url.startsWith("https://")) return true;
-          return false;
+          return isAllowedWebViewUrl(url, "payment");
         }}
         onError={(syntheticEvent: any) => {
           const { nativeEvent } = syntheticEvent;

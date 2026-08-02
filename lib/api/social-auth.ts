@@ -1,8 +1,11 @@
-import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as WebBrowser from "expo-web-browser";
+import * as Crypto from "expo-crypto";
 import * as Linking from "expo-linking";
+import * as WebBrowser from "expo-web-browser";
+import { Platform } from "react-native";
 import { User } from "./auth";
+
+WebBrowser.maybeCompleteAuthSession();
 
 const SITE_URL =
   process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
@@ -13,8 +16,28 @@ const SITE_URL_BASE = SITE_URL.replace(/\/$/, "");
 const TOKEN_KEY = "jwt_token";
 const USER_KEY = "user_data";
 const OAUTH_STATE_PREFIX = "lamako_oauth_state_";
+const OAUTH_STATE_MAX_AGE_MS = 10 * 60 * 1000;
+const SOCIAL_REQUEST_TIMEOUT_MS = 15_000;
 
 export type SocialProvider = "google" | "apple" | "facebook";
+
+export interface SocialCredential {
+  token: string;
+  nonce?: string;
+  firstName?: string;
+  lastName?: string;
+}
+
+interface StoredOAuthState {
+  stateId: string;
+  oidcNonce: string;
+  issuedAt: number;
+}
+
+interface OAuthStatePayload extends StoredOAuthState {
+  provider: "google" | "facebook";
+  returnUrl: string;
+}
 
 interface SocialLoginResponse {
   success: boolean;
@@ -33,30 +56,44 @@ interface SocialLoginResponse {
   message?: string;
 }
 
-// Secure storage helpers (same as auth.ts)
 async function secureSet(key: string, value: string) {
   if (Platform.OS === "web") {
     await AsyncStorage.setItem(key, value);
-  } else {
-    const SecureStore = await import("expo-secure-store");
-    await SecureStore.setItemAsync(key, value);
+    return;
   }
+
+  const SecureStore = await import("expo-secure-store");
+  await SecureStore.setItemAsync(key, value);
 }
 
-function createOAuthState(
+async function randomToken(byteLength = 32): Promise<string> {
+  const bytes = await Crypto.getRandomBytesAsync(byteLength);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
+    "",
+  );
+}
+
+async function createOAuthState(
   provider: "google" | "facebook",
   returnUrl: string,
-): { state: string; nonce: string } {
-  const nonce = Math.random().toString(36).slice(2) + Date.now().toString(36);
-  return {
-    nonce,
-    state: JSON.stringify({
-      provider,
-      nonce,
-      returnUrl,
-      ts: Date.now(),
-    }),
+): Promise<{ state: string; stored: StoredOAuthState }> {
+  const stored: StoredOAuthState = {
+    stateId: await randomToken(),
+    oidcNonce: await randomToken(),
+    issuedAt: Date.now(),
   };
+  const payload: OAuthStatePayload = {
+    provider,
+    returnUrl,
+    ...stored,
+  };
+
+  await AsyncStorage.setItem(
+    `${OAUTH_STATE_PREFIX}${provider}`,
+    JSON.stringify(stored),
+  );
+
+  return { state: JSON.stringify(payload), stored };
 }
 
 function getOAuthParams(url: string): URLSearchParams {
@@ -67,94 +104,111 @@ function getOAuthParams(url: string): URLSearchParams {
   return new URLSearchParams(fragment || parsed.search.replace(/^\?/, ""));
 }
 
-async function rememberOAuthState(
-  provider: "google" | "facebook",
-  nonce: string,
-) {
-  await AsyncStorage.setItem(`${OAUTH_STATE_PREFIX}${provider}`, nonce);
+function parseOAuthState(value: string): OAuthStatePayload | null {
+  try {
+    return JSON.parse(value) as OAuthStatePayload;
+  } catch {
+    try {
+      return JSON.parse(decodeURIComponent(value)) as OAuthStatePayload;
+    } catch {
+      return null;
+    }
+  }
 }
 
 async function validateOAuthState(
   provider: "google" | "facebook",
   params: URLSearchParams,
-) {
+): Promise<StoredOAuthState> {
   const returnedState = params.get("state");
-  const expectedNonce = await AsyncStorage.getItem(
-    `${OAUTH_STATE_PREFIX}${provider}`,
-  );
+  const storageKey = `${OAUTH_STATE_PREFIX}${provider}`;
+  const expectedRaw = await AsyncStorage.getItem(storageKey);
+  await AsyncStorage.removeItem(storageKey);
 
-  if (!returnedState || !expectedNonce) {
+  if (!returnedState || !expectedRaw) {
     throw new Error("Session de connexion expirée. Veuillez réessayer.");
   }
 
-  let decoded: any = null;
+  const returned = parseOAuthState(returnedState);
+  let expected: StoredOAuthState | null = null;
   try {
-    decoded = JSON.parse(returnedState);
+    expected = JSON.parse(expectedRaw) as StoredOAuthState;
   } catch {
-    try {
-      decoded = JSON.parse(decodeURIComponent(returnedState));
-    } catch {
-      decoded = null;
-    }
+    expected = null;
   }
 
-  await AsyncStorage.removeItem(`${OAUTH_STATE_PREFIX}${provider}`);
-
   if (
-    !decoded ||
-    decoded.provider !== provider ||
-    decoded.nonce !== expectedNonce
+    !returned ||
+    !expected ||
+    returned.provider !== provider ||
+    returned.stateId !== expected.stateId ||
+    returned.oidcNonce !== expected.oidcNonce ||
+    returned.issuedAt !== expected.issuedAt ||
+    Date.now() - expected.issuedAt > OAUTH_STATE_MAX_AGE_MS
   ) {
     throw new Error("Retour de connexion invalide. Veuillez réessayer.");
   }
+
+  const providerError = params.get("error_description") || params.get("error");
+  if (providerError) {
+    throw new Error(providerError);
+  }
+
+  return expected;
 }
 
-/**
- * Social login flow:
- * 1. Get OAuth token from provider (Google/Apple/Facebook)
- * 2. Send token to WordPress backend endpoint
- * 3. Backend verifies token, finds/creates user, links accounts by email
- * 4. Returns JWT token for the app
- */
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  timeoutMs = SOCIAL_REQUEST_TIMEOUT_MS,
+) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (error: any) {
+    if (error?.name === "AbortError") {
+      throw new Error("Le service de connexion met trop de temps à répondre.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function socialLogin(
   provider: SocialProvider,
-  token: string,
-  userData?: {
-    email?: string;
-    firstName?: string;
-    lastName?: string;
-    name?: string;
-  },
+  credential: SocialCredential,
 ): Promise<User> {
-  // Call the WordPress social login endpoint
-  const res = await fetch(`${SITE_URL}/wp-json/lamako-mobile/v1/social-login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      provider,
-      token,
-      email: userData?.email,
-      first_name: userData?.firstName,
-      last_name: userData?.lastName,
-      name: userData?.name,
-    }),
-  });
+  const res = await fetchWithTimeout(
+    `${SITE_URL_BASE}/wp-json/lamako-mobile/v1/social-login`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider,
+        token: credential.token,
+        nonce: credential.nonce,
+        first_name: provider === "apple" ? credential.firstName : undefined,
+        last_name: provider === "apple" ? credential.lastName : undefined,
+      }),
+    },
+  );
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || `Erreur de connexion ${provider}`);
+    const errorBody = await res.json().catch(() => ({}));
+    throw new Error(
+      errorBody.message || `Erreur de connexion ${provider} (${res.status})`,
+    );
   }
 
   const data: SocialLoginResponse = await res.json();
-
   if (!data.success || !data.token) {
-    throw new Error(data.message || "Ã‰chec de l'authentification");
+    throw new Error(data.message || "Échec de l'authentification");
   }
 
-  // Store JWT token
   await secureSet(TOKEN_KEY, data.token);
 
-  // Build user object
   const roles = data.user.role || "customer";
   let role: "customer" | "shop_manager" | "administrator" = "customer";
   if (roles.includes("administrator")) role = "administrator";
@@ -174,159 +228,112 @@ export async function socialLogin(
   return user;
 }
 
-/**
- * Google Sign-In through a HTTPS callback page.
- * Google web OAuth clients only accept http/https redirect URIs, so WordPress
- * receives the HTTPS redirect and forwards the fragment back to the app.
- */
-export async function startGoogleLogin(): Promise<{
-  token: string;
-  email?: string;
-  name?: string;
-  firstName?: string;
-  lastName?: string;
-} | null> {
+export async function startGoogleLogin(): Promise<SocialCredential | null> {
   if (!GOOGLE_CLIENT_ID) {
     throw new Error("Google Client ID non configuré");
   }
 
   const appRedirectUri = Linking.createURL("oauth/google-callback");
   const webRedirectUri = `${SITE_URL_BASE}/lamako-mobile/oauth/google-callback`;
-  const { state, nonce } = createOAuthState("google", appRedirectUri);
-  await rememberOAuthState("google", nonce);
+  const { state, stored } = await createOAuthState("google", appRedirectUri);
+  const authParams = new URLSearchParams({
+    client_id: GOOGLE_CLIENT_ID,
+    redirect_uri: webRedirectUri,
+    response_type: "id_token",
+    scope: "openid email profile",
+    state,
+    nonce: stored.oidcNonce,
+    prompt: "select_account",
+  });
 
-  const authUrl =
-    `https://accounts.google.com/o/oauth2/v2/auth?` +
-    `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}` +
-    `&redirect_uri=${encodeURIComponent(webRedirectUri)}` +
-    `&response_type=token` +
-    `&scope=${encodeURIComponent("openid email profile")}` +
-    `&state=${state}` +
-    `&prompt=select_account`;
-
-  const result = await WebBrowser.openAuthSessionAsync(authUrl, appRedirectUri);
-
-  if (result.type === "success" && result.url) {
-    const params = getOAuthParams(result.url);
-    await validateOAuthState("google", params);
-    const accessToken = params.get("access_token");
-
-    if (accessToken) {
-      try {
-        const userInfoRes = await fetch(
-          "https://www.googleapis.com/oauth2/v3/userinfo",
-          {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          },
-        );
-        const userInfo = await userInfoRes.json();
-        return {
-          token: accessToken,
-          email: userInfo.email,
-          name: userInfo.name,
-          firstName: userInfo.given_name,
-          lastName: userInfo.family_name,
-        };
-      } catch (e: any) {
-        console.warn("Google userinfo error:", e);
-        throw new Error(
-          e.message || "Erreur lors de l'authentification Google",
-        );
-      }
-    }
+  const result = await WebBrowser.openAuthSessionAsync(
+    `https://accounts.google.com/o/oauth2/v2/auth?${authParams.toString()}`,
+    appRedirectUri,
+  );
+  if (result.type !== "success" || !result.url) {
+    await AsyncStorage.removeItem(`${OAUTH_STATE_PREFIX}google`);
+    return null;
   }
 
-  return null;
+  const params = getOAuthParams(result.url);
+  const validatedState = await validateOAuthState("google", params);
+  const identityToken = params.get("id_token");
+  if (!identityToken) {
+    throw new Error("Google n'a pas retourné de preuve d'identité.");
+  }
+
+  return { token: identityToken, nonce: validatedState.oidcNonce };
 }
-/**
- * Apple Sign-In using the native Apple Authentication module.
- */
-export async function startAppleLogin(): Promise<{
-  token: string;
-  email?: string;
-  firstName?: string;
-  lastName?: string;
-} | null> {
-  if (Platform.OS === "web") {
-    throw new Error("Apple Sign-In n'est pas disponible sur le web");
+
+export async function startAppleLogin(): Promise<SocialCredential | null> {
+  if (Platform.OS !== "ios") {
+    throw new Error("La connexion Apple est disponible uniquement sur iOS.");
   }
+
+  const AppleAuthentication = await import("expo-apple-authentication");
+  const state = await randomToken();
+  const nonce = await randomToken();
 
   try {
-    const AppleAuthentication = await import("expo-apple-authentication");
     const credential = await AppleAuthentication.signInAsync({
       requestedScopes: [
         AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
         AppleAuthentication.AppleAuthenticationScope.EMAIL,
       ],
+      state,
+      nonce,
     });
 
-    if (credential.identityToken) {
-      return {
-        token: credential.identityToken,
-        email: credential.email || undefined,
-        firstName: credential.fullName?.givenName || undefined,
-        lastName: credential.fullName?.familyName || undefined,
-      };
+    if (credential.state !== state) {
+      throw new Error("Retour Apple invalide. Veuillez réessayer.");
     }
-  } catch (e: any) {
-    if (e.code === "ERR_REQUEST_CANCELED") {
-      return null; // User cancelled
+    if (!credential.identityToken) {
+      throw new Error("Apple n'a pas retourné de preuve d'identité.");
     }
-    throw e;
-  }
 
-  return null;
+    return {
+      token: credential.identityToken,
+      nonce,
+      firstName: credential.fullName?.givenName || undefined,
+      lastName: credential.fullName?.familyName || undefined,
+    };
+  } catch (error: any) {
+    if (error?.code === "ERR_REQUEST_CANCELED") return null;
+    throw error;
+  }
 }
 
-/**
- * Facebook Login using OAuth web flow.
- */
-export async function startFacebookLogin(): Promise<{
-  token: string;
-  email?: string;
-  name?: string;
-} | null> {
+export async function startFacebookLogin(): Promise<SocialCredential | null> {
   if (!FACEBOOK_APP_ID) {
-    throw new Error("Facebook App ID non configurÃ©");
+    throw new Error("Facebook App ID non configuré");
   }
 
   const appRedirectUri = Linking.createURL("oauth/facebook-callback");
   const webRedirectUri = `${SITE_URL_BASE}/lamako-mobile/oauth/facebook-callback`;
-  const { state, nonce } = createOAuthState("facebook", appRedirectUri);
-  await rememberOAuthState("facebook", nonce);
+  const { state } = await createOAuthState("facebook", appRedirectUri);
+  const authParams = new URLSearchParams({
+    client_id: FACEBOOK_APP_ID,
+    redirect_uri: webRedirectUri,
+    response_type: "token",
+    scope: "email,public_profile",
+    state,
+  });
 
-  const authUrl =
-    `https://www.facebook.com/v18.0/dialog/oauth?` +
-    `client_id=${encodeURIComponent(FACEBOOK_APP_ID)}` +
-    `&redirect_uri=${encodeURIComponent(webRedirectUri)}` +
-    `&response_type=token` +
-    `&scope=${encodeURIComponent("email,public_profile")}` +
-    `&state=${state}`;
-
-  const result = await WebBrowser.openAuthSessionAsync(authUrl, appRedirectUri);
-
-  if (result.type === "success" && result.url) {
-    const params = getOAuthParams(result.url);
-    await validateOAuthState("facebook", params);
-    const accessToken = params.get("access_token");
-
-    if (accessToken) {
-      // Get user info from Facebook
-      try {
-        const userInfoRes = await fetch(
-          `https://graph.facebook.com/me?fields=email,name,first_name,last_name&access_token=${accessToken}`,
-        );
-        const userInfo = await userInfoRes.json();
-        return {
-          token: accessToken,
-          email: userInfo.email,
-          name: userInfo.name,
-        };
-      } catch {
-        return { token: accessToken };
-      }
-    }
+  const result = await WebBrowser.openAuthSessionAsync(
+    `https://www.facebook.com/v18.0/dialog/oauth?${authParams.toString()}`,
+    appRedirectUri,
+  );
+  if (result.type !== "success" || !result.url) {
+    await AsyncStorage.removeItem(`${OAUTH_STATE_PREFIX}facebook`);
+    return null;
   }
 
-  return null;
+  const params = getOAuthParams(result.url);
+  await validateOAuthState("facebook", params);
+  const accessToken = params.get("access_token");
+  if (!accessToken) {
+    throw new Error("Facebook n'a pas retourné de preuve d'identité.");
+  }
+
+  return { token: accessToken };
 }

@@ -13,6 +13,7 @@ Only values that are safe to ship inside the mobile app may use the `EXPO_PUBLIC
 | App deep link scheme | Configured in `app.config.ts` as `ticketbylamako://payment-return`; do not put secrets or order keys in deep links. | `ticketbylamako` |
 | `EXPO_PUBLIC_GOOGLE_CLIENT_ID` | Public Google OAuth client ID | `xxxxx.apps.googleusercontent.com` |
 | `EXPO_PUBLIC_FACEBOOK_APP_ID` | Public Facebook App ID | `123456789012345` |
+| `EXPO_PUBLIC_PAYMENT_HOSTS` | Optional comma-separated HTTPS hosts for audited payment gateways not already present in the built-in allowlist. Never add a wildcard. | `pay.provider.example` |
 | `EXPO_PUBLIC_OAUTH_PORTAL_URL` | Public OAuth portal URL, if still used | `https://portal.manus.space` |
 | `EXPO_PUBLIC_OAUTH_SERVER_URL` | Public OAuth server URL, if still used | `https://oauth.manus.space` |
 | `EXPO_PUBLIC_APP_ID` | Public Manus app ID, if still used | `(provided by platform)` |
@@ -44,6 +45,13 @@ Configure these only on the WordPress/server side, not in Expo public variables.
 | WooCommerce REST consumer key/secret | Server-side only, if a backend integration still needs REST credentials. |
 | Lamako rewards internal API key | Server-side only while legacy rewards routes remain active. |
 | Payment gateway return URLs | Must point to Lamako mobile return/verification pages once Phase 4 is implemented. |
+| `LAMAKO_GOOGLE_CLIENT_IDS` | Comma-separated Google OAuth client IDs accepted by server-side token verification. |
+| `LAMAKO_FACEBOOK_APP_ID` | Facebook application ID expected by server-side token verification. |
+| `LAMAKO_FACEBOOK_APP_SECRET` | Facebook application secret. Server environment only; never expose it to Expo or Git. |
+| `LAMAKO_APPLE_CLIENT_IDS` | Apple bundle/service IDs accepted by server-side identity-token verification. The client app uses `com.ticketbylamako.app`. |
+| `LAMAKO_ALLOW_LEGACY_GOOGLE_ACCESS_TOKEN` | Temporary compatibility switch for the already-submitted client build. Set to `false` after the signed-ID-token build is adopted. |
+| `LAMAKO_REQUIRE_SOCIAL_NONCE` | Enforce social-login nonce on current builds after the compatibility window. |
+| `LAMAKO_ENABLE_LEGACY_AUTO_LOGIN` | Emergency rollback only. Leave undefined/false so JWTs cannot be transported in WebView URLs. |
 
 ## Local backend variables
 

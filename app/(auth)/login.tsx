@@ -1,5 +1,15 @@
-import { useState } from "react";
-import { Text, View, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from "react-native";
+import { useEffect, useState } from "react";
+import {
+  Text,
+  View,
+  TextInput,
+  TouchableOpacity,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+} from "react-native";
 import { Image } from "expo-image";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
@@ -8,7 +18,15 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useAuth } from "@/lib/auth-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { socialLogin, startGoogleLogin, startFacebookLogin, type SocialProvider } from "@/lib/api/social-auth";
+import * as AppleAuthentication from "expo-apple-authentication";
+import {
+  socialLogin,
+  startAppleLogin,
+  startFacebookLogin,
+  startGoogleLogin,
+  type SocialCredential,
+  type SocialProvider,
+} from "@/lib/api/social-auth";
 import { requestPasswordReset } from "@/lib/api/auth";
 
 export default function LoginScreen() {
@@ -21,13 +39,36 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [socialLoading, setSocialLoading] = useState<string | null>(null);
+  const [socialLoading, setSocialLoading] = useState<SocialProvider | null>(
+    null,
+  );
   const [resetLoading, setResetLoading] = useState(false);
+  const [appleAvailable, setAppleAvailable] = useState(false);
   const [error, setError] = useState("");
   const [resetMessage, setResetMessage] = useState("");
 
+  useEffect(() => {
+    let mounted = true;
+    if (Platform.OS !== "ios") return undefined;
+
+    AppleAuthentication.isAvailableAsync()
+      .then((available) => {
+        if (mounted) setAppleAvailable(available);
+      })
+      .catch(() => {
+        if (mounted) setAppleAvailable(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const handleLogin = async () => {
-    if (!email.trim() || !password.trim()) { setError("Veuillez remplir tous les champs"); return; }
+    if (!email.trim() || !password.trim()) {
+      setError("Veuillez remplir tous les champs");
+      return;
+    }
     setError("");
     setLoading(true);
     try {
@@ -39,23 +80,22 @@ export default function LoginScreen() {
       }
     } catch (e: any) {
       setError(e.message || "Identifiants incorrects");
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSocialLogin = async (provider: Extract<SocialProvider, "google" | "facebook">) => {
+  const handleSocialLogin = async (provider: SocialProvider) => {
     setSocialLoading(provider);
     setError("");
     try {
-      const result: { token: string; email?: string; name?: string; firstName?: string; lastName?: string } | null =
-        provider === "google" ? await startGoogleLogin() : await startFacebookLogin();
-      if (!result) return;
+      let credential: SocialCredential | null;
+      if (provider === "google") credential = await startGoogleLogin();
+      else if (provider === "facebook") credential = await startFacebookLogin();
+      else credential = await startAppleLogin();
+      if (!credential) return;
 
-      const user = await socialLogin(provider, result.token, {
-        email: result.email,
-        firstName: result.firstName,
-        lastName: result.lastName,
-        name: result.name,
-      });
+      const user = await socialLogin(provider, credential);
 
       loginWithUser(user);
       if (params.returnTo) {
@@ -75,7 +115,9 @@ export default function LoginScreen() {
     setResetMessage("");
     setError("");
     if (!loginOrEmail) {
-      setError("Renseignez votre email ou nom d'utilisateur pour recevoir le lien de réinitialisation.");
+      setError(
+        "Renseignez votre email ou nom d'utilisateur pour recevoir le lien de réinitialisation.",
+      );
       return;
     }
 
@@ -92,12 +134,33 @@ export default function LoginScreen() {
 
   return (
     <ScreenContainer edges={["top", "bottom", "left", "right"]}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 24 }} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+      >
+        <ScrollView
+          contentContainerStyle={{
+            flexGrow: 1,
+            justifyContent: "center",
+            padding: 24,
+          }}
+          keyboardShouldPersistTaps="handled"
+        >
           {/* Back button */}
-          <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.surface }]}>
-            <IconSymbol name="chevron.left" size={22} color={colors.foreground} />
-            <Text style={{ color: colors.foreground, fontSize: 15, marginLeft: 4 }}>Retour</Text>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={[styles.backButton, { backgroundColor: colors.surface }]}
+          >
+            <IconSymbol
+              name="chevron.left"
+              size={22}
+              color={colors.foreground}
+            />
+            <Text
+              style={{ color: colors.foreground, fontSize: 15, marginLeft: 4 }}
+            >
+              Retour
+            </Text>
           </TouchableOpacity>
 
           {/* Logo */}
@@ -111,66 +174,166 @@ export default function LoginScreen() {
               style={styles.logo}
               contentFit="contain"
             />
-            <Text style={[styles.welcomeText, { color: colors.foreground }]}>Bienvenue</Text>
-            <Text style={[styles.subtitleText, { color: colors.muted }]}>Connectez-vous à votre compte</Text>
+            <Text style={[styles.welcomeText, { color: colors.foreground }]}>
+              Bienvenue
+            </Text>
+            <Text style={[styles.subtitleText, { color: colors.muted }]}>
+              Connectez-vous à votre compte
+            </Text>
           </View>
 
           {/* Social Login Buttons */}
           <View style={styles.socialContainer}>
-            <TouchableOpacity
-              onPress={() => handleSocialLogin("facebook")}
-              disabled={!!socialLoading}
-              style={[styles.socialButton, { backgroundColor: "#1877F2", opacity: socialLoading ? 0.7 : 1 }]}
-              activeOpacity={0.8}
-            >
-              {socialLoading === "facebook" ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <MaterialIcons name="facebook" size={22} color="#fff" />
-              )}
-              <Text style={styles.socialButtonText}>Facebook</Text>
-            </TouchableOpacity>
+            {appleAvailable ? (
+              <View
+                style={styles.appleButtonWrap}
+                pointerEvents={socialLoading ? "none" : "auto"}
+              >
+                <AppleAuthentication.AppleAuthenticationButton
+                  buttonType={
+                    AppleAuthentication.AppleAuthenticationButtonType.CONTINUE
+                  }
+                  buttonStyle={
+                    AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+                  }
+                  cornerRadius={12}
+                  style={styles.appleButton}
+                  onPress={() => handleSocialLogin("apple")}
+                />
+                {socialLoading === "apple" ? (
+                  <View style={styles.appleLoadingOverlay}>
+                    <ActivityIndicator size="small" color="#fff" />
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
 
-            <TouchableOpacity
-              onPress={() => handleSocialLogin("google")}
-              disabled={!!socialLoading}
-              style={[styles.socialButton, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, opacity: socialLoading ? 0.7 : 1 }]}
-              activeOpacity={0.8}
-            >
-              {socialLoading === "google" ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <Text style={styles.googleMark}>G</Text>
-              )}
-              <Text style={[styles.socialButtonText, { color: colors.foreground }]}>Google</Text>
-            </TouchableOpacity>
+            <View style={styles.socialButtonRow}>
+              <TouchableOpacity
+                onPress={() => handleSocialLogin("facebook")}
+                disabled={!!socialLoading}
+                style={[
+                  styles.socialButton,
+                  {
+                    backgroundColor: "#1877F2",
+                    opacity: socialLoading ? 0.7 : 1,
+                  },
+                ]}
+                activeOpacity={0.8}
+              >
+                {socialLoading === "facebook" ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <MaterialIcons name="facebook" size={22} color="#fff" />
+                )}
+                <Text style={styles.socialButtonText}>Facebook</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => handleSocialLogin("google")}
+                disabled={!!socialLoading}
+                style={[
+                  styles.socialButton,
+                  {
+                    backgroundColor: colors.surface,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    opacity: socialLoading ? 0.7 : 1,
+                  },
+                ]}
+                activeOpacity={0.8}
+              >
+                {socialLoading === "google" ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Text style={styles.googleMark}>G</Text>
+                )}
+                <Text
+                  style={[
+                    styles.socialButtonText,
+                    { color: colors.foreground },
+                  ]}
+                >
+                  Google
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View style={styles.divider}>
-            <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-            <Text style={[styles.dividerText, { color: colors.muted }]}>ou</Text>
-            <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+            <View
+              style={[styles.dividerLine, { backgroundColor: colors.border }]}
+            />
+            <Text style={[styles.dividerText, { color: colors.muted }]}>
+              ou
+            </Text>
+            <View
+              style={[styles.dividerLine, { backgroundColor: colors.border }]}
+            />
           </View>
 
           {/* Error */}
           {error ? (
-            <View style={[styles.errorBox, { backgroundColor: colors.error + "15" }]}>
-              <IconSymbol name="xmark.circle.fill" size={18} color={colors.error} />
-              <Text style={{ color: colors.error, fontSize: 13, marginLeft: 8, flex: 1 }}>{error}</Text>
+            <View
+              style={[
+                styles.errorBox,
+                { backgroundColor: colors.error + "15" },
+              ]}
+            >
+              <IconSymbol
+                name="xmark.circle.fill"
+                size={18}
+                color={colors.error}
+              />
+              <Text
+                style={{
+                  color: colors.error,
+                  fontSize: 13,
+                  marginLeft: 8,
+                  flex: 1,
+                }}
+              >
+                {error}
+              </Text>
             </View>
           ) : null}
 
           {resetMessage ? (
-            <View style={[styles.errorBox, { backgroundColor: colors.success + "15" }]}>
-              <IconSymbol name="checkmark.circle.fill" size={18} color={colors.success} />
-              <Text style={{ color: colors.success, fontSize: 13, marginLeft: 8, flex: 1 }}>{resetMessage}</Text>
+            <View
+              style={[
+                styles.errorBox,
+                { backgroundColor: colors.success + "15" },
+              ]}
+            >
+              <IconSymbol
+                name="checkmark.circle.fill"
+                size={18}
+                color={colors.success}
+              />
+              <Text
+                style={{
+                  color: colors.success,
+                  fontSize: 13,
+                  marginLeft: 8,
+                  flex: 1,
+                }}
+              >
+                {resetMessage}
+              </Text>
             </View>
           ) : null}
 
           {/* Email */}
           <View style={{ marginBottom: 14 }}>
-            <Text style={[styles.inputLabel, { color: colors.foreground }]}>Email ou nom d'utilisateur</Text>
-            <View style={[styles.inputRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.inputLabel, { color: colors.foreground }]}>
+              Email ou nom d'utilisateur
+            </Text>
+            <View
+              style={[
+                styles.inputRow,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+            >
               <IconSymbol name="person.fill" size={18} color={colors.muted} />
               <TextInput
                 placeholder="votre@email.com"
@@ -187,8 +350,15 @@ export default function LoginScreen() {
 
           {/* Password */}
           <View style={{ marginBottom: 20 }}>
-            <Text style={[styles.inputLabel, { color: colors.foreground }]}>Mot de passe</Text>
-            <View style={[styles.inputRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.inputLabel, { color: colors.foreground }]}>
+              Mot de passe
+            </Text>
+            <View
+              style={[
+                styles.inputRow,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+            >
               <IconSymbol name="lock.fill" size={18} color={colors.muted} />
               <TextInput
                 placeholder="Votre mot de passe"
@@ -201,14 +371,26 @@ export default function LoginScreen() {
                 style={[styles.input, { color: colors.foreground }]}
               />
               <TouchableOpacity onPress={() => setShowPw(!showPw)}>
-                <IconSymbol name={showPw ? "eye.slash.fill" : "eye.fill"} size={20} color={colors.muted} />
+                <IconSymbol
+                  name={showPw ? "eye.slash.fill" : "eye.fill"}
+                  size={20}
+                  color={colors.muted}
+                />
               </TouchableOpacity>
             </View>
-            <TouchableOpacity onPress={handlePasswordReset} disabled={resetLoading} style={styles.forgotPasswordButton}>
+            <TouchableOpacity
+              onPress={handlePasswordReset}
+              disabled={resetLoading}
+              style={styles.forgotPasswordButton}
+            >
               {resetLoading ? (
                 <ActivityIndicator size="small" color={colors.primary} />
               ) : (
-                <Text style={[styles.forgotPasswordText, { color: colors.primary }]}>Mot de passe oublié ?</Text>
+                <Text
+                  style={[styles.forgotPasswordText, { color: colors.primary }]}
+                >
+                  Mot de passe oublié ?
+                </Text>
               )}
             </TouchableOpacity>
           </View>
@@ -217,22 +399,52 @@ export default function LoginScreen() {
           <TouchableOpacity
             onPress={handleLogin}
             disabled={loading}
-            style={[styles.loginButton, { backgroundColor: colors.primary, opacity: loading ? 0.7 : 1 }]}
+            style={[
+              styles.loginButton,
+              { backgroundColor: colors.primary, opacity: loading ? 0.7 : 1 },
+            ]}
           >
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.loginButtonText}>Se connecter</Text>}
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.loginButtonText}>Se connecter</Text>
+            )}
           </TouchableOpacity>
 
           {/* Register link */}
           <View style={styles.registerRow}>
-            <Text style={{ color: colors.muted, fontSize: 14 }}>Pas encore de compte ? </Text>
-            <TouchableOpacity onPress={() => router.push("/(auth)/register" as any)}>
-              <Text style={{ color: colors.primary, fontSize: 14, fontWeight: "600" }}>S'inscrire</Text>
+            <Text style={{ color: colors.muted, fontSize: 14 }}>
+              Pas encore de compte ?{" "}
+            </Text>
+            <TouchableOpacity
+              onPress={() => router.push("/(auth)/register" as any)}
+            >
+              <Text
+                style={{
+                  color: colors.primary,
+                  fontSize: 14,
+                  fontWeight: "600",
+                }}
+              >
+                S'inscrire
+              </Text>
             </TouchableOpacity>
           </View>
 
           {/* Privacy link */}
-          <TouchableOpacity onPress={() => router.push("/privacy" as any)} style={styles.privacyLink}>
-            <Text style={{ color: colors.muted, fontSize: 12, textDecorationLine: "underline" }}>Politique de confidentialité</Text>
+          <TouchableOpacity
+            onPress={() => router.push("/privacy" as any)}
+            style={styles.privacyLink}
+          >
+            <Text
+              style={{
+                color: colors.muted,
+                fontSize: 12,
+                textDecorationLine: "underline",
+              }}
+            >
+              Politique de confidentialité
+            </Text>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -268,9 +480,28 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   socialContainer: {
-    flexDirection: "row",
     gap: 10,
     marginBottom: 20,
+  },
+  socialButtonRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  appleButtonWrap: {
+    position: "relative",
+    width: "100%",
+    height: 46,
+  },
+  appleButton: {
+    width: "100%",
+    height: 46,
+  },
+  appleLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    backgroundColor: "rgba(0, 0, 0, 0.72)",
   },
   socialButton: {
     flex: 1,

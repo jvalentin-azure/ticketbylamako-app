@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { Confetti } from "@/components/confetti";
@@ -8,10 +17,10 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { useCart } from "@/lib/cart-provider";
 import { parsePaymentReturnUrl } from "@/lib/payment-return";
+import { isAllowedWebViewUrl } from "@/lib/webview-policy";
 import {
   createMobileSeatingSession,
   getMobileSeatingSessionStatus,
-  SITE_URL,
   type CreateMobileSeatingSessionResponse,
 } from "@/lib/api/mobile";
 
@@ -22,7 +31,13 @@ if (Platform.OS !== "web") {
   } catch {}
 }
 
-type FlowPhase = "loading" | "seating" | "checkout" | "pending" | "success" | "error";
+type FlowPhase =
+  | "loading"
+  | "seating"
+  | "checkout"
+  | "pending"
+  | "success"
+  | "error";
 
 interface WebMessageEnvelope {
   source?: string;
@@ -43,14 +58,19 @@ interface SeatPurchaseFlowProps {
   onClose: () => void;
 }
 
-export function SeatPurchaseFlow({ eventId, eventTitle, onClose }: SeatPurchaseFlowProps) {
+export function SeatPurchaseFlow({
+  eventId,
+  eventTitle,
+  onClose,
+}: SeatPurchaseFlowProps) {
   const colors = useColors();
   const router = useRouter();
   const { clearCart } = useCart();
   const webviewRef = useRef<any>(null);
   const verifyingRef = useRef(false);
   const closingCheckoutRef = useRef(false);
-  const [session, setSession] = useState<CreateMobileSeatingSessionResponse | null>(null);
+  const [session, setSession] =
+    useState<CreateMobileSeatingSessionResponse | null>(null);
   const [phase, setPhase] = useState<FlowPhase>("loading");
   const [error, setError] = useState("");
   const [selectedCount, setSelectedCount] = useState(0);
@@ -64,15 +84,17 @@ export function SeatPurchaseFlow({ eventId, eventTitle, onClose }: SeatPurchaseF
     setError("");
 
     createMobileSeatingSession({ eventId })
-      .then(result => {
+      .then((result) => {
         if (cancelled) return;
         setSession(result);
         setPhase("seating");
       })
-      .catch(err => {
+      .catch((err) => {
         if (cancelled) return;
         console.warn("Create seating session failed:", err);
-        setError(err?.message || "Impossible de créer la session de réservation.");
+        setError(
+          err?.message || "Impossible de créer la session de réservation.",
+        );
         setPhase("error");
       });
 
@@ -102,18 +124,26 @@ export function SeatPurchaseFlow({ eventId, eventTitle, onClose }: SeatPurchaseF
         return;
       }
 
-      setError("Le paiement n'a pas été confirmé. Votre commande est conservée si elle a été créée.");
+      setError(
+        "Le paiement n'a pas été confirmé. Votre commande est conservée si elle a été créée.",
+      );
       setPhase("error");
     } catch (err: any) {
       console.warn("Seating payment verification failed:", err);
-      setError("Impossible de vérifier le statut du paiement. Consultez vos commandes dans quelques instants.");
+      setError(
+        "Impossible de vérifier le statut du paiement. Consultez vos commandes dans quelques instants.",
+      );
       setPhase("error");
     } finally {
       verifyingRef.current = false;
     }
   };
 
-  const openVerifiedPaymentReturn = (kind: string, token: string, statusHint?: string) => {
+  const openVerifiedPaymentReturn = (
+    kind: string,
+    token: string,
+    statusHint?: string,
+  ) => {
     if (kind !== "seating" || !token) return false;
     if (session?.flowToken && token !== session.flowToken) return false;
 
@@ -131,7 +161,11 @@ export function SeatPurchaseFlow({ eventId, eventTitle, onClose }: SeatPurchaseF
   const handlePaymentReturnUrl = (url: string) => {
     const parsed = parsePaymentReturnUrl(url);
     if (!parsed) return false;
-    return openVerifiedPaymentReturn(parsed.kind, parsed.token, parsed.statusHint);
+    return openVerifiedPaymentReturn(
+      parsed.kind,
+      parsed.token,
+      parsed.statusHint,
+    );
   };
 
   const handleMessage = (event: any) => {
@@ -139,7 +173,12 @@ export function SeatPurchaseFlow({ eventId, eventTitle, onClose }: SeatPurchaseF
       const message = JSON.parse(event.nativeEvent.data) as WebMessageEnvelope;
       if (message.source && message.source !== "lamako-mobile-web") return;
       if (message.version && message.version !== 1) return;
-      if (session?.flowId && message.flowId && message.flowId !== session.flowId) return;
+      if (
+        session?.flowId &&
+        message.flowId &&
+        message.flowId !== session.flowId
+      )
+        return;
 
       switch (message.type) {
         case "FLOW_READY":
@@ -147,7 +186,9 @@ export function SeatPurchaseFlow({ eventId, eventTitle, onClose }: SeatPurchaseF
           break;
         case "SEAT_SELECTION_CHANGED":
           setSelectedCount(Number(message.payload?.count || 0));
-          setSelectedSeats(Array.isArray(message.payload?.seats) ? message.payload.seats : []);
+          setSelectedSeats(
+            Array.isArray(message.payload?.seats) ? message.payload.seats : [],
+          );
           break;
         case "CHECKOUT_READY":
         case "PAYMENT_STARTED":
@@ -159,7 +200,7 @@ export function SeatPurchaseFlow({ eventId, eventTitle, onClose }: SeatPurchaseF
             openVerifiedPaymentReturn(
               message.payload?.kind || "seating",
               message.payload?.token || session?.flowToken || "",
-              message.payload?.status
+              message.payload?.status,
             )
           ) {
             return;
@@ -188,10 +229,18 @@ export function SeatPurchaseFlow({ eventId, eventTitle, onClose }: SeatPurchaseF
     const url = navState.url || "";
     if (handlePaymentReturnUrl(url)) return;
 
-    if (url.includes("/checkout") || url.includes("/commande") || url.includes("order-pay")) {
+    if (
+      url.includes("/checkout") ||
+      url.includes("/commande") ||
+      url.includes("order-pay")
+    ) {
       setPhase("checkout");
     }
-    if (url.includes("order-received") || url.includes("commande-recue") || url.includes("thankyou")) {
+    if (
+      url.includes("order-received") ||
+      url.includes("commande-recue") ||
+      url.includes("thankyou")
+    ) {
       verifyPayment();
     }
   };
@@ -248,7 +297,12 @@ export function SeatPurchaseFlow({ eventId, eventTitle, onClose }: SeatPurchaseF
     onClose();
   };
 
-  const title = phase === "checkout" ? "Paiement sécurisé" : phase === "success" ? "Confirmation" : "Plan de salle";
+  const title =
+    phase === "checkout"
+      ? "Paiement sécurisé"
+      : phase === "success"
+        ? "Confirmation"
+        : "Plan de salle";
   const visibleSelectedCount = phase === "seating" ? selectedCount : 0;
 
   const continueToCheckoutFromSummary = () => {
@@ -262,28 +316,66 @@ export function SeatPurchaseFlow({ eventId, eventTitle, onClose }: SeatPurchaseF
   };
 
   const seatsForModal: SelectedSeat[] =
-    selectedSeats.length > 0 ? selectedSeats : Array.from({ length: selectedCount }, (_, index) => ({ label: `Place ${index + 1}` }));
+    selectedSeats.length > 0
+      ? selectedSeats
+      : Array.from({ length: selectedCount }, (_, index) => ({
+          label: `Place ${index + 1}`,
+        }));
 
   const seatSummaryModal = (
-    <Modal visible={showSeatSummary} transparent animationType="fade" onRequestClose={() => setShowSeatSummary(false)}>
+    <Modal
+      visible={showSeatSummary}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowSeatSummary(false)}
+    >
       <View style={styles.modalBackdrop}>
-        <View style={[styles.seatModal, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View
+          style={[
+            styles.seatModal,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
+        >
           <View style={styles.seatModalHeader}>
-            <Text style={[styles.seatModalTitle, { color: colors.foreground }]}>Places sélectionnées</Text>
-            <TouchableOpacity onPress={() => setShowSeatSummary(false)} style={styles.modalClose}>
+            <Text style={[styles.seatModalTitle, { color: colors.foreground }]}>
+              Places sélectionnées
+            </Text>
+            <TouchableOpacity
+              onPress={() => setShowSeatSummary(false)}
+              style={styles.modalClose}
+            >
               <IconSymbol name="xmark" size={18} color={colors.foreground} />
             </TouchableOpacity>
           </View>
           <View style={styles.seatList}>
             {seatsForModal.map((seat, index) => (
-              <View key={`${seat?.id || "seat"}-${index}`} style={[styles.seatChip, { backgroundColor: colors.primary + "12", borderColor: colors.primary + "30" }]}>
+              <View
+                key={`${seat?.id || "seat"}-${index}`}
+                style={[
+                  styles.seatChip,
+                  {
+                    backgroundColor: colors.primary + "12",
+                    borderColor: colors.primary + "30",
+                  },
+                ]}
+              >
                 <IconSymbol name="mappin" size={14} color={colors.primary} />
-                <Text style={[styles.seatChipText, { color: colors.primary }]}>{seat?.label || `Place ${index + 1}`}</Text>
+                <Text style={[styles.seatChipText, { color: colors.primary }]}>
+                  {seat?.label || `Place ${index + 1}`}
+                </Text>
               </View>
             ))}
           </View>
-          <TouchableOpacity onPress={continueToCheckoutFromSummary} style={[styles.modalPayButton, { backgroundColor: colors.success || "#16a34a" }]}>
-            <Text style={styles.modalPayButtonText}>Continuer vers le paiement</Text>
+          <TouchableOpacity
+            onPress={continueToCheckoutFromSummary}
+            style={[
+              styles.modalPayButton,
+              { backgroundColor: colors.success || "#16a34a" },
+            ]}
+          >
+            <Text style={styles.modalPayButtonText}>
+              Continuer vers le paiement
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -297,7 +389,9 @@ export function SeatPurchaseFlow({ eventId, eventTitle, onClose }: SeatPurchaseF
         {seatSummaryModal}
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={[styles.centerText, { color: colors.muted }]}>Préparation du plan de salle pour {eventTitle}...</Text>
+          <Text style={[styles.centerText, { color: colors.muted }]}>
+            Préparation du plan de salle pour {eventTitle}...
+          </Text>
         </View>
       </ScreenContainer>
     );
@@ -309,10 +403,21 @@ export function SeatPurchaseFlow({ eventId, eventTitle, onClose }: SeatPurchaseF
         <Header title="Plan de salle" colors={colors} onClose={handleClose} />
         {seatSummaryModal}
         <View style={styles.center}>
-          <IconSymbol name="exclamationmark.triangle.fill" size={48} color={colors.warning} />
-          <Text style={[styles.errorTitle, { color: colors.foreground }]}>Réservation indisponible</Text>
-          <Text style={[styles.centerText, { color: colors.muted }]}>{error}</Text>
-          <TouchableOpacity onPress={onClose} style={[styles.primaryButton, { backgroundColor: colors.primary }]}>
+          <IconSymbol
+            name="exclamationmark.triangle.fill"
+            size={48}
+            color={colors.warning}
+          />
+          <Text style={[styles.errorTitle, { color: colors.foreground }]}>
+            Réservation indisponible
+          </Text>
+          <Text style={[styles.centerText, { color: colors.muted }]}>
+            {error}
+          </Text>
+          <TouchableOpacity
+            onPress={onClose}
+            style={[styles.primaryButton, { backgroundColor: colors.primary }]}
+          >
             <Text style={styles.primaryButtonText}>Retour à l'événement</Text>
           </TouchableOpacity>
         </View>
@@ -323,17 +428,35 @@ export function SeatPurchaseFlow({ eventId, eventTitle, onClose }: SeatPurchaseF
   if (phase === "pending") {
     return (
       <ScreenContainer edges={["top", "left", "right", "bottom"]}>
-        <Header title="Paiement en attente" colors={colors} onClose={handleClose} />
+        <Header
+          title="Paiement en attente"
+          colors={colors}
+          onClose={handleClose}
+        />
         {seatSummaryModal}
         <View style={styles.center}>
           <IconSymbol name="clock.fill" size={48} color={colors.warning} />
-          <Text style={[styles.errorTitle, { color: colors.foreground }]}>Confirmation en cours</Text>
-          <Text style={[styles.centerText, { color: colors.muted }]}>Votre paiement est en cours de vérification.</Text>
-          <TouchableOpacity onPress={verifyPayment} style={[styles.primaryButton, { backgroundColor: colors.primary }]}>
+          <Text style={[styles.errorTitle, { color: colors.foreground }]}>
+            Confirmation en cours
+          </Text>
+          <Text style={[styles.centerText, { color: colors.muted }]}>
+            Votre paiement est en cours de vérification.
+          </Text>
+          <TouchableOpacity
+            onPress={verifyPayment}
+            style={[styles.primaryButton, { backgroundColor: colors.primary }]}
+          >
             <Text style={styles.primaryButtonText}>Vérifier maintenant</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.replace("/orders" as any)} style={styles.secondaryButton}>
-            <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>Voir mes commandes</Text>
+          <TouchableOpacity
+            onPress={() => router.replace("/orders" as any)}
+            style={styles.secondaryButton}
+          >
+            <Text
+              style={[styles.secondaryButtonText, { color: colors.primary }]}
+            >
+              Voir mes commandes
+            </Text>
           </TouchableOpacity>
         </View>
       </ScreenContainer>
@@ -347,12 +470,23 @@ export function SeatPurchaseFlow({ eventId, eventTitle, onClose }: SeatPurchaseF
         {seatSummaryModal}
         <Confetti active />
         <View style={styles.center}>
-          <IconSymbol name="checkmark.circle.fill" size={64} color={colors.success} />
-          <Text style={[styles.successTitle, { color: colors.foreground }]}>Paiement confirmé</Text>
-          <Text style={[styles.centerText, { color: colors.muted }]}>
-            {orderId ? `Votre commande #${orderId} est confirmée.` : "Votre commande est confirmée."}
+          <IconSymbol
+            name="checkmark.circle.fill"
+            size={64}
+            color={colors.success}
+          />
+          <Text style={[styles.successTitle, { color: colors.foreground }]}>
+            Paiement confirmé
           </Text>
-          <TouchableOpacity onPress={() => router.replace("/orders" as any)} style={[styles.primaryButton, { backgroundColor: colors.primary }]}>
+          <Text style={[styles.centerText, { color: colors.muted }]}>
+            {orderId
+              ? `Votre commande #${orderId} est confirmée.`
+              : "Votre commande est confirmée."}
+          </Text>
+          <TouchableOpacity
+            onPress={() => router.replace("/orders" as any)}
+            style={[styles.primaryButton, { backgroundColor: colors.primary }]}
+          >
             <Text style={styles.primaryButtonText}>Voir mes commandes</Text>
           </TouchableOpacity>
         </View>
@@ -363,10 +497,18 @@ export function SeatPurchaseFlow({ eventId, eventTitle, onClose }: SeatPurchaseF
   if (Platform.OS === "web" || !WebViewComponent) {
     return (
       <ScreenContainer edges={["top", "left", "right", "bottom"]}>
-        <Header title={title} colors={colors} onClose={handleClose} selectedCount={visibleSelectedCount} onSeatSummary={() => setShowSeatSummary(true)} />
+        <Header
+          title={title}
+          colors={colors}
+          onClose={handleClose}
+          selectedCount={visibleSelectedCount}
+          onSeatSummary={() => setShowSeatSummary(true)}
+        />
         {seatSummaryModal}
         <View style={styles.center}>
-          <Text style={[styles.centerText, { color: colors.muted }]}>Le plan de salle est disponible dans l'application mobile.</Text>
+          <Text style={[styles.centerText, { color: colors.muted }]}>
+            Le plan de salle est disponible dans l'application mobile.
+          </Text>
         </View>
       </ScreenContainer>
     );
@@ -374,7 +516,13 @@ export function SeatPurchaseFlow({ eventId, eventTitle, onClose }: SeatPurchaseF
 
   return (
     <ScreenContainer edges={["top", "left", "right", "bottom"]}>
-      <Header title={title} colors={colors} onClose={handleClose} selectedCount={visibleSelectedCount} onSeatSummary={() => setShowSeatSummary(true)} />
+      <Header
+        title={title}
+        colors={colors}
+        onClose={handleClose}
+        selectedCount={visibleSelectedCount}
+        onSeatSummary={() => setShowSeatSummary(true)}
+      />
       {seatSummaryModal}
       <WebViewComponent
         ref={webviewRef}
@@ -397,13 +545,14 @@ export function SeatPurchaseFlow({ eventId, eventTitle, onClose }: SeatPurchaseF
           const url = request.url || "";
           if (handlePaymentReturnUrl(url)) return false;
           if (url.startsWith("ticketbylamako://")) return false;
-          if (url.startsWith(SITE_URL)) return true;
-          if (url.startsWith("https://")) return true;
-          if (url.startsWith("about:") || url.startsWith("data:")) return true;
-          return false;
+          return isAllowedWebViewUrl(
+            url,
+            phase === "seating" ? "first-party" : "payment",
+          );
         }}
         onError={(event: any) => {
-          const description = event?.nativeEvent?.description || "Erreur WebView";
+          const description =
+            event?.nativeEvent?.description || "Erreur WebView";
           Alert.alert("Erreur", description);
         }}
       />
@@ -411,18 +560,53 @@ export function SeatPurchaseFlow({ eventId, eventTitle, onClose }: SeatPurchaseF
   );
 }
 
-function Header({ title, colors, onClose, selectedCount = 0, onSeatSummary }: { title: string; colors: any; onClose: () => void; selectedCount?: number; onSeatSummary?: () => void }) {
+function Header({
+  title,
+  colors,
+  onClose,
+  selectedCount = 0,
+  onSeatSummary,
+}: {
+  title: string;
+  colors: any;
+  onClose: () => void;
+  selectedCount?: number;
+  onSeatSummary?: () => void;
+}) {
   const showSeatBadge = selectedCount > 0 && !!onSeatSummary;
 
   return (
-    <View style={[styles.header, { borderBottomColor: colors.border, backgroundColor: colors.background }]}>
+    <View
+      style={[
+        styles.header,
+        {
+          borderBottomColor: colors.border,
+          backgroundColor: colors.background,
+        },
+      ]}
+    >
       <TouchableOpacity onPress={onClose} style={styles.headerBack}>
         <IconSymbol name="chevron.left" size={20} color={colors.foreground} />
-        <Text style={[styles.headerBackText, { color: colors.foreground }]}>Retour</Text>
+        <Text style={[styles.headerBackText, { color: colors.foreground }]}>
+          Retour
+        </Text>
       </TouchableOpacity>
-      <Text style={[styles.headerTitle, { color: colors.foreground }]} numberOfLines={1}>{title}</Text>
+      <Text
+        style={[styles.headerTitle, { color: colors.foreground }]}
+        numberOfLines={1}
+      >
+        {title}
+      </Text>
       {showSeatBadge ? (
-        <TouchableOpacity onPress={onSeatSummary} style={[styles.badge, styles.headerBadge, { backgroundColor: colors.primary }]} activeOpacity={0.8}>
+        <TouchableOpacity
+          onPress={onSeatSummary}
+          style={[
+            styles.badge,
+            styles.headerBadge,
+            { backgroundColor: colors.primary },
+          ]}
+          activeOpacity={0.8}
+        >
           <Text style={styles.badgeText}>{selectedCount}</Text>
         </TouchableOpacity>
       ) : null}
@@ -431,30 +615,111 @@ function Header({ title, colors, onClose, selectedCount = 0, onSeatSummary }: { 
 }
 
 const styles = StyleSheet.create({
-  header: { height: 52, borderBottomWidth: 1, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", position: "relative" },
-  headerBack: { position: "absolute", left: 12, width: 86, flexDirection: "row", alignItems: "center", zIndex: 2 },
+  header: {
+    height: 52,
+    borderBottomWidth: 1,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  headerBack: {
+    position: "absolute",
+    left: 12,
+    width: 86,
+    flexDirection: "row",
+    alignItems: "center",
+    zIndex: 2,
+  },
   headerBackText: { fontSize: 14, fontWeight: "600" },
-  headerTitle: { width: "100%", textAlign: "center", fontSize: 16, fontWeight: "800", paddingHorizontal: 96 },
+  headerTitle: {
+    width: "100%",
+    textAlign: "center",
+    fontSize: 16,
+    fontWeight: "800",
+    paddingHorizontal: 96,
+  },
   headerBadge: { position: "absolute", right: 12, zIndex: 2 },
-  badge: { minWidth: 32, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", paddingHorizontal: 10 },
+  badge: {
+    minWidth: 32,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+  },
   badgeText: { color: "#fff", fontSize: 12, fontWeight: "800" },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 28 },
-  centerText: { marginTop: 12, fontSize: 14, textAlign: "center", lineHeight: 20 },
-  errorTitle: { marginTop: 14, fontSize: 18, fontWeight: "800", textAlign: "center" },
-  successTitle: { marginTop: 14, fontSize: 20, fontWeight: "800", textAlign: "center" },
-  primaryButton: { marginTop: 22, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 24 },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 28,
+  },
+  centerText: {
+    marginTop: 12,
+    fontSize: 14,
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  errorTitle: {
+    marginTop: 14,
+    fontSize: 18,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  successTitle: {
+    marginTop: 14,
+    fontSize: 20,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  primaryButton: {
+    marginTop: 22,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+  },
   primaryButtonText: { color: "#fff", fontSize: 15, fontWeight: "800" },
   secondaryButton: { marginTop: 12, paddingVertical: 10 },
   secondaryButtonText: { fontSize: 14, fontWeight: "700" },
   loader: { position: "absolute", top: 52, left: 0, right: 0, bottom: 0 },
-  modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.42)", justifyContent: "center", padding: 20 },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.42)",
+    justifyContent: "center",
+    padding: 20,
+  },
   seatModal: { borderWidth: 1, borderRadius: 14, padding: 16 },
-  seatModalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
+  seatModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
   seatModalTitle: { fontSize: 17, fontWeight: "800" },
-  modalClose: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
+  modalClose: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   seatList: { gap: 8, marginBottom: 16 },
-  seatChip: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 8 },
+  seatChip: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   seatChipText: { fontSize: 14, fontWeight: "800" },
-  modalPayButton: { borderRadius: 10, paddingVertical: 14, alignItems: "center" },
+  modalPayButton: {
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
   modalPayButtonText: { color: "#fff", fontSize: 15, fontWeight: "900" },
 });

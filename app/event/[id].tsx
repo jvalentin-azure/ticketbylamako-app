@@ -30,7 +30,6 @@ import {
 } from "@/lib/api/catalog";
 import { MOBILE_V2_SEATING_ENABLED } from "@/lib/api/mobile";
 import { useAuth } from "@/lib/auth-provider";
-import { getStoredToken } from "@/lib/api/auth";
 import { useFavorites } from "@/lib/favorites-provider";
 import {
   formatAriary,
@@ -43,6 +42,7 @@ import { CartToast } from "@/components/cart-toast";
 import { SeatingChartSkeleton } from "@/components/skeleton-loader";
 import { Confetti } from "@/components/confetti";
 import { SeatPurchaseFlow } from "@/components/seating/SeatPurchaseFlow";
+import { isAllowedWebViewUrl } from "@/lib/webview-policy";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const SITE_URL = API_SITE_URL;
@@ -317,25 +317,15 @@ export default function EventDetailScreen() {
       // confirms → cart → checkout → payment - ALL within the same WebView session
       const eventPageUrl = event.link || `${SITE_URL}/tc-events/${event.slug}/`;
 
-      // Use auto-login URL to pre-authenticate the WebView session
-      // This ensures the user is logged in for checkout (no login form exposed)
-      const token = await getStoredToken();
-      // Add nocache parameter to bypass Cloudways Varnish/Redis cache
+      // Legacy fallback no longer transports a JWT in the URL. The v2 seating
+      // session is the supported authenticated path and is enabled by default.
       const nocache = `nocache=${Date.now()}`;
-      if (token) {
-        // The redirect URL will have from_app=1 added by the PHP endpoint
-        const redirectUrl =
-          eventPageUrl + (eventPageUrl.includes("?") ? "&" : "?") + nocache;
-        const autoLoginUrl = `${SITE_URL}/wp-json/lamako-mobile/v1/auto-login?token=${encodeURIComponent(token)}&redirect=${encodeURIComponent(redirectUrl)}`;
-        setSeatingChartUrl(autoLoginUrl);
-      } else {
-        const directUrl =
-          eventPageUrl +
-          (eventPageUrl.includes("?") ? "&" : "?") +
-          nocache +
-          "&from_app=1";
-        setSeatingChartUrl(directUrl);
-      }
+      const directUrl =
+        eventPageUrl +
+        (eventPageUrl.includes("?") ? "&" : "?") +
+        nocache +
+        "&from_app=1";
+      setSeatingChartUrl(directUrl);
 
       setShowSeatingChart(true);
       setWebviewPhase("seating");
@@ -767,7 +757,7 @@ export default function EventDetailScreen() {
             sharedCookiesEnabled
             thirdPartyCookiesEnabled
             allowsInlineMediaPlayback
-            mixedContentMode="compatibility"
+            mixedContentMode="never"
             scalesPageToFit={true}
             allowsBackForwardNavigationGestures={true}
             bounces={false}
@@ -862,12 +852,11 @@ export default function EventDetailScreen() {
             }}
             onShouldStartLoadWithRequest={(request: any) => {
               const url = request.url || "";
-              // Allow all HTTPS navigation (payment gateways return to various domains)
-              if (url.startsWith("https://") || url.startsWith("http://"))
-                return true;
-              if (url.startsWith("about:") || url.startsWith("data:"))
-                return true;
-              return false;
+              if (url.startsWith("ticketbylamako://")) return false;
+              return isAllowedWebViewUrl(
+                url,
+                webviewPhase === "seating" ? "first-party" : "payment",
+              );
             }}
           />
           {/* Zoom controls overlay - only show during seating phase */}

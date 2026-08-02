@@ -24,7 +24,8 @@ const env = {
   appSlug: "ticketbylamako-app",
   // S3 URL of the app logo - set this to the URL returned by generate_image when creating custom logo
   // Leave empty to use the default icon from assets/images/icon.png
-  logoUrl: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663365168618/JRJGgJaBkkGJgNIg.png",
+  logoUrl:
+    "https://files.manuscdn.com/user_upload_by_module/session_file/310519663365168618/JRJGgJaBkkGJgNIg.png",
   scheme: "ticketbylamako",
   iosBundleId: bundleId,
   androidPackage: bundleId,
@@ -41,6 +42,7 @@ const config: ExpoConfig = {
   newArchEnabled: true,
   ios: {
     supportsTablet: false,
+    usesAppleSignIn: true,
     bundleIdentifier: env.iosBundleId,
     associatedDomains: [
       "applinks:www.ticketbylamako.com",
@@ -49,17 +51,17 @@ const config: ExpoConfig = {
     runtimeVersion: {
       policy: "appVersion",
     },
-    "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false,
-        "NSAppTransportSecurity": {
-          "NSAllowsArbitraryLoads": false,
-          "NSExceptionDomains": {
-            "localhost": {
-              "NSExceptionAllowsInsecureHTTPLoads": true
-            }
-          }
-        }
-      }
+    infoPlist: {
+      ITSAppUsesNonExemptEncryption: false,
+      NSAppTransportSecurity: {
+        NSAllowsArbitraryLoads: false,
+        NSExceptionDomains: {
+          localhost: {
+            NSExceptionAllowsInsecureHTTPLoads: true,
+          },
+        },
+      },
+    },
   },
   android: {
     adaptiveIcon: {
@@ -131,6 +133,7 @@ const config: ExpoConfig = {
   },
   plugins: [
     "expo-router",
+    "expo-apple-authentication",
     [
       "expo-splash-screen",
       {
