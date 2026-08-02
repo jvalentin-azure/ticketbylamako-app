@@ -40,6 +40,16 @@
         "buildType": "apk"
       }
     },
+    "staging-testflight": {
+      "distribution": "store",
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_SITE_URL": "https://staging.ticketbylamako.com",
+        "EXPO_PUBLIC_ENABLE_MOBILE_V2_SEATING": "true",
+        "EXPO_PUBLIC_GOOGLE_CLIENT_ID": "189168265008-it6ve6n3s60h3u9t6telunafnchv4v3s.apps.googleusercontent.com",
+        "EXPO_PUBLIC_FACEBOOK_APP_ID": "1642777483642147"
+      }
+    },
     "production": {
       "channel": "production",
       "autoIncrement": true,
