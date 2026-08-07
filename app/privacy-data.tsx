@@ -1,15 +1,20 @@
-import { Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useState } from "react";
+import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
+import { useAuth } from "@/lib/auth-provider";
+import { requestAccountDeletion } from "@/lib/api/auth";
 
-const WEB_BASE_URL = "https://www.ticketbylamako.com";
+const WEB_BASE_URL = (process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com").replace(/\/$/, "");
 const PRIVACY_EMAIL = "info@lamakoevents.mg";
 
 export default function PrivacyDataScreen() {
   const colors = useColors();
   const router = useRouter();
+  const { isAuthenticated } = useAuth();
+  const [deletionLoading, setDeletionLoading] = useState(false);
 
   const openExternal = (url: string) => {
     Linking.openURL(url).catch(() => {
@@ -17,13 +22,43 @@ export default function PrivacyDataScreen() {
     });
   };
 
+  const handleAccountDeletion = () => {
+    if (!isAuthenticated) {
+      openExternal(`${WEB_BASE_URL}/suppression-compte/`);
+      return;
+    }
+
+    Alert.alert(
+      "Supprimer mon compte",
+      "Cette demande concerne la suppression totale de votre compte. Certaines données peuvent être conservées lorsque la loi, la facturation, la prévention de la fraude ou un litige l’exigent.",
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Envoyer la demande",
+          style: "destructive",
+          onPress: async () => {
+            setDeletionLoading(true);
+            try {
+              const requestId = await requestAccountDeletion();
+              Alert.alert("Demande reçue", `Votre demande #${requestId} a été enregistrée. Aucune autre action n’est nécessaire pour l’initier.`);
+            } catch (error: any) {
+              Alert.alert("Demande non envoyée", error?.message || "Veuillez réessayer plus tard.");
+            } finally {
+              setDeletionLoading(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const actions = [
-    { icon: "hand.raised.fill" as const, label: "Politique de confidentialite", onPress: () => router.push("/privacy" as any) },
-    { icon: "clipboard.fill" as const, label: "Conditions generales d'utilisation", onPress: () => openExternal(`${WEB_BASE_URL}/conditions-generales-utilisation/`) },
-    { icon: "cart.fill" as const, label: "Conditions generales de vente", onPress: () => router.push("/terms" as any) },
+    { icon: "hand.raised.fill" as const, label: "Politique de confidentialité", onPress: () => router.push("/privacy" as any) },
+    { icon: "clipboard.fill" as const, label: "Conditions générales d’utilisation", onPress: () => openExternal(`${WEB_BASE_URL}/conditions-generales-utilisation/`) },
+    { icon: "cart.fill" as const, label: "Conditions générales de vente", onPress: () => router.push("/terms" as any) },
     { icon: "gearshape.fill" as const, label: "Politique cookies", onPress: () => openExternal(`${WEB_BASE_URL}/politique-cookies/`) },
-    { icon: "shield.fill" as const, label: "Gerer mes cookies", onPress: () => openExternal(`${WEB_BASE_URL}/politique-cookies/#gerer-mes-cookies`) },
-    { icon: "trash.fill" as const, label: "Supprimer mon compte", onPress: () => openExternal(`${WEB_BASE_URL}/suppression-compte/`), danger: true },
+    { icon: "shield.fill" as const, label: "Gérer mes cookies", onPress: () => openExternal(`${WEB_BASE_URL}/politique-cookies/#gerer-mes-cookies`) },
+    { icon: "trash.fill" as const, label: "Supprimer mon compte", onPress: handleAccountDeletion, danger: true, loading: deletionLoading },
     { icon: "envelope.fill" as const, label: "Contacter le support privacy", onPress: () => openExternal(`mailto:${PRIVACY_EMAIL}`) },
   ];
 
@@ -46,6 +81,7 @@ export default function PrivacyDataScreen() {
             <TouchableOpacity
               key={item.label}
               onPress={item.onPress}
+              disabled={item.loading}
               style={[
                 styles.row,
                 { borderBottomColor: colors.border, borderBottomWidth: index < actions.length - 1 ? 1 : 0 },
@@ -53,7 +89,11 @@ export default function PrivacyDataScreen() {
               activeOpacity={0.7}
             >
               <View style={[styles.iconBox, { backgroundColor: item.danger ? colors.error + "12" : colors.primary + "12" }]}>
-                <IconSymbol name={item.icon} size={18} color={item.danger ? colors.error : colors.primary} />
+                {item.loading ? (
+                  <ActivityIndicator size="small" color={colors.error} />
+                ) : (
+                  <IconSymbol name={item.icon} size={18} color={item.danger ? colors.error : colors.primary} />
+                )}
               </View>
               <Text style={[styles.rowLabel, { color: item.danger ? colors.error : colors.foreground }]} numberOfLines={2}>
                 {item.label}

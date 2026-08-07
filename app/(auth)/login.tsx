@@ -208,69 +208,71 @@ export default function LoginScreen() {
               </View>
             ) : null}
 
-            <View style={styles.socialButtonRow}>
-              <TouchableOpacity
-                onPress={() => handleSocialLogin("facebook")}
-                disabled={!!socialLoading}
-                style={[
-                  styles.socialButton,
-                  {
-                    backgroundColor: "#1877F2",
-                    opacity: socialLoading ? 0.7 : 1,
-                  },
-                ]}
-                activeOpacity={0.8}
-              >
-                {socialLoading === "facebook" ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <MaterialIcons name="facebook" size={22} color="#fff" />
-                )}
-                <Text style={styles.socialButtonText}>Facebook</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => handleSocialLogin("google")}
-                disabled={!!socialLoading}
-                style={[
-                  styles.socialButton,
-                  {
-                    backgroundColor: colors.surface,
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                    opacity: socialLoading ? 0.7 : 1,
-                  },
-                ]}
-                activeOpacity={0.8}
-              >
-                {socialLoading === "google" ? (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                ) : (
-                  <Text style={styles.googleMark}>G</Text>
-                )}
-                <Text
+            {Platform.OS !== "ios" ? (
+              <View style={styles.socialButtonRow}>
+                <TouchableOpacity
+                  onPress={() => handleSocialLogin("facebook")}
+                  disabled={!!socialLoading}
                   style={[
-                    styles.socialButtonText,
-                    { color: colors.foreground },
+                    styles.socialButton,
+                    {
+                      backgroundColor: "#1877F2",
+                      opacity: socialLoading ? 0.7 : 1,
+                    },
                   ]}
+                  activeOpacity={0.8}
                 >
-                  Google
-                </Text>
-              </TouchableOpacity>
-            </View>
+                  {socialLoading === "facebook" ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <MaterialIcons name="facebook" size={22} color="#fff" />
+                  )}
+                  <Text style={styles.socialButtonText}>Facebook</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => handleSocialLogin("google")}
+                  disabled={!!socialLoading}
+                  style={[
+                    styles.socialButton,
+                    {
+                      backgroundColor: colors.surface,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      opacity: socialLoading ? 0.7 : 1,
+                    },
+                  ]}
+                  activeOpacity={0.8}
+                >
+                  {socialLoading === "google" ? (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  ) : (
+                    <Text style={styles.googleMark}>G</Text>
+                  )}
+                  <Text
+                    style={[
+                      styles.socialButtonText,
+                      { color: colors.foreground },
+                    ]}
+                  >
+                    Google
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
           </View>
 
-          <View style={styles.divider}>
-            <View
-              style={[styles.dividerLine, { backgroundColor: colors.border }]}
-            />
-            <Text style={[styles.dividerText, { color: colors.muted }]}>
-              ou
-            </Text>
-            <View
-              style={[styles.dividerLine, { backgroundColor: colors.border }]}
-            />
-          </View>
+          {appleAvailable || Platform.OS !== "ios" ? (
+            <View style={styles.divider}>
+              <View
+                style={[styles.dividerLine, { backgroundColor: colors.border }]}
+              />
+              <Text style={[styles.dividerText, { color: colors.muted }]}>ou</Text>
+              <View
+                style={[styles.dividerLine, { backgroundColor: colors.border }]}
+              />
+            </View>
+          ) : null}
 
           {/* Error */}
           {error ? (

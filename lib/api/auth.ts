@@ -199,6 +199,42 @@ export async function logout(): Promise<void> {
   await secureDelete(USER_KEY);
 }
 
+export async function requestAccountDeletion(): Promise<number> {
+  const token = await getStoredToken();
+  if (!token) {
+    throw new Error("Vous devez être connecté pour demander la suppression du compte.");
+  }
+
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeout = controller ? setTimeout(() => controller.abort(), 20000) : null;
+  let res: Response;
+
+  try {
+    res = await fetch(`${SITE_URL}/wp-json/ticketbylamako-compliance/v1/account-deletion-requests`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      signal: controller?.signal,
+    });
+  } catch (error: any) {
+    if (error?.name === "AbortError") {
+      throw new Error("La demande a expiré. Vérifiez votre connexion puis réessayez.");
+    }
+    throw new Error("Impossible de contacter le serveur. Vérifiez votre connexion puis réessayez.");
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || "La demande de suppression n’a pas pu être enregistrée.");
+  }
+
+  return Number(data.request_id);
+}
+
 export async function updateProfile(token: string, userId: number, data: { first_name?: string; last_name?: string }): Promise<void> {
   const res = await fetch(`${SITE_URL}/wp-json/wp/v2/users/${userId}`, {
     method: "POST",
