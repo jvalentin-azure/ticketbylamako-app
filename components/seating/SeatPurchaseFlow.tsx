@@ -533,6 +533,7 @@ export function SeatPurchaseFlow({
         sharedCookiesEnabled
         thirdPartyCookiesEnabled
         startInLoadingState
+        setSupportMultipleWindows={false}
         injectedJavaScript={injectedJavaScript}
         onMessage={handleMessage}
         onNavigationStateChange={handleNavChange}

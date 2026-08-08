@@ -108,61 +108,57 @@ export default function EventDetailScreen() {
   useEffect(() => {
     if (!id) return;
     const eventId = Number(id);
+    let cancelled = false;
+    let detailApplied = false;
 
-    // Strategy: Use compact events-data for instant display, then hydrate full detail.
-    getEventsData()
-      .then(({ events: allEvents }) => {
-        const cachedEvent = allEvents.find((e) => e.id === eventId);
-        if (cachedEvent) {
-          setEvent(cachedEvent);
-          if (cachedEvent.tickets && cachedEvent.tickets.length > 0) {
-            setTickets(cachedEvent.tickets);
-            const firstAvailable = cachedEvent.tickets.find(isTicketAvailable);
-            if (cachedEvent.tickets.length === 1 && firstAvailable)
-              setSelectedTicket(firstAvailable);
-          }
-          setLoading(false);
-        }
+    const applyEvent = (nextEvent: TCEvent, source: "catalogue" | "detail") => {
+      if (cancelled) return;
+      if (source === "catalogue" && detailApplied) return;
+      if (source === "detail") detailApplied = true;
+      const nextTickets = nextEvent.tickets || [];
+      setEvent(nextEvent);
+      setTickets(nextTickets);
+      const firstAvailable = nextTickets.find(isTicketAvailable);
+      if (nextTickets.length === 1 && firstAvailable) {
+        setSelectedTicket(firstAvailable);
+      }
+      setLoading(false);
+    };
 
-        // Set upcoming events
-        const now = Date.now();
-        const upcoming = allEvents
-          .filter((e) => {
-            if (e.id === eventId) return false;
-            const dt = e.mobileFields?.event_date_time;
-            if (!dt) return true;
-            return new Date(dt.replace(" ", "T")).getTime() > now;
-          })
-          .slice(0, 8);
-        setUpcomingEvents(upcoming);
+    // Start both requests immediately. The compact catalogue can paint from its
+    // memory cache, while the detail request no longer waits several seconds for it.
+    const catalogueRequest = getEventsData().then(({ events: allEvents }) => {
+      if (cancelled) return;
+      const cachedEvent = allEvents.find((item) => item.id === eventId);
+      if (cachedEvent) applyEvent(cachedEvent, "catalogue");
 
-        getTCEvent(eventId)
-          .then((ev) => {
-            const tix = ev.tickets || [];
-            setEvent(ev);
-            setTickets(tix);
-            const firstAvailable = tix.find(isTicketAvailable);
-            if (tix.length === 1 && firstAvailable)
-              setSelectedTicket(firstAvailable);
-            setLoading(false);
+      const now = Date.now();
+      setUpcomingEvents(
+        allEvents
+          .filter((item) => {
+            if (item.id === eventId) return false;
+            const date = item.mobileFields?.event_date_time;
+            if (!date) return true;
+            return new Date(date.replace(" ", "T")).getTime() > now;
           })
-          .catch(() => {
-            if (!cachedEvent) setLoading(false);
-          });
-      })
-      .catch(() => {
-        getTCEvent(eventId)
-          .then((ev) => {
-            const tix = ev.tickets || [];
-            setEvent(ev);
-            setTickets(tix);
-            const firstAvailable = tix.find(isTicketAvailable);
-            if (tix.length === 1 && firstAvailable)
-              setSelectedTicket(firstAvailable);
-            setLoading(false);
-          })
-          .catch(() => setLoading(false));
-      });
+          .slice(0, 8),
+      );
+    });
+
+    const detailRequest = getTCEvent(eventId).then((nextEvent) => {
+      applyEvent(nextEvent, "detail");
+    });
+
+    Promise.allSettled([catalogueRequest, detailRequest]).then((results) => {
+      if (cancelled) return;
+      if (results.every((result) => result.status === "rejected")) {
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   // Countdown timer (updates every second)

@@ -814,11 +814,7 @@ export default function CheckoutScreen() {
           }
         }
       }
-      window.addEventListener('load', checkSuccess);
-      if (document.body && window.MutationObserver) {
-        var obs = new MutationObserver(checkSuccess);
-        obs.observe(document.body, { childList: true, subtree: true });
-      }
+      window.addEventListener('load', checkSuccess, { once: true });
     })();
     true;
   `;
@@ -2047,6 +2043,14 @@ export default function CheckoutScreen() {
         sharedCookiesEnabled
         thirdPartyCookiesEnabled
         keyboardDisplayRequiresUserAction={false}
+        setSupportMultipleWindows={false}
+        allowsBackForwardNavigationGestures
+        onContentProcessDidTerminate={() => {
+          if (retryCount < MAX_RETRIES) {
+            setRetryCount((previous) => previous + 1);
+            webviewRef.current?.reload();
+          }
+        }}
       />
     </ScreenContainer>
   );
