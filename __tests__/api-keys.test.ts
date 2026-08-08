@@ -92,17 +92,19 @@ describe("client secret policy", () => {
     expect(plugin).not.toContain("ticketbylamako://payment-return?order_key=");
   });
 
-  it("routes checkout and seating WebView payment returns through the verified native return screen", () => {
+  it("routes checkout and seating orders through the verified native payment screen", () => {
     const checkout = fs.readFileSync(path.join(process.cwd(), "app", "checkout.tsx"), "utf-8");
+    const payment = fs.readFileSync(path.join(process.cwd(), "app", "payment.tsx"), "utf-8");
     const seatingComponent = fs.readFileSync(
       path.join(process.cwd(), "components", "seating", "SeatPurchaseFlow.tsx"),
       "utf-8"
     );
 
-    expect(checkout).toContain("parsePaymentReturnUrl");
-    expect(checkout).toContain('pathname: "/payment-return"');
-    expect(seatingComponent).toContain("parsePaymentReturnUrl");
-    expect(seatingComponent).toContain('pathname: "/payment-return"');
+    expect(checkout).toContain('pathname: "/payment"');
+    expect(seatingComponent).toContain('case "SEATING_ORDER_CREATED"');
+    expect(seatingComponent).toContain('pathname: "/payment"');
+    expect(payment).toContain("getMobilePaymentReturnStatus(kind, token)");
+    expect(payment).toContain('pathname: "/payment-return"');
   });
 
   it("uses v2 authenticated APIs for customer orders, tickets, rewards, referrals, and push tokens", () => {

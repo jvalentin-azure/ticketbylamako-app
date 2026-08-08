@@ -265,6 +265,14 @@ export default function RootLayout() {
                 statusBarStyle: "dark",
               }}
             />
+            <Stack.Screen
+              name="payment"
+              options={{
+                presentation: "modal",
+                statusBarHidden: false,
+                statusBarStyle: "dark",
+              }}
+            />
             <Stack.Screen name="orders" />
             <Stack.Screen name="privacy" />
             <Stack.Screen name="privacy-data" />

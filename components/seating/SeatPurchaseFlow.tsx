@@ -16,9 +16,7 @@ import { SeatingChartSkeleton } from "@/components/skeleton-loader";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { useCart } from "@/lib/cart-provider";
-import { parsePaymentReturnUrl } from "@/lib/payment-return";
 import { isAllowedWebViewUrl } from "@/lib/webview-policy";
-import { openCommerceSession } from "@/lib/commerce-browser";
 import {
   createMobileSeatingSession,
   getMobileSeatingSessionStatus,
@@ -80,9 +78,6 @@ export function SeatPurchaseFlow({
   const [showSeatSummary, setShowSeatSummary] = useState(false);
   const [orderId, setOrderId] = useState<number | null>(null);
   const [sessionAttempt, setSessionAttempt] = useState(0);
-  const [browserOpening, setBrowserOpening] = useState(false);
-  const [browserMessage, setBrowserMessage] = useState("");
-  const browserOpenedForRef = useRef("");
 
   useEffect(() => {
     let cancelled = false;
@@ -115,8 +110,6 @@ export function SeatPurchaseFlow({
     setSelectedCount(0);
     setSelectedSeats([]);
     setError("");
-    setBrowserMessage("");
-    browserOpenedForRef.current = "";
     setPhase("loading");
     setSessionAttempt((attempt) => attempt + 1);
   };
@@ -157,86 +150,6 @@ export function SeatPurchaseFlow({
     }
   };
 
-  const openVerifiedPaymentReturn = (
-    kind: string,
-    token: string,
-    statusHint?: string,
-  ) => {
-    if (kind !== "seating" || !token) return false;
-    if (session?.flowToken && token !== session.flowToken) return false;
-
-    router.replace({
-      pathname: "/payment-return",
-      params: {
-        kind,
-        token,
-        status: statusHint || "",
-      },
-    } as any);
-    return true;
-  };
-
-  const handlePaymentReturnUrl = (url: string) => {
-    const parsed = parsePaymentReturnUrl(url);
-    if (!parsed) return false;
-    return openVerifiedPaymentReturn(
-      parsed.kind,
-      parsed.token,
-      parsed.statusHint,
-    );
-  };
-
-  const openSecureSeating = async () => {
-    if (!session?.seatUrl || browserOpening) return;
-
-    setBrowserOpening(true);
-    setBrowserMessage("");
-    try {
-      const result = await openCommerceSession(session.seatUrl);
-      if (result.type === "success" && result.url) {
-        if (handlePaymentReturnUrl(result.url)) return;
-      }
-
-      const status = await getMobileSeatingSessionStatus(session.flowToken);
-      const paymentStatus = status.order?.paymentStatus || status.status;
-      if (paymentStatus === "success") {
-        setOrderId(status.order?.id || null);
-        clearCart();
-        setPhase("success");
-      } else if (status.order && paymentStatus === "pending") {
-        setOrderId(status.order.id || null);
-        setPhase("pending");
-      } else {
-        setPhase("seating");
-        setBrowserMessage(
-          "Le plan a ete ferme. Votre session reste disponible pour reprendre la selection.",
-        );
-      }
-    } catch (err: any) {
-      console.warn("Secure seating session failed:", err);
-      setPhase("seating");
-      setBrowserMessage(
-        err?.message || "Impossible d'ouvrir le plan de salle securise.",
-      );
-    } finally {
-      setBrowserOpening(false);
-    }
-  };
-
-  useEffect(() => {
-    if (
-      Platform.OS === "web" ||
-      phase !== "seating" ||
-      !session?.flowId ||
-      browserOpenedForRef.current === session.flowId
-    ) {
-      return;
-    }
-
-    browserOpenedForRef.current = session.flowId;
-    void openSecureSeating();
-  }, [phase, session?.flowId]);
-
   const handleMessage = (event: any) => {
     try {
       const message = JSON.parse(event.nativeEvent.data) as WebMessageEnvelope;
@@ -260,20 +173,34 @@ export function SeatPurchaseFlow({
           );
           break;
         case "CHECKOUT_READY":
+          setPhase("checkout");
+          break;
+        case "SEATING_ORDER_CREATED": {
+          const flowToken = String(
+            message.payload?.token || session?.flowToken || "",
+          );
+          const createdOrderId = Number(message.payload?.order?.id || 0);
+          if (!flowToken) {
+            setError("La commande a été créée sans session de paiement valide.");
+            setPhase("error");
+            break;
+          }
+          if (createdOrderId) setOrderId(createdOrderId);
+          setPhase("checkout");
+          onClose();
+          setTimeout(() => {
+            router.push({
+              pathname: "/payment",
+              params: { kind: "seating", token: flowToken },
+            } as any);
+          }, 0);
+          break;
+        }
         case "PAYMENT_STARTED":
           setPhase("checkout");
           break;
         case "PAYMENT_RESULT":
         case "RETURN_TO_APP":
-          if (
-            openVerifiedPaymentReturn(
-              message.payload?.kind || "seating",
-              message.payload?.token || session?.flowToken || "",
-              message.payload?.status,
-            )
-          ) {
-            return;
-          }
           verifyPayment();
           break;
         case "SESSION_EXPIRED":
@@ -296,7 +223,6 @@ export function SeatPurchaseFlow({
 
   const handleNavChange = (navState: any) => {
     const url = navState.url || "";
-    if (handlePaymentReturnUrl(url)) return;
 
     if (
       url.includes("/checkout") ||
@@ -586,40 +512,6 @@ export function SeatPurchaseFlow({
     );
   }
 
-  if (WebViewComponent) {
-    return (
-      <ScreenContainer edges={["top", "left", "right", "bottom"]}>
-        <Header title={title} colors={colors} onClose={handleClose} />
-        <View style={styles.center}>
-          {browserOpening ? (
-            <ActivityIndicator size="large" color={colors.primary} />
-          ) : (
-            <IconSymbol name="ticket.fill" size={48} color={colors.primary} />
-          )}
-          <Text style={[styles.errorTitle, { color: colors.foreground }]}>
-            {browserOpening
-              ? "Ouverture du plan securise"
-              : "Choisissez vos places"}
-          </Text>
-          <Text style={[styles.centerText, { color: colors.muted }]}>
-            {browserMessage ||
-              "Le plan officiel s'ouvre dans la fenetre securisee du telephone. Votre paiement revient ensuite automatiquement dans l'application."}
-          </Text>
-          {!browserOpening ? (
-            <TouchableOpacity
-              onPress={() => void openSecureSeating()}
-              style={[styles.primaryButton, { backgroundColor: colors.primary }]}
-            >
-              <Text style={styles.primaryButtonText}>
-                Ouvrir le plan de salle
-              </Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      </ScreenContainer>
-    );
-  }
-
   return (
     <ScreenContainer edges={["top", "left", "right", "bottom"]}>
       <Header
@@ -650,15 +542,11 @@ export function SeatPurchaseFlow({
         )}
         onShouldStartLoadWithRequest={(request: any) => {
           const url = request.url || "";
-          if (handlePaymentReturnUrl(url)) return false;
           if (url.startsWith("ticketbylamako://")) return false;
           if (request.isTopFrame === false) {
             return url === "about:blank" || url.startsWith("https://");
           }
-          return isAllowedWebViewUrl(
-            url,
-            phase === "seating" ? "first-party" : "payment",
-          );
+          return isAllowedWebViewUrl(url, "first-party");
         }}
         onHttpError={(event: any) => {
           const statusCode = Number(event?.nativeEvent?.statusCode || 0);

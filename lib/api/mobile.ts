@@ -224,6 +224,7 @@ export interface MobileOrderSummary {
   subtotal?: string;
   totalTax?: string;
   discountTotal?: string;
+  couponCodes?: string[];
   shippingTotal?: string;
   currency: string;
   dateCreated: string | null;
@@ -242,6 +243,43 @@ export interface MobileOrderSummary {
     phone: string;
   };
   items?: MobileOrderItem[];
+}
+
+export type MobilePaymentKind = "checkout" | "seating";
+export type MobilePaymentFlow = "success" | "pending" | "redirect" | "failed";
+
+export interface MobilePaymentMethod {
+  id: string;
+  title: string;
+  description: string;
+  flow: "async" | "redirect";
+  requiresPhone: boolean;
+}
+
+export interface MobilePaymentMethodsResponse {
+  kind: MobilePaymentKind;
+  token: string;
+  methods: MobilePaymentMethod[];
+  order: MobileOrderSummary;
+  zeroTotal: boolean;
+  pollAfterMs: number;
+}
+
+export interface MobileCouponResponse {
+  kind: MobilePaymentKind;
+  token: string;
+  order: MobileOrderSummary;
+}
+
+export interface MobilePaymentStartResponse {
+  flow: MobilePaymentFlow;
+  paymentStatus: MobilePaymentStatus;
+  redirectUrl?: string;
+  orderId: number;
+  gatewayId?: string;
+  attemptId?: string;
+  pollAfterMs?: number;
+  order: MobileOrderSummary;
 }
 
 export interface MobileCheckoutStatusResponse {
@@ -398,6 +436,52 @@ export async function getMobileCheckoutStatus(
 ): Promise<MobileCheckoutStatusResponse> {
   return mobileV2Fetch<MobileCheckoutStatusResponse>(
     `checkouts/${encodeURIComponent(checkoutToken)}/status`
+  );
+}
+
+export async function getMobilePaymentMethods(
+  token: string,
+  kind: MobilePaymentKind,
+): Promise<MobilePaymentMethodsResponse> {
+  return mobileV2Fetch<MobilePaymentMethodsResponse>(
+    `payments/${encodeURIComponent(token)}/methods`,
+    { params: { kind } },
+  );
+}
+
+export async function updateMobilePaymentCoupon(
+  token: string,
+  kind: MobilePaymentKind,
+  code: string,
+  action: "apply" | "remove" = "apply",
+): Promise<MobileCouponResponse> {
+  return mobileV2Fetch<MobileCouponResponse>(
+    `payments/${encodeURIComponent(token)}/coupon`,
+    {
+      method: "POST",
+      params: { kind },
+      body: { code, action },
+    },
+  );
+}
+
+export async function startMobilePayment(
+  token: string,
+  kind: MobilePaymentKind,
+  input: {
+    paymentMethod?: string;
+    billingPhone?: string;
+    attemptId: string;
+  },
+): Promise<MobilePaymentStartResponse> {
+  return mobileV2Fetch<MobilePaymentStartResponse>(
+    `payments/${encodeURIComponent(token)}/start`,
+    {
+      method: "POST",
+      params: { kind },
+      body: input,
+      timeoutMs: 30000,
+    },
   );
 }
 

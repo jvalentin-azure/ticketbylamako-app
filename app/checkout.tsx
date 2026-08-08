@@ -596,13 +596,13 @@ export default function CheckoutScreen() {
         setOrderId(result.orderId);
         setCheckoutToken(result.checkoutToken);
         setCheckoutUrl(result.checkoutUrl);
-        paymentBrowserOpenedForRef.current = "";
-        paymentReturnHandledRef.current = false;
-        paymentRecoveryAttemptedRef.current = false;
-        lastNavigationUrlRef.current = "";
-        setWebviewLoading(true);
-        setRetryCount(0);
-        setPhase("paying");
+        router.replace({
+          pathname: "/payment",
+          params: {
+            kind: "checkout",
+            token: result.checkoutToken,
+          },
+        } as any);
       } else {
         setErrorMsg(
           "Impossible de créer la session de paiement. Veuillez réessayer.",
