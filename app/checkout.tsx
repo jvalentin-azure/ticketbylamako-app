@@ -44,6 +44,7 @@ import { parsePaymentReturnUrl } from "@/lib/payment-return";
 import type { CheckoutFieldSchema } from "@/lib/types/commerce";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { isAllowedWebViewUrl } from "@/lib/webview-policy";
+import { openCommerceSession } from "@/lib/commerce-browser";
 
 // WebView for checkout - loads WooCommerce pay-for-order page
 let WebViewComponent: any = null;
@@ -134,6 +135,7 @@ export default function CheckoutScreen() {
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [paymentErrorMsg, setPaymentErrorMsg] = useState<string>("");
   const [webviewLoading, setWebviewLoading] = useState(true);
+  const [browserOpening, setBrowserOpening] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const MAX_RETRIES = 3;
   const verificationInFlightRef = useRef(false);
@@ -141,6 +143,7 @@ export default function CheckoutScreen() {
   const paymentReturnHandledRef = useRef(false);
   const paymentRecoveryAttemptedRef = useRef(false);
   const lastNavigationUrlRef = useRef("");
+  const paymentBrowserOpenedForRef = useRef("");
 
   // Auth guard: redirect to login if not authenticated
   useEffect(() => {
@@ -321,6 +324,56 @@ export default function CheckoutScreen() {
       parsed.statusHint,
     );
   };
+
+  const openSecurePayment = async () => {
+    if (!checkoutUrl || !checkoutToken || browserOpening) return;
+
+    setBrowserOpening(true);
+    setPaymentErrorMsg("");
+    try {
+      const result = await openCommerceSession(checkoutUrl);
+      if (result.type === "success" && result.url) {
+        if (handlePaymentReturnUrl(result.url)) return;
+      }
+
+      const status = await getMobileCheckoutStatus(checkoutToken);
+      if (status.order.paymentStatus === "success") {
+        markPaymentSuccess(status.order.id);
+        return;
+      }
+
+      setPaymentErrorMsg(
+        result.type === "cancel" || result.type === "dismiss"
+          ? "La fenetre de paiement a ete fermee avant la confirmation. Votre commande est conservee."
+          : "Le paiement n'a pas encore ete confirme. Votre commande est conservee.",
+      );
+      setPhase("payment_error");
+    } catch (err: any) {
+      console.warn("Secure payment session failed:", err);
+      setPaymentErrorMsg(
+        err?.message || "Impossible d'ouvrir le paiement securise.",
+      );
+      setPhase("payment_error");
+    } finally {
+      setBrowserOpening(false);
+    }
+  };
+
+  useEffect(() => {
+    if (
+      Platform.OS === "web" ||
+      phase !== "paying" ||
+      !checkoutUrl ||
+      !checkoutToken
+    ) {
+      return;
+    }
+
+    const attemptKey = `${checkoutToken}:${retryCount}`;
+    if (paymentBrowserOpenedForRef.current === attemptKey) return;
+    paymentBrowserOpenedForRef.current = attemptKey;
+    void openSecurePayment();
+  }, [checkoutToken, checkoutUrl, phase, retryCount]);
 
   const checkoutFieldKey = (field: CheckoutFieldSchema) =>
     field.storageKey || field.key;
@@ -543,6 +596,7 @@ export default function CheckoutScreen() {
         setOrderId(result.orderId);
         setCheckoutToken(result.checkoutToken);
         setCheckoutUrl(result.checkoutUrl);
+        paymentBrowserOpenedForRef.current = "";
         paymentReturnHandledRef.current = false;
         paymentRecoveryAttemptedRef.current = false;
         lastNavigationUrlRef.current = "";
@@ -1760,6 +1814,8 @@ export default function CheckoutScreen() {
           <TouchableOpacity
             onPress={() => {
               setPaymentErrorMsg("");
+              paymentBrowserOpenedForRef.current = "";
+              setRetryCount((count) => count + 1);
               setPhase("paying");
               setWebviewLoading(true);
               const baseUrl = checkoutUrl.split("&error=")[0];
@@ -1899,6 +1955,51 @@ export default function CheckoutScreen() {
   }
 
   // ---- PAYING phase (WebView) ----
+  if (Platform.OS !== "web") {
+    return (
+      <ScreenContainer edges={["top", "bottom", "left", "right"]}>
+        <View style={[styles.header, { borderBottomColor: colors.border }]}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <IconSymbol
+              name="chevron.left"
+              size={24}
+              color={colors.foreground}
+            />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+            Paiement securise
+          </Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={styles.centerContent}>
+          {browserOpening ? (
+            <ActivityIndicator size="large" color={colors.primary} />
+          ) : (
+            <IconSymbol name="lock.fill" size={52} color={colors.primary} />
+          )}
+          <Text style={[styles.loadingText, { color: colors.foreground }]}>
+            {browserOpening
+              ? "Ouverture du paiement..."
+              : "Finalisez votre paiement"}
+          </Text>
+          <Text style={[styles.loadingSubtext, { color: colors.muted }]}>
+            La fenetre securisee du telephone prend en charge les champs, les
+            coupons et votre moyen de paiement, puis revient automatiquement
+            dans TicketByLamako.
+          </Text>
+          {!browserOpening ? (
+            <TouchableOpacity
+              onPress={() => void openSecurePayment()}
+              style={[styles.retryBtn, { backgroundColor: colors.primary }]}
+            >
+              <Text style={styles.retryBtnText}>Reprendre le paiement</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      </ScreenContainer>
+    );
+  }
+
   if (Platform.OS === "web" || !WebViewComponent) {
     return (
       <ScreenContainer edges={["top", "bottom", "left", "right"]}>
