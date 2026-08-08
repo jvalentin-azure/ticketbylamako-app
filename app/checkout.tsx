@@ -800,6 +800,12 @@ export default function CheckoutScreen() {
         document.querySelectorAll(hideSelectors).forEach(function(el) { el.style.display = 'none'; });
         var btn = document.getElementById('place_order');
         if (btn) { btn.removeAttribute('hidden'); btn.style.display = 'block'; }
+        document.documentElement.style.pointerEvents = 'auto';
+        if (document.body) document.body.style.pointerEvents = 'auto';
+        document.querySelectorAll('#order_review, #payment, .wc_payment_method, input, button, select, textarea, label, a').forEach(function(el) {
+          el.style.pointerEvents = 'auto';
+          el.style.touchAction = 'manipulation';
+        });
       }
       cleanup();
       setTimeout(cleanup, 300);
@@ -1991,6 +1997,9 @@ export default function CheckoutScreen() {
           const url = request.url || "";
           if (handlePaymentReturnUrl(url)) return false;
           if (url.startsWith("ticketbylamako://")) return false;
+          if (request.isTopFrame === false) {
+            return url === "about:blank" || url.startsWith("https://");
+          }
           return isAllowedWebViewUrl(url, "payment");
         }}
         onError={(syntheticEvent: any) => {
@@ -2044,7 +2053,10 @@ export default function CheckoutScreen() {
         thirdPartyCookiesEnabled
         keyboardDisplayRequiresUserAction={false}
         setSupportMultipleWindows={false}
-        allowsBackForwardNavigationGestures
+        bounces={false}
+        overScrollMode="never"
+        contentInsetAdjustmentBehavior="never"
+        automaticallyAdjustContentInsets={false}
         onContentProcessDidTerminate={() => {
           if (retryCount < MAX_RETRIES) {
             setRetryCount((previous) => previous + 1);

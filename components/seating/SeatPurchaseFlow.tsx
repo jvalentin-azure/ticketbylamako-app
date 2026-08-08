@@ -69,6 +69,7 @@ export function SeatPurchaseFlow({
   const webviewRef = useRef<any>(null);
   const verifyingRef = useRef(false);
   const closingCheckoutRef = useRef(false);
+  const sessionRecoveryRef = useRef(0);
   const [session, setSession] =
     useState<CreateMobileSeatingSessionResponse | null>(null);
   const [phase, setPhase] = useState<FlowPhase>("loading");
@@ -77,6 +78,7 @@ export function SeatPurchaseFlow({
   const [selectedSeats, setSelectedSeats] = useState<SelectedSeat[]>([]);
   const [showSeatSummary, setShowSeatSummary] = useState(false);
   const [orderId, setOrderId] = useState<number | null>(null);
+  const [sessionAttempt, setSessionAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -101,7 +103,17 @@ export function SeatPurchaseFlow({
     return () => {
       cancelled = true;
     };
-  }, [eventId]);
+  }, [eventId, sessionAttempt]);
+
+  const restartSeatingSession = (resetRecovery = false) => {
+    if (resetRecovery) sessionRecoveryRef.current = 0;
+    setSession(null);
+    setSelectedCount(0);
+    setSelectedSeats([]);
+    setError("");
+    setPhase("loading");
+    setSessionAttempt((attempt) => attempt + 1);
+  };
 
   const verifyPayment = async () => {
     if (!session?.flowToken || verifyingRef.current) return;
@@ -415,10 +427,13 @@ export function SeatPurchaseFlow({
             {error}
           </Text>
           <TouchableOpacity
-            onPress={onClose}
+            onPress={() => restartSeatingSession(true)}
             style={[styles.primaryButton, { backgroundColor: colors.primary }]}
           >
-            <Text style={styles.primaryButtonText}>Retour à l'événement</Text>
+            <Text style={styles.primaryButtonText}>Réessayer</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onClose} style={styles.secondaryButton}>
+            <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>Retour à l'événement</Text>
           </TouchableOpacity>
         </View>
       </ScreenContainer>
@@ -546,16 +561,39 @@ export function SeatPurchaseFlow({
           const url = request.url || "";
           if (handlePaymentReturnUrl(url)) return false;
           if (url.startsWith("ticketbylamako://")) return false;
+          if (request.isTopFrame === false) {
+            return url === "about:blank" || url.startsWith("https://");
+          }
           return isAllowedWebViewUrl(
             url,
             phase === "seating" ? "first-party" : "payment",
           );
+        }}
+        onHttpError={(event: any) => {
+          const statusCode = Number(event?.nativeEvent?.statusCode || 0);
+          const failedUrl = String(event?.nativeEvent?.url || "");
+          const isSeatingSessionPage =
+            failedUrl.includes("lamako_seating_token=") ||
+            failedUrl.includes("/lamako-mobile/seat/");
+          if (
+            statusCode === 404 &&
+            phase === "seating" &&
+            isSeatingSessionPage &&
+            sessionRecoveryRef.current < 1
+          ) {
+            sessionRecoveryRef.current += 1;
+            restartSeatingSession();
+          }
         }}
         onError={(event: any) => {
           const description =
             event?.nativeEvent?.description || "Erreur WebView";
           Alert.alert("Erreur", description);
         }}
+        bounces={false}
+        overScrollMode="never"
+        contentInsetAdjustmentBehavior="never"
+        automaticallyAdjustContentInsets={false}
       />
     </ScreenContainer>
   );
