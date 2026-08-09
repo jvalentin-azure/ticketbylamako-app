@@ -1470,7 +1470,9 @@ export default function EventDetailScreen() {
                       event.mobileFields!.event_location!,
                     );
                     Linking.openURL(
-                      Platform.OS === "ios" ? `maps:?q=${q}` : `geo:0,0?q=${q}`,
+                      Platform.OS === "ios"
+                        ? `https://maps.apple.com/?q=${q}`
+                        : `https://www.google.com/maps/search/?api=1&query=${q}`,
                     );
                   }}
                 >
@@ -1489,24 +1491,44 @@ export default function EventDetailScreen() {
                   {event.mobileFields.event_location}
                 </Text>
               </View>
-              {/* Static map preview */}
               <TouchableOpacity
                 onPress={() => {
                   const q = encodeURIComponent(
                     event.mobileFields!.event_location!,
                   );
                   Linking.openURL(
-                    Platform.OS === "ios" ? `maps:?q=${q}` : `geo:0,0?q=${q}`,
+                    Platform.OS === "ios"
+                      ? `https://maps.apple.com/?q=${q}`
+                      : `https://www.google.com/maps/search/?api=1&query=${q}`,
                   );
                 }}
-                style={styles.mapPreview}
+                style={[
+                  styles.mapAction,
+                  {
+                    backgroundColor: colors.primary + "10",
+                    borderColor: colors.primary + "35",
+                  },
+                ]}
               >
-                <Image
-                  source={{
-                    uri: `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(event.mobileFields.event_location)}&zoom=15&size=600x200&markers=color:red%7C${encodeURIComponent(event.mobileFields.event_location)}&key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8`,
-                  }}
-                  style={styles.mapImage}
-                  contentFit="cover"
+                <IconSymbol
+                  name="map.fill"
+                  size={22}
+                  color={colors.primary}
+                />
+                <View style={styles.mapActionCopy}>
+                  <Text
+                    style={[styles.mapActionTitle, { color: colors.foreground }]}
+                  >
+                    Ouvrir l'itinéraire
+                  </Text>
+                  <Text style={[styles.mapActionHint, { color: colors.muted }]}>
+                    Plans ou Google Maps affichera le trajet vers ce lieu.
+                  </Text>
+                </View>
+                <IconSymbol
+                  name="chevron.right"
+                  size={18}
+                  color={colors.primary}
                 />
               </TouchableOpacity>
             </View>
@@ -1952,8 +1974,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   locationText: { fontSize: 14, flex: 1 },
-  mapPreview: { borderRadius: 10, overflow: "hidden" },
-  mapImage: { width: "100%", height: 140, borderRadius: 10 },
+  mapAction: { minHeight: 72, borderRadius: 10, borderWidth: 1, padding: 13, flexDirection: "row", alignItems: "center", gap: 11 },
+  mapActionCopy: { flex: 1 },
+  mapActionTitle: { fontSize: 14, fontFamily: "Raleway_700Bold" },
+  mapActionHint: { marginTop: 3, fontSize: 12, lineHeight: 16, fontFamily: "Raleway_500Medium" },
   // Upcoming events
   upcomingHeader: {
     flexDirection: "row",

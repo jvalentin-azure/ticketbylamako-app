@@ -21,12 +21,12 @@ export function RewardsPopup({ delay = 30000 }: RewardsPopupProps) {
   const [visible, setVisible] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    // Don't show if user is already logged in
-    if (isAuthenticated) return;
+    // Wait for secure-session hydration and never interrupt a signed-in customer.
+    if (isLoading || isAuthenticated) return;
 
     // Start the 30s timer
     timerRef.current = setTimeout(async () => {
@@ -56,7 +56,7 @@ export function RewardsPopup({ delay = 30000 }: RewardsPopupProps) {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [isAuthenticated, delay]);
+  }, [isAuthenticated, isLoading, delay]);
 
   const handleClose = () => {
     Animated.timing(fadeAnim, {
@@ -107,11 +107,11 @@ export function RewardsPopup({ delay = 30000 }: RewardsPopupProps) {
             <Text style={styles.rewardsLabel}>Rewards</Text>
 
             <Text style={styles.title}>
-              Profitez de réductions et récompenses{"\n"}en gagnant des points !
+              Créez votre compte pour cumuler des points à chaque achat
             </Text>
 
             <Text style={styles.features}>
-              Billets gratuits • Cashback • Événements exclusifs
+              Vos avantages restent associés à votre compte, sur le site et dans l'application.
             </Text>
 
             <TouchableOpacity onPress={handleJoin} style={styles.joinBtn} activeOpacity={0.85}>

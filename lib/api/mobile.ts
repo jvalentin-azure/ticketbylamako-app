@@ -236,6 +236,7 @@ export interface MobileOrderSummary {
   ticketsReady: boolean;
   ticketCount: number;
   createdVia: string;
+  reservationExpiresAt?: string | null;
   billing?: {
     firstName: string;
     lastName: string;
@@ -439,14 +440,36 @@ export async function getMobileCheckoutStatus(
   );
 }
 
+function requireMobileOrder(
+  value: unknown,
+  context: string,
+): MobileOrderSummary {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    typeof (value as MobileOrderSummary).id !== "number" ||
+    typeof (value as MobileOrderSummary).paymentStatus !== "string"
+  ) {
+    throw new Error(
+      `${context}: la réponse du serveur est incomplète. Réessayez sans recréer votre panier.`,
+    );
+  }
+  return value as MobileOrderSummary;
+}
+
 export async function getMobilePaymentMethods(
   token: string,
   kind: MobilePaymentKind,
 ): Promise<MobilePaymentMethodsResponse> {
-  return mobileV2Fetch<MobilePaymentMethodsResponse>(
+  const response = await mobileV2Fetch<MobilePaymentMethodsResponse>(
     `payments/${encodeURIComponent(token)}/methods`,
     { params: { kind } },
   );
+  if (!response || !Array.isArray(response.methods)) {
+    throw new Error("Impossible de charger les moyens de paiement.");
+  }
+  response.order = requireMobileOrder(response.order, "Paiement");
+  return response;
 }
 
 export async function updateMobilePaymentCoupon(
@@ -455,7 +478,7 @@ export async function updateMobilePaymentCoupon(
   code: string,
   action: "apply" | "remove" = "apply",
 ): Promise<MobileCouponResponse> {
-  return mobileV2Fetch<MobileCouponResponse>(
+  const response = await mobileV2Fetch<MobileCouponResponse>(
     `payments/${encodeURIComponent(token)}/coupon`,
     {
       method: "POST",
@@ -463,6 +486,11 @@ export async function updateMobilePaymentCoupon(
       body: { code, action },
     },
   );
+  if (!response) {
+    throw new Error("Le serveur n'a pas confirmé le code promo.");
+  }
+  response.order = requireMobileOrder(response.order, "Code promo");
+  return response;
 }
 
 export async function startMobilePayment(
@@ -474,7 +502,7 @@ export async function startMobilePayment(
     attemptId: string;
   },
 ): Promise<MobilePaymentStartResponse> {
-  return mobileV2Fetch<MobilePaymentStartResponse>(
+  const response = await mobileV2Fetch<MobilePaymentStartResponse>(
     `payments/${encodeURIComponent(token)}/start`,
     {
       method: "POST",
@@ -483,6 +511,19 @@ export async function startMobilePayment(
       timeoutMs: 30000,
     },
   );
+  if (
+    !response ||
+    !["success", "pending", "redirect", "failed"].includes(response.flow)
+  ) {
+    throw new Error(
+      "Le prestataire n'a pas confirmé le démarrage du paiement.",
+    );
+  }
+  response.order = requireMobileOrder(response.order, "Paiement");
+  if (response.flow === "redirect" && !response.redirectUrl) {
+    throw new Error("Le lien sécurisé du prestataire est indisponible.");
+  }
+  return response;
 }
 
 export async function createMobileSeatingSession(

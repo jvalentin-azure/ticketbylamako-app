@@ -82,7 +82,7 @@ export default function RegisterScreen() {
               contentFit="contain"
             />
             <Text style={[styles.titleText, { color: colors.foreground }]}>Créer un compte</Text>
-            <Text style={[styles.subtitleText, { color: colors.muted }]}>Inscrivez-vous pour acheter des billets</Text>
+            <Text style={[styles.subtitleText, { color: colors.muted }]}>Créez votre compte pour retrouver vos billets et vos avantages</Text>
           </View>
 
           {error ? (
@@ -160,7 +160,7 @@ export default function RegisterScreen() {
           {/* Register button */}
           <TouchableOpacity onPress={handleRegister} disabled={loading}
             style={[styles.registerButton, { backgroundColor: colors.primary, opacity: loading ? 0.7 : 1 }]}>
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.registerButtonText}>S'inscrire</Text>}
+            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.registerButtonText}>Créer mon compte avec mon e-mail</Text>}
           </TouchableOpacity>
 
           {/* Login link */}

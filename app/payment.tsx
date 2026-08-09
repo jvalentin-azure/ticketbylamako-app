@@ -52,8 +52,10 @@ export default function PaymentScreen() {
   const [phone, setPhone] = useState("");
   const [coupon, setCoupon] = useState("");
   const [couponBusy, setCouponBusy] = useState(false);
+  const [couponMessage, setCouponMessage] = useState("");
   const [message, setMessage] = useState("");
   const [pollAfterMs, setPollAfterMs] = useState(2500);
+  const [clock, setClock] = useState(Date.now());
   const pollInFlightRef = useRef(false);
 
   const selected = useMemo(
@@ -62,6 +64,28 @@ export default function PaymentScreen() {
   );
   const total = Number(order?.total || 0);
   const isZeroTotal = !!order && total <= 0;
+  const expiresAt = order?.reservationExpiresAt
+    ? Date.parse(order.reservationExpiresAt)
+    : 0;
+  const remainingSeconds = expiresAt
+    ? Math.max(0, Math.ceil((expiresAt - clock) / 1000))
+    : null;
+  const reservationExpired = remainingSeconds === 0;
+  const paymentActionLabel = isZeroTotal
+    ? "Confirmer la commande"
+    : selected?.id === "papi_paiement"
+      ? "Continuer vers Orange Money"
+      : selected?.id === "cybersource"
+        ? "Continuer vers le paiement par carte"
+        : selected
+          ? `Envoyer la demande ${selected.title}`
+          : `Payer ${formatAriary(total)}`;
+
+  useEffect(() => {
+    if (!expiresAt || reservationExpired) return;
+    const timer = setInterval(() => setClock(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [expiresAt, reservationExpired]);
 
   const finish = (status = "success") => {
     clearCart();
@@ -139,7 +163,7 @@ export default function PaymentScreen() {
   const applyCoupon = async (action: "apply" | "remove") => {
     if (!token || (action === "apply" && !coupon.trim())) return;
     setCouponBusy(true);
-    setMessage("");
+    setCouponMessage("");
     try {
       const response = await updateMobilePaymentCoupon(
         token,
@@ -149,8 +173,15 @@ export default function PaymentScreen() {
       );
       setOrder(response.order);
       if (action === "remove") setCoupon("");
+      setCouponMessage(
+        action === "remove"
+          ? "Le code promo a été retiré."
+          : "Code promo appliqué. Le total a été mis à jour.",
+      );
     } catch (error: any) {
-      setMessage(error?.message || "Ce code promo ne peut pas être appliqué.");
+      setCouponMessage(
+        error?.message || "Ce code promo ne peut pas être appliqué.",
+      );
     } finally {
       setCouponBusy(false);
     }
@@ -158,6 +189,11 @@ export default function PaymentScreen() {
 
   const pay = async () => {
     if (!token || !order) return;
+    if (reservationExpired) {
+      setMessage("Cette réservation a expiré. Reprenez votre sélection.");
+      setPhase("error");
+      return;
+    }
     if (!isZeroTotal && !selected) {
       setMessage("Sélectionnez un moyen de paiement.");
       return;
@@ -228,6 +264,12 @@ export default function PaymentScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <Header onBack={() => router.back()} colors={colors} />
+        {remainingSeconds !== null ? (
+          <ReservationTimer
+            remainingSeconds={remainingSeconds}
+            colors={colors}
+          />
+        ) : null}
         <ScrollView
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.content}
@@ -283,6 +325,28 @@ export default function PaymentScreen() {
                     </TouchableOpacity>
                   </View>
                 )}
+                {couponMessage ? (
+                  <View
+                    style={[
+                      styles.inlineMessage,
+                      { borderColor: colors.border },
+                    ]}
+                  >
+                    <IconSymbol
+                      name="info.circle.fill"
+                      size={18}
+                      color={colors.warning}
+                    />
+                    <Text
+                      style={[
+                        styles.inlineMessageText,
+                        { color: colors.foreground },
+                      ]}
+                    >
+                      {couponMessage}
+                    </Text>
+                  </View>
+                ) : null}
               </View>
 
               {!isZeroTotal ? (
@@ -298,11 +362,36 @@ export default function PaymentScreen() {
                         onPress={() => {
                           setSelectedMethod(method.id);
                           setMessage("");
+                          setPhase("ready");
                         }}
                         colors={colors}
                       />
                     ))}
                   </View>
+                  {selected?.flow === "redirect" ? (
+                    <View
+                      style={[
+                        styles.inlineMessage,
+                        { borderColor: colors.border },
+                      ]}
+                    >
+                      <IconSymbol
+                        name="arrow.up.right.square.fill"
+                        size={18}
+                        color={colors.primary}
+                      />
+                      <Text
+                        style={[
+                          styles.inlineMessageText,
+                          { color: colors.foreground },
+                        ]}
+                      >
+                        {selected.id === "papi_paiement"
+                          ? "Orange Money demandera l'autorisation sur sa page sécurisée, puis vous ramènera automatiquement dans l'application."
+                          : "La banque ouvrira sa page sécurisée, puis vous ramènera automatiquement dans l'application."}
+                      </Text>
+                    </View>
+                  ) : null}
                   {selected?.requiresPhone ? (
                     <View style={styles.phoneBlock}>
                       <Text style={[styles.label, { color: colors.foreground }]}>Numéro de paiement</Text>
@@ -325,43 +414,6 @@ export default function PaymentScreen() {
                 </View>
               )}
 
-              {message ? (
-                <View style={[styles.message, { borderColor: phase === "pending" ? colors.warning : colors.border }]}>
-                  {phase === "pending" ? <ActivityIndicator size="small" color={colors.warning} /> : <IconSymbol name="info.circle.fill" size={20} color={colors.warning} />}
-                  <Text style={[styles.messageText, { color: colors.foreground }]}>{message}</Text>
-                </View>
-              ) : null}
-
-              <TouchableOpacity
-                onPress={() => void pay()}
-                disabled={phase === "starting" || phase === "pending"}
-                style={[
-                  styles.payButton,
-                  { backgroundColor: colors.primary, opacity: phase === "starting" || phase === "pending" ? 0.65 : 1 },
-                ]}
-              >
-                {phase === "starting" ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <>
-                    <IconSymbol name="lock.fill" size={20} color="#fff" />
-                    <Text style={styles.payButtonText}>{isZeroTotal ? "Confirmer la commande" : `Payer ${formatAriary(total)}`}</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-
-              {phase === "pending" ? (
-                <TouchableOpacity onPress={() => void checkStatus()} style={styles.checkButton}>
-                  <IconSymbol name="arrow.clockwise" size={18} color={colors.primary} />
-                  <Text style={[styles.checkButtonText, { color: colors.primary }]}>Vérifier maintenant</Text>
-                </TouchableOpacity>
-              ) : null}
-              {phase === "error" ? (
-                <TouchableOpacity onPress={() => setPhase("ready")} style={styles.checkButton}>
-                  <IconSymbol name="arrow.uturn.left.circle.fill" size={18} color={colors.primary} />
-                  <Text style={[styles.checkButtonText, { color: colors.primary }]}>Réessayer</Text>
-                </TouchableOpacity>
-              ) : null}
             </>
           ) : (
             <View style={styles.loading}>
@@ -373,8 +425,126 @@ export default function PaymentScreen() {
             </View>
           )}
         </ScrollView>
+        {order && phase !== "loading" ? (
+          <View
+            style={[
+              styles.footer,
+              { borderTopColor: colors.border, backgroundColor: colors.background },
+            ]}
+          >
+            {message ? (
+              <View
+                style={[
+                  styles.message,
+                  {
+                    borderColor:
+                      phase === "pending" ? colors.warning : colors.border,
+                  },
+                ]}
+              >
+                {phase === "pending" ? (
+                  <ActivityIndicator size="small" color={colors.warning} />
+                ) : (
+                  <IconSymbol
+                    name="info.circle.fill"
+                    size={20}
+                    color={colors.warning}
+                  />
+                )}
+                <Text
+                  style={[styles.messageText, { color: colors.foreground }]}
+                >
+                  {message}
+                </Text>
+              </View>
+            ) : null}
+            <TouchableOpacity
+              onPress={() =>
+                phase === "pending" ? void checkStatus() : void pay()
+              }
+              disabled={phase === "starting" || reservationExpired}
+              style={[
+                styles.payButton,
+                {
+                  backgroundColor: colors.primary,
+                  opacity:
+                    phase === "starting" || reservationExpired ? 0.55 : 1,
+                },
+              ]}
+            >
+              {phase === "starting" ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <IconSymbol
+                    name={phase === "pending" ? "arrow.clockwise" : "lock.fill"}
+                    size={20}
+                    color="#fff"
+                  />
+                  <Text style={styles.payButtonText}>
+                    {phase === "pending"
+                      ? "Vérifier le paiement"
+                      : paymentActionLabel}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+            {phase === "error" && !reservationExpired ? (
+              <TouchableOpacity
+                onPress={() => {
+                  setMessage("");
+                  setPhase("ready");
+                }}
+                style={styles.checkButton}
+              >
+                <Text
+                  style={[styles.checkButtonText, { color: colors.primary }]}
+                >
+                  Modifier ou réessayer
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        ) : null}
       </KeyboardAvoidingView>
     </ScreenContainer>
+  );
+}
+
+function ReservationTimer({
+  remainingSeconds,
+  colors,
+}: {
+  remainingSeconds: number;
+  colors: any;
+}) {
+  const minutes = Math.floor(remainingSeconds / 60);
+  const seconds = remainingSeconds % 60;
+  const urgent = remainingSeconds <= 120;
+  return (
+    <View
+      style={[
+        styles.timer,
+        { backgroundColor: urgent ? colors.error + "16" : colors.warning + "18" },
+      ]}
+    >
+      <IconSymbol
+        name="clock.fill"
+        size={17}
+        color={urgent ? colors.error : colors.warning}
+      />
+      <Text style={[styles.timerText, { color: colors.foreground }]}>
+        Réservation maintenue encore
+      </Text>
+      <Text
+        style={[
+          styles.timerValue,
+          { color: urgent ? colors.error : colors.foreground },
+        ]}
+      >
+        {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
+      </Text>
+    </View>
   );
 }
 
@@ -489,6 +659,9 @@ const styles = StyleSheet.create({
   headerCopy: { flex: 1 },
   headerTitle: { fontSize: 18, fontFamily: "Raleway_800ExtraBold" },
   headerSubtitle: { marginTop: 2, fontSize: 12, fontFamily: "Raleway_500Medium" },
+  timer: { minHeight: 42, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "center" },
+  timerText: { fontSize: 12, fontFamily: "Raleway_600SemiBold" },
+  timerValue: { marginLeft: 6, fontSize: 14, fontFamily: "Raleway_800ExtraBold", fontVariant: ["tabular-nums"] },
   content: { padding: 16, paddingBottom: 36, gap: 18 },
   progress: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   progressItem: { flex: 1, alignItems: "center", gap: 6 },
@@ -526,6 +699,8 @@ const styles = StyleSheet.create({
   appliedCoupon: { minHeight: 50, borderRadius: 8, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   appliedCouponText: { flex: 1, fontSize: 13, fontFamily: "Raleway_700Bold" },
   removeText: { fontSize: 13, fontFamily: "Raleway_800ExtraBold" },
+  inlineMessage: { borderWidth: 1, borderRadius: 8, padding: 11, flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  inlineMessageText: { flex: 1, fontSize: 12, lineHeight: 17, fontFamily: "Raleway_600SemiBold" },
   methodList: { gap: 9 },
   method: { minHeight: 74, borderWidth: 1.5, borderRadius: 8, padding: 12, flexDirection: "row", alignItems: "center", gap: 12 },
   methodIcon: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
@@ -540,6 +715,7 @@ const styles = StyleSheet.create({
   zeroTotalText: { flex: 1, fontSize: 14, fontFamily: "Raleway_700Bold" },
   message: { borderWidth: 1, borderRadius: 8, padding: 13, flexDirection: "row", alignItems: "flex-start", gap: 10 },
   messageText: { flex: 1, fontSize: 13, lineHeight: 18, fontFamily: "Raleway_600SemiBold" },
+  footer: { borderTopWidth: 1, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10, gap: 8 },
   payButton: { minHeight: 56, borderRadius: 8, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 9, paddingHorizontal: 18 },
   payButtonText: { color: "#fff", fontSize: 16, fontFamily: "Raleway_800ExtraBold" },
   checkButton: { minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },

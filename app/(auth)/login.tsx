@@ -208,8 +208,7 @@ export default function LoginScreen() {
               </View>
             ) : null}
 
-            {Platform.OS !== "ios" ? (
-              <View style={styles.socialButtonRow}>
+            <View style={styles.socialButtonRow}>
                 <TouchableOpacity
                   onPress={() => handleSocialLogin("facebook")}
                   disabled={!!socialLoading}
@@ -258,21 +257,18 @@ export default function LoginScreen() {
                     Google
                   </Text>
                 </TouchableOpacity>
-              </View>
-            ) : null}
+            </View>
           </View>
 
-          {appleAvailable || Platform.OS !== "ios" ? (
-            <View style={styles.divider}>
-              <View
-                style={[styles.dividerLine, { backgroundColor: colors.border }]}
-              />
-              <Text style={[styles.dividerText, { color: colors.muted }]}>ou</Text>
-              <View
-                style={[styles.dividerLine, { backgroundColor: colors.border }]}
-              />
-            </View>
-          ) : null}
+          <View style={styles.divider}>
+            <View
+              style={[styles.dividerLine, { backgroundColor: colors.border }]}
+            />
+            <Text style={[styles.dividerText, { color: colors.muted }]}>ou</Text>
+            <View
+              style={[styles.dividerLine, { backgroundColor: colors.border }]}
+            />
+          </View>
 
           {/* Error */}
           {error ? (

@@ -166,6 +166,9 @@ export function SeatPurchaseFlow({
         case "FLOW_READY":
           setPhase("seating");
           break;
+        case "SEATING_CHART_OPENED":
+          setPhase("seating");
+          break;
         case "SEAT_SELECTION_CHANGED":
           setSelectedCount(Number(message.payload?.count || 0));
           setSelectedSeats(
@@ -573,6 +576,12 @@ export function SeatPurchaseFlow({
         overScrollMode="never"
         contentInsetAdjustmentBehavior="never"
         automaticallyAdjustContentInsets={false}
+        onLoadEnd={() => {
+          webviewRef.current?.injectJavaScript(
+            "window.lamakoOpenSeatingChart && window.lamakoOpenSeatingChart(); true;",
+          );
+        }}
+        onContentProcessDidTerminate={() => webviewRef.current?.reload()}
       />
     </ScreenContainer>
   );
