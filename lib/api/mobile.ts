@@ -199,6 +199,7 @@ export interface CreateMobileSeatingSessionResponse {
 export type MobilePaymentStatus =
   | "success"
   | "pending"
+  | "review"
   | "failed"
   | "cancelled"
   | "expired"
@@ -237,6 +238,11 @@ export interface MobileOrderSummary {
   ticketCount: number;
   createdVia: string;
   reservationExpiresAt?: string | null;
+  paymentAttemptStatus?: string | null;
+  paymentPendingUntil?: string | null;
+  paymentLastCheckedAt?: string | null;
+  paymentPollCount?: number;
+  requiresManualReview?: boolean;
   billing?: {
     firstName: string;
     lastName: string;
@@ -551,6 +557,27 @@ export async function getMobilePaymentReturnStatus(
     `payment-return/${encodeURIComponent(token)}/status`,
     { params: { kind } }
   );
+}
+
+export async function verifyMobilePayment(
+  kind: MobilePaymentKind,
+  token: string,
+): Promise<MobilePaymentReturnStatusResponse> {
+  const response = await mobileV2Fetch<MobilePaymentReturnStatusResponse>(
+    `payments/${encodeURIComponent(token)}/verify`,
+    {
+      method: "POST",
+      params: { kind },
+      timeoutMs: 30000,
+    },
+  );
+  if (!response) {
+    throw new Error("Le serveur n'a pas pu vérifier le paiement.");
+  }
+  if (response.order) {
+    response.order = requireMobileOrder(response.order, "Vérification du paiement");
+  }
+  return response;
 }
 
 export async function getMobileOrders(params: {

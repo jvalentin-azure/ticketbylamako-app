@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  AppState,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -25,12 +26,19 @@ import {
   getMobilePaymentReturnStatus,
   startMobilePayment,
   updateMobilePaymentCoupon,
+  verifyMobilePayment,
   type MobileOrderSummary,
   type MobilePaymentKind,
   type MobilePaymentMethod,
 } from "@/lib/api/mobile";
 
-type ScreenPhase = "loading" | "ready" | "starting" | "pending" | "error";
+type ScreenPhase =
+  | "loading"
+  | "ready"
+  | "starting"
+  | "pending"
+  | "review"
+  | "error";
 
 function firstParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] || "" : value || "";
@@ -64,13 +72,19 @@ export default function PaymentScreen() {
   );
   const total = Number(order?.total || 0);
   const isZeroTotal = !!order && total <= 0;
+  const paymentInProgress =
+    order?.paymentStatus === "pending" ||
+    order?.paymentStatus === "review" ||
+    ["queued", "processing", "pending", "redirect", "verification_delayed", "review"].includes(
+      order?.paymentAttemptStatus || "",
+    );
   const expiresAt = order?.reservationExpiresAt
     ? Date.parse(order.reservationExpiresAt)
     : 0;
   const remainingSeconds = expiresAt
     ? Math.max(0, Math.ceil((expiresAt - clock) / 1000))
     : null;
-  const reservationExpired = remainingSeconds === 0;
+  const reservationExpired = remainingSeconds === 0 && !paymentInProgress;
   const paymentActionLabel = isZeroTotal
     ? "Confirmer la commande"
     : selected?.id === "papi_paiement"
@@ -82,10 +96,10 @@ export default function PaymentScreen() {
           : `Payer ${formatAriary(total)}`;
 
   useEffect(() => {
-    if (!expiresAt || reservationExpired) return;
+    if (!expiresAt || reservationExpired || paymentInProgress) return;
     const timer = setInterval(() => setClock(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, [expiresAt, reservationExpired]);
+  }, [expiresAt, reservationExpired, paymentInProgress]);
 
   const finish = (status = "success") => {
     clearCart();
@@ -107,17 +121,43 @@ export default function PaymentScreen() {
       const response = await getMobilePaymentMethods(token, kind);
       setOrder(response.order);
       setMethods(response.methods);
+      setSelectedMethod((current) => {
+        if (response.methods.some((method) => method.id === current)) {
+          return current;
+        }
+        if (
+          response.order.paymentMethod &&
+          response.methods.some(
+            (method) => method.id === response.order.paymentMethod,
+          )
+        ) {
+          return response.order.paymentMethod;
+        }
+        return response.methods[0]?.id || "";
+      });
       setPhone(response.order.billing?.phone || "");
       setPollAfterMs(response.pollAfterMs || 2500);
       if (response.order.paymentStatus === "success") {
         finish();
         return;
       }
-      setSelectedMethod((current) =>
-        response.methods.some((method) => method.id === current)
-          ? current
-          : response.methods[0]?.id || "",
-      );
+      if (response.order.paymentStatus === "review") {
+        setMessage(
+          "La confirmation de l'opérateur prend plus de temps que prévu. Ne payez pas une seconde fois; vérifiez à nouveau ou contactez le support.",
+        );
+        setPhase("review");
+        return;
+      }
+      if (
+        response.order.paymentStatus === "pending" &&
+        response.order.paymentAttemptStatus
+      ) {
+        setMessage(
+          "Paiement envoyé. Confirmez-le auprès de votre opérateur; nous vérifions automatiquement son statut.",
+        );
+        setPhase("pending");
+        return;
+      }
       setPhase("ready");
     } catch (error: any) {
       setMessage(error?.message || "Impossible de charger le paiement.");
@@ -129,14 +169,23 @@ export default function PaymentScreen() {
     void load();
   }, [token, kind]);
 
-  const checkStatus = async () => {
+  const checkStatus = async (verifyProvider = false) => {
     if (!token || pollInFlightRef.current) return;
     pollInFlightRef.current = true;
     try {
-      const status = await getMobilePaymentReturnStatus(kind, token);
+      const status = verifyProvider
+        ? await verifyMobilePayment(kind, token)
+        : await getMobilePaymentReturnStatus(kind, token);
       if (status.order) setOrder(status.order);
       if (status.status === "success") {
         finish();
+        return;
+      }
+      if (status.status === "review") {
+        setMessage(
+          "La confirmation de l'opérateur est toujours en attente. Ne relancez pas le paiement; vérifiez à nouveau ou contactez le support.",
+        );
+        setPhase("review");
         return;
       }
       if (["failed", "cancelled", "expired"].includes(status.status)) {
@@ -146,7 +195,9 @@ export default function PaymentScreen() {
             : "Le paiement n'a pas abouti. Vous pouvez réessayer sans recréer la commande.",
         );
         setPhase("error");
+        return;
       }
+      setPhase("pending");
     } catch {
       // A temporary network failure must not turn a provider payment into a failure.
     } finally {
@@ -159,6 +210,15 @@ export default function PaymentScreen() {
     const timer = setInterval(() => void checkStatus(), Math.max(2000, pollAfterMs));
     return () => clearInterval(timer);
   }, [phase, pollAfterMs, token, kind]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active" && (phase === "pending" || phase === "review")) {
+        void checkStatus(true);
+      }
+    });
+    return () => subscription.remove();
+  }, [phase, token, kind]);
 
   const applyCoupon = async (action: "apply" | "remove") => {
     if (!token || (action === "apply" && !coupon.trim())) return;
@@ -189,6 +249,10 @@ export default function PaymentScreen() {
 
   const pay = async () => {
     if (!token || !order) return;
+    if (paymentInProgress) {
+      await checkStatus(true);
+      return;
+    }
     if (reservationExpired) {
       setMessage("Cette réservation a expiré. Reprenez votre sélection.");
       setPhase("error");
@@ -230,22 +294,16 @@ export default function PaymentScreen() {
         const returnUrl = Linking.createURL("payment-return", {
           queryParams: { kind, token },
         });
-        const result = await WebBrowser.openAuthSessionAsync(
+        await WebBrowser.openAuthSessionAsync(
           response.redirectUrl,
           returnUrl,
           { preferEphemeralSession: false },
         );
-        if (result.type === "success" && result.url) {
-          const parsed = Linking.parse(result.url);
-          const status = String(parsed.queryParams?.status || "");
-          if (status === "success") {
-            finish(status);
-            return;
-          }
-        }
+        // A browser return is only a navigation signal. The server-side
+        // provider callback remains the sole source of payment truth.
         setMessage("Vérification du retour de paiement en cours...");
         setPhase("pending");
-        await checkStatus();
+        await checkStatus(true);
         return;
       }
 
@@ -264,7 +322,7 @@ export default function PaymentScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <Header onBack={() => router.back()} colors={colors} />
-        {remainingSeconds !== null ? (
+        {remainingSeconds !== null && !paymentInProgress ? (
           <ReservationTimer
             remainingSeconds={remainingSeconds}
             colors={colors}
@@ -438,11 +496,13 @@ export default function PaymentScreen() {
                   styles.message,
                   {
                     borderColor:
-                      phase === "pending" ? colors.warning : colors.border,
+                      phase === "pending" || phase === "review"
+                        ? colors.warning
+                        : colors.border,
                   },
                 ]}
               >
-                {phase === "pending" ? (
+                {phase === "pending" || phase === "review" ? (
                   <ActivityIndicator size="small" color={colors.warning} />
                 ) : (
                   <IconSymbol
@@ -460,7 +520,9 @@ export default function PaymentScreen() {
             ) : null}
             <TouchableOpacity
               onPress={() =>
-                phase === "pending" ? void checkStatus() : void pay()
+                phase === "pending" || phase === "review"
+                  ? void checkStatus(true)
+                  : void pay()
               }
               disabled={phase === "starting" || reservationExpired}
               style={[
@@ -477,12 +539,16 @@ export default function PaymentScreen() {
               ) : (
                 <>
                   <IconSymbol
-                    name={phase === "pending" ? "arrow.clockwise" : "lock.fill"}
+                    name={
+                      phase === "pending" || phase === "review"
+                        ? "arrow.clockwise"
+                        : "lock.fill"
+                    }
                     size={20}
                     color="#fff"
                   />
                   <Text style={styles.payButtonText}>
-                    {phase === "pending"
+                    {phase === "pending" || phase === "review"
                       ? "Vérifier le paiement"
                       : paymentActionLabel}
                   </Text>
