@@ -39,4 +39,12 @@ describe("native commerce payment flow", () => {
     expect(paymentSource).toContain('response.flow === "redirect"');
     expect(paymentSource).toContain("openAuthSessionAsync");
   });
+
+  it("keeps provider verification active for pending and review states", () => {
+    const paymentSource = source("app/payment.tsx");
+    expect(paymentSource).toContain(
+      'phase !== "pending" && phase !== "review"',
+    );
+    expect(paymentSource).toContain("checkStatus(true)");
+  });
 });

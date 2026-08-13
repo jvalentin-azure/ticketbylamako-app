@@ -206,8 +206,9 @@ export default function PaymentScreen() {
   };
 
   useEffect(() => {
-    if (phase !== "pending") return;
-    const timer = setInterval(() => void checkStatus(), Math.max(2000, pollAfterMs));
+    if (phase !== "pending" && phase !== "review") return;
+    const interval = Math.max(phase === "review" ? 15000 : 8000, pollAfterMs);
+    const timer = setInterval(() => void checkStatus(true), interval);
     return () => clearInterval(timer);
   }, [phase, pollAfterMs, token, kind]);
 
