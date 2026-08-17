@@ -47,4 +47,14 @@ describe("native commerce payment flow", () => {
     );
     expect(paymentSource).toContain("checkStatus(true)");
   });
+
+  it("does not treat a new unpaid order as an already-started provider payment", () => {
+    const paymentSource = source("app/payment.tsx");
+    expect(paymentSource).toContain(
+      'const paymentAttemptStatus = order?.paymentAttemptStatus || ""',
+    );
+    expect(paymentSource).not.toContain(
+      'order?.paymentStatus === "pending" ||',
+    );
+  });
 });

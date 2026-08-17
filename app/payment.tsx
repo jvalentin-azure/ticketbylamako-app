@@ -72,11 +72,11 @@ export default function PaymentScreen() {
   );
   const total = Number(order?.total || 0);
   const isZeroTotal = !!order && total <= 0;
+  const paymentAttemptStatus = order?.paymentAttemptStatus || "";
   const paymentInProgress =
-    order?.paymentStatus === "pending" ||
     order?.paymentStatus === "review" ||
     ["queued", "processing", "pending", "redirect", "verification_delayed", "review"].includes(
-      order?.paymentAttemptStatus || "",
+      paymentAttemptStatus,
     );
   const expiresAt = order?.reservationExpiresAt
     ? Date.parse(order.reservationExpiresAt)
