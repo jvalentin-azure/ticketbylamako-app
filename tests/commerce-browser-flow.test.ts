@@ -38,6 +38,14 @@ describe("native commerce payment flow", () => {
     const paymentSource = source("app/payment.tsx");
     expect(paymentSource).toContain('response.flow === "redirect"');
     expect(paymentSource).toContain("openAuthSessionAsync");
+    expect(paymentSource).toContain('browserResult.type === "cancel"');
+  });
+
+  it("locks payment-method changes while a provider attempt is active", () => {
+    const paymentSource = source("app/payment.tsx");
+    expect(paymentSource).toContain("disabled={paymentInProgress}");
+    expect(paymentSource).toContain("afin d'éviter un double débit");
+    expect(paymentSource).toContain("order?.paymentMethod");
   });
 
   it("keeps provider verification active for pending and review states", () => {

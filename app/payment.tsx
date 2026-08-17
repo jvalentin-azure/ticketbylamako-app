@@ -94,6 +94,9 @@ export default function PaymentScreen() {
         : selected
           ? `Envoyer la demande ${selected.title}`
           : `Payer ${formatAriary(total)}`;
+  const activePaymentMethod = paymentInProgress
+    ? methods.find((method) => method.id === order?.paymentMethod) || selected
+    : selected;
 
   useEffect(() => {
     if (!expiresAt || reservationExpired || paymentInProgress) return;
@@ -295,11 +298,18 @@ export default function PaymentScreen() {
         const returnUrl = Linking.createURL("payment-return", {
           queryParams: { kind, token },
         });
-        await WebBrowser.openAuthSessionAsync(
+        const browserResult = await WebBrowser.openAuthSessionAsync(
           response.redirectUrl,
           returnUrl,
           { preferEphemeralSession: false },
         );
+        if (browserResult.type === "cancel" || browserResult.type === "dismiss") {
+          setMessage(
+            "La page sécurisée a été fermée. Vous pouvez reprendre l'autorisation du paiement.",
+          );
+          setPhase("error");
+          return;
+        }
         // A browser return is only a navigation signal. The server-side
         // provider callback remains the sole source of payment truth.
         setMessage("Vérification du retour de paiement en cours...");
@@ -417,8 +427,14 @@ export default function PaymentScreen() {
                       <PaymentMethodRow
                         key={method.id}
                         method={method}
-                        selected={selectedMethod === method.id}
+                        selected={
+                          (paymentInProgress
+                            ? order?.paymentMethod
+                            : selectedMethod) === method.id
+                        }
+                        disabled={paymentInProgress}
                         onPress={() => {
+                          if (paymentInProgress) return;
                           setSelectedMethod(method.id);
                           setMessage("");
                           setPhase("ready");
@@ -427,6 +443,28 @@ export default function PaymentScreen() {
                       />
                     ))}
                   </View>
+                  {paymentInProgress && activePaymentMethod ? (
+                    <View
+                      style={[
+                        styles.inlineMessage,
+                        { borderColor: colors.warning },
+                      ]}
+                    >
+                      <IconSymbol
+                        name="clock.fill"
+                        size={18}
+                        color={colors.warning}
+                      />
+                      <Text
+                        style={[
+                          styles.inlineMessageText,
+                          { color: colors.foreground },
+                        ]}
+                      >
+                        {`${activePaymentMethod.title} est en cours de vérification. Attendez son résultat avant de choisir un autre moyen afin d'éviter un double débit.`}
+                      </Text>
+                    </View>
+                  ) : null}
                   {selected?.flow === "redirect" ? (
                     <View
                       style={[
@@ -692,16 +730,20 @@ function SummaryLine({ label, value, colors, accent = false }: { label: string; 
   );
 }
 
-function PaymentMethodRow({ method, selected, onPress, colors }: { method: MobilePaymentMethod; selected: boolean; onPress: () => void; colors: any }) {
+function PaymentMethodRow({ method, selected, disabled, onPress, colors }: { method: MobilePaymentMethod; selected: boolean; disabled: boolean; onPress: () => void; colors: any }) {
   return (
     <TouchableOpacity
       onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="radio"
+      accessibilityState={{ disabled, selected }}
       activeOpacity={0.8}
       style={[
         styles.method,
         {
           borderColor: selected ? colors.primary : colors.border,
           backgroundColor: selected ? colors.primary + "0D" : "transparent",
+          opacity: disabled && !selected ? 0.45 : 1,
         },
       ]}
     >
