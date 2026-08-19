@@ -22,6 +22,7 @@ import { useColors } from "@/hooks/use-colors";
 import { useCart } from "@/lib/cart-provider";
 import { formatAriary } from "@/lib/format";
 import {
+  cancelMobilePayment,
   getMobilePaymentMethods,
   getMobilePaymentReturnStatus,
   startMobilePayment,
@@ -195,7 +196,7 @@ export default function PaymentScreen() {
         setMessage(
           status.status === "expired"
             ? "La réservation a expiré. Reprenez votre sélection."
-            : "Le paiement n'a pas abouti. Vous pouvez réessayer sans recréer la commande.",
+            : "Paiement non abouti. Veuillez réessayer.",
         );
         setPhase("error");
         return;
@@ -205,6 +206,36 @@ export default function PaymentScreen() {
       // A temporary network failure must not turn a provider payment into a failure.
     } finally {
       pollInFlightRef.current = false;
+    }
+  };
+
+  const cancelPayment = async () => {
+    if (!token || phase === "starting") return;
+    setPhase("starting");
+    setMessage("");
+    try {
+      const response = await cancelMobilePayment(kind, token);
+      if (response.order) setOrder(response.order);
+      router.replace({
+        pathname: "/payment-return",
+        params: { kind, token, status: "cancelled" },
+      } as any);
+    } catch (error: any) {
+      try {
+        const status = await verifyMobilePayment(kind, token);
+        if (status.order) setOrder(status.order);
+        if (status.status === "success") {
+          finish();
+          return;
+        }
+      } catch {
+        // Keep the cancellation error below when status verification is unavailable.
+      }
+      setMessage(
+        error?.message ||
+          "Impossible de confirmer l'annulation. Le paiement n'a pas été relancé.",
+      );
+      setPhase("error");
     }
   };
 
@@ -304,10 +335,7 @@ export default function PaymentScreen() {
           { preferEphemeralSession: false },
         );
         if (browserResult.type === "cancel" || browserResult.type === "dismiss") {
-          setMessage(
-            "Paiement annulé. Aucun débit n'a été confirmé. Choisissez un moyen de paiement ou réessayez.",
-          );
-          setPhase("error");
+          await cancelPayment();
           return;
         }
         // A browser return is only a navigation signal. The server-side
@@ -558,18 +586,24 @@ export default function PaymentScreen() {
               </View>
             ) : null}
             <TouchableOpacity
-              onPress={() =>
-                phase === "pending" || phase === "review"
-                  ? void checkStatus(true)
-                  : void pay()
+              onPress={() => void pay()}
+              disabled={
+                phase === "starting" ||
+                phase === "pending" ||
+                phase === "review" ||
+                reservationExpired
               }
-              disabled={phase === "starting" || reservationExpired}
               style={[
                 styles.payButton,
                 {
                   backgroundColor: colors.primary,
                   opacity:
-                    phase === "starting" || reservationExpired ? 0.55 : 1,
+                    phase === "starting" ||
+                    phase === "pending" ||
+                    phase === "review" ||
+                    reservationExpired
+                      ? 0.55
+                      : 1,
                 },
               ]}
             >
@@ -580,7 +614,7 @@ export default function PaymentScreen() {
                   <IconSymbol
                     name={
                       phase === "pending" || phase === "review"
-                        ? "arrow.clockwise"
+                        ? "clock.fill"
                         : "lock.fill"
                     }
                     size={20}
@@ -588,16 +622,26 @@ export default function PaymentScreen() {
                   />
                   <Text style={styles.payButtonText}>
                     {phase === "pending" || phase === "review"
-                      ? "Actualiser le statut"
+                      ? "Confirmation en cours..."
                       : paymentActionLabel}
                   </Text>
                 </>
               )}
             </TouchableOpacity>
             {phase === "pending" || phase === "review" ? (
-              <Text style={[styles.statusHint, { color: colors.muted }]}>
-                La confirmation est automatique. Actualisez seulement si le statut tarde à changer.
-              </Text>
+              <>
+                <Text style={[styles.statusHint, { color: colors.muted }]}>
+                  La confirmation est automatique. Ne relancez pas un second paiement.
+                </Text>
+                <TouchableOpacity
+                  onPress={() => void cancelPayment()}
+                  style={styles.checkButton}
+                >
+                  <Text style={[styles.checkButtonText, { color: colors.warning }]}>
+                    Annuler et réessayer
+                  </Text>
+                </TouchableOpacity>
+              </>
             ) : null}
             {phase === "error" && !reservationExpired ? (
               <TouchableOpacity

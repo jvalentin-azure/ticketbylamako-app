@@ -75,7 +75,7 @@ export default function PaymentReturnScreen() {
         }
 
         if (verified.status === "cancelled") {
-          setMessage("Le paiement a été annulé. Aucun débit n'a été confirmé. Vous pouvez choisir un moyen de paiement et réessayer.");
+          setMessage("Paiement non abouti. Veuillez réessayer.");
           setPhase("cancelled");
           return;
         }
@@ -128,7 +128,7 @@ export default function PaymentReturnScreen() {
           {phase === "success"
             ? "Paiement confirmé"
             : phase === "cancelled"
-              ? "Paiement annulé"
+              ? "Paiement non abouti"
             : phase === "pending"
               ? "Paiement en attente"
               : phase === "verifying"
@@ -152,7 +152,7 @@ export default function PaymentReturnScreen() {
           style={[styles.primaryButton, { backgroundColor: colors.primary }]}
         >
           <Text style={styles.primaryButtonText}>
-            {phase === "cancelled" ? "Réessayer le paiement" : "Voir mes commandes"}
+            {phase === "cancelled" ? "Réessayer" : "Voir mes commandes"}
           </Text>
         </TouchableOpacity>
         {phase === "cancelled" ? (
@@ -169,9 +169,9 @@ export default function PaymentReturnScreen() {
 }
 
 function paymentFailureMessage(status: PaymentReturnStatus): string {
-  if (status === "cancelled") return "Le paiement a été annulé. Votre commande reste consultable si elle a été créée.";
+  if (status === "cancelled") return "Paiement non abouti. Veuillez réessayer.";
   if (status === "expired") return "Cette session de paiement a expiré. Relancez le paiement depuis le panier ou les commandes.";
-  if (status === "failed") return "Le paiement n'a pas abouti. Vous pouvez réessayer depuis vos commandes si la commande existe.";
+  if (status === "failed") return "Paiement non abouti. Veuillez réessayer.";
   return "Le paiement n'est pas confirmé. Consultez vos commandes pour suivre son statut.";
 }
 

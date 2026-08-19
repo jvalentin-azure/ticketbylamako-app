@@ -580,6 +580,27 @@ export async function verifyMobilePayment(
   return response;
 }
 
+export async function cancelMobilePayment(
+  kind: MobilePaymentKind,
+  token: string,
+): Promise<MobilePaymentReturnStatusResponse> {
+  const response = await mobileV2Fetch<MobilePaymentReturnStatusResponse>(
+    `payments/${encodeURIComponent(token)}/cancel`,
+    {
+      method: "POST",
+      params: { kind },
+      timeoutMs: 15000,
+    },
+  );
+  if (!response || response.status !== "cancelled") {
+    throw new Error("Le serveur n'a pas confirmé l'annulation du paiement.");
+  }
+  if (response.order) {
+    response.order = requireMobileOrder(response.order, "Annulation du paiement");
+  }
+  return response;
+}
+
 export async function getMobileOrders(params: {
   status?: string;
   limit?: number;

@@ -39,6 +39,9 @@ describe("native commerce payment flow", () => {
     expect(paymentSource).toContain('response.flow === "redirect"');
     expect(paymentSource).toContain("openAuthSessionAsync");
     expect(paymentSource).toContain('browserResult.type === "cancel"');
+    expect(paymentSource).toContain("cancelMobilePayment(kind, token)");
+    expect(paymentSource).toContain("Annuler et réessayer");
+    expect(paymentSource).not.toContain("Actualiser le statut");
   });
 
   it("locks payment-method changes while a provider attempt is active", () => {
