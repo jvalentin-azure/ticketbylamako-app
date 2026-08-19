@@ -4,29 +4,42 @@ import path from "node:path";
 
 describe("client secret policy", () => {
   it("documents WooCommerce, JWT, and rewards secrets as deprecated client variables", () => {
-    const envExample = fs.readFileSync(path.join(process.cwd(), "ENV_EXAMPLE.md"), "utf-8");
+    const envExample = fs.readFileSync(
+      path.join(process.cwd(), "ENV_EXAMPLE.md"),
+      "utf-8",
+    );
 
     expect(envExample).toContain("Deprecated client variables");
     expect(envExample).toContain("EXPO_PUBLIC_WC_CONSUMER_SECRET");
     expect(envExample).toContain("EXPO_PUBLIC_JWT_SECRET");
     expect(envExample).toContain("EXPO_PUBLIC_REWARDS_API_KEY");
-    expect(envExample).toContain("must not be present in production mobile builds");
+    expect(envExample).toContain(
+      "must not be present in production mobile builds",
+    );
   });
 
   it("does not keep the legacy rewards API key hardcoded in the app source", () => {
     const rewardsProvider = fs.readFileSync(
       path.join(process.cwd(), "lib", "rewards-provider.tsx"),
-      "utf-8"
+      "utf-8",
     );
 
     expect(rewardsProvider).not.toContain("LR_2024_SECURE_KEY_TBL");
   });
 
   it("uses the JWT-authenticated v2 checkout client for native checkout", () => {
-    const checkout = fs.readFileSync(path.join(process.cwd(), "app", "checkout.tsx"), "utf-8");
+    const checkout = fs.readFileSync(
+      path.join(process.cwd(), "app", "checkout.tsx"),
+      "utf-8",
+    );
+    const payment = fs.readFileSync(
+      path.join(process.cwd(), "app", "payment.tsx"),
+      "utf-8",
+    );
 
     expect(checkout).toContain("createMobileCheckout");
-    expect(checkout).toContain("getMobileCheckoutStatus");
+    expect(checkout).toContain('pathname: "/payment"');
+    expect(payment).toContain("getMobilePaymentReturnStatus");
     expect(checkout).not.toContain("MOBILE_V2_COMMERCE_ENABLED");
     expect(checkout).not.toContain("createOrder");
     expect(checkout).not.toContain("orderKey");
@@ -37,7 +50,7 @@ describe("client secret policy", () => {
   it("keeps native cart clearing local-only", () => {
     const cartProvider = fs.readFileSync(
       path.join(process.cwd(), "lib", "cart-provider.tsx"),
-      "utf-8"
+      "utf-8",
     );
 
     expect(cartProvider).not.toContain("clearServerCart");
@@ -46,15 +59,15 @@ describe("client secret policy", () => {
   it("uses tokenized v2 seating sessions instead of JWT auto-login by default", () => {
     const eventScreen = fs.readFileSync(
       path.join(process.cwd(), "app", "event", "[id].tsx"),
-      "utf-8"
+      "utf-8",
     );
     const seatingComponent = fs.readFileSync(
       path.join(process.cwd(), "components", "seating", "SeatPurchaseFlow.tsx"),
-      "utf-8"
+      "utf-8",
     );
     const mobileClient = fs.readFileSync(
       path.join(process.cwd(), "lib", "api", "mobile.ts"),
-      "utf-8"
+      "utf-8",
     );
 
     expect(eventScreen).toContain("MOBILE_V2_SEATING_ENABLED");
@@ -65,12 +78,18 @@ describe("client secret policy", () => {
   });
 
   it("uses a stable payment return deep link and verifies returns server-side", () => {
-    const appConfig = fs.readFileSync(path.join(process.cwd(), "app.config.ts"), "utf-8");
+    const appConfig = fs.readFileSync(
+      path.join(process.cwd(), "app.config.ts"),
+      "utf-8",
+    );
     const paymentReturn = fs.readFileSync(
       path.join(process.cwd(), "app", "payment-return.tsx"),
-      "utf-8"
+      "utf-8",
     );
-    const helper = fs.readFileSync(path.join(process.cwd(), "lib", "payment-return.ts"), "utf-8");
+    const helper = fs.readFileSync(
+      path.join(process.cwd(), "lib", "payment-return.ts"),
+      "utf-8",
+    );
 
     expect(appConfig).toContain('scheme: "ticketbylamako"');
     expect(appConfig).toContain('host: "payment-return"');
@@ -80,11 +99,19 @@ describe("client secret policy", () => {
 
   it("adds v2 payment return pages without exposing WooCommerce order keys in deep links", () => {
     const plugin = fs.readFileSync(
-      path.join(process.cwd(), "scripts", "lamako-mobile-api", "includes", "v2-commerce.php"),
-      "utf-8"
+      path.join(
+        process.cwd(),
+        "scripts",
+        "lamako-mobile-api",
+        "includes",
+        "v2-commerce.php",
+      ),
+      "utf-8",
     );
 
-    expect(plugin).toContain("/lamako-mobile/(payment-return|payment-failed|payment-cancel)");
+    expect(plugin).toContain(
+      "/lamako-mobile/(payment-return|payment-failed|payment-cancel)",
+    );
     expect(plugin).toContain("ticketbylamako://payment-return?kind=");
     expect(plugin).toContain("lamako_mobile_checkout_token");
     expect(plugin).toContain("payment-return/(?P<token>");
@@ -93,11 +120,17 @@ describe("client secret policy", () => {
   });
 
   it("routes checkout and seating orders through the verified native payment screen", () => {
-    const checkout = fs.readFileSync(path.join(process.cwd(), "app", "checkout.tsx"), "utf-8");
-    const payment = fs.readFileSync(path.join(process.cwd(), "app", "payment.tsx"), "utf-8");
+    const checkout = fs.readFileSync(
+      path.join(process.cwd(), "app", "checkout.tsx"),
+      "utf-8",
+    );
+    const payment = fs.readFileSync(
+      path.join(process.cwd(), "app", "payment.tsx"),
+      "utf-8",
+    );
     const seatingComponent = fs.readFileSync(
       path.join(process.cwd(), "components", "seating", "SeatPurchaseFlow.tsx"),
-      "utf-8"
+      "utf-8",
     );
 
     expect(checkout).toContain('pathname: "/payment"');
@@ -108,26 +141,29 @@ describe("client secret policy", () => {
   });
 
   it("uses v2 authenticated APIs for customer orders, tickets, rewards, referrals, and push tokens", () => {
-    const orders = fs.readFileSync(path.join(process.cwd(), "app", "orders.tsx"), "utf-8");
+    const orders = fs.readFileSync(
+      path.join(process.cwd(), "app", "orders.tsx"),
+      "utf-8",
+    );
     const orderDetail = fs.readFileSync(
       path.join(process.cwd(), "app", "order", "[id].tsx"),
-      "utf-8"
+      "utf-8",
     );
     const ticketDetail = fs.readFileSync(
       path.join(process.cwd(), "app", "ticket", "[id].tsx"),
-      "utf-8"
+      "utf-8",
     );
     const ticketsTab = fs.readFileSync(
       path.join(process.cwd(), "app", "(tabs)", "tickets.tsx"),
-      "utf-8"
+      "utf-8",
     );
     const rewardsProvider = fs.readFileSync(
       path.join(process.cwd(), "lib", "rewards-provider.tsx"),
-      "utf-8"
+      "utf-8",
     );
     const notifications = fs.readFileSync(
       path.join(process.cwd(), "lib", "notifications.ts"),
-      "utf-8"
+      "utf-8",
     );
 
     expect(orders).toContain("getMobileOrders");
@@ -146,8 +182,14 @@ describe("client secret policy", () => {
 
   it("exposes v2 referral and enriched order/ticket fields server-side", () => {
     const plugin = fs.readFileSync(
-      path.join(process.cwd(), "scripts", "lamako-mobile-api", "includes", "v2-commerce.php"),
-      "utf-8"
+      path.join(
+        process.cwd(),
+        "scripts",
+        "lamako-mobile-api",
+        "includes",
+        "v2-commerce.php",
+      ),
+      "utf-8",
     );
 
     expect(plugin).toContain("/referral/validate");
@@ -159,22 +201,36 @@ describe("client secret policy", () => {
   });
 
   it("adds EAS build profiles and blocks deprecated public secrets before mobile builds", () => {
-    const eas = JSON.parse(fs.readFileSync(path.join(process.cwd(), "eas.json"), "utf-8"));
-    const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), "package.json"), "utf-8"));
+    const eas = JSON.parse(
+      fs.readFileSync(path.join(process.cwd(), "eas.json"), "utf-8"),
+    );
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(process.cwd(), "package.json"), "utf-8"),
+    );
     const secretCheck = fs.readFileSync(
       path.join(process.cwd(), "scripts", "check-mobile-secrets.mjs"),
-      "utf-8"
+      "utf-8",
     );
     const phase6 = fs.readFileSync(
       path.join(process.cwd(), "docs", "phase-6-mobile-qa.md"),
-      "utf-8"
+      "utf-8",
     );
 
-    expect(eas.build.development.env).not.toHaveProperty("EXPO_PUBLIC_ENABLE_MOBILE_V2_COMMERCE");
-    expect(eas.build.preview.env.EXPO_PUBLIC_ENABLE_MOBILE_V2_SEATING).toBe("true");
-    expect(eas.build.production.env.EXPO_PUBLIC_SITE_URL).toBe("https://www.ticketbylamako.com");
-    expect(pkg.scripts["check:mobile-secrets"]).toBe("node scripts/check-mobile-secrets.mjs");
-    expect(pkg.scripts["eas-build-pre-install"]).toBe("node scripts/check-mobile-secrets.mjs");
+    expect(eas.build.development.env).not.toHaveProperty(
+      "EXPO_PUBLIC_ENABLE_MOBILE_V2_COMMERCE",
+    );
+    expect(eas.build.preview.env.EXPO_PUBLIC_ENABLE_MOBILE_V2_SEATING).toBe(
+      "true",
+    );
+    expect(eas.build.production.env.EXPO_PUBLIC_SITE_URL).toBe(
+      "https://www.ticketbylamako.com",
+    );
+    expect(pkg.scripts["check:mobile-secrets"]).toBe(
+      "node scripts/check-mobile-secrets.mjs",
+    );
+    expect(pkg.scripts["eas-build-pre-install"]).toBe(
+      "node scripts/check-mobile-secrets.mjs",
+    );
     expect(secretCheck).toContain("EXPO_PUBLIC_WC_CONSUMER_SECRET");
     expect(secretCheck).toContain("EXPO_PUBLIC_JWT_SECRET");
     expect(secretCheck).toContain("EXPO_PUBLIC_REWARDS_API_KEY");
@@ -185,7 +241,7 @@ describe("client secret policy", () => {
   it("uses v2 public read endpoints for native browsing without WooCommerce client secrets", () => {
     const catalogClient = fs.readFileSync(
       path.join(process.cwd(), "lib", "api", "catalog.ts"),
-      "utf-8"
+      "utf-8",
     );
     const browseScreens = [
       path.join(process.cwd(), "app", "(tabs)", "index.tsx"),
@@ -194,10 +250,16 @@ describe("client secret policy", () => {
       path.join(process.cwd(), "app", "event", "[id].tsx"),
       path.join(process.cwd(), "app", "product", "[id].tsx"),
       path.join(process.cwd(), "app", "search.tsx"),
-    ].map(file => fs.readFileSync(file, "utf-8"));
+    ].map((file) => fs.readFileSync(file, "utf-8"));
     const plugin = fs.readFileSync(
-      path.join(process.cwd(), "scripts", "lamako-mobile-api", "includes", "v2-commerce.php"),
-      "utf-8"
+      path.join(
+        process.cwd(),
+        "scripts",
+        "lamako-mobile-api",
+        "includes",
+        "v2-commerce.php",
+      ),
+      "utf-8",
     );
 
     expect(plugin).toContain("/public/home-data");
@@ -222,18 +284,18 @@ describe("client secret policy", () => {
   it("keeps shared commerce types outside the legacy WooCommerce client", () => {
     const commerceTypes = fs.readFileSync(
       path.join(process.cwd(), "lib", "types", "commerce.ts"),
-      "utf-8"
+      "utf-8",
     );
     const catalogClient = fs.readFileSync(
       path.join(process.cwd(), "lib", "api", "catalog.ts"),
-      "utf-8"
+      "utf-8",
     );
     const orderSurfaces = [
       path.join(process.cwd(), "app", "orders.tsx"),
       path.join(process.cwd(), "app", "order", "[id].tsx"),
       path.join(process.cwd(), "app", "ticket", "[id].tsx"),
       path.join(process.cwd(), "lib", "order-adapters.ts"),
-    ].map(file => fs.readFileSync(file, "utf-8"));
+    ].map((file) => fs.readFileSync(file, "utf-8"));
 
     expect(commerceTypes).toContain("export interface WCProduct");
     expect(commerceTypes).toContain("export interface WCOrder");
