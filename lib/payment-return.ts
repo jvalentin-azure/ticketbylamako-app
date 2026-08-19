@@ -65,10 +65,16 @@ export function parsePaymentReturnUrl(url: string): PaymentReturnInput | null {
 
 export async function verifyPaymentReturn(input: PaymentReturnInput): Promise<VerifiedPaymentReturn> {
   const status = await getMobilePaymentReturnStatus(input.kind, input.token);
+  const verifiedStatus =
+    input.statusHint === "cancelled" && isPaymentReturnPending(status.status)
+      ? "cancelled"
+      : input.statusHint === "failed" && isPaymentReturnPending(status.status)
+        ? "failed"
+        : status.status;
   return {
     kind: status.kind,
     token: status.token,
-    status: status.status,
+    status: verifiedStatus,
     order: status.order,
     ticketsReady: status.ticketsReady,
   };

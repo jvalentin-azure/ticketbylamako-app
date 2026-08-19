@@ -305,7 +305,7 @@ export default function PaymentScreen() {
         );
         if (browserResult.type === "cancel" || browserResult.type === "dismiss") {
           setMessage(
-            "La page sécurisée a été fermée. Vous pouvez reprendre l'autorisation du paiement.",
+            "Paiement annulé. Aucun débit n'a été confirmé. Choisissez un moyen de paiement ou réessayez.",
           );
           setPhase("error");
           return;
@@ -588,12 +588,17 @@ export default function PaymentScreen() {
                   />
                   <Text style={styles.payButtonText}>
                     {phase === "pending" || phase === "review"
-                      ? "Vérifier le paiement"
+                      ? "Actualiser le statut"
                       : paymentActionLabel}
                   </Text>
                 </>
               )}
             </TouchableOpacity>
+            {phase === "pending" || phase === "review" ? (
+              <Text style={[styles.statusHint, { color: colors.muted }]}>
+                La confirmation est automatique. Actualisez seulement si le statut tarde à changer.
+              </Text>
+            ) : null}
             {phase === "error" && !reservationExpired ? (
               <TouchableOpacity
                 onPress={() => {
@@ -827,6 +832,7 @@ const styles = StyleSheet.create({
   footer: { borderTopWidth: 1, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10, gap: 8 },
   payButton: { minHeight: 56, borderRadius: 8, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 9, paddingHorizontal: 18 },
   payButtonText: { color: "#fff", fontSize: 16, fontFamily: "Raleway_800ExtraBold" },
+  statusHint: { textAlign: "center", fontSize: 12, lineHeight: 17, fontFamily: "Raleway_500Medium" },
   checkButton: { minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   checkButtonText: { fontSize: 14, fontFamily: "Raleway_800ExtraBold" },
 });

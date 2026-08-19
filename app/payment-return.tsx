@@ -17,7 +17,7 @@ import {
   type VerifiedPaymentReturn,
 } from "@/lib/payment-return";
 
-type Phase = "verifying" | "success" | "pending" | "failed";
+type Phase = "verifying" | "success" | "pending" | "cancelled" | "failed";
 
 export default function PaymentReturnScreen() {
   const colors = useColors();
@@ -74,6 +74,12 @@ export default function PaymentReturnScreen() {
           return;
         }
 
+        if (verified.status === "cancelled") {
+          setMessage("Le paiement a été annulé. Aucun débit n'a été confirmé. Vous pouvez choisir un moyen de paiement et réessayer.");
+          setPhase("cancelled");
+          return;
+        }
+
         setMessage(paymentFailureMessage(verified.status));
         setPhase("failed");
       })
@@ -96,7 +102,11 @@ export default function PaymentReturnScreen() {
         ? "clock.fill"
         : "exclamationmark.triangle.fill";
   const iconColor =
-    phase === "success" ? colors.success : phase === "failed" ? colors.warning : colors.primary;
+    phase === "success"
+      ? colors.success
+      : phase === "failed" || phase === "cancelled"
+        ? colors.warning
+        : colors.primary;
 
   return (
     <ScreenContainer edges={["top", "bottom", "left", "right"]}>
@@ -116,12 +126,14 @@ export default function PaymentReturnScreen() {
         )}
         <Text style={[styles.title, { color: colors.foreground }]}>
           {phase === "success"
-            ? "Paiement confirme"
+            ? "Paiement confirmé"
+            : phase === "cancelled"
+              ? "Paiement annulé"
             : phase === "pending"
               ? "Paiement en attente"
               : phase === "verifying"
-                ? "Verification"
-                : "Paiement non confirme"}
+                ? "Vérification"
+                : "Paiement non confirmé"}
         </Text>
         <Text style={[styles.message, { color: colors.muted }]}>{message}</Text>
 
@@ -132,11 +144,22 @@ export default function PaymentReturnScreen() {
         ) : null}
 
         <TouchableOpacity
-          onPress={() => router.replace("/orders" as any)}
+          onPress={() =>
+            phase === "cancelled"
+              ? router.replace({ pathname: "/payment", params: { kind: normalizePaymentReturnKind(kindParam) || "checkout", token: tokenParam } } as any)
+              : router.replace("/orders" as any)
+          }
           style={[styles.primaryButton, { backgroundColor: colors.primary }]}
         >
-          <Text style={styles.primaryButtonText}>Voir mes commandes</Text>
+          <Text style={styles.primaryButtonText}>
+            {phase === "cancelled" ? "Réessayer le paiement" : "Voir mes commandes"}
+          </Text>
         </TouchableOpacity>
+        {phase === "cancelled" ? (
+          <TouchableOpacity onPress={() => router.replace("/orders" as any)} style={styles.secondaryButton}>
+            <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>Voir mes commandes</Text>
+          </TouchableOpacity>
+        ) : null}
         <TouchableOpacity onPress={() => router.replace("/(tabs)/" as any)} style={styles.secondaryButton}>
           <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>Retour a l'accueil</Text>
         </TouchableOpacity>
@@ -146,10 +169,10 @@ export default function PaymentReturnScreen() {
 }
 
 function paymentFailureMessage(status: PaymentReturnStatus): string {
-  if (status === "cancelled") return "Le paiement a ete annule. Votre commande reste consultable si elle a ete creee.";
-  if (status === "expired") return "Cette session de paiement a expire. Relancez le paiement depuis le panier ou les commandes.";
-  if (status === "failed") return "Le paiement n'a pas abouti. Vous pouvez reessayer depuis vos commandes si la commande existe.";
-  return "Le paiement n'est pas confirme. Consultez vos commandes pour suivre son statut.";
+  if (status === "cancelled") return "Le paiement a été annulé. Votre commande reste consultable si elle a été créée.";
+  if (status === "expired") return "Cette session de paiement a expiré. Relancez le paiement depuis le panier ou les commandes.";
+  if (status === "failed") return "Le paiement n'a pas abouti. Vous pouvez réessayer depuis vos commandes si la commande existe.";
+  return "Le paiement n'est pas confirmé. Consultez vos commandes pour suivre son statut.";
 }
 
 const styles = StyleSheet.create({
