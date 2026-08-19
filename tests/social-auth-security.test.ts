@@ -11,8 +11,8 @@ const loginScreen = fs.readFileSync(
   path.join(root, "app/(auth)/login.tsx"),
   "utf8",
 );
-const eventScreen = fs.readFileSync(
-  path.join(root, "app/event/[id].tsx"),
+const seatingFlow = fs.readFileSync(
+  path.join(root, "components/seating/SeatPurchaseFlow.tsx"),
   "utf8",
 );
 const appConfig = fs.readFileSync(path.join(root, "app.config.ts"), "utf8");
@@ -37,7 +37,7 @@ describe("social authentication security", () => {
   });
 
   it("does not place the WordPress JWT in a WebView URL", () => {
-    expect(eventScreen).not.toContain("/auto-login?token=");
-    expect(eventScreen).toContain('mixedContentMode="never"');
+    expect(seatingFlow).not.toContain("/auto-login?token=");
+    expect(seatingFlow).toContain('mixedContentMode="never"');
   });
 });

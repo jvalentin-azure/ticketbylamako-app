@@ -2,9 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Modal,
   Platform,
-  StyleSheet,
   Text,
   TouchableOpacity,
   View,
@@ -12,11 +10,21 @@ import {
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { Confetti } from "@/components/confetti";
+import { SeatFlowHeader, SeatSummaryModal } from "@/components/seating/SeatFlowChrome";
+import { seatPurchaseFlowStyles as styles } from "@/components/seating/seat-purchase-flow.styles";
 import { SeatingChartSkeleton } from "@/components/skeleton-loader";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { useCart } from "@/lib/cart-provider";
 import { isAllowedWebViewUrl } from "@/lib/webview-policy";
+import {
+  buildSeatingInjectedJavaScript,
+  isSeatingCheckoutUrl,
+  isSeatingSessionUrl,
+  isSeatingSuccessUrl,
+  parseSeatingWebMessage,
+  type SelectedSeat,
+} from "@/lib/seating-webview";
 import {
   createMobileSeatingSession,
   getMobileSeatingSessionStatus,
@@ -37,19 +45,6 @@ type FlowPhase =
   | "pending"
   | "success"
   | "error";
-
-interface WebMessageEnvelope {
-  source?: string;
-  version?: number;
-  flowId?: string;
-  type?: string;
-  payload?: Record<string, any>;
-}
-
-interface SelectedSeat {
-  id?: string;
-  label?: string;
-}
 
 interface SeatPurchaseFlowProps {
   eventId: number;
@@ -151,17 +146,13 @@ export function SeatPurchaseFlow({
   };
 
   const handleMessage = (event: any) => {
-    try {
-      const message = JSON.parse(event.nativeEvent.data) as WebMessageEnvelope;
-      if (message.source && message.source !== "lamako-mobile-web") return;
-      if (message.version && message.version !== 1) return;
-      if (
-        session?.flowId &&
-        message.flowId &&
-        message.flowId !== session.flowId
-      )
-        return;
+    const message = parseSeatingWebMessage(
+      String(event.nativeEvent.data || ""),
+      session?.flowId,
+    );
+    if (!message) return;
 
+    try {
       switch (message.type) {
         case "FLOW_READY":
           setPhase("seating");
@@ -172,7 +163,9 @@ export function SeatPurchaseFlow({
         case "SEAT_SELECTION_CHANGED":
           setSelectedCount(Number(message.payload?.count || 0));
           setSelectedSeats(
-            Array.isArray(message.payload?.seats) ? message.payload.seats : [],
+            Array.isArray(message.payload?.seats)
+              ? (message.payload.seats as SelectedSeat[])
+              : [],
           );
           break;
         case "CHECKOUT_READY":
@@ -182,7 +175,12 @@ export function SeatPurchaseFlow({
           const flowToken = String(
             message.payload?.token || session?.flowToken || "",
           );
-          const createdOrderId = Number(message.payload?.order?.id || 0);
+          const orderPayload = message.payload?.order;
+          const createdOrderId = Number(
+            orderPayload && typeof orderPayload === "object" && "id" in orderPayload
+              ? orderPayload.id
+              : 0,
+          );
           if (!flowToken) {
             setError("La commande a été créée sans session de paiement valide.");
             setPhase("error");
@@ -211,7 +209,9 @@ export function SeatPurchaseFlow({
           setPhase("error");
           break;
         case "ERROR":
-          setError(message.payload?.message || "Une erreur est survenue.");
+          setError(
+            String(message.payload?.message || "Une erreur est survenue."),
+          );
           setPhase("error");
           break;
         case "CANCEL_REQUESTED":
@@ -225,55 +225,12 @@ export function SeatPurchaseFlow({
   };
 
   const handleNavChange = (navState: any) => {
-    const url = navState.url || "";
-
-    if (
-      url.includes("/checkout") ||
-      url.includes("/commande") ||
-      url.includes("order-pay")
-    ) {
-      setPhase("checkout");
-    }
-    if (
-      url.includes("order-received") ||
-      url.includes("commande-recue") ||
-      url.includes("thankyou")
-    ) {
-      verifyPayment();
-    }
+    const url = String(navState.url || "");
+    if (isSeatingCheckoutUrl(url)) setPhase("checkout");
+    if (isSeatingSuccessUrl(url)) verifyPayment();
   };
 
-  const injectedJavaScript = `
-    (function() {
-      if (window.__LAMAKO_MOBILE_WEBVIEW_INJECTED__) return true;
-      window.__LAMAKO_MOBILE_WEBVIEW_INJECTED__ = true;
-      var style = document.createElement('style');
-      style.textContent =
-        '#wpadminbar, header, footer, nav, aside, .site-header, .site-footer, #masthead, #colophon, .woocommerce-breadcrumb, .gt-breadcrumb, .gt-page-title-bar, .sidebar,' +
-        '[class*="whatsapp"], [id*="whatsapp"], [class*="qlwapp"], [id*="qlwapp"], [class*="cookie"], [class*="consent"], #fkcart-floating-toggler, .fkcart-main-wrapper,' +
-        '[class*="tidio"], [id*="tidio"], [class*="tawk"], [id*="tawk"], [class*="crisp"], [id*="crisp"] { display: none !important; visibility: hidden !important; }' +
-        'body { margin: 0 !important; padding: 0 !important; font-family: -apple-system, BlinkMacSystemFont, sans-serif !important; background: #f7f3ed !important; }' +
-        '.woocommerce, .woocommerce-cart, .woocommerce-checkout { max-width: 100% !important; padding: 10px !important; box-sizing: border-box !important; }' +
-        '.wc-proceed-to-checkout a, .checkout-button, #place_order { display: block !important; width: 100% !important; border-radius: 12px !important; padding: 14px !important; font-size: 16px !important; font-weight: 800 !important; }';
-      document.head.appendChild(style);
-      function post(type, payload) {
-        if (!window.ReactNativeWebView) return;
-        window.ReactNativeWebView.postMessage(JSON.stringify({
-          source: 'lamako-mobile-web',
-          version: 1,
-          flowId: '${session?.flowId || ""}',
-          type: type,
-          payload: payload || {},
-          ts: Date.now(),
-          signature: ''
-        }));
-      }
-      var url = window.location.href;
-      if (url.indexOf('/checkout') !== -1 || url.indexOf('/commande') !== -1 || url.indexOf('order-pay') !== -1) post('CHECKOUT_READY', { url: url });
-      if (url.indexOf('order-received') !== -1 || url.indexOf('commande-recue') !== -1 || url.indexOf('thankyou') !== -1) post('PAYMENT_RESULT', { status: 'success', url: url });
-      true;
-    })();
-  `;
+  const injectedJavaScript = buildSeatingInjectedJavaScript(session?.flowId);
 
   const handleClose = () => {
     if (phase === "checkout" && !closingCheckoutRef.current) {
@@ -321,69 +278,18 @@ export function SeatPurchaseFlow({
         }));
 
   const seatSummaryModal = (
-    <Modal
+    <SeatSummaryModal
       visible={showSeatSummary}
-      transparent
-      animationType="fade"
-      onRequestClose={() => setShowSeatSummary(false)}
-    >
-      <View style={styles.modalBackdrop}>
-        <View
-          style={[
-            styles.seatModal,
-            { backgroundColor: colors.surface, borderColor: colors.border },
-          ]}
-        >
-          <View style={styles.seatModalHeader}>
-            <Text style={[styles.seatModalTitle, { color: colors.foreground }]}>
-              Places sélectionnées
-            </Text>
-            <TouchableOpacity
-              onPress={() => setShowSeatSummary(false)}
-              style={styles.modalClose}
-            >
-              <IconSymbol name="xmark" size={18} color={colors.foreground} />
-            </TouchableOpacity>
-          </View>
-          <View style={styles.seatList}>
-            {seatsForModal.map((seat, index) => (
-              <View
-                key={`${seat?.id || "seat"}-${index}`}
-                style={[
-                  styles.seatChip,
-                  {
-                    backgroundColor: colors.primary + "12",
-                    borderColor: colors.primary + "30",
-                  },
-                ]}
-              >
-                <IconSymbol name="mappin" size={14} color={colors.primary} />
-                <Text style={[styles.seatChipText, { color: colors.primary }]}>
-                  {seat?.label || `Place ${index + 1}`}
-                </Text>
-              </View>
-            ))}
-          </View>
-          <TouchableOpacity
-            onPress={continueToCheckoutFromSummary}
-            style={[
-              styles.modalPayButton,
-              { backgroundColor: colors.success || "#16a34a" },
-            ]}
-          >
-            <Text style={styles.modalPayButtonText}>
-              Continuer vers le paiement
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
+      seats={seatsForModal}
+      onClose={() => setShowSeatSummary(false)}
+      onContinue={continueToCheckoutFromSummary}
+    />
   );
 
   if (phase === "loading") {
     return (
       <ScreenContainer edges={["top", "left", "right", "bottom"]}>
-        <Header title="Plan de salle" colors={colors} onClose={handleClose} />
+        <SeatFlowHeader title="Plan de salle" onClose={handleClose} />
         {seatSummaryModal}
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.primary} />
@@ -398,7 +304,7 @@ export function SeatPurchaseFlow({
   if (phase === "error") {
     return (
       <ScreenContainer edges={["top", "left", "right", "bottom"]}>
-        <Header title="Plan de salle" colors={colors} onClose={handleClose} />
+        <SeatFlowHeader title="Plan de salle" onClose={handleClose} />
         {seatSummaryModal}
         <View style={styles.center}>
           <IconSymbol
@@ -429,9 +335,8 @@ export function SeatPurchaseFlow({
   if (phase === "pending") {
     return (
       <ScreenContainer edges={["top", "left", "right", "bottom"]}>
-        <Header
+        <SeatFlowHeader
           title="Paiement en attente"
-          colors={colors}
           onClose={handleClose}
         />
         {seatSummaryModal}
@@ -467,7 +372,7 @@ export function SeatPurchaseFlow({
   if (phase === "success") {
     return (
       <ScreenContainer edges={["top", "left", "right", "bottom"]}>
-        <Header title="Confirmation" colors={colors} onClose={handleClose} />
+        <SeatFlowHeader title="Confirmation" onClose={handleClose} />
         {seatSummaryModal}
         <Confetti active />
         <View style={styles.center}>
@@ -498,9 +403,8 @@ export function SeatPurchaseFlow({
   if (Platform.OS === "web" || !WebViewComponent) {
     return (
       <ScreenContainer edges={["top", "left", "right", "bottom"]}>
-        <Header
+        <SeatFlowHeader
           title={title}
-          colors={colors}
           onClose={handleClose}
           selectedCount={visibleSelectedCount}
           onSeatSummary={() => setShowSeatSummary(true)}
@@ -517,9 +421,8 @@ export function SeatPurchaseFlow({
 
   return (
     <ScreenContainer edges={["top", "left", "right", "bottom"]}>
-      <Header
+      <SeatFlowHeader
         title={title}
-        colors={colors}
         onClose={handleClose}
         selectedCount={visibleSelectedCount}
         onSeatSummary={() => setShowSeatSummary(true)}
@@ -531,6 +434,7 @@ export function SeatPurchaseFlow({
         style={{ flex: 1 }}
         javaScriptEnabled
         domStorageEnabled
+        mixedContentMode="never"
         sharedCookiesEnabled
         thirdPartyCookiesEnabled
         startInLoadingState
@@ -554,9 +458,7 @@ export function SeatPurchaseFlow({
         onHttpError={(event: any) => {
           const statusCode = Number(event?.nativeEvent?.statusCode || 0);
           const failedUrl = String(event?.nativeEvent?.url || "");
-          const isSeatingSessionPage =
-            failedUrl.includes("lamako_seating_token=") ||
-            failedUrl.includes("/lamako-mobile/seat/");
+          const isSeatingSessionPage = isSeatingSessionUrl(failedUrl);
           if (
             statusCode === 404 &&
             phase === "seating" &&
@@ -586,167 +488,3 @@ export function SeatPurchaseFlow({
     </ScreenContainer>
   );
 }
-
-function Header({
-  title,
-  colors,
-  onClose,
-  selectedCount = 0,
-  onSeatSummary,
-}: {
-  title: string;
-  colors: any;
-  onClose: () => void;
-  selectedCount?: number;
-  onSeatSummary?: () => void;
-}) {
-  const showSeatBadge = selectedCount > 0 && !!onSeatSummary;
-
-  return (
-    <View
-      style={[
-        styles.header,
-        {
-          borderBottomColor: colors.border,
-          backgroundColor: colors.background,
-        },
-      ]}
-    >
-      <TouchableOpacity onPress={onClose} style={styles.headerBack}>
-        <IconSymbol name="chevron.left" size={20} color={colors.foreground} />
-        <Text style={[styles.headerBackText, { color: colors.foreground }]}>
-          Retour
-        </Text>
-      </TouchableOpacity>
-      <Text
-        style={[styles.headerTitle, { color: colors.foreground }]}
-        numberOfLines={1}
-      >
-        {title}
-      </Text>
-      {showSeatBadge ? (
-        <TouchableOpacity
-          onPress={onSeatSummary}
-          style={[
-            styles.badge,
-            styles.headerBadge,
-            { backgroundColor: colors.primary },
-          ]}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.badgeText}>{selectedCount}</Text>
-        </TouchableOpacity>
-      ) : null}
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  header: {
-    height: 52,
-    borderBottomWidth: 1,
-    paddingHorizontal: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
-  },
-  headerBack: {
-    position: "absolute",
-    left: 12,
-    width: 86,
-    flexDirection: "row",
-    alignItems: "center",
-    zIndex: 2,
-  },
-  headerBackText: { fontSize: 14, fontWeight: "600" },
-  headerTitle: {
-    width: "100%",
-    textAlign: "center",
-    fontSize: 16,
-    fontWeight: "800",
-    paddingHorizontal: 96,
-  },
-  headerBadge: { position: "absolute", right: 12, zIndex: 2 },
-  badge: {
-    minWidth: 32,
-    height: 28,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 10,
-  },
-  badgeText: { color: "#fff", fontSize: 12, fontWeight: "800" },
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 28,
-  },
-  centerText: {
-    marginTop: 12,
-    fontSize: 14,
-    textAlign: "center",
-    lineHeight: 20,
-  },
-  errorTitle: {
-    marginTop: 14,
-    fontSize: 18,
-    fontWeight: "800",
-    textAlign: "center",
-  },
-  successTitle: {
-    marginTop: 14,
-    fontSize: 20,
-    fontWeight: "800",
-    textAlign: "center",
-  },
-  primaryButton: {
-    marginTop: 22,
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-  },
-  primaryButtonText: { color: "#fff", fontSize: 15, fontWeight: "800" },
-  secondaryButton: { marginTop: 12, paddingVertical: 10 },
-  secondaryButtonText: { fontSize: 14, fontWeight: "700" },
-  loader: { position: "absolute", top: 52, left: 0, right: 0, bottom: 0 },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.42)",
-    justifyContent: "center",
-    padding: 20,
-  },
-  seatModal: { borderWidth: 1, borderRadius: 14, padding: 16 },
-  seatModalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  seatModalTitle: { fontSize: 17, fontWeight: "800" },
-  modalClose: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  seatList: { gap: 8, marginBottom: 16 },
-  seatChip: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  seatChipText: { fontSize: 14, fontWeight: "800" },
-  modalPayButton: {
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  modalPayButtonText: { color: "#fff", fontSize: 15, fontWeight: "900" },
-});

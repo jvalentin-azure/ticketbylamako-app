@@ -33,7 +33,7 @@ describe("client secret policy", () => {
       "utf-8",
     );
     const payment = fs.readFileSync(
-      path.join(process.cwd(), "app", "payment.tsx"),
+      path.join(process.cwd(), "hooks", "use-mobile-payment.ts"),
       "utf-8",
     );
 
@@ -70,8 +70,8 @@ describe("client secret policy", () => {
       "utf-8",
     );
 
-    expect(eventScreen).toContain("MOBILE_V2_SEATING_ENABLED");
     expect(eventScreen).toContain("SeatPurchaseFlow");
+    expect(eventScreen).not.toContain("MOBILE_V2_SEATING_ENABLED");
     expect(seatingComponent).toContain("createMobileSeatingSession");
     expect(seatingComponent).toContain("getMobileSeatingSessionStatus");
     expect(mobileClient).toContain("seating-sessions");
@@ -125,7 +125,7 @@ describe("client secret policy", () => {
       "utf-8",
     );
     const payment = fs.readFileSync(
-      path.join(process.cwd(), "app", "payment.tsx"),
+      path.join(process.cwd(), "hooks", "use-mobile-payment.ts"),
       "utf-8",
     );
     const seatingComponent = fs.readFileSync(

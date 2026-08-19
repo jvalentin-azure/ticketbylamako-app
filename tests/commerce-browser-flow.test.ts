@@ -20,7 +20,7 @@ describe("native commerce payment flow", () => {
   });
 
   it("loads payment methods and starts payment through the authenticated API", () => {
-    const paymentSource = source("app/payment.tsx");
+    const paymentSource = source("hooks/use-mobile-payment.ts");
     expect(paymentSource).toContain("getMobilePaymentMethods(token, kind)");
     expect(paymentSource).toContain("startMobilePayment(token, kind");
     expect(paymentSource).toContain("getMobilePaymentReturnStatus(kind, token)");
@@ -35,24 +35,25 @@ describe("native commerce payment flow", () => {
   });
 
   it("opens a system authorization session only for redirect gateways", () => {
-    const paymentSource = source("app/payment.tsx");
+    const paymentSource = source("hooks/use-mobile-payment.ts");
+    const screenSource = source("app/payment.tsx");
     expect(paymentSource).toContain('response.flow === "redirect"');
     expect(paymentSource).toContain("openAuthSessionAsync");
     expect(paymentSource).toContain('browserResult.type === "cancel"');
     expect(paymentSource).toContain("cancelMobilePayment(kind, token)");
-    expect(paymentSource).toContain("Annuler et réessayer");
-    expect(paymentSource).not.toContain("Actualiser le statut");
+    expect(screenSource).toContain("Annuler et réessayer");
+    expect(screenSource).not.toContain("Actualiser le statut");
   });
 
   it("locks payment-method changes while a provider attempt is active", () => {
-    const paymentSource = source("app/payment.tsx");
-    expect(paymentSource).toContain("disabled={paymentInProgress}");
-    expect(paymentSource).toContain("afin d'éviter un double débit");
-    expect(paymentSource).toContain("order?.paymentMethod");
+    const screenSource = source("app/payment.tsx");
+    expect(screenSource).toContain("disabled={paymentInProgress}");
+    expect(screenSource).toContain("afin d'éviter un double débit");
+    expect(screenSource).toContain("order?.paymentMethod");
   });
 
   it("keeps provider verification active for pending and review states", () => {
-    const paymentSource = source("app/payment.tsx");
+    const paymentSource = source("hooks/use-mobile-payment.ts");
     expect(paymentSource).toContain(
       'phase !== "pending" && phase !== "review"',
     );
@@ -60,10 +61,9 @@ describe("native commerce payment flow", () => {
   });
 
   it("does not treat a new unpaid order as an already-started provider payment", () => {
-    const paymentSource = source("app/payment.tsx");
-    expect(paymentSource).toContain(
-      'const paymentAttemptStatus = order?.paymentAttemptStatus || ""',
-    );
+    const paymentSource = source("hooks/use-mobile-payment.ts");
+    expect(paymentSource).toContain("IN_PROGRESS_ATTEMPT_STATUSES.has");
+    expect(paymentSource).toContain('order?.paymentAttemptStatus || ""');
     expect(paymentSource).not.toContain(
       'order?.paymentStatus === "pending" ||',
     );
