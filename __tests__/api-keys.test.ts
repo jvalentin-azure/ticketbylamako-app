@@ -86,6 +86,10 @@ describe("client secret policy", () => {
       path.join(process.cwd(), "app", "payment-return.tsx"),
       "utf-8",
     );
+    const paymentReturnHook = fs.readFileSync(
+      path.join(process.cwd(), "hooks", "use-payment-return.ts"),
+      "utf-8",
+    );
     const helper = fs.readFileSync(
       path.join(process.cwd(), "lib", "payment-return.ts"),
       "utf-8",
@@ -93,7 +97,9 @@ describe("client secret policy", () => {
 
     expect(appConfig).toContain('scheme: "ticketbylamako"');
     expect(appConfig).toContain('host: "payment-return"');
-    expect(paymentReturn).toContain("verifyPaymentReturn");
+    expect(paymentReturn).toContain("usePaymentReturn");
+    expect(paymentReturnHook).toContain("verifyPaymentReturn");
+    expect(paymentReturnHook).toContain("cancelMobilePayment");
     expect(helper).toContain("getMobilePaymentReturnStatus");
   });
 

@@ -23,24 +23,28 @@ describe("native commerce payment flow", () => {
     const paymentSource = source("hooks/use-mobile-payment.ts");
     expect(paymentSource).toContain("getMobilePaymentMethods(token, kind)");
     expect(paymentSource).toContain("startMobilePayment(token, kind");
-    expect(paymentSource).toContain("getMobilePaymentReturnStatus(kind, token)");
+    expect(paymentSource).toContain(
+      "getMobilePaymentReturnStatus(kind, token)",
+    );
   });
 
   it("keeps the embedded WebView limited to the first-party seating chart", () => {
     const seatingSource = source("components/seating/SeatPurchaseFlow.tsx");
-    expect(seatingSource).toContain(
-      'isAllowedWebViewUrl(url, "first-party")',
-    );
+    expect(seatingSource).toContain('isAllowedWebViewUrl(url, "first-party")');
     expect(seatingSource).not.toContain("openCommerceSession");
   });
 
-  it("opens a system authorization session only for redirect gateways", () => {
+  it("opens a secure in-app browser sheet only for redirect gateways", () => {
     const paymentSource = source("hooks/use-mobile-payment.ts");
+    const browserSource = source("lib/commerce-browser.ts");
     const screenSource = source("app/payment.tsx");
     expect(paymentSource).toContain('response.flow === "redirect"');
-    expect(paymentSource).toContain("openAuthSessionAsync");
-    expect(paymentSource).toContain('browserResult.type === "cancel"');
-    expect(paymentSource).toContain("cancelMobilePayment(kind, token)");
+    expect(paymentSource).toContain(
+      "openCommerceSession(response.redirectUrl)",
+    );
+    expect(paymentSource).not.toContain("openAuthSessionAsync");
+    expect(browserSource).toContain("openBrowserAsync");
+    expect(browserSource).not.toContain("openAuthSessionAsync");
     expect(screenSource).toContain("Annuler la commande");
     expect(screenSource).not.toContain("Actualiser le statut");
   });
@@ -52,20 +56,23 @@ describe("native commerce payment flow", () => {
     expect(paymentSource).not.toContain(
       "reservationExpired || paymentInProgress",
     );
-    expect(screenSource).toContain(
-      "paymentInProgress={paymentInProgress}",
-    );
-    expect(partsSource).toContain(
-      "Paiement en cours, réservation protégée",
-    );
+    expect(screenSource).toContain("paymentInProgress={paymentInProgress}");
+    expect(partsSource).toContain("Paiement en cours, réservation protégée");
   });
 
   it("treats cancellation as terminal instead of reopening payment", () => {
     const returnSource = source("app/payment-return.tsx");
-    expect(returnSource).toContain("Continuer mes achats");
-    expect(returnSource).toContain("clearCart()");
-    expect(returnSource).toContain("cancelMobilePayment(kind, tokenParam)");
+    const returnHookSource = source("hooks/use-payment-return.ts");
+    expect(returnSource).toContain(
+      'phase === "cancelled" || phase === "failed"',
+    );
+    expect(returnSource).toContain('"Réessayer"');
+    expect(returnHookSource).toContain("clearCart()");
+    expect(returnHookSource).toContain("cancelMobilePayment(kind, token)");
     expect(returnSource).not.toContain('pathname: "/payment"');
+    expect(returnSource).toContain("RÉFÉRENCE DE COMMANDE");
+    expect(returnSource).toContain("Voir mes billets");
+    expect(returnSource).toContain("<Confetti");
   });
 
   it("renders provider logos supplied by the secured payment API", () => {

@@ -2,8 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState } from "react-native";
 import { useRouter } from "expo-router";
 import * as Crypto from "expo-crypto";
-import * as Linking from "expo-linking";
-import * as WebBrowser from "expo-web-browser";
 
 import {
   cancelMobilePayment,
@@ -17,6 +15,7 @@ import {
   type MobilePaymentMethod,
 } from "@/lib/api/mobile";
 import { useCart } from "@/lib/cart-provider";
+import { openCommerceSession } from "@/lib/commerce-browser";
 import { formatAriary } from "@/lib/format";
 
 export type PaymentScreenPhase =
@@ -235,7 +234,10 @@ export function useMobilePayment({ token, kind }: UseMobilePaymentOptions) {
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {
-      if (nextState === "active" && (phase === "pending" || phase === "review")) {
+      if (
+        nextState === "active" &&
+        (phase === "pending" || phase === "review")
+      ) {
         void checkStatus(true);
       }
     });
@@ -311,23 +313,14 @@ export function useMobilePayment({ token, kind }: UseMobilePaymentOptions) {
         );
         setPhase("pending");
       } else if (response.flow === "redirect" && response.redirectUrl) {
-        const returnUrl = Linking.createURL("payment-return", {
-          queryParams: { kind, token },
-        });
-        const browserResult = await WebBrowser.openAuthSessionAsync(
-          response.redirectUrl,
-          returnUrl,
-          { preferEphemeralSession: false },
-        );
-        if (browserResult.type === "cancel" || browserResult.type === "dismiss") {
-          await cancelPayment();
-          return;
-        }
+        await openCommerceSession(response.redirectUrl);
         setMessage("Vérification du retour de paiement en cours...");
         setPhase("pending");
         await checkStatus(true);
       } else {
-        setMessage("Le prestataire n'a pas pu démarrer le paiement. Réessayez.");
+        setMessage(
+          "Le prestataire n'a pas pu démarrer le paiement. Réessayez.",
+        );
         setPhase("error");
       }
     } catch (error: any) {

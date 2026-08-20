@@ -1,14 +1,9 @@
-import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import { isAllowedWebViewUrl } from "@/lib/webview-policy";
 
 export type CommerceBrowserResult = Awaited<
-  ReturnType<typeof WebBrowser.openAuthSessionAsync>
+  ReturnType<typeof WebBrowser.openBrowserAsync>
 >;
-
-export function getCommerceReturnUrl() {
-  return Linking.createURL("payment-return");
-}
 
 export async function openCommerceSession(
   url: string,
@@ -17,7 +12,15 @@ export async function openCommerceSession(
     throw new Error("Adresse de paiement non securisee ou non autorisee.");
   }
 
-  return WebBrowser.openAuthSessionAsync(url, getCommerceReturnUrl(), {
-    preferEphemeralSession: false,
+  return WebBrowser.openBrowserAsync(url, {
+    presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
+    dismissButtonStyle: "close",
+    controlsColor: "#7A4315",
+    toolbarColor: "#FFFFFF",
+    secondaryToolbarColor: "#FFFFFF",
+    enableBarCollapsing: false,
+    enableDefaultShareMenuItem: false,
+    showInRecents: false,
+    showTitle: false,
   });
 }

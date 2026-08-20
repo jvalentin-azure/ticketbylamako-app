@@ -1,124 +1,64 @@
-import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useEffect, useState } from "react";
+import {
+  AccessibilityInfo,
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
+import { Confetti } from "@/components/confetti";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
-import { useCart } from "@/lib/cart-provider";
+import { usePaymentReturn } from "@/hooks/use-payment-return";
 import { formatAriary } from "@/lib/format";
-import { notifyPaymentConfirmed } from "@/lib/notifications";
-import { cancelMobilePayment } from "@/lib/api/mobile";
-import {
-  firstParam,
-  isPaymentReturnPending,
-  isPaymentReturnSuccess,
-  normalizePaymentReturnKind,
-  verifyPaymentReturn,
-  type PaymentReturnStatus,
-  type VerifiedPaymentReturn,
-} from "@/lib/payment-return";
-
-type Phase = "verifying" | "success" | "pending" | "cancelled" | "failed";
+import { firstParam } from "@/lib/payment-return";
 
 export default function PaymentReturnScreen() {
   const colors = useColors();
   const router = useRouter();
-  const params = useLocalSearchParams<{ kind?: string; token?: string; status?: string }>();
-  const { clearCart } = useCart();
-  const notifiedRef = useRef(false);
-  const [phase, setPhase] = useState<Phase>("verifying");
-  const [message, setMessage] = useState("Verification du paiement...");
-  const [result, setResult] = useState<VerifiedPaymentReturn | null>(null);
+  const params = useLocalSearchParams<{
+    kind?: string;
+    token?: string;
+    status?: string;
+    orderId?: string;
+    orderNumber?: string;
+  }>();
+  const [reduceMotion, setReduceMotion] = useState(false);
 
   const kindParam = firstParam(params.kind);
   const tokenParam = firstParam(params.token);
   const statusHint = firstParam(params.status);
+  const fallbackOrderId = firstParam(params.orderId);
+  const fallbackOrderNumber = firstParam(params.orderNumber);
+  const { message, orderReference, phase, result, showTickets } =
+    usePaymentReturn({
+      kindParam,
+      tokenParam,
+      statusHint,
+      fallbackOrderId,
+      fallbackOrderNumber,
+    });
 
   useEffect(() => {
-    const kind = normalizePaymentReturnKind(kindParam);
-    if (!kind || !tokenParam) {
-      setMessage("Lien de retour invalide. Ouvrez vos commandes pour verifier le statut.");
-      setPhase("failed");
-      return;
-    }
+    WebBrowser.dismissBrowser();
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then(setReduceMotion)
+      .catch(() => {});
+    const subscription = AccessibilityInfo.addEventListener(
+      "reduceMotionChanged",
+      setReduceMotion,
+    );
+    return () => subscription.remove();
+  }, []);
 
-    let cancelled = false;
-    setPhase("verifying");
-    setMessage("Verification securisee du paiement...");
-
-    const verifyReturn = async (): Promise<VerifiedPaymentReturn> => {
-      if (statusHint !== "cancelled") {
-        return verifyPaymentReturn({ kind, token: tokenParam, statusHint });
-      }
-
-      try {
-        const cancelledPayment = await cancelMobilePayment(kind, tokenParam);
-        return {
-          kind: cancelledPayment.kind,
-          token: cancelledPayment.token,
-          status: cancelledPayment.status,
-          order: cancelledPayment.order,
-          ticketsReady: cancelledPayment.ticketsReady,
-        };
-      } catch (cancellationError) {
-        const verified = await verifyPaymentReturn({ kind, token: tokenParam });
-        if (isPaymentReturnSuccess(verified.status)) return verified;
-        throw cancellationError;
-      }
-    };
-
-    verifyReturn()
-      .then(verified => {
-        if (cancelled) return;
-        setResult(verified);
-
-        if (isPaymentReturnSuccess(verified.status)) {
-          clearCart();
-          if (!notifiedRef.current && verified.order?.id) {
-            notifiedRef.current = true;
-            notifyPaymentConfirmed(
-              verified.order.id,
-              formatAriary(Number(verified.order.total || 0))
-            ).catch(() => {});
-          }
-          setMessage(
-            verified.order?.id
-              ? `Votre commande #${verified.order.number || verified.order.id} est confirmee.`
-              : "Votre paiement est confirme."
-          );
-          setPhase("success");
-          return;
-        }
-
-        if (isPaymentReturnPending(verified.status)) {
-          setMessage("Votre paiement est en attente de confirmation. La commande sera mise a jour apres validation.");
-          setPhase("pending");
-          return;
-        }
-
-        if (verified.status === "cancelled") {
-          clearCart();
-          setMessage("Commande annulée. Aucun paiement n'a été confirmé.");
-          setPhase("cancelled");
-          return;
-        }
-
-        setMessage(paymentFailureMessage(verified.status));
-        setPhase("failed");
-      })
-      .catch(err => {
-        if (cancelled) return;
-        console.warn("Payment return verification failed:", err);
-        setMessage("Impossible de verifier le paiement pour le moment. Consultez vos commandes dans quelques instants.");
-        setPhase("failed");
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [clearCart, kindParam, tokenParam, statusHint]);
-
-  const iconName: "checkmark.circle.fill" | "clock.fill" | "exclamationmark.triangle.fill" =
+  const iconName:
+    | "checkmark.circle.fill"
+    | "clock.fill"
+    | "exclamationmark.triangle.fill" =
     phase === "success"
       ? "checkmark.circle.fill"
       : phase === "pending" || phase === "verifying"
@@ -130,14 +70,19 @@ export default function PaymentReturnScreen() {
       : phase === "failed" || phase === "cancelled"
         ? colors.warning
         : colors.primary;
-
   return (
     <ScreenContainer edges={["top", "bottom", "left", "right"]}>
+      <Confetti active={phase === "success" && !reduceMotion} />
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.replace("/(tabs)/" as any)} style={styles.backBtn}>
+        <TouchableOpacity
+          onPress={() => router.replace("/(tabs)/" as any)}
+          style={styles.backBtn}
+        >
           <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.foreground }]}>Retour paiement</Text>
+        <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+          Résultat du paiement
+        </Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -152,13 +97,35 @@ export default function PaymentReturnScreen() {
             ? "Paiement confirmé"
             : phase === "cancelled"
               ? "Paiement non abouti"
-            : phase === "pending"
-              ? "Paiement en attente"
-              : phase === "verifying"
-                ? "Vérification"
-                : "Paiement non confirmé"}
+              : phase === "pending"
+                ? "Paiement en attente"
+                : phase === "verifying"
+                  ? "Vérification"
+                  : "Paiement non confirmé"}
         </Text>
         <Text style={[styles.message, { color: colors.muted }]}>{message}</Text>
+
+        {orderReference ? (
+          <View
+            style={[
+              styles.referenceCard,
+              { borderColor: colors.border, backgroundColor: colors.surface },
+            ]}
+          >
+            <Text style={[styles.referenceLabel, { color: colors.muted }]}>
+              RÉFÉRENCE DE COMMANDE
+            </Text>
+            <Text
+              selectable
+              style={[styles.referenceValue, { color: colors.foreground }]}
+            >
+              #{orderReference}
+            </Text>
+            <Text style={[styles.referenceHint, { color: colors.muted }]}>
+              Conservez cette référence pour toute demande d'assistance.
+            </Text>
+          </View>
+        ) : null}
 
         {result?.order?.total ? (
           <Text style={[styles.total, { color: colors.primary }]}>
@@ -167,47 +134,122 @@ export default function PaymentReturnScreen() {
         ) : null}
 
         <TouchableOpacity
-          onPress={() =>
-            phase === "cancelled"
-              ? router.replace("/(tabs)/events" as any)
-              : router.replace("/orders" as any)
-          }
+          onPress={() => {
+            if (showTickets) {
+              router.replace("/(tabs)/tickets" as any);
+              return;
+            }
+            if (phase === "cancelled" || phase === "failed") {
+              router.replace("/(tabs)/events" as any);
+              return;
+            }
+            router.replace("/orders" as any);
+          }}
           style={[styles.primaryButton, { backgroundColor: colors.primary }]}
         >
           <Text style={styles.primaryButtonText}>
-            {phase === "cancelled" ? "Continuer mes achats" : "Voir mes commandes"}
+            {showTickets
+              ? "Voir mes billets"
+              : phase === "cancelled" || phase === "failed"
+                ? "Réessayer"
+                : "Voir mes commandes"}
           </Text>
         </TouchableOpacity>
-        {phase === "cancelled" ? (
-          <TouchableOpacity onPress={() => router.replace("/orders" as any)} style={styles.secondaryButton}>
-            <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>Voir mes commandes</Text>
+        {phase === "success" && showTickets ? (
+          <TouchableOpacity
+            onPress={() => router.replace("/orders" as any)}
+            style={styles.secondaryButton}
+          >
+            <Text
+              style={[styles.secondaryButtonText, { color: colors.primary }]}
+            >
+              Voir mes commandes
+            </Text>
           </TouchableOpacity>
         ) : null}
-        <TouchableOpacity onPress={() => router.replace("/(tabs)/" as any)} style={styles.secondaryButton}>
-          <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>Retour a l'accueil</Text>
+        <TouchableOpacity
+          onPress={() => router.replace("/(tabs)/" as any)}
+          style={styles.secondaryButton}
+        >
+          <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>
+            Retour à l'accueil
+          </Text>
         </TouchableOpacity>
       </View>
     </ScreenContainer>
   );
 }
 
-function paymentFailureMessage(status: PaymentReturnStatus): string {
-  if (status === "cancelled") return "Commande annulée. Aucun paiement n'a été confirmé.";
-  if (status === "expired") return "Cette session de paiement a expiré. Relancez le paiement depuis le panier ou les commandes.";
-  if (status === "failed") return "Paiement non abouti. Veuillez réessayer.";
-  return "Le paiement n'est pas confirmé. Consultez vos commandes pour suivre son statut.";
-}
-
 const styles = StyleSheet.create({
-  header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
   backBtn: { width: 40, alignItems: "flex-start" },
-  headerTitle: { flex: 1, textAlign: "center", fontSize: 17, fontWeight: "700" },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 30 },
-  title: { marginTop: 16, fontSize: 22, fontWeight: "800", textAlign: "center" },
+  headerTitle: {
+    flex: 1,
+    textAlign: "center",
+    fontSize: 17,
+    fontWeight: "700",
+  },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  title: {
+    marginTop: 16,
+    fontSize: 22,
+    fontWeight: "800",
+    textAlign: "center",
+  },
   message: { marginTop: 10, fontSize: 14, lineHeight: 20, textAlign: "center" },
   total: { marginTop: 14, fontSize: 24, fontWeight: "800" },
-  primaryButton: { marginTop: 26, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 28 },
+  referenceCard: {
+    width: "100%",
+    maxWidth: 380,
+    marginTop: 20,
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 16,
+    alignItems: "center",
+  },
+  referenceLabel: { fontSize: 11, fontFamily: "Raleway_800ExtraBold" },
+  referenceValue: {
+    marginTop: 5,
+    fontSize: 22,
+    fontFamily: "Raleway_800ExtraBold",
+    fontVariant: ["tabular-nums"],
+  },
+  referenceHint: {
+    marginTop: 6,
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: "center",
+    fontFamily: "Raleway_500Medium",
+  },
+  primaryButton: {
+    width: "100%",
+    maxWidth: 380,
+    minHeight: 54,
+    marginTop: 24,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
   primaryButtonText: { color: "#fff", fontSize: 15, fontWeight: "800" },
-  secondaryButton: { marginTop: 14, paddingVertical: 10 },
+  secondaryButton: {
+    minHeight: 44,
+    marginTop: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   secondaryButtonText: { fontSize: 14, fontWeight: "700" },
 });

@@ -260,7 +260,8 @@ export default function RootLayout() {
             <Stack.Screen
               name="payment-return"
               options={{
-                presentation: "modal",
+                presentation: "fullScreenModal",
+                gestureEnabled: false,
                 statusBarHidden: false,
                 statusBarStyle: "dark",
               }}
@@ -332,9 +333,7 @@ export default function RootLayout() {
           <RewardsProvider>
             <FavoritesProvider>
               <NotificationsProvider>
-                <SafeAreaProvider>
-                  {content}
-                </SafeAreaProvider>
+                <SafeAreaProvider>{content}</SafeAreaProvider>
               </NotificationsProvider>
             </FavoritesProvider>
           </RewardsProvider>
