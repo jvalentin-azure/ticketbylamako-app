@@ -10,7 +10,6 @@ import { formatDateShort, decodeHtmlEntities } from "@/lib/format";
 
 interface TicketItem {
   orderId: number;
-  ticketCode: string;
   eventName: string;
   ticketType: string;
   date: string;
@@ -18,28 +17,37 @@ interface TicketItem {
 }
 
 const ticketVisibleStatuses = new Set(["completed", "processing", "cs-complete"]);
+const ticketsMemoryCache = new Map<number, TicketItem[]>();
 
 export default function TicketsScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { isAuthenticated } = useAuth();
-  const [tickets, setTickets] = useState<TicketItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { isAuthenticated, user } = useAuth();
+  const cachedTickets = user ? ticketsMemoryCache.get(user.id) : undefined;
+  const [tickets, setTickets] = useState<TicketItem[]>(cachedTickets || []);
+  const [loadedUserId, setLoadedUserId] = useState<number | null>(user?.id || null);
+  const [loading, setLoading] = useState(cachedTickets === undefined);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     if (!isAuthenticated) { setLoading(false); return; }
     try {
-      const orders = await getMobileOrders({ limit: 50 });
+      const orders = await getMobileOrders({
+        status: "completed,processing,cs-complete",
+        limit: 50,
+        includeTickets: true,
+      });
+      const visibleOrders = orders.filter(
+        order => ticketVisibleStatuses.has(order.status) && (order.ticketCount > 0 || order.ticketsReady),
+      );
       const ticketGroups = await Promise.all(
-        orders
-          .filter(order => ticketVisibleStatuses.has(order.status) && (order.ticketCount > 0 || order.ticketsReady))
-          .map(async order => {
+        visibleOrders.map(async order => {
             try {
-              const response = await getMobileOrderTickets(order.id);
-              return response.tickets.map(ticket => ({
+              const orderTickets = Array.isArray(order.tickets)
+                ? order.tickets
+                : (await getMobileOrderTickets(order.id)).tickets;
+              return orderTickets.map(ticket => ({
                 orderId: order.id,
-                ticketCode: ticket.ticketCode,
                 eventName: decodeHtmlEntities(ticket.eventName || ticket.productName),
                 ticketType: decodeHtmlEntities(ticket.productName || "Standard"),
                 date: order.dateCreated || "",
@@ -57,7 +65,6 @@ export default function TicketsScreen() {
           (order.items || []).forEach(item => {
             tix.push({
               orderId: order.id,
-              ticketCode: `TKT-${order.id}-${item.id}`,
               eventName: decodeHtmlEntities(item.name),
               ticketType: "Standard",
               date: order.dateCreated || "",
@@ -66,11 +73,15 @@ export default function TicketsScreen() {
           });
         });
       }
+      if (user) ticketsMemoryCache.set(user.id, tix);
       setTickets(tix);
+      setLoadedUserId(user?.id || null);
     } catch {} finally { setLoading(false); setRefreshing(false); }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, user]);
 
   useEffect(() => { load(); }, [load]);
+
+  const visibleTickets = loadedUserId === user?.id ? tickets : cachedTickets || [];
 
   if (!isAuthenticated) {
     return (
@@ -115,7 +126,7 @@ export default function TicketsScreen() {
         </View>
       ) : (
         <FlatList
-          data={tickets}
+          data={visibleTickets}
           keyExtractor={(item, i) => `${item.orderId}-${i}`}
           contentContainerStyle={{ paddingHorizontal: 16 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.primary} />}

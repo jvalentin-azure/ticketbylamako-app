@@ -158,7 +158,7 @@ function describePaymentReturn(
     return {
       phase: "cancelled",
       message: "Commande annulée. Aucun paiement n'a été confirmé.",
-      clearCart: true,
+      clearCart: false,
     };
   }
   return {

@@ -177,6 +177,7 @@ describe("client secret policy", () => {
     expect(orderDetail).toContain("getMobileOrderTickets");
     expect(ticketDetail).toContain("getMobileOrder");
     expect(ticketsTab).toContain("getMobileOrderTickets");
+    expect(ticketsTab).toContain("Array.isArray(order.tickets)");
     expect(rewardsProvider).toContain("getMobileRewardsBalance");
     expect(rewardsProvider).toContain("redeemMobileRewards");
     expect(rewardsProvider).toContain("validateMobileReferralCode");

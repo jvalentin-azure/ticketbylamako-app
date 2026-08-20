@@ -13,6 +13,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { usePaymentReturn } from "@/hooks/use-payment-return";
+import { useCart } from "@/lib/cart-provider";
 import { formatAriary } from "@/lib/format";
 import {
   claimPaymentCelebration,
@@ -110,6 +111,7 @@ function PaymentReturnResult({
 }: PaymentReturnResultProps) {
   const colors = useColors();
   const router = useRouter();
+  const { clearCart } = useCart();
   const [reduceMotion, setReduceMotion] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
   const { message, orderReference, phase, result, showTickets } =
@@ -143,6 +145,11 @@ function PaymentReturnResult({
     replacePaymentFlowRoot(router, destination);
   };
 
+  const returnHome = () => {
+    clearCart();
+    exitTo("/(tabs)/" as any);
+  };
+
   const iconName:
     | "checkmark.circle.fill"
     | "clock.fill"
@@ -163,7 +170,7 @@ function PaymentReturnResult({
       <Confetti active={celebrate && !reduceMotion} />
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <TouchableOpacity
-          onPress={() => exitTo("/(tabs)/" as any)}
+          onPress={returnHome}
           style={styles.backBtn}
         >
           <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
@@ -228,7 +235,7 @@ function PaymentReturnResult({
               return;
             }
             if (phase === "cancelled" || phase === "failed") {
-              exitTo("/(tabs)/events" as any);
+              exitTo("/(tabs)/cart" as any);
               return;
             }
             exitTo("/orders" as any);
@@ -256,7 +263,7 @@ function PaymentReturnResult({
           </TouchableOpacity>
         ) : null}
         <TouchableOpacity
-          onPress={() => exitTo("/(tabs)/" as any)}
+          onPress={returnHome}
           style={styles.secondaryButton}
         >
           <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>

@@ -250,6 +250,7 @@ export interface MobileOrderSummary {
     phone: string;
   };
   items?: MobileOrderItem[];
+  tickets?: MobileTicket[];
 }
 
 export type MobilePaymentKind = "checkout" | "seating";
@@ -605,11 +606,13 @@ export async function cancelMobilePayment(
 export async function getMobileOrders(params: {
   status?: string;
   limit?: number;
+  includeTickets?: boolean;
 } = {}): Promise<MobileOrderSummary[]> {
   const response = await mobileV2Fetch<MobileOrdersResponse>("orders", {
     params: {
       status: params.status,
       limit: params.limit,
+      include_tickets: params.includeTickets ? 1 : undefined,
     },
   });
   return response.orders;

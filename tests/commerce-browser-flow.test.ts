@@ -67,7 +67,12 @@ describe("native commerce payment flow", () => {
       'phase === "cancelled" || phase === "failed"',
     );
     expect(returnSource).toContain('"Réessayer"');
+    expect(returnSource).toContain('exitTo("/(tabs)/cart"');
+    expect(returnSource).toContain("const returnHome = () =>");
+    expect(returnSource).toContain("clearCart();");
     expect(returnHookSource).toContain("clearCart()");
+    expect(returnHookSource).toContain('phase: "cancelled"');
+    expect(returnHookSource).toContain("clearCart: false");
     expect(returnHookSource).toContain("cancelMobilePayment(kind, token)");
     expect(returnSource).not.toContain('pathname: "/payment"');
     expect(returnSource).toContain("RÉFÉRENCE DE COMMANDE");

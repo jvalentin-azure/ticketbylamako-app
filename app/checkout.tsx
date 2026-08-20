@@ -13,7 +13,6 @@ import type {
   TicketFieldValues,
 } from "@/components/commerce/TicketCustomFieldsForm";
 import { useCart } from "@/lib/cart-provider";
-import { getStoredUser } from "@/lib/api/auth";
 import {
   createMobileCheckout,
   getMobileCheckoutFields,
@@ -41,7 +40,7 @@ const BILLING_STORAGE_KEY = "billing_info";
 export default function CheckoutScreen() {
   const router = useRouter();
   const { items, total } = useCart();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const {
     currentTier,
     canRedeem,
@@ -55,6 +54,11 @@ export default function CheckoutScreen() {
   const allItemsRewardEligible =
     items.length > 0 && rewardEligibleItems.length === items.length;
   const hasPhysicalProducts = items.some((item) => !item.isEvent);
+  const hasTicketCheckoutFields = items.some(
+    (item) =>
+      item.isEvent &&
+      (item.hasCheckoutFields !== false || item.requiresCheckoutFields !== false),
+  );
   const canShowRedeem =
     isAuthenticated &&
     allItemsRewardEligible &&
@@ -78,7 +82,7 @@ export default function CheckoutScreen() {
   const [errorSource, setErrorSource] = useState<CheckoutErrorSource>("order");
   const [fieldsRequestKey, setFieldsRequestKey] = useState(0);
   const [checkoutFieldsLoading, setCheckoutFieldsLoading] = useState(
-    items.length > 0,
+    items.length > 0 && hasTicketCheckoutFields,
   );
   const [checkoutFields, setCheckoutFields] =
     useState<MobileCheckoutFieldsResponse | null>(null);
@@ -143,13 +147,20 @@ export default function CheckoutScreen() {
       return;
     }
 
+    if (!hasTicketCheckoutFields) {
+      setCheckoutFields(null);
+      setBuyerFieldValues({});
+      setTicketFieldValues({});
+      setTicketFieldErrors({});
+      setCheckoutFieldsLoading(false);
+      return;
+    }
+
     setCheckoutFieldsLoading(true);
     getMobileCheckoutFields(buildCheckoutItemInputs(items))
-      .then(async (schema) => {
+      .then((schema) => {
         if (!active) return;
-        const storedUser = await getStoredUser();
-        if (!active) return;
-        const defaults = buildDefaultCheckoutFieldValues(schema, storedUser);
+        const defaults = buildDefaultCheckoutFieldValues(schema, user);
         setCheckoutFields(schema);
         setBuyerFieldValues(defaults.buyerValues);
         setTicketFieldValues(defaults.ticketValues);
@@ -159,7 +170,7 @@ export default function CheckoutScreen() {
         if (!active) return;
         console.warn("Checkout fields load failed:", error);
         setCheckoutFields(null);
-        if (items.some((item) => item.hasCheckoutFields)) {
+        if (hasTicketCheckoutFields) {
           setErrorSource("fields");
           setErrorMessage(
             "Impossible de charger les champs requis pour ce billet. Veuillez réessayer.",
@@ -174,7 +185,7 @@ export default function CheckoutScreen() {
     return () => {
       active = false;
     };
-  }, [fieldsRequestKey, isAuthenticated, items]);
+  }, [fieldsRequestKey, hasTicketCheckoutFields, isAuthenticated, items, user]);
 
   useEffect(() => {
     if (
@@ -256,11 +267,10 @@ export default function CheckoutScreen() {
       }
 
       setPhase("creating");
-      const storedUser = await getStoredUser();
       const billing: Record<string, string> = {
-        first_name: storedUser?.firstName || "Client",
-        last_name: storedUser?.lastName || "Mobile",
-        email: storedUser?.email || "",
+        first_name: user?.firstName || "Client",
+        last_name: user?.lastName || "Mobile",
+        email: user?.email || "",
         phone: shippingPhone,
       };
       if (hasPhysicalProducts) {
@@ -326,6 +336,7 @@ export default function CheckoutScreen() {
     shippingCity,
     shippingPhone,
     ticketFieldValues,
+    user,
   ]);
 
   useEffect(() => {
