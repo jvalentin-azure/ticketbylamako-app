@@ -50,6 +50,17 @@ describe("WebView navigation policy", () => {
     const orangeUrl = "https://webpayment.orange.mg/authorize";
     expect(isAllowedWebViewUrl(orangeUrl, "first-party")).toBe(false);
     expect(isAllowedWebViewUrl(orangeUrl, "payment")).toBe(true);
+
+    const orangeProviderUrl =
+      "https://webpayment-qualif.orange-money.com/payment/pay_token";
+    expect(isAllowedWebViewUrl(orangeProviderUrl, "first-party")).toBe(false);
+    expect(isAllowedWebViewUrl(orangeProviderUrl, "payment")).toBe(true);
+    expect(
+      isAllowedWebViewUrl(
+        "https://orange-money.com.example.org/payment/pay_token",
+        "payment",
+      ),
+    ).toBe(false);
   });
 
   it("supports additional public payment hosts from build configuration", () => {

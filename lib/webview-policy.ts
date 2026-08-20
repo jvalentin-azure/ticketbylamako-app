@@ -8,6 +8,7 @@ const DEFAULT_PAYMENT_HOSTS = [
   "telma.mg",
   "orange.mg",
   "orange.com",
+  "orange-money.com",
   "airtel.mg",
   "airtel.africa",
   "visa.com",
