@@ -106,10 +106,17 @@ describe("native commerce payment flow", () => {
   it("prevents the covered payment screen from reopening a terminal result", () => {
     const paymentSource = source("hooks/use-mobile-payment.ts");
     const returnHookSource = source("hooks/use-payment-return.ts");
+    const returnScreenSource = source("app/payment-return.tsx");
+    const navigationSource = source("lib/payment-navigation.ts");
     expect(paymentSource).toContain("useIsFocused");
     expect(paymentSource).toContain("terminalNavigationRef.current");
     expect(paymentSource).toContain("!isFocusedRef.current");
-    expect(returnHookSource).toContain("notifiedPaymentOrders.has");
+    expect(paymentSource).toContain("hasTerminalPaymentToken(token)");
+    expect(returnHookSource).toContain("claimPaymentNotification");
+    expect(returnScreenSource).toContain("claimPaymentCelebration");
+    expect(returnScreenSource).toContain('normalized: "1"');
+    expect(returnScreenSource).toContain("replacePaymentFlowRoot");
+    expect(navigationSource).toContain("router.dismissAll()");
   });
 
   it("does not treat a new unpaid order as an already-started provider payment", () => {

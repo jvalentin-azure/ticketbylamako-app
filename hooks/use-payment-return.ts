@@ -5,6 +5,10 @@ import { useCart } from "@/lib/cart-provider";
 import { formatAriary } from "@/lib/format";
 import { notifyPaymentConfirmed } from "@/lib/notifications";
 import {
+  claimPaymentNotification,
+  claimTerminalPaymentToken,
+} from "@/lib/payment-flow-state";
+import {
   isPaymentReturnPending,
   isPaymentReturnSuccess,
   normalizePaymentReturnKind,
@@ -34,8 +38,6 @@ interface PaymentReturnOutcome {
   clearCart: boolean;
 }
 
-const notifiedPaymentOrders = new Set<number>();
-
 export function usePaymentReturn({
   kindParam,
   tokenParam,
@@ -50,6 +52,7 @@ export function usePaymentReturn({
   const [result, setResult] = useState<VerifiedPaymentReturn | null>(null);
 
   useEffect(() => {
+    claimTerminalPaymentToken(tokenParam);
     const kind = normalizePaymentReturnKind(kindParam);
     if (!kind || !tokenParam) {
       setMessage(
@@ -171,10 +174,9 @@ function notifySuccessOnce(
 ) {
   if (!isPaymentReturnSuccess(verified.status) || !verified.order?.id) return;
   if (notifiedRef.current) return;
-  if (notifiedPaymentOrders.has(verified.order.id)) return;
+  if (!claimPaymentNotification(verified.order.id)) return;
 
   notifiedRef.current = true;
-  notifiedPaymentOrders.add(verified.order.id);
   notifyPaymentConfirmed(
     verified.order.id,
     formatAriary(Number(verified.order.total || 0)),

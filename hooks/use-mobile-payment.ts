@@ -18,6 +18,10 @@ import {
 import { useCart } from "@/lib/cart-provider";
 import { openCommerceSession } from "@/lib/commerce-browser";
 import { formatAriary } from "@/lib/format";
+import {
+  claimTerminalPaymentToken,
+  hasTerminalPaymentToken,
+} from "@/lib/payment-flow-state";
 
 export type PaymentScreenPhase =
   | "loading"
@@ -58,11 +62,19 @@ export function useMobilePayment({ token, kind }: UseMobilePaymentOptions) {
   const [clock, setClock] = useState(Date.now());
   const pollInFlightRef = useRef(false);
   const isFocusedRef = useRef(isFocused);
+  const mountedRef = useRef(true);
   const terminalNavigationRef = useRef(false);
 
   useEffect(() => {
     isFocusedRef.current = isFocused;
   }, [isFocused]);
+
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    [],
+  );
 
   const selected = useMemo(
     () => methods.find((method) => method.id === selectedMethod) || null,
@@ -103,6 +115,7 @@ export function useMobilePayment({ token, kind }: UseMobilePaymentOptions) {
   const finish = useCallback(
     (status = "success") => {
       if (terminalNavigationRef.current) return;
+      if (!claimTerminalPaymentToken(token)) return;
       terminalNavigationRef.current = true;
       clearCart();
       router.replace({
@@ -211,11 +224,7 @@ export function useMobilePayment({ token, kind }: UseMobilePaymentOptions) {
     try {
       const response = await cancelMobilePayment(kind, token);
       if (response.order) setOrder(response.order);
-      clearCart();
-      router.replace({
-        pathname: "/payment-return",
-        params: { kind, token, status: "cancelled" },
-      } as any);
+      finish("cancelled");
     } catch (error: any) {
       try {
         const status = await verifyMobilePayment(kind, token);
@@ -233,7 +242,7 @@ export function useMobilePayment({ token, kind }: UseMobilePaymentOptions) {
       );
       setPhase("error");
     }
-  }, [clearCart, finish, kind, phase, router, token]);
+  }, [finish, kind, phase, token]);
 
   useEffect(() => {
     if (!isFocused || (phase !== "pending" && phase !== "review")) return;
@@ -328,7 +337,14 @@ export function useMobilePayment({ token, kind }: UseMobilePaymentOptions) {
         // The provider callback can already have opened /payment-return.
         // Do not let this covered payment screen race the terminal route.
         await new Promise((resolve) => setTimeout(resolve, 250));
-        if (!isFocusedRef.current || terminalNavigationRef.current) return;
+        if (
+          !mountedRef.current ||
+          !isFocusedRef.current ||
+          terminalNavigationRef.current ||
+          hasTerminalPaymentToken(token)
+        ) {
+          return;
+        }
         setMessage("Vérification du retour de paiement en cours...");
         setPhase("pending");
         await checkStatus(true);

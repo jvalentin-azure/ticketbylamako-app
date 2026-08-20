@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AccessibilityInfo,
   ActivityIndicator,
@@ -8,17 +8,20 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
 import { Confetti } from "@/components/confetti";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { usePaymentReturn } from "@/hooks/use-payment-return";
 import { formatAriary } from "@/lib/format";
+import {
+  claimPaymentCelebration,
+  claimTerminalPaymentToken,
+} from "@/lib/payment-flow-state";
+import { replacePaymentFlowRoot } from "@/lib/payment-navigation";
 import { firstParam } from "@/lib/payment-return";
 
 export default function PaymentReturnScreen() {
-  const colors = useColors();
   const router = useRouter();
   const params = useLocalSearchParams<{
     kind?: string;
@@ -26,14 +29,89 @@ export default function PaymentReturnScreen() {
     status?: string;
     orderId?: string;
     orderNumber?: string;
+    normalized?: string;
   }>();
-  const [reduceMotion, setReduceMotion] = useState(false);
-
   const kindParam = firstParam(params.kind);
   const tokenParam = firstParam(params.token);
   const statusHint = firstParam(params.status);
   const fallbackOrderId = firstParam(params.orderId);
   const fallbackOrderNumber = firstParam(params.orderNumber);
+  const normalized = firstParam(params.normalized) === "1";
+
+  const normalizedDestination = useMemo(
+    () =>
+      ({
+        pathname: "/payment-return",
+        params: {
+          kind: kindParam,
+          token: tokenParam,
+          status: statusHint,
+          orderId: fallbackOrderId,
+          orderNumber: fallbackOrderNumber,
+          normalized: "1",
+        },
+      }) as const,
+    [
+      fallbackOrderId,
+      fallbackOrderNumber,
+      kindParam,
+      statusHint,
+      tokenParam,
+    ],
+  );
+
+  useEffect(() => {
+    claimTerminalPaymentToken(tokenParam);
+    if (normalized) return;
+    replacePaymentFlowRoot(router, normalizedDestination as any);
+  }, [normalized, normalizedDestination, router, tokenParam]);
+
+  if (!normalized) return <PaymentReturnPreparing />;
+
+  return (
+    <PaymentReturnResult
+      kindParam={kindParam}
+      tokenParam={tokenParam}
+      statusHint={statusHint}
+      fallbackOrderId={fallbackOrderId}
+      fallbackOrderNumber={fallbackOrderNumber}
+    />
+  );
+}
+
+function PaymentReturnPreparing() {
+  const colors = useColors();
+  return (
+    <ScreenContainer edges={["top", "bottom", "left", "right"]}>
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[styles.message, { color: colors.muted }]}>
+          Finalisation sécurisée du paiement...
+        </Text>
+      </View>
+    </ScreenContainer>
+  );
+}
+
+interface PaymentReturnResultProps {
+  kindParam: string;
+  tokenParam: string;
+  statusHint: string;
+  fallbackOrderId: string;
+  fallbackOrderNumber: string;
+}
+
+function PaymentReturnResult({
+  kindParam,
+  tokenParam,
+  statusHint,
+  fallbackOrderId,
+  fallbackOrderNumber,
+}: PaymentReturnResultProps) {
+  const colors = useColors();
+  const router = useRouter();
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const [celebrate, setCelebrate] = useState(false);
   const { message, orderReference, phase, result, showTickets } =
     usePaymentReturn({
       kindParam,
@@ -44,7 +122,6 @@ export default function PaymentReturnScreen() {
     });
 
   useEffect(() => {
-    WebBrowser.dismissBrowser();
     AccessibilityInfo.isReduceMotionEnabled()
       .then(setReduceMotion)
       .catch(() => {});
@@ -54,6 +131,17 @@ export default function PaymentReturnScreen() {
     );
     return () => subscription.remove();
   }, []);
+
+  useEffect(() => {
+    const orderId = Number(result?.order?.id || 0);
+    if (phase === "success" && claimPaymentCelebration(orderId)) {
+      setCelebrate(true);
+    }
+  }, [phase, result?.order?.id]);
+
+  const exitTo = (destination: Parameters<typeof router.replace>[0]) => {
+    replacePaymentFlowRoot(router, destination);
+  };
 
   const iconName:
     | "checkmark.circle.fill"
@@ -72,10 +160,10 @@ export default function PaymentReturnScreen() {
         : colors.primary;
   return (
     <ScreenContainer edges={["top", "bottom", "left", "right"]}>
-      <Confetti active={phase === "success" && !reduceMotion} />
+      <Confetti active={celebrate && !reduceMotion} />
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <TouchableOpacity
-          onPress={() => router.replace("/(tabs)/" as any)}
+          onPress={() => exitTo("/(tabs)/" as any)}
           style={styles.backBtn}
         >
           <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
@@ -136,14 +224,14 @@ export default function PaymentReturnScreen() {
         <TouchableOpacity
           onPress={() => {
             if (showTickets) {
-              router.replace("/(tabs)/tickets" as any);
+              exitTo("/(tabs)/tickets" as any);
               return;
             }
             if (phase === "cancelled" || phase === "failed") {
-              router.replace("/(tabs)/events" as any);
+              exitTo("/(tabs)/events" as any);
               return;
             }
-            router.replace("/orders" as any);
+            exitTo("/orders" as any);
           }}
           style={[styles.primaryButton, { backgroundColor: colors.primary }]}
         >
@@ -157,7 +245,7 @@ export default function PaymentReturnScreen() {
         </TouchableOpacity>
         {phase === "success" && showTickets ? (
           <TouchableOpacity
-            onPress={() => router.replace("/orders" as any)}
+            onPress={() => exitTo("/orders" as any)}
             style={styles.secondaryButton}
           >
             <Text
@@ -168,7 +256,7 @@ export default function PaymentReturnScreen() {
           </TouchableOpacity>
         ) : null}
         <TouchableOpacity
-          onPress={() => router.replace("/(tabs)/" as any)}
+          onPress={() => exitTo("/(tabs)/" as any)}
           style={styles.secondaryButton}
         >
           <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>
