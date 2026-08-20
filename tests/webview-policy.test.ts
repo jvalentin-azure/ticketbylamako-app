@@ -46,6 +46,10 @@ describe("WebView navigation policy", () => {
     const url = "https://secureacceptance.cybersource.com/pay";
     expect(isAllowedWebViewUrl(url, "first-party")).toBe(false);
     expect(isAllowedWebViewUrl(url, "payment")).toBe(true);
+
+    const orangeUrl = "https://webpayment.orange.mg/authorize";
+    expect(isAllowedWebViewUrl(orangeUrl, "first-party")).toBe(false);
+    expect(isAllowedWebViewUrl(orangeUrl, "payment")).toBe(true);
   });
 
   it("supports additional public payment hosts from build configuration", () => {

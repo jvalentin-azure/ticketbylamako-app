@@ -44,6 +44,7 @@ describe("native commerce payment flow", () => {
     );
     expect(paymentSource).not.toContain("openAuthSessionAsync");
     expect(browserSource).toContain("openBrowserAsync");
+    expect(browserSource).toContain('isAllowedWebViewUrl(url, "payment")');
     expect(browserSource).not.toContain("openAuthSessionAsync");
     expect(screenSource).toContain("Annuler la commande");
     expect(screenSource).not.toContain("Actualiser le statut");

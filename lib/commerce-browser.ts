@@ -8,7 +8,7 @@ export type CommerceBrowserResult = Awaited<
 export async function openCommerceSession(
   url: string,
 ): Promise<CommerceBrowserResult> {
-  if (!isAllowedWebViewUrl(url, "first-party")) {
+  if (!isAllowedWebViewUrl(url, "payment")) {
     throw new Error("Adresse de paiement non securisee ou non autorisee.");
   }
 
