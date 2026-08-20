@@ -261,6 +261,7 @@ export interface MobilePaymentMethod {
   description: string;
   flow: "async" | "redirect";
   requiresPhone: boolean;
+  iconUrl?: string;
 }
 
 export interface MobilePaymentMethodsResponse {

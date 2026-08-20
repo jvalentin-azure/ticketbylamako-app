@@ -7,6 +7,7 @@ import { useColors } from "@/hooks/use-colors";
 import { useCart } from "@/lib/cart-provider";
 import { formatAriary } from "@/lib/format";
 import { notifyPaymentConfirmed } from "@/lib/notifications";
+import { cancelMobilePayment } from "@/lib/api/mobile";
 import {
   firstParam,
   isPaymentReturnPending,
@@ -45,7 +46,28 @@ export default function PaymentReturnScreen() {
     setPhase("verifying");
     setMessage("Verification securisee du paiement...");
 
-    verifyPaymentReturn({ kind, token: tokenParam, statusHint })
+    const verifyReturn = async (): Promise<VerifiedPaymentReturn> => {
+      if (statusHint !== "cancelled") {
+        return verifyPaymentReturn({ kind, token: tokenParam, statusHint });
+      }
+
+      try {
+        const cancelledPayment = await cancelMobilePayment(kind, tokenParam);
+        return {
+          kind: cancelledPayment.kind,
+          token: cancelledPayment.token,
+          status: cancelledPayment.status,
+          order: cancelledPayment.order,
+          ticketsReady: cancelledPayment.ticketsReady,
+        };
+      } catch (cancellationError) {
+        const verified = await verifyPaymentReturn({ kind, token: tokenParam });
+        if (isPaymentReturnSuccess(verified.status)) return verified;
+        throw cancellationError;
+      }
+    };
+
+    verifyReturn()
       .then(verified => {
         if (cancelled) return;
         setResult(verified);
@@ -75,7 +97,8 @@ export default function PaymentReturnScreen() {
         }
 
         if (verified.status === "cancelled") {
-          setMessage("Paiement non abouti. Veuillez réessayer.");
+          clearCart();
+          setMessage("Commande annulée. Aucun paiement n'a été confirmé.");
           setPhase("cancelled");
           return;
         }
@@ -93,7 +116,7 @@ export default function PaymentReturnScreen() {
     return () => {
       cancelled = true;
     };
-  }, [kindParam, tokenParam, statusHint]);
+  }, [clearCart, kindParam, tokenParam, statusHint]);
 
   const iconName: "checkmark.circle.fill" | "clock.fill" | "exclamationmark.triangle.fill" =
     phase === "success"
@@ -146,13 +169,13 @@ export default function PaymentReturnScreen() {
         <TouchableOpacity
           onPress={() =>
             phase === "cancelled"
-              ? router.replace({ pathname: "/payment", params: { kind: normalizePaymentReturnKind(kindParam) || "checkout", token: tokenParam } } as any)
+              ? router.replace("/(tabs)/events" as any)
               : router.replace("/orders" as any)
           }
           style={[styles.primaryButton, { backgroundColor: colors.primary }]}
         >
           <Text style={styles.primaryButtonText}>
-            {phase === "cancelled" ? "Réessayer" : "Voir mes commandes"}
+            {phase === "cancelled" ? "Continuer mes achats" : "Voir mes commandes"}
           </Text>
         </TouchableOpacity>
         {phase === "cancelled" ? (
@@ -169,7 +192,7 @@ export default function PaymentReturnScreen() {
 }
 
 function paymentFailureMessage(status: PaymentReturnStatus): string {
-  if (status === "cancelled") return "Paiement non abouti. Veuillez réessayer.";
+  if (status === "cancelled") return "Commande annulée. Aucun paiement n'a été confirmé.";
   if (status === "expired") return "Cette session de paiement a expiré. Relancez le paiement depuis le panier ou les commandes.";
   if (status === "failed") return "Paiement non abouti. Veuillez réessayer.";
   return "Le paiement n'est pas confirmé. Consultez vos commandes pour suivre son statut.";

@@ -72,7 +72,8 @@ export function useMobilePayment({ token, kind }: UseMobilePaymentOptions) {
   const remainingSeconds = expiresAt
     ? Math.max(0, Math.ceil((expiresAt - clock) / 1000))
     : null;
-  const reservationExpired = remainingSeconds === 0 && !paymentInProgress;
+  const reservationCountdownComplete = remainingSeconds === 0;
+  const reservationExpired = reservationCountdownComplete && !paymentInProgress;
   const paymentActionLabel = isZeroTotal
     ? "Confirmer la commande"
     : selected?.id === "papi_paiement"
@@ -87,10 +88,10 @@ export function useMobilePayment({ token, kind }: UseMobilePaymentOptions) {
     : selected;
 
   useEffect(() => {
-    if (!expiresAt || reservationExpired || paymentInProgress) return;
+    if (!expiresAt || reservationCountdownComplete) return;
     const timer = setInterval(() => setClock(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, [expiresAt, reservationExpired, paymentInProgress]);
+  }, [expiresAt, reservationCountdownComplete]);
 
   const finish = useCallback(
     (status = "success") => {
@@ -201,6 +202,7 @@ export function useMobilePayment({ token, kind }: UseMobilePaymentOptions) {
     try {
       const response = await cancelMobilePayment(kind, token);
       if (response.order) setOrder(response.order);
+      clearCart();
       router.replace({
         pathname: "/payment-return",
         params: { kind, token, status: "cancelled" },
@@ -222,7 +224,7 @@ export function useMobilePayment({ token, kind }: UseMobilePaymentOptions) {
       );
       setPhase("error");
     }
-  }, [finish, kind, phase, router, token]);
+  }, [clearCart, finish, kind, phase, router, token]);
 
   useEffect(() => {
     if (phase !== "pending" && phase !== "review") return;

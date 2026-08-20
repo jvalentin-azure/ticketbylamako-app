@@ -52,6 +52,7 @@ export const paymentStyles = StyleSheet.create({
   methodList: { gap: 9 },
   method: { minHeight: 74, borderWidth: 1.5, borderRadius: 8, padding: 12, flexDirection: "row", alignItems: "center", gap: 12 },
   methodIcon: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
+  methodLogo: { width: 34, height: 34 },
   methodCopy: { flex: 1 },
   methodTitle: { fontSize: 15, fontFamily: "Raleway_700Bold" },
   methodDescription: { marginTop: 3, fontSize: 12, lineHeight: 16, fontFamily: "Raleway_500Medium" },

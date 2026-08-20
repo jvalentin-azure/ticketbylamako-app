@@ -1,4 +1,5 @@
 import { Text, TouchableOpacity, View } from "react-native";
+import { Image } from "expo-image";
 
 import { paymentStyles as styles } from "@/components/payment/payment-screen.styles";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -7,16 +8,19 @@ import { formatAriary } from "@/lib/format";
 
 type Colors = Record<string, string>;
 
-export function ReservationTimer({ remainingSeconds, colors }: { remainingSeconds: number; colors: Colors }) {
+export function ReservationTimer({ remainingSeconds, paymentInProgress = false, colors }: { remainingSeconds: number; paymentInProgress?: boolean; colors: Colors }) {
   const minutes = Math.floor(remainingSeconds / 60);
   const seconds = remainingSeconds % 60;
   const urgent = remainingSeconds <= 120;
+  const protectedPayment = paymentInProgress && remainingSeconds === 0;
   return (
     <View style={[styles.timer, { backgroundColor: urgent ? colors.error + "16" : colors.warning + "18" }]}>
       <IconSymbol name="clock.fill" size={17} color={urgent ? colors.error : colors.warning} />
-      <Text style={[styles.timerText, { color: colors.foreground }]}>Réservation maintenue encore</Text>
+      <Text style={[styles.timerText, { color: colors.foreground }]}>
+        {protectedPayment ? "Paiement en cours, réservation protégée" : "Réservation maintenue encore"}
+      </Text>
       <Text style={[styles.timerValue, { color: urgent ? colors.error : colors.foreground }]}>
-        {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
+        {protectedPayment ? "EN COURS" : `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`}
       </Text>
     </View>
   );
@@ -109,8 +113,12 @@ export function PaymentMethodRow({ method, selected, disabled, onPress, colors }
       activeOpacity={0.8}
       style={[styles.method, { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.primary + "0D" : "transparent", opacity: disabled && !selected ? 0.45 : 1 }]}
     >
-      <View style={[styles.methodIcon, { backgroundColor: selected ? colors.primary : colors.border }]}>
-        <IconSymbol name={method.requiresPhone ? "phone.fill" : "banknote.fill"} size={21} color={selected ? "#fff" : colors.foreground} />
+      <View style={[styles.methodIcon, { backgroundColor: method.iconUrl ? "#fff" : selected ? colors.primary : colors.border }]}>
+        {method.iconUrl ? (
+          <Image source={{ uri: method.iconUrl }} style={styles.methodLogo} contentFit="contain" transition={120} />
+        ) : (
+          <IconSymbol name={method.requiresPhone ? "phone.fill" : "banknote.fill"} size={21} color={selected ? "#fff" : colors.foreground} />
+        )}
       </View>
       <View style={styles.methodCopy}>
         <Text style={[styles.methodTitle, { color: colors.foreground }]}>{method.title}</Text>

@@ -41,8 +41,44 @@ describe("native commerce payment flow", () => {
     expect(paymentSource).toContain("openAuthSessionAsync");
     expect(paymentSource).toContain('browserResult.type === "cancel"');
     expect(paymentSource).toContain("cancelMobilePayment(kind, token)");
-    expect(screenSource).toContain("Annuler et réessayer");
+    expect(screenSource).toContain("Annuler la commande");
     expect(screenSource).not.toContain("Actualiser le statut");
+  });
+
+  it("keeps the reservation status visible while provider verification is active", () => {
+    const paymentSource = source("hooks/use-mobile-payment.ts");
+    const screenSource = source("app/payment.tsx");
+    const partsSource = source("components/payment/PaymentScreenParts.tsx");
+    expect(paymentSource).not.toContain(
+      "reservationExpired || paymentInProgress",
+    );
+    expect(screenSource).toContain(
+      "paymentInProgress={paymentInProgress}",
+    );
+    expect(partsSource).toContain(
+      "Paiement en cours, réservation protégée",
+    );
+  });
+
+  it("treats cancellation as terminal instead of reopening payment", () => {
+    const returnSource = source("app/payment-return.tsx");
+    expect(returnSource).toContain("Continuer mes achats");
+    expect(returnSource).toContain("clearCart()");
+    expect(returnSource).toContain("cancelMobilePayment(kind, tokenParam)");
+    expect(returnSource).not.toContain('pathname: "/payment"');
+  });
+
+  it("renders provider logos supplied by the secured payment API", () => {
+    expect(source("lib/api/mobile.ts")).toContain("iconUrl?: string");
+    expect(source("components/payment/PaymentScreenParts.tsx")).toContain(
+      "method.iconUrl",
+    );
+  });
+
+  it("keeps a direct path back to event discovery from the cart", () => {
+    const cartSource = source("app/(tabs)/cart.tsx");
+    expect(cartSource).toContain("Continuer vos achats");
+    expect(cartSource).toContain('router.push("/(tabs)/events"');
   });
 
   it("locks payment-method changes while a provider attempt is active", () => {

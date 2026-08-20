@@ -393,25 +393,34 @@ export default function CartScreen() {
             </Text>
           </TouchableOpacity>
         ) : (
-          <TouchableOpacity
-            onPress={handleCheckout}
-            disabled={closedItems.length > 0}
-            style={[
-              styles.checkoutBtn,
-              {
-                backgroundColor:
-                  closedItems.length > 0 ? colors.muted : colors.primary,
-                opacity: closedItems.length > 0 ? 0.65 : 1,
-              },
-            ]}
-          >
-            <IconSymbol name="lock.fill" size={18} color="#fff" />
-            <Text style={styles.checkoutBtnText}>
-              {closedItems.length > 0
-                ? "Retirer les billets fermés"
-                : "Passer la commande"}
-            </Text>
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity
+              onPress={handleCheckout}
+              disabled={closedItems.length > 0}
+              style={[
+                styles.checkoutBtn,
+                {
+                  backgroundColor:
+                    closedItems.length > 0 ? colors.muted : colors.primary,
+                  opacity: closedItems.length > 0 ? 0.65 : 1,
+                },
+              ]}
+            >
+              <IconSymbol name="lock.fill" size={18} color="#fff" />
+              <Text style={styles.checkoutBtnText}>
+                {closedItems.length > 0
+                  ? "Retirer les billets fermés"
+                  : "Passer la commande"}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => router.push("/(tabs)/events" as any)}
+              style={[styles.continueShoppingBtn, { borderColor: colors.border }]}
+            >
+              <IconSymbol name="arrow.left" size={17} color={colors.primary} />
+              <Text style={[styles.continueShoppingText, { color: colors.primary }]}>Continuer vos achats</Text>
+            </TouchableOpacity>
+          </>
         )}
       </View>
     </ScreenContainer>
@@ -530,6 +539,17 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   checkoutBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  continueShoppingBtn: {
+    minHeight: 46,
+    marginTop: 8,
+    borderWidth: 1,
+    borderRadius: 12,
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
+  },
+  continueShoppingText: { fontSize: 14, fontWeight: "700" },
   // LamakoRewards styles
   rewardsSummary: {
     borderRadius: 12,

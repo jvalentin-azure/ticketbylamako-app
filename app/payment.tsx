@@ -1,5 +1,6 @@
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -72,9 +73,10 @@ export default function PaymentScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <PaymentHeader onBack={() => router.back()} colors={colors} />
-        {remainingSeconds !== null && !paymentInProgress ? (
+        {remainingSeconds !== null ? (
           <ReservationTimer
             remainingSeconds={remainingSeconds}
+            paymentInProgress={paymentInProgress}
             colors={colors}
           />
         ) : null}
@@ -345,11 +347,20 @@ export default function PaymentScreen() {
                   La confirmation est automatique. Ne relancez pas un second paiement.
                 </Text>
                 <TouchableOpacity
-                  onPress={() => void cancelPayment()}
+                  onPress={() =>
+                    Alert.alert(
+                      "Annuler la commande ?",
+                      "La réservation et la commande seront annulées. Aucun nouveau paiement ne sera lancé.",
+                      [
+                        { text: "Garder la commande", style: "cancel" },
+                        { text: "Annuler la commande", style: "destructive", onPress: () => void cancelPayment() },
+                      ],
+                    )
+                  }
                   style={styles.checkButton}
                 >
                   <Text style={[styles.checkButtonText, { color: colors.warning }]}>
-                    Annuler et réessayer
+                    Annuler la commande
                   </Text>
                 </TouchableOpacity>
               </>
