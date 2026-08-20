@@ -34,6 +34,8 @@ interface PaymentReturnOutcome {
   clearCart: boolean;
 }
 
+const notifiedPaymentOrders = new Set<number>();
+
 export function usePaymentReturn({
   kindParam,
   tokenParam,
@@ -169,8 +171,10 @@ function notifySuccessOnce(
 ) {
   if (!isPaymentReturnSuccess(verified.status) || !verified.order?.id) return;
   if (notifiedRef.current) return;
+  if (notifiedPaymentOrders.has(verified.order.id)) return;
 
   notifiedRef.current = true;
+  notifiedPaymentOrders.add(verified.order.id);
   notifyPaymentConfirmed(
     verified.order.id,
     formatAriary(Number(verified.order.total || 0)),

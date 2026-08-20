@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState } from "react-native";
 import { useRouter } from "expo-router";
+import { useIsFocused } from "@react-navigation/native";
 import * as Crypto from "expo-crypto";
 
 import {
@@ -42,6 +43,7 @@ const IN_PROGRESS_ATTEMPT_STATUSES = new Set([
 
 export function useMobilePayment({ token, kind }: UseMobilePaymentOptions) {
   const router = useRouter();
+  const isFocused = useIsFocused();
   const { clearCart } = useCart();
   const [phase, setPhase] = useState<PaymentScreenPhase>("loading");
   const [order, setOrder] = useState<MobileOrderSummary | null>(null);
@@ -55,6 +57,12 @@ export function useMobilePayment({ token, kind }: UseMobilePaymentOptions) {
   const [pollAfterMs, setPollAfterMs] = useState(2500);
   const [clock, setClock] = useState(Date.now());
   const pollInFlightRef = useRef(false);
+  const isFocusedRef = useRef(isFocused);
+  const terminalNavigationRef = useRef(false);
+
+  useEffect(() => {
+    isFocusedRef.current = isFocused;
+  }, [isFocused]);
 
   const selected = useMemo(
     () => methods.find((method) => method.id === selectedMethod) || null,
@@ -94,6 +102,8 @@ export function useMobilePayment({ token, kind }: UseMobilePaymentOptions) {
 
   const finish = useCallback(
     (status = "success") => {
+      if (terminalNavigationRef.current) return;
+      terminalNavigationRef.current = true;
       clearCart();
       router.replace({
         pathname: "/payment-return",
@@ -226,16 +236,17 @@ export function useMobilePayment({ token, kind }: UseMobilePaymentOptions) {
   }, [clearCart, finish, kind, phase, router, token]);
 
   useEffect(() => {
-    if (phase !== "pending" && phase !== "review") return;
+    if (!isFocused || (phase !== "pending" && phase !== "review")) return;
     const interval = Math.max(phase === "review" ? 15000 : 8000, pollAfterMs);
     const timer = setInterval(() => void checkStatus(true), interval);
     return () => clearInterval(timer);
-  }, [checkStatus, phase, pollAfterMs]);
+  }, [checkStatus, isFocused, phase, pollAfterMs]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {
       if (
         nextState === "active" &&
+        isFocusedRef.current &&
         (phase === "pending" || phase === "review")
       ) {
         void checkStatus(true);
@@ -314,6 +325,10 @@ export function useMobilePayment({ token, kind }: UseMobilePaymentOptions) {
         setPhase("pending");
       } else if (response.flow === "redirect" && response.redirectUrl) {
         await openCommerceSession(response.redirectUrl);
+        // The provider callback can already have opened /payment-return.
+        // Do not let this covered payment screen race the terminal route.
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        if (!isFocusedRef.current || terminalNavigationRef.current) return;
         setMessage("Vérification du retour de paiement en cours...");
         setPhase("pending");
         await checkStatus(true);

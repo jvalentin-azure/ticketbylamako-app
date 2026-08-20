@@ -101,7 +101,7 @@ export default function PaymentReturnScreen() {
                 ? "Paiement en attente"
                 : phase === "verifying"
                   ? "Vérification"
-                  : "Paiement non confirmé"}
+                  : "Paiement non abouti"}
         </Text>
         <Text style={[styles.message, { color: colors.muted }]}>{message}</Text>
 

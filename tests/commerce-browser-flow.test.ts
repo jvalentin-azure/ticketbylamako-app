@@ -103,6 +103,15 @@ describe("native commerce payment flow", () => {
     expect(paymentSource).toContain("checkStatus(true)");
   });
 
+  it("prevents the covered payment screen from reopening a terminal result", () => {
+    const paymentSource = source("hooks/use-mobile-payment.ts");
+    const returnHookSource = source("hooks/use-payment-return.ts");
+    expect(paymentSource).toContain("useIsFocused");
+    expect(paymentSource).toContain("terminalNavigationRef.current");
+    expect(paymentSource).toContain("!isFocusedRef.current");
+    expect(returnHookSource).toContain("notifiedPaymentOrders.has");
+  });
+
   it("does not treat a new unpaid order as an already-started provider payment", () => {
     const paymentSource = source("hooks/use-mobile-payment.ts");
     expect(paymentSource).toContain("IN_PROGRESS_ATTEMPT_STATUSES.has");
