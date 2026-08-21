@@ -42,12 +42,15 @@ export default function SearchScreen() {
   const colors = useColors();
   const router = useRouter();
   const inputRef = useRef<TextInput>(null);
+  const dataRequestId = useRef(0);
 
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState<TabType>("all");
   const [events, setEvents] = useState<TCEvent[]>([]);
   const [products, setProducts] = useState<WCProduct[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [dataError, setDataError] = useState("");
 
   // Auto-focus the search input on mount
   useEffect(() => {
@@ -55,27 +58,35 @@ export default function SearchScreen() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Load all data once on mount for local filtering
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const [{ events: evts }, { products: prods }] = await Promise.all([
-          getEventsData(),
-          getShopData(),
-        ]);
-        if (!cancelled) {
-          setEvents(evts);
-          setProducts(prods);
-        }
-      } catch (e) {
-        console.error("Search data load error:", e);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+  const loadSearchData = useCallback(async (forceRefresh = false) => {
+    const activeRequest = ++dataRequestId.current;
+    setDataLoading(true);
+    setDataError("");
+    try {
+      const [{ events: evts }, { products: prods }] = await Promise.all([
+        getEventsData({ forceRefresh }),
+        getShopData({ forceRefresh }),
+      ]);
+      if (dataRequestId.current !== activeRequest) return;
+      setEvents(evts);
+      setProducts(prods);
+    } catch {
+      if (dataRequestId.current !== activeRequest) return;
+      setDataError(
+        "La recherche est momentanément indisponible. Vérifiez votre connexion.",
+      );
+    } finally {
+      if (dataRequestId.current === activeRequest) setDataLoading(false);
+    }
   }, []);
+
+  // Load all data once on mount for fast local filtering.
+  useEffect(() => {
+    void loadSearchData();
+    return () => {
+      dataRequestId.current += 1;
+    };
+  }, [loadSearchData]);
 
   const normalize = (s: string) =>
     s
@@ -323,6 +334,62 @@ export default function SearchScreen() {
             produits
           </Text>
         </View>
+      ) : dataLoading ? (
+        <View style={styles.searchLoading}>
+          {[0, 1, 2].map((item) => (
+            <View
+              key={item}
+              style={[
+                styles.searchSkeleton,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+            >
+              <View
+                style={[
+                  styles.searchSkeletonImage,
+                  { backgroundColor: colors.border },
+                ]}
+              />
+              <View style={styles.searchSkeletonBody}>
+                <View
+                  style={[
+                    styles.searchSkeletonLine,
+                    { backgroundColor: colors.border },
+                  ]}
+                />
+                <View
+                  style={[
+                    styles.searchSkeletonLine,
+                    styles.searchSkeletonLineShort,
+                    { backgroundColor: colors.border },
+                  ]}
+                />
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : dataError ? (
+        <View style={styles.emptyContainer}>
+          <IconSymbol
+            name="exclamationmark.triangle.fill"
+            size={42}
+            color={colors.primary}
+          />
+          <Text style={[styles.emptyText, { color: colors.foreground }]}>
+            Recherche indisponible
+          </Text>
+          <Text style={[styles.emptySubText, { color: colors.muted }]}>
+            {dataError}
+          </Text>
+          <TouchableOpacity
+            onPress={() => void loadSearchData(true)}
+            style={[styles.retryButton, { backgroundColor: colors.primary }]}
+            accessibilityRole="button"
+            accessibilityLabel="Réessayer le chargement de la recherche"
+          >
+            <Text style={styles.retryButtonText}>Réessayer</Text>
+          </TouchableOpacity>
+        </View>
       ) : (
         <FlatList
           data={results}
@@ -402,6 +469,18 @@ const styles = StyleSheet.create({
   listContent: {
     padding: 16,
   },
+  searchLoading: { padding: 16, gap: 12 },
+  searchSkeleton: {
+    height: 102,
+    flexDirection: "row",
+    borderRadius: 8,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  searchSkeletonImage: { width: 100, height: 100 },
+  searchSkeletonBody: { flex: 1, padding: 14, gap: 12 },
+  searchSkeletonLine: { height: 14, width: "82%", borderRadius: 5 },
+  searchSkeletonLineShort: { width: "48%" },
   card: {
     flexDirection: "row",
     borderRadius: 14,
@@ -472,4 +551,14 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 20,
   },
+  retryButton: {
+    minHeight: 48,
+    minWidth: 180,
+    borderRadius: 8,
+    marginTop: 20,
+    paddingHorizontal: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  retryButtonText: { color: "#fff", fontSize: 15, fontWeight: "700" },
 });
