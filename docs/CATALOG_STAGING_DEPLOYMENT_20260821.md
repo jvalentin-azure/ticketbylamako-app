@@ -353,3 +353,35 @@ php -l /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins
 
 Après rollback, retester les trois routes catalogue, l'événement standard
 `13842` et l'événement seating `12673`.
+
+## Images catalogue adaptées aux cartes - 21 août 2026
+
+Les listes événement et boutique utilisent désormais la variante WordPress
+`medium_large` au lieu de `large`. Les fiches détaillées conservent la variante
+`large`, afin de ne pas dégrader les visuels plein écran.
+
+Contrôle staging sur l'événement `13842` :
+
+- image catalogue : `768x429`, `418172` octets ;
+- image détail : `1024x572`, `725223` octets ;
+- économie catalogue observée : environ `42 %` pour ce visuel.
+
+Le composant mobile partagé conserve `expo-image`, le cache mémoire/disque, le
+placeholder et le recyclage des cellules. Cette modification agit donc sur le
+poids réseau sans changer le layout ni les proportions des cartes.
+
+Déploiement staging ciblé :
+
+- fichier actif avant déploiement :
+  `87afad4634b2bd092cf40a4ed1748cf94f40cbf12631230a714129ed74269c2d` ;
+- fichier actif après fusion :
+  `19c0dd956330717887d2e70c9d68bf6131abed0d584f29fda1efb5bbf391e426` ;
+- backup :
+  `/home/master/tbl-compliance-backups/wvvtwdcenn-20260821T201400Z-pre-catalog-image-sizing/includes/v2-commerce.php`.
+
+Rollback staging :
+
+```bash
+cp -p /home/master/tbl-compliance-backups/wvvtwdcenn-20260821T201400Z-pre-catalog-image-sizing/includes/v2-commerce.php /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
+php -l /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
+```

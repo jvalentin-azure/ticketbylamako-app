@@ -36,4 +36,11 @@ describe("mobile API catalogue query", () => {
     expect(source).toContain("created_product_cat");
     expect(source).toContain("X-Lamako-Catalog-Cache");
   });
+
+  it("serves card-sized images in lists while preserving large detail images", () => {
+    expect(source).toContain("$include_details ? 'large' : 'medium_large'");
+    expect(source).toContain(
+      "lamako_mobile_v2_public_product_images( $product, $include_details ? 'large' : 'medium_large' )",
+    );
+  });
 });

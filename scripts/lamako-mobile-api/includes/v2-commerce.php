@@ -660,7 +660,7 @@ function lamako_mobile_v2_public_shop_categories() {
     return $categories;
 }
 
-function lamako_mobile_v2_public_product_images( WC_Product $product ) {
+function lamako_mobile_v2_public_product_images( WC_Product $product, $image_size = 'large' ) {
     $image_ids = [];
     $main_id = $product->get_image_id();
     if ( $main_id ) {
@@ -672,7 +672,7 @@ function lamako_mobile_v2_public_product_images( WC_Product $product ) {
 
     $images = [];
     foreach ( array_unique( array_filter( $image_ids ) ) as $image_id ) {
-        $src = wp_get_attachment_image_url( $image_id, 'large' );
+        $src = wp_get_attachment_image_url( $image_id, $image_size );
         if ( $src ) {
             $images[] = [
                 'id'  => (int) $image_id,
@@ -719,7 +719,7 @@ function lamako_mobile_v2_public_product_summary( WC_Product $product, $include_
         'sale_price'      => $product->get_sale_price(),
         'description'     => $include_details ? wp_kses_post( $product->get_description() ) : '',
         'short_description' => $include_details ? wp_kses_post( $product->get_short_description() ) : '',
-        'images'          => lamako_mobile_v2_public_product_images( $product ),
+        'images'          => lamako_mobile_v2_public_product_images( $product, $include_details ? 'large' : 'medium_large' ),
         'categories'      => lamako_mobile_v2_public_product_categories( $product_id ),
         'stock_status'    => $product->get_stock_status(),
         'type'            => $product->get_type(),
@@ -887,7 +887,9 @@ function lamako_mobile_v2_public_event_summary( WP_Post $event, array $ticket_ma
     }
 
     $thumb_id = get_post_thumbnail_id( $event_id );
-    $featured = $thumb_id ? wp_get_attachment_image_url( $thumb_id, 'large' ) : '';
+    $featured = $thumb_id
+        ? wp_get_attachment_image_url( $thumb_id, $include_details ? 'large' : 'medium_large' )
+        : '';
 
     return [
         'id'              => $event_id,
