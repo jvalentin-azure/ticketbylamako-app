@@ -14,6 +14,17 @@ export interface CachedValue<T> {
 const CACHE_PREFIX = "api_cache_";
 const memoryCache: Record<string, CacheEntry<any>> = {};
 
+function isCacheEntry<T>(value: unknown): value is CacheEntry<T> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const entry = value as Record<string, unknown>;
+  return (
+    Object.prototype.hasOwnProperty.call(entry, "data") &&
+    typeof entry.timestamp === "number" &&
+    Number.isFinite(entry.timestamp) &&
+    entry.timestamp > 0
+  );
+}
+
 /**
  * Get cached data from memory first, then AsyncStorage.
  * Returns null if cache is expired or not found.
@@ -47,7 +58,12 @@ export async function getCachedValue<T>(
   try {
     const stored = await AsyncStorage.getItem(fullKey);
     if (stored) {
-      const entry: CacheEntry<T> = JSON.parse(stored);
+      const parsed: unknown = JSON.parse(stored);
+      if (!isCacheEntry<T>(parsed)) {
+        await AsyncStorage.removeItem(fullKey).catch(() => undefined);
+        return null;
+      }
+      const entry = parsed;
       const ageMs = Date.now() - entry.timestamp;
       memoryCache[fullKey] = entry;
       return { data: entry.data, ageMs, isStale: ageMs >= maxAgeMs };

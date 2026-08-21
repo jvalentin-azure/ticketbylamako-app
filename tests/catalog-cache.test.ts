@@ -63,6 +63,21 @@ describe("catalogue cache-first", () => {
     expect(cached?.isStale).toBe(false);
   });
 
+  it("discards a structurally invalid persisted cache entry", async () => {
+    storage.set(
+      "api_cache_cache-test",
+      JSON.stringify({ data: { value: 42 }, timestamp: "invalid" }),
+    );
+
+    const cached = await getCachedValue<{ value: number }>(
+      "cache-test",
+      60_000,
+    );
+
+    expect(cached).toBeNull();
+    expect(storage.has("api_cache_cache-test")).toBe(false);
+  });
+
   it("filters non-public events and preserves a zero price", async () => {
     mobileV2FetchMock.mockResolvedValueOnce({
       events: [
