@@ -17,6 +17,7 @@ import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScreenContainer } from "@/components/screen-container";
+import { EventDetailSkeleton } from "@/components/event-detail-skeleton";
 import { useColors } from "@/hooks/use-colors";
 import { useCart } from "@/lib/cart-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -67,6 +68,8 @@ export default function EventDetailScreen() {
   const [event, setEvent] = useState<TCEvent | null>(null);
   const [tickets, setTickets] = useState<TicketType[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
   const [selectedTicket, setSelectedTicket] = useState<TicketType | null>(null);
   const [qty, setQty] = useState(1);
   const [showSeatingChart, setShowSeatingChart] = useState(false);
@@ -86,6 +89,13 @@ export default function EventDetailScreen() {
 
   useEffect(() => {
     if (!id) return;
+    setLoading(true);
+    setLoadError(null);
+    setEvent(null);
+    setTickets([]);
+    setSelectedTicket(null);
+    setQty(1);
+    setGalleryIndex(0);
     const eventId = Number(id);
     let cancelled = false;
     let detailApplied = false;
@@ -96,6 +106,7 @@ export default function EventDetailScreen() {
       if (source === "detail") detailApplied = true;
       const nextTickets = nextEvent.tickets || [];
       setEvent(nextEvent);
+      setLoadError(null);
       setTickets(nextTickets);
       const firstAvailable = nextTickets.find(isTicketAvailable);
       if (nextTickets.length === 1 && firstAvailable) {
@@ -131,6 +142,9 @@ export default function EventDetailScreen() {
     Promise.allSettled([catalogueRequest, detailRequest]).then((results) => {
       if (cancelled) return;
       if (results.every((result) => result.status === "rejected")) {
+        setLoadError(
+          "Impossible de charger cet événement. Vérifiez votre connexion puis réessayez.",
+        );
         setLoading(false);
       }
     });
@@ -138,7 +152,7 @@ export default function EventDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, retryKey]);
 
   // Countdown timer (updates every second)
   useEffect(() => {
@@ -177,16 +191,41 @@ export default function EventDetailScreen() {
 
   if (loading) {
     return (
-      <ScreenContainer className="flex-1 items-center justify-center">
-        <ActivityIndicator size="large" color={colors.primary} />
+      <ScreenContainer edges={["top", "left", "right"]} className="flex-1">
+        <EventDetailSkeleton />
       </ScreenContainer>
     );
   }
 
   if (!event) {
     return (
-      <ScreenContainer className="flex-1 items-center justify-center">
-        <Text style={{ color: colors.muted }}>Événement introuvable</Text>
+      <ScreenContainer className="flex-1 items-center justify-center px-6">
+        <IconSymbol
+          name="exclamationmark.triangle.fill"
+          size={34}
+          color={colors.primary}
+        />
+        <Text style={[styles.loadErrorTitle, { color: colors.foreground }]}>
+          Événement indisponible
+        </Text>
+        <Text style={[styles.loadErrorMessage, { color: colors.muted }]}>
+          {loadError || "Cet événement est introuvable."}
+        </Text>
+        {loadError ? (
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Réessayer de charger l'événement"
+            activeOpacity={0.8}
+            onPress={() => setRetryKey((value) => value + 1)}
+            style={[
+              styles.loadRetryButton,
+              { backgroundColor: colors.primary },
+            ]}
+          >
+            <IconSymbol name="arrow.clockwise" size={18} color="#fff" />
+            <Text style={styles.loadRetryText}>Réessayer</Text>
+          </TouchableOpacity>
+        ) : null}
       </ScreenContainer>
     );
   }
@@ -1086,6 +1125,35 @@ export default function EventDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+  loadErrorTitle: {
+    marginTop: 14,
+    fontSize: 20,
+    fontFamily: "Raleway_700Bold",
+    textAlign: "center",
+  },
+  loadErrorMessage: {
+    marginTop: 8,
+    maxWidth: 340,
+    fontSize: 14,
+    lineHeight: 20,
+    fontFamily: "Raleway_500Medium",
+    textAlign: "center",
+  },
+  loadRetryButton: {
+    minHeight: 48,
+    marginTop: 20,
+    paddingHorizontal: 22,
+    borderRadius: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  loadRetryText: {
+    color: "#fff",
+    fontSize: 14,
+    fontFamily: "Raleway_700Bold",
+  },
   backButton: {
     position: "absolute",
     top: 12,
