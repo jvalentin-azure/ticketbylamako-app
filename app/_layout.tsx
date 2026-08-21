@@ -33,7 +33,6 @@ import { LoadingScreen } from "@/components/loading-screen";
 import { RewardsPopup } from "@/components/rewards-popup";
 import {
   setupNotificationHandler,
-  registerForPushNotificationsAsync,
   setupAndroidChannel,
   registerPushTokenWithBackend,
 } from "@/lib/notifications";
@@ -80,32 +79,11 @@ export default function RootLayout() {
   // Set up push notifications
   useEffect(() => {
     if (Platform.OS === "web") return;
-    try {
-      setupAndroidChannel();
-    } catch (e) {
-      console.warn("Android channel setup failed:", e);
-    }
-    registerForPushNotificationsAsync().then(async (token) => {
-      if (token) {
-        // Register with WordPress backend
-        try {
-          const { getStoredUser } = await import("@/lib/api/auth");
-          const user = await getStoredUser();
-          registerPushTokenWithBackend(user?.id);
-        } catch (e) {
-          console.warn("Push token backend registration failed:", e);
-        }
-      }
+    void setupAndroidChannel().catch((error) => {
+      console.warn("Android channel setup failed:", error);
     });
-
-    const notificationListener = Notifications.addNotificationReceivedListener(
-      (notification) => {
-        console.log(
-          "Notification received:",
-          notification.request.content.title,
-        );
-      },
-    );
+    // Restore an already-authorized device without prompting during startup.
+    void registerPushTokenWithBackend();
 
     const responseListener =
       Notifications.addNotificationResponseReceivedListener((response) => {
@@ -122,7 +100,6 @@ export default function RootLayout() {
       });
 
     return () => {
-      notificationListener.remove();
       responseListener.remove();
     };
   }, []);

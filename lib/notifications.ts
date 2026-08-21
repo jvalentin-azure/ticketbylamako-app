@@ -65,10 +65,11 @@ export async function setupAndroidChannel() {
 /**
  * Register for push notifications and return the Expo push token
  */
-export async function registerForPushNotificationsAsync(): Promise<string | null> {
+export async function registerForPushNotificationsAsync(
+  requestPermission = true,
+): Promise<string | null> {
   // Push notifications only work on physical devices
   if (!Device.isDevice) {
-    console.log("Push notifications require a physical device");
     return null;
   }
 
@@ -80,13 +81,12 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
   let finalStatus = existingStatus;
 
   // Request permissions if not granted
-  if (existingStatus !== "granted") {
+  if (existingStatus !== "granted" && requestPermission) {
     const { status } = await Notifications.requestPermissionsAsync();
     finalStatus = status;
   }
 
   if (finalStatus !== "granted") {
-    console.log("Push notification permission not granted");
     return null;
   }
 
@@ -112,12 +112,15 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
  * Register the Expo push token with the WordPress backend.
  * Should be called after login or whenever the token changes.
  */
-export async function registerPushTokenWithBackend(userId?: number): Promise<boolean> {
+export async function registerPushTokenWithBackend(
+  _userId?: number,
+  requestPermission = false,
+): Promise<boolean> {
   try {
     const token = await AsyncStorage.getItem(PUSH_TOKEN_KEY);
     if (!token) {
       // Try to get a new token first
-      const newToken = await registerForPushNotificationsAsync();
+      const newToken = await registerForPushNotificationsAsync(requestPermission);
       if (!newToken) return false;
     }
     const storedToken = await AsyncStorage.getItem(PUSH_TOKEN_KEY);

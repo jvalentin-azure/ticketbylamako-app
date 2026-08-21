@@ -1,19 +1,14 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
 import * as Notifications from "expo-notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
+import {
+  normalizeStoredNotifications,
+  type AppNotification,
+} from "./notification-store";
 
 const NOTIF_STORAGE_KEY = "tbl_notifications";
 const MAX_NOTIFICATIONS = 50;
-
-export interface AppNotification {
-  id: string;
-  title: string;
-  body: string;
-  data?: Record<string, any>;
-  receivedAt: string; // ISO date string
-  read: boolean;
-}
 
 interface NotificationsContextType {
   notifications: AppNotification[];
@@ -40,13 +35,21 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
 
   // Load stored notifications on mount
   useEffect(() => {
-    AsyncStorage.getItem(NOTIF_STORAGE_KEY).then(data => {
-      if (data) {
-        try {
-          setNotifications(JSON.parse(data));
-        } catch {}
+    let mounted = true;
+    void AsyncStorage.getItem(NOTIF_STORAGE_KEY).then((data) => {
+      if (!mounted || !data) return;
+      let stored: AppNotification[] = [];
+      try {
+        stored = normalizeStoredNotifications(JSON.parse(data));
+      } catch {
+        void AsyncStorage.removeItem(NOTIF_STORAGE_KEY);
+        return;
       }
+      setNotifications((current) => normalizeStoredNotifications([...current, ...stored]));
     });
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   // Save notifications to storage whenever they change
@@ -64,13 +67,13 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
         id: notification.request.identifier,
         title: content.title || "Notification",
         body: content.body || "",
-        data: content.data as Record<string, any> | undefined,
+        data: content.data as Record<string, unknown> | undefined,
         receivedAt: new Date().toISOString(),
         read: false,
       };
 
       setNotifications(prev => {
-        const updated = [newNotif, ...prev].slice(0, MAX_NOTIFICATIONS);
+        const updated = normalizeStoredNotifications([newNotif, ...prev]);
         persist(updated);
         return updated;
       });
@@ -79,7 +82,10 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     return () => subscription.remove();
   }, [persist]);
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = useMemo(
+    () => notifications.filter((notification) => !notification.read).length,
+    [notifications],
+  );
 
   const markAsRead = useCallback((id: string) => {
     setNotifications(prev => {

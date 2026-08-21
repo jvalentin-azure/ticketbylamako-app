@@ -11,8 +11,8 @@ import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import {
   useNotifications,
-  type AppNotification,
 } from "@/lib/notifications-provider";
+import type { AppNotification } from "@/lib/notification-store";
 
 export default function NotificationsScreen() {
   const colors = useColors();
