@@ -25,6 +25,7 @@ import { PARENT_CATEGORY_COLORS } from "@/constants/category-colors";
 import { useColors } from "@/hooks/use-colors";
 import { getHomeData, type TCEvent, type WCProduct } from "@/lib/api/catalog";
 import { useAuth } from "@/lib/auth-provider";
+import { prefetchCatalogImages } from "@/lib/catalog-image-prefetch";
 import { useFavorites } from "@/lib/favorites-provider";
 import { setPendingCategory } from "@/lib/filter-state";
 import {
@@ -104,6 +105,9 @@ export default function HomeScreen() {
       setError(null);
       try {
         const data = await getHomeData({ forceRefresh });
+        void prefetchCatalogImages(
+          data.events.filter(isUpcoming).map((event) => event.featuredImage),
+        );
         setEvents(data.events);
         setProducts(data.products);
         setShowingSavedData(data.cacheStatus === "stale");
