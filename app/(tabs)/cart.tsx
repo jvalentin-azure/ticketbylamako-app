@@ -6,9 +6,9 @@ import {
   Alert,
   StyleSheet,
 } from "react-native";
-import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { CatalogImage } from "@/components/catalog-image";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useCart } from "@/lib/cart-provider";
@@ -154,12 +154,10 @@ export default function CartScreen() {
               { backgroundColor: colors.surface, borderColor: colors.border },
             ]}
           >
-            <Image
-              source={{ uri: item.image }}
+            <CatalogImage
+              uri={item.image}
               style={styles.cartItemImage}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-              transition={150}
+              accessibilityLabel={`Image de ${decodeHtmlEntities(item.name)}`}
               recyclingKey={`cart-${item.productId}-${item.seatLabel || "general"}`}
             />
             <View style={styles.cartItemBody}>

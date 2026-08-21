@@ -1,5 +1,12 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseCartActivityTimestamp, parseStoredCart } from "../lib/cart-store";
+
+const cartScreenSource = fs.readFileSync(
+  path.resolve(__dirname, "..", "app", "(tabs)", "cart.tsx"),
+  "utf8",
+);
 
 const validItem = {
   productId: 42,
@@ -37,5 +44,11 @@ describe("cart storage", () => {
     expect(parseCartActivityTimestamp("1780000000000")).toBe(1780000000000);
     expect(parseCartActivityTimestamp("invalid")).toBeNull();
     expect(parseCartActivityTimestamp("-1")).toBeNull();
+  });
+
+  it("renders cart thumbnails with the shared resilient component", () => {
+    expect(cartScreenSource).toContain('import { CatalogImage }');
+    expect(cartScreenSource).toContain("<CatalogImage");
+    expect(cartScreenSource).not.toContain('from "expo-image"');
   });
 });
