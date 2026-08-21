@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { User, login as apiLogin, register as apiRegister, logout as apiLogout, getStoredUser, validateToken } from "./api/auth";
+import { invalidateAllCaches } from "./api/cache";
 
 interface AuthState {
   user: User | null;
@@ -59,8 +60,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    await apiLogout();
-    setState({ user: null, isLoading: false, isAuthenticated: false });
+    try {
+      await apiLogout();
+    } finally {
+      await invalidateAllCaches();
+      setState({ user: null, isLoading: false, isAuthenticated: false });
+    }
   }, []);
 
   const loginWithUser = useCallback((user: User) => {

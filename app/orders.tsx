@@ -1,107 +1,249 @@
-import { useEffect, useState } from "react";
-import { Text, View, TouchableOpacity, FlatList, ActivityIndicator, StyleSheet } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  FlatList,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
+import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/lib/auth-provider";
-import { IconSymbol } from "@/components/ui/icon-symbol";
-import { getMobileOrders } from "@/lib/api/mobile";
-import { mobileOrderToWCOrder } from "@/lib/order-adapters";
+import {
+  getMobileOrders,
+  MobileApiError,
+  type MobileOrderSummary,
+} from "@/lib/api/mobile";
+import { CACHE_DURATIONS, getCachedValue, setCache } from "@/lib/api/cache";
+import { decodeHtmlEntities, formatAriary, formatDate } from "@/lib/format";
 import type { WCOrder } from "@/lib/types/commerce";
-import { formatAriary, formatDate, decodeHtmlEntities } from "@/lib/format";
 
-const statusMap: Record<string, { label: string; color: string; icon: string }> = {
-  completed: { label: "Terminée", color: "#22C55E", icon: "checkmark.circle.fill" },
+interface OrderListItem extends Pick<WCOrder, "id" | "status" | "total"> {
+  number: string;
+  dateCreated: string;
+  paymentMethodTitle: string;
+  ticketCount: number;
+  items: Pick<
+    WCOrder["line_items"][number],
+    "id" | "name" | "quantity" | "total"
+  >[];
+}
+
+const statusMap: Record<
+  string,
+  { label: string; color: string; icon: string }
+> = {
+  completed: {
+    label: "Terminée",
+    color: "#22C55E",
+    icon: "checkmark.circle.fill",
+  },
+  "cs-complete": {
+    label: "Terminée",
+    color: "#22C55E",
+    icon: "checkmark.circle.fill",
+  },
   processing: { label: "En cours", color: "#F59E0B", icon: "clock.fill" },
-  "on-hold": { label: "En attente", color: "#6366F1", icon: "pause.circle.fill" },
-  pending: { label: "En attente paiement", color: "#6366F1", icon: "pause.circle.fill" },
+  "on-hold": {
+    label: "En attente",
+    color: "#6366F1",
+    icon: "pause.circle.fill",
+  },
+  pending: {
+    label: "En attente paiement",
+    color: "#6366F1",
+    icon: "pause.circle.fill",
+  },
   cancelled: { label: "Annulée", color: "#EF4444", icon: "xmark.circle.fill" },
-  refunded: { label: "Remboursée", color: "#8B5CF6", icon: "arrow.uturn.left.circle.fill" },
+  refunded: {
+    label: "Remboursée",
+    color: "#8B5CF6",
+    icon: "arrow.uturn.left.circle.fill",
+  },
   failed: { label: "Échouée", color: "#EF4444", icon: "xmark.circle.fill" },
 };
 
-/**
- * Extract ticket codes from order meta_data (tc_cart_info).
- * Returns an array of { ticketType, seat, code } for each ticket in the order.
- */
-function extractTicketInfo(order: WCOrder): { ticketType: string; seat: string; code: string }[] {
-  const tickets: { ticketType: string; seat: string; code: string }[] = [];
-  const cartInfo = order.meta_data?.find(m => m.key === "tc_cart_info")?.value;
-  if (cartInfo && typeof cartInfo === "object") {
-    for (const [code, info] of Object.entries(cartInfo as Record<string, any>)) {
-      tickets.push({
-        ticketType: info.ticket_type_title || info.ticket_type || "",
-        seat: info.seat || "",
-        code: code,
-      });
-    }
-  }
-  return tickets;
+const completedStatuses = new Set(["completed", "cs-complete"]);
+const pendingStatuses = new Set(["processing", "on-hold", "pending"]);
+
+function orderCacheKey(userId: number) {
+  return `order-list-v2-${userId}`;
 }
 
-function OrderCard({ order, colors, onPress }: { order: WCOrder; colors: any; onPress: () => void }) {
-  const st = statusMap[order.status] || { label: order.status, color: colors.muted, icon: "questionmark.circle" };
-  const ticketInfo = extractTicketInfo(order);
-  const totalTickets = ticketInfo.length;
-  const paymentMethod = order.payment_method_title || "Non spécifié";
+function toOrderListItem(order: MobileOrderSummary): OrderListItem {
+  return {
+    id: order.id,
+    number: order.number || String(order.id),
+    status: order.status,
+    total: order.total,
+    dateCreated: order.dateCreated || "",
+    paymentMethodTitle: order.paymentMethodTitle || "Non spécifié",
+    ticketCount: order.ticketCount || 0,
+    items: (order.items || []).map((item) => ({
+      id: item.id,
+      name: item.name,
+      quantity: item.quantity,
+      total: item.total,
+    })),
+  };
+}
+
+function orderErrorMessage(error: unknown) {
+  if (error instanceof MobileApiError) {
+    if (error.status === 401)
+      return "Votre session a expiré. Reconnectez-vous puis réessayez.";
+    if (error.status === 403)
+      return "Votre compte ne peut pas accéder à ces commandes.";
+    if (error.status === 408)
+      return "La connexion est trop lente. Votre historique enregistré reste disponible.";
+  }
+  return "Impossible d'actualiser vos commandes pour le moment.";
+}
+
+function OrderListSkeleton({ color }: { color: string }) {
+  return (
+    <View
+      accessibilityLabel="Chargement de vos commandes"
+      style={styles.skeletonList}
+    >
+      {[0, 1, 2].map((index) => (
+        <View key={index} style={[styles.skeletonCard, { borderColor: color }]}>
+          <View style={[styles.skeletonTitle, { backgroundColor: color }]} />
+          <View style={[styles.skeletonLine, { backgroundColor: color }]} />
+          <View style={[styles.skeletonTotal, { backgroundColor: color }]} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function OrderCard({
+  order,
+  colors,
+  onPress,
+}: {
+  order: OrderListItem;
+  colors: ReturnType<typeof useColors>;
+  onPress: () => void;
+}) {
+  const status = statusMap[order.status] || {
+    label: order.status,
+    color: colors.muted,
+    icon: "questionmark.circle",
+  };
 
   return (
-    <TouchableOpacity onPress={onPress} style={[styles.orderCard, { backgroundColor: colors.surface, borderColor: colors.border }]} activeOpacity={0.7}>
-      {/* Header: Order number + Status */}
+    <TouchableOpacity
+      accessibilityRole="button"
+      accessibilityLabel={`Ouvrir la commande ${order.number}`}
+      onPress={onPress}
+      style={[
+        styles.orderCard,
+        { backgroundColor: colors.surface, borderColor: colors.border },
+      ]}
+      activeOpacity={0.78}
+    >
       <View style={styles.orderHeader}>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.orderNumber, { color: colors.foreground }]}>Commande #{order.number || order.id}</Text>
-          <Text style={[styles.orderDate, { color: colors.muted }]}>{formatDate(order.date_created)}</Text>
+        <View style={styles.orderHeading}>
+          <Text style={[styles.orderNumber, { color: colors.foreground }]}>
+            Commande #{order.number}
+          </Text>
+          <Text style={[styles.orderDate, { color: colors.muted }]}>
+            {formatDate(order.dateCreated)}
+          </Text>
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: st.color + "15" }]}>
-          <IconSymbol name={st.icon as any} size={12} color={st.color} />
-          <Text style={[styles.statusText, { color: st.color }]}>{st.label}</Text>
+        <View
+          style={[styles.statusBadge, { backgroundColor: `${status.color}15` }]}
+        >
+          <IconSymbol
+            name={status.icon as any}
+            size={12}
+            color={status.color}
+          />
+          <Text style={[styles.statusText, { color: status.color }]}>
+            {status.label}
+          </Text>
         </View>
       </View>
 
-      {/* Line Items */}
-      <View style={[styles.lineItemsSection, { borderTopColor: colors.border }]}>
-        {order.line_items.map((li, i) => (
-          <View key={i} style={styles.lineItem}>
-            <View style={[styles.lineItemQty, { backgroundColor: colors.primary + "15" }]}>
-              <Text style={[styles.lineItemQtyText, { color: colors.primary }]}>{li.quantity}x</Text>
+      {order.items.length > 0 ? (
+        <View
+          style={[styles.lineItemsSection, { borderTopColor: colors.border }]}
+        >
+          {order.items.map((item) => (
+            <View key={`${order.id}-${item.id}`} style={styles.lineItem}>
+              <View
+                style={[
+                  styles.lineItemQty,
+                  { backgroundColor: `${colors.primary}15` },
+                ]}
+              >
+                <Text
+                  style={[styles.lineItemQtyText, { color: colors.primary }]}
+                >
+                  {item.quantity}x
+                </Text>
+              </View>
+              <Text
+                style={[styles.lineItemName, { color: colors.foreground }]}
+                numberOfLines={2}
+              >
+                {decodeHtmlEntities(item.name)}
+              </Text>
+              <Text
+                style={[styles.lineItemPrice, { color: colors.foreground }]}
+              >
+                {formatAriary(item.total)}
+              </Text>
             </View>
-            <Text style={[styles.lineItemName, { color: colors.foreground }]} numberOfLines={2}>{decodeHtmlEntities(li.name)}</Text>
-            <Text style={[styles.lineItemPrice, { color: colors.foreground }]}>{formatAriary(li.total)}</Text>
-          </View>
-        ))}
-      </View>
+          ))}
+        </View>
+      ) : null}
 
-      {/* Tickets count */}
-      {totalTickets > 0 && (
-        <View style={[styles.ticketsRow, { backgroundColor: colors.primary + "08", borderColor: colors.primary + "20" }]}>
+      {order.ticketCount > 0 ? (
+        <View
+          style={[
+            styles.ticketsRow,
+            {
+              backgroundColor: `${colors.primary}08`,
+              borderColor: `${colors.primary}20`,
+            },
+          ]}
+        >
           <IconSymbol name="ticket.fill" size={14} color={colors.primary} />
           <Text style={[styles.ticketsText, { color: colors.primary }]}>
-            {totalTickets} billet{totalTickets > 1 ? "s" : ""} associé{totalTickets > 1 ? "s" : ""}
+            {order.ticketCount} billet{order.ticketCount > 1 ? "s" : ""} associé
+            {order.ticketCount > 1 ? "s" : ""}
           </Text>
-          {ticketInfo.some(t => t.seat) && (
-            <Text style={[styles.seatsText, { color: colors.muted }]}>
-              Sièges: {ticketInfo.filter(t => t.seat).map(t => t.seat).join(", ")}
-            </Text>
-          )}
         </View>
-      )}
+      ) : null}
 
-      {/* Footer: Payment + Total */}
       <View style={[styles.orderFooter, { borderTopColor: colors.border }]}>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.paymentLabel, { color: colors.muted }]}>Paiement</Text>
-          <Text style={[styles.paymentValue, { color: colors.foreground }]}>{paymentMethod}</Text>
+        <View style={styles.orderHeading}>
+          <Text style={[styles.paymentLabel, { color: colors.muted }]}>
+            Paiement
+          </Text>
+          <Text style={[styles.paymentValue, { color: colors.foreground }]}>
+            {order.paymentMethodTitle}
+          </Text>
         </View>
-        <View style={{ alignItems: "flex-end" }}>
-          <Text style={[styles.totalLabel, { color: colors.muted }]}>Total</Text>
-          <Text style={[styles.totalValue, { color: colors.primary }]}>{formatAriary(order.total)}</Text>
+        <View style={styles.totalBlock}>
+          <Text style={[styles.totalLabel, { color: colors.muted }]}>
+            Total
+          </Text>
+          <Text style={[styles.totalValue, { color: colors.primary }]}>
+            {formatAriary(order.total)}
+          </Text>
         </View>
       </View>
 
-      {/* View details arrow */}
       <View style={styles.viewDetails}>
-        <Text style={[styles.viewDetailsText, { color: colors.primary }]}>Voir les détails</Text>
+        <Text style={[styles.viewDetailsText, { color: colors.primary }]}>
+          Voir les détails
+        </Text>
         <IconSymbol name="chevron.right" size={14} color={colors.primary} />
       </View>
     </TouchableOpacity>
@@ -111,97 +253,257 @@ function OrderCard({ order, colors, onPress }: { order: WCOrder; colors: any; on
 export default function OrdersScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { isAuthenticated } = useAuth();
-  const [orders, setOrders] = useState<WCOrder[]>([]);
+  const { isAuthenticated, user } = useAuth();
+  const requestId = useRef(0);
+  const [orders, setOrders] = useState<OrderListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const load = useCallback(async (userId: number, activeRequest: number) => {
+    try {
+      const response = await getMobileOrders({ limit: 50 });
+      const nextOrders = response.map(toOrderListItem);
+      if (requestId.current !== activeRequest) return;
+      setOrders(nextOrders);
+      setErrorMessage(null);
+      await setCache(orderCacheKey(userId), nextOrders);
+    } catch (error) {
+      if (requestId.current === activeRequest) {
+        setErrorMessage(orderErrorMessage(error));
+      }
+    } finally {
+      if (requestId.current === activeRequest) {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    }
+  }, []);
 
   useEffect(() => {
-    if (!isAuthenticated) { setLoading(false); return; }
-    let cancelled = false;
+    const userId = user?.id;
+    const activeRequest = ++requestId.current;
+
+    if (!isAuthenticated || !userId) {
+      setOrders([]);
+      setLoading(false);
+      setErrorMessage(null);
+      return;
+    }
+
+    setOrders([]);
     setLoading(true);
-    getMobileOrders({ limit: 50 })
-      .then(o => {
-        if (!cancelled) setOrders(o.map(mobileOrderToWCOrder));
-      })
-      .catch(() => {
-        if (!cancelled) setOrders([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    setErrorMessage(null);
+
+    void (async () => {
+      const cached = await getCachedValue<OrderListItem[]>(
+        orderCacheKey(userId),
+        CACHE_DURATIONS.ORDERS,
+      );
+      if (requestId.current !== activeRequest) return;
+      if (cached) {
+        setOrders(cached.data);
+        setLoading(false);
+      }
+      await load(userId, activeRequest);
+    })();
+
     return () => {
-      cancelled = true;
+      if (requestId.current === activeRequest) requestId.current += 1;
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, load, user?.id]);
+
+  const refresh = useCallback(() => {
+    if (!user?.id) return;
+    const activeRequest = ++requestId.current;
+    setRefreshing(true);
+    setErrorMessage(null);
+    void load(user.id, activeRequest);
+  }, [load, user?.id]);
 
   if (!isAuthenticated) {
     return (
       <ScreenContainer>
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <View style={styles.centeredState}>
           <IconSymbol name="person.fill" size={48} color={colors.muted} />
-          <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "600", marginTop: 16 }}>Connectez-vous pour voir vos commandes</Text>
-          <TouchableOpacity onPress={() => router.push("/(auth)/login" as any)} style={{ backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 28, marginTop: 16 }}>
-            <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>Se connecter</Text>
+          <Text style={[styles.stateTitle, { color: colors.foreground }]}>
+            Connectez-vous pour voir vos commandes
+          </Text>
+          <TouchableOpacity
+            accessibilityRole="button"
+            onPress={() => router.push("/(auth)/login" as any)}
+            style={[styles.primaryButton, { backgroundColor: colors.primary }]}
+          >
+            <Text style={styles.primaryButtonText}>Se connecter</Text>
           </TouchableOpacity>
         </View>
       </ScreenContainer>
     );
   }
 
+  const completedCount = orders.filter((order) =>
+    completedStatuses.has(order.status),
+  ).length;
+  const pendingCount = orders.filter((order) =>
+    pendingStatuses.has(order.status),
+  ).length;
+
   return (
     <ScreenContainer>
-      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Revenir à l'écran précédent"
+          onPress={() => router.back()}
+          style={styles.backBtn}
+        >
           <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.foreground }]}>Mes Commandes</Text>
-        <View style={{ width: 40 }} />
+        <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+          Mes commandes
+        </Text>
+        <View style={styles.headerSpacer} />
       </View>
 
-      {/* Summary bar */}
-      {!loading && orders.length > 0 && (
-        <View style={[styles.summaryBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+      {!loading && orders.length > 0 ? (
+        <View
+          style={[
+            styles.summaryBar,
+            {
+              backgroundColor: colors.surface,
+              borderBottomColor: colors.border,
+            },
+          ]}
+        >
           <View style={styles.summaryItem}>
-            <Text style={[styles.summaryNumber, { color: colors.foreground }]}>{orders.length}</Text>
-            <Text style={[styles.summaryLabel, { color: colors.muted }]}>Commande{orders.length > 1 ? "s" : ""}</Text>
+            <Text style={[styles.summaryNumber, { color: colors.foreground }]}>
+              {orders.length}
+            </Text>
+            <Text style={[styles.summaryLabel, { color: colors.muted }]}>
+              Commandes
+            </Text>
           </View>
-          <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
+          <View
+            style={[styles.summaryDivider, { backgroundColor: colors.border }]}
+          />
           <View style={styles.summaryItem}>
-            <Text style={[styles.summaryNumber, { color: "#22C55E" }]}>{orders.filter(o => o.status === "completed").length}</Text>
-            <Text style={[styles.summaryLabel, { color: colors.muted }]}>Terminée{orders.filter(o => o.status === "completed").length > 1 ? "s" : ""}</Text>
+            <Text style={[styles.summaryNumber, { color: "#22C55E" }]}>
+              {completedCount}
+            </Text>
+            <Text style={[styles.summaryLabel, { color: colors.muted }]}>
+              Terminées
+            </Text>
           </View>
-          <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
+          <View
+            style={[styles.summaryDivider, { backgroundColor: colors.border }]}
+          />
           <View style={styles.summaryItem}>
-            <Text style={[styles.summaryNumber, { color: "#F59E0B" }]}>{orders.filter(o => ["processing", "on-hold", "pending"].includes(o.status)).length}</Text>
-            <Text style={[styles.summaryLabel, { color: colors.muted }]}>En cours</Text>
+            <Text style={[styles.summaryNumber, { color: "#F59E0B" }]}>
+              {pendingCount}
+            </Text>
+            <Text style={[styles.summaryLabel, { color: colors.muted }]}>
+              En cours
+            </Text>
           </View>
         </View>
-      )}
+      ) : null}
 
       {loading ? (
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={{ color: colors.muted, marginTop: 12 }}>Chargement des commandes...</Text>
-        </View>
-      ) : orders.length === 0 ? (
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}>
-          <IconSymbol name="clipboard.fill" size={48} color={colors.muted} />
-          <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "600", marginTop: 16 }}>Aucune commande</Text>
-          <Text style={{ color: colors.muted, fontSize: 14, marginTop: 8, textAlign: "center" }}>Vos commandes apparaîtront ici après votre premier achat.</Text>
-        </View>
+        <OrderListSkeleton color={colors.border} />
       ) : (
         <FlatList
           data={orders}
-          keyExtractor={o => String(o.id)}
-          contentContainerStyle={{ padding: 16 }}
-          renderItem={({ item: order }) => (
+          keyExtractor={(order) => String(order.id)}
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={refresh}
+              tintColor={colors.primary}
+            />
+          }
+          ListHeaderComponent={
+            errorMessage && orders.length > 0 ? (
+              <View
+                style={[
+                  styles.inlineError,
+                  {
+                    backgroundColor: `${colors.warning}12`,
+                    borderColor: `${colors.warning}40`,
+                  },
+                ]}
+              >
+                <IconSymbol
+                  name="exclamationmark.triangle.fill"
+                  size={18}
+                  color={colors.warning}
+                />
+                <Text
+                  style={[styles.inlineErrorText, { color: colors.foreground }]}
+                >
+                  {errorMessage}
+                </Text>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  onPress={refresh}
+                  hitSlop={8}
+                >
+                  <IconSymbol
+                    name="arrow.clockwise"
+                    size={20}
+                    color={colors.primary}
+                  />
+                </TouchableOpacity>
+              </View>
+            ) : null
+          }
+          renderItem={({ item }) => (
             <OrderCard
-              order={order}
+              order={item}
               colors={colors}
-              onPress={() => router.push(`/order/${order.id}` as any)}
+              onPress={() => router.push(`/order/${item.id}` as any)}
             />
           )}
+          ListEmptyComponent={
+            <View style={styles.centeredState}>
+              <View
+                style={[
+                  styles.emptyIcon,
+                  { backgroundColor: `${colors.primary}12` },
+                ]}
+              >
+                <IconSymbol
+                  name={
+                    errorMessage
+                      ? "exclamationmark.triangle.fill"
+                      : "clipboard.fill"
+                  }
+                  size={36}
+                  color={errorMessage ? colors.warning : colors.primary}
+                />
+              </View>
+              <Text style={[styles.stateTitle, { color: colors.foreground }]}>
+                {errorMessage ? "Commandes indisponibles" : "Aucune commande"}
+              </Text>
+              <Text style={[styles.stateCopy, { color: colors.muted }]}>
+                {errorMessage ||
+                  "Vos commandes apparaîtront ici après votre premier achat."}
+              </Text>
+              {errorMessage ? (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  onPress={refresh}
+                  style={[
+                    styles.retryButton,
+                    { backgroundColor: colors.primary },
+                  ]}
+                >
+                  <IconSymbol name="arrow.clockwise" size={18} color="#fff" />
+                  <Text style={styles.primaryButtonText}>Réessayer</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          }
         />
       )}
     </ScreenContainer>
@@ -209,34 +511,181 @@ export default function OrdersScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12 },
-  backBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  backBtn: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   headerTitle: { fontSize: 22, fontWeight: "700" },
-  summaryBar: { flexDirection: "row", paddingVertical: 14, paddingHorizontal: 20, borderBottomWidth: 1 },
+  headerSpacer: { width: 44 },
+  summaryBar: {
+    flexDirection: "row",
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+  },
   summaryItem: { flex: 1, alignItems: "center" },
   summaryNumber: { fontSize: 20, fontWeight: "800" },
   summaryLabel: { fontSize: 11, marginTop: 2 },
   summaryDivider: { width: 1, marginVertical: 4 },
-  orderCard: { borderRadius: 16, borderWidth: 1, marginBottom: 16, overflow: "hidden" },
-  orderHeader: { flexDirection: "row", alignItems: "center", padding: 16, paddingBottom: 12 },
+  listContent: { padding: 16, paddingBottom: 28, flexGrow: 1 },
+  orderCard: {
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 12,
+    overflow: "hidden",
+  },
+  orderHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    paddingBottom: 12,
+  },
+  orderHeading: { flex: 1 },
   orderNumber: { fontSize: 16, fontWeight: "700" },
   orderDate: { fontSize: 12, marginTop: 2 },
-  statusBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
+  statusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
   statusText: { fontSize: 11, fontWeight: "600" },
-  lineItemsSection: { borderTopWidth: 1, paddingHorizontal: 16, paddingVertical: 10 },
+  lineItemsSection: {
+    borderTopWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
   lineItem: { flexDirection: "row", alignItems: "center", paddingVertical: 6 },
-  lineItemQty: { width: 32, height: 24, borderRadius: 6, alignItems: "center", justifyContent: "center", marginRight: 10 },
+  lineItemQty: {
+    width: 32,
+    height: 24,
+    borderRadius: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
   lineItemQtyText: { fontSize: 12, fontWeight: "700" },
   lineItemName: { flex: 1, fontSize: 13 },
   lineItemPrice: { fontSize: 13, fontWeight: "600", marginLeft: 8 },
-  ticketsRow: { flexDirection: "row", alignItems: "center", gap: 6, marginHorizontal: 16, marginBottom: 10, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1, flexWrap: "wrap" },
+  ticketsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
   ticketsText: { fontSize: 12, fontWeight: "600" },
-  seatsText: { fontSize: 11 },
-  orderFooter: { flexDirection: "row", alignItems: "center", borderTopWidth: 1, paddingHorizontal: 16, paddingVertical: 12 },
+  orderFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderTopWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
   paymentLabel: { fontSize: 11 },
   paymentValue: { fontSize: 13, fontWeight: "600" },
+  totalBlock: { alignItems: "flex-end" },
   totalLabel: { fontSize: 11 },
   totalValue: { fontSize: 18, fontWeight: "800" },
-  viewDetails: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingVertical: 10, borderTopWidth: 0 },
+  viewDetails: {
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
   viewDetailsText: { fontSize: 13, fontWeight: "600" },
+  inlineError: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  inlineErrorText: { flex: 1, fontSize: 12, lineHeight: 17 },
+  centeredState: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    paddingBottom: 72,
+  },
+  emptyIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stateTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginTop: 16,
+    textAlign: "center",
+  },
+  stateCopy: {
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 7,
+    textAlign: "center",
+  },
+  primaryButton: {
+    minHeight: 44,
+    borderRadius: 8,
+    paddingHorizontal: 28,
+    marginTop: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  retryButton: {
+    minHeight: 44,
+    borderRadius: 8,
+    paddingHorizontal: 18,
+    marginTop: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  primaryButtonText: { color: "#fff", fontSize: 14, fontWeight: "700" },
+  skeletonList: { paddingHorizontal: 16, paddingTop: 10 },
+  skeletonCard: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 12,
+  },
+  skeletonTitle: { width: "48%", height: 17, borderRadius: 4, opacity: 0.7 },
+  skeletonLine: {
+    width: "82%",
+    height: 13,
+    borderRadius: 4,
+    opacity: 0.55,
+    marginTop: 18,
+  },
+  skeletonTotal: {
+    width: "28%",
+    height: 18,
+    borderRadius: 4,
+    opacity: 0.7,
+    marginTop: 20,
+    alignSelf: "flex-end",
+  },
 });

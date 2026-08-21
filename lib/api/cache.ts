@@ -116,4 +116,5 @@ export const CACHE_DURATIONS = {
   EVENT_DETAIL: 3 * 60 * 1000, // 3 minutes for single event
   PRODUCTS: 5 * 60 * 1000, // 5 minutes for products
   TICKETS: 10 * 60 * 1000, // 10 minutes for non-sensitive ticket summaries
+  ORDERS: 5 * 60 * 1000, // 5 minutes for sanitized order summaries
 } as const;
