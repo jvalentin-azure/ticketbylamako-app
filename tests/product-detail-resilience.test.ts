@@ -30,4 +30,12 @@ describe("product detail resilience", () => {
     );
     expect(catalogSource).toContain("await setCache(cacheKey, product)");
   });
+
+  it("uses responsive cached images for the product gallery", () => {
+    expect(screenSource).toContain("useWindowDimensions");
+    expect(screenSource).toContain("<CatalogImage");
+    expect(screenSource).toContain("prefetchCatalogImages");
+    expect(screenSource).not.toContain('import { Image } from "expo-image"');
+    expect(screenSource).not.toContain('Dimensions.get("window")');
+  });
 });

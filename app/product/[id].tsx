@@ -1,27 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ScrollView,
-  Text,
-  View,
-  TouchableOpacity,
-  Dimensions,
   FlatList,
+  ScrollView,
   StyleSheet,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
 } from "react-native";
-import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { CatalogImage } from "@/components/catalog-image";
+import { CartToast } from "@/components/cart-toast";
+import { PointsBadge } from "@/components/points-badge";
 import { ScreenContainer } from "@/components/screen-container";
-import { useColors } from "@/hooks/use-colors";
-import { useCart } from "@/lib/cart-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
+import { useColors } from "@/hooks/use-colors";
 import { getProduct, type WCProduct } from "@/lib/api/catalog";
 import { MobileApiError } from "@/lib/api/mobile";
-import { formatAriary, stripHtml, decodeHtmlEntities } from "@/lib/format";
-import { PointsBadge } from "@/components/points-badge";
-import { CartToast } from "@/components/cart-toast";
-
-const { width: SCREEN_W } = Dimensions.get("window");
+import { useCart } from "@/lib/cart-provider";
+import { prefetchCatalogImages } from "@/lib/catalog-image-prefetch";
+import { decodeHtmlEntities, formatAriary, stripHtml } from "@/lib/format";
 
 function getProductErrorMessage(error: unknown): string {
   if (error instanceof MobileApiError) {
@@ -34,11 +33,32 @@ function getProductErrorMessage(error: unknown): string {
   return "Impossible de charger ce produit. Vérifiez votre connexion.";
 }
 
-function ProductDetailSkeleton({ colors }: { colors: any }) {
+function getProductImageUrls(product: WCProduct): string[] {
+  const mobileGallery = (product as any).lamako_mobile?.gallery;
+  const urls = Array.isArray(mobileGallery)
+    ? mobileGallery.filter((url): url is string => typeof url === "string" && Boolean(url))
+    : [];
+
+  for (const image of product.images || []) {
+    if (image.src && !urls.includes(image.src)) urls.push(image.src);
+  }
+  return urls;
+}
+
+function ProductDetailSkeleton({
+  colors,
+  width,
+}: {
+  colors: any;
+  width: number;
+}) {
   return (
     <ScreenContainer edges={["top", "left", "right"]}>
       <View
-        style={[styles.skeletonHero, { backgroundColor: colors.surface }]}
+        style={[
+          styles.skeletonHero,
+          { width, backgroundColor: colors.surface },
+        ]}
       />
       <View style={styles.skeletonContent}>
         <View
@@ -76,6 +96,7 @@ function ProductDetailSkeleton({ colors }: { colors: any }) {
 export default function ProductDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useColors();
+  const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { addItem } = useCart();
@@ -104,6 +125,8 @@ export default function ProductDetailScreen() {
       try {
         const nextProduct = await getProduct(productId, { forceRefresh });
         if (requestId.current !== activeRequest) return;
+        void prefetchCatalogImages(getProductImageUrls(nextProduct));
+        setGalleryIndex(0);
         setProduct(nextProduct);
       } catch (error) {
         if (requestId.current !== activeRequest) return;
@@ -123,7 +146,7 @@ export default function ProductDetailScreen() {
     };
   }, [loadProduct]);
 
-  if (loading) return <ProductDetailSkeleton colors={colors} />;
+  if (loading) return <ProductDetailSkeleton colors={colors} width={width} />;
   if (!product)
     return (
       <ScreenContainer className="flex-1 items-center justify-center px-6">
@@ -171,7 +194,6 @@ export default function ProductDetailScreen() {
       }
     | undefined;
   const mobileDesc = mobileFields?.description;
-  const mobileGallery = mobileFields?.gallery;
   const practicalInfo = mobileFields?.practical_info;
 
   // Description: prefer mobile, fallback to site
@@ -181,16 +203,7 @@ export default function ProductDetailScreen() {
   const desc = mobileDesc || siteDesc;
 
   // Images: mobile gallery + WC product images
-  const wcImages = product.images?.map((img) => img.src) || [];
-  const allImages: string[] = [];
-  if (mobileGallery && mobileGallery.length > 0) {
-    mobileGallery.forEach((img) => {
-      if (img) allImages.push(img);
-    });
-  }
-  wcImages.forEach((img) => {
-    if (img && !allImages.includes(img)) allImages.push(img);
-  });
+  const allImages = getProductImageUrls(product);
 
   const productName = decodeHtmlEntities(product.name);
   const bottomSafePadding = Math.max(insets.bottom, 16) + 12;
@@ -215,24 +228,29 @@ export default function ProductDetailScreen() {
           {allImages.length > 1 ? (
             <View>
               <FlatList
+                key={`product-gallery-${Math.round(width)}`}
                 data={allImages}
                 horizontal
                 pagingEnabled
+                initialScrollIndex={galleryIndex}
+                getItemLayout={(_, index) => ({
+                  length: width,
+                  offset: width * index,
+                  index,
+                })}
                 showsHorizontalScrollIndicator={false}
                 onMomentumScrollEnd={(e) => {
                   const idx = Math.round(
-                    e.nativeEvent.contentOffset.x / SCREEN_W,
+                    e.nativeEvent.contentOffset.x / width,
                   );
                   setGalleryIndex(idx);
                 }}
                 keyExtractor={(_, i) => String(i)}
                 renderItem={({ item }) => (
-                  <Image
-                    source={{ uri: item }}
-                    style={{ width: SCREEN_W, height: SCREEN_W * 0.85 }}
-                    contentFit="cover"
-                    cachePolicy="memory-disk"
-                    transition={180}
+                  <CatalogImage
+                    uri={item}
+                    style={{ width, aspectRatio: 1 / 0.85 }}
+                    accessibilityLabel={`Photo de ${productName}`}
                     recyclingKey={`product-gallery-${product.id}-${item}`}
                   />
                 )}
@@ -254,12 +272,10 @@ export default function ProductDetailScreen() {
               </View>
             </View>
           ) : (
-            <Image
-              source={{ uri: allImages[0] }}
-              style={{ width: SCREEN_W, height: SCREEN_W * 0.85 }}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-              transition={180}
+            <CatalogImage
+              uri={allImages[0]}
+              style={{ width, aspectRatio: 1 / 0.85 }}
+              accessibilityLabel={`Photo de ${productName}`}
               recyclingKey={`product-featured-${product.id}`}
             />
           )}
@@ -489,7 +505,7 @@ export default function ProductDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  skeletonHero: { width: SCREEN_W, height: SCREEN_W * 0.85 },
+  skeletonHero: { aspectRatio: 1 / 0.85 },
   skeletonContent: { padding: 20, gap: 16 },
   skeletonLine: { height: 18, borderRadius: 6 },
   skeletonTitle: { width: "78%", height: 28 },
