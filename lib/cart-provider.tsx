@@ -8,25 +8,13 @@ import {
 } from "react";
 import { Alert, AppState, AppStateStatus } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  parseCartActivityTimestamp,
+  parseStoredCart,
+  type CartItem,
+} from "./cart-store";
 
-export interface CartItem {
-  productId: number;
-  name: string;
-  price: number;
-  quantity: number;
-  image: string;
-  isEvent: boolean;
-  eventId?: number;
-  ticketType?: string;
-  seatLabel?: string;
-  hasCheckoutFields?: boolean;
-  requiresCheckoutFields?: boolean;
-  lamakoRewardsEnabled?: boolean;
-  purchasable?: boolean;
-  salesClosed?: boolean;
-  ticketingStatus?: string;
-  ticketingMessage?: string;
-}
+export type { CartItem } from "./cart-store";
 
 interface CartContextType {
   items: CartItem[];
@@ -54,15 +42,26 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   // Load cart and check expiry on mount
   useEffect(() => {
-    (async () => {
-      const data = await AsyncStorage.getItem(CART_KEY);
-      const timestamp = await AsyncStorage.getItem(CART_TIMESTAMP_KEY);
-      if (data) {
-        const parsed = JSON.parse(data) as CartItem[];
-        if (parsed.length > 0 && timestamp) {
-          const elapsed = Date.now() - parseInt(timestamp, 10);
+    let mounted = true;
+    void (async () => {
+      try {
+        const [data, storedTimestamp] = await Promise.all([
+          AsyncStorage.getItem(CART_KEY),
+          AsyncStorage.getItem(CART_TIMESTAMP_KEY),
+        ]);
+        if (!mounted || !data) return;
+        const parsed = parseStoredCart(data);
+        const timestamp = parseCartActivityTimestamp(storedTimestamp);
+        if (parsed.length === 0) {
+          await Promise.all([
+            AsyncStorage.removeItem(CART_KEY),
+            AsyncStorage.removeItem(CART_TIMESTAMP_KEY),
+          ]);
+          return;
+        }
+        if (timestamp) {
+          const elapsed = Date.now() - timestamp;
           if (elapsed >= CART_EXPIRY_MS) {
-            // Cart expired while app was closed
             persist([]);
             Alert.alert(
               "Panier expiré",
@@ -71,11 +70,19 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             );
             return;
           }
+          startTimer(CART_EXPIRY_MS - Math.max(0, elapsed));
+        } else {
+          resetTimer();
         }
         setItems(parsed);
-        if (parsed.length > 0) startTimer();
+      } catch {
+        if (mounted) setItems([]);
       }
     })();
+    return () => {
+      mounted = false;
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, []);
 
   // Listen for app going to background/foreground
@@ -90,21 +97,26 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       nextState.match(/inactive|background/)
     ) {
       // App going to background - record timestamp
-      AsyncStorage.setItem(CART_TIMESTAMP_KEY, String(Date.now()));
+      void AsyncStorage.setItem(CART_TIMESTAMP_KEY, String(Date.now())).catch(
+        () => undefined,
+      );
     } else if (nextState === "active") {
       // App coming back - check if cart expired
-      checkExpiry();
+      void checkExpiry();
     }
     appState.current = nextState;
   };
 
   const checkExpiry = async () => {
-    const timestamp = await AsyncStorage.getItem(CART_TIMESTAMP_KEY);
-    const data = await AsyncStorage.getItem(CART_KEY);
-    if (timestamp && data) {
-      const parsed = JSON.parse(data) as CartItem[];
-      if (parsed.length > 0) {
-        const elapsed = Date.now() - parseInt(timestamp, 10);
+    try {
+      const [storedTimestamp, data] = await Promise.all([
+        AsyncStorage.getItem(CART_TIMESTAMP_KEY),
+        AsyncStorage.getItem(CART_KEY),
+      ]);
+      const timestamp = parseCartActivityTimestamp(storedTimestamp);
+      const parsed = parseStoredCart(data);
+      if (timestamp && parsed.length > 0) {
+        const elapsed = Date.now() - timestamp;
         if (elapsed >= CART_EXPIRY_MS) {
           persist([]);
           Alert.alert(
@@ -113,9 +125,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             [{ text: "OK" }],
           );
         } else {
-          startTimer(CART_EXPIRY_MS - elapsed);
+          startTimer(CART_EXPIRY_MS - Math.max(0, elapsed));
         }
+      } else if (data && parsed.length === 0) {
+        persist([]);
       }
+    } catch {
+      // Keep the in-memory cart available if device storage is temporarily unavailable.
     }
   };
 
@@ -124,8 +140,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     timerRef.current = setTimeout(() => {
       setItems((prev) => {
         if (prev.length > 0) {
-          AsyncStorage.setItem(CART_KEY, JSON.stringify([]));
-          AsyncStorage.removeItem(CART_TIMESTAMP_KEY);
+          void AsyncStorage.setItem(CART_KEY, JSON.stringify([])).catch(
+            () => undefined,
+          );
+          void AsyncStorage.removeItem(CART_TIMESTAMP_KEY).catch(
+            () => undefined,
+          );
           Alert.alert(
             "Panier expiré",
             "Votre panier a été vidé automatiquement après 15 minutes d'inactivité.",
@@ -139,18 +159,22 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   };
 
   const resetTimer = () => {
-    AsyncStorage.setItem(CART_TIMESTAMP_KEY, String(Date.now()));
+    void AsyncStorage.setItem(CART_TIMESTAMP_KEY, String(Date.now())).catch(
+      () => undefined,
+    );
     startTimer();
   };
 
   const persist = (newItems: CartItem[]) => {
     setItems(newItems);
-    AsyncStorage.setItem(CART_KEY, JSON.stringify(newItems));
+    void AsyncStorage.setItem(CART_KEY, JSON.stringify(newItems)).catch(
+      () => undefined,
+    );
     if (newItems.length > 0) {
       resetTimer();
     } else {
       if (timerRef.current) clearTimeout(timerRef.current);
-      AsyncStorage.removeItem(CART_TIMESTAMP_KEY);
+      void AsyncStorage.removeItem(CART_TIMESTAMP_KEY).catch(() => undefined);
     }
   };
 
@@ -177,8 +201,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         } else {
           next = [...prev, { ...item, quantity: item.quantity || 1 }];
         }
-        AsyncStorage.setItem(CART_KEY, JSON.stringify(next));
-        AsyncStorage.setItem(CART_TIMESTAMP_KEY, String(Date.now()));
+        void AsyncStorage.setItem(CART_KEY, JSON.stringify(next)).catch(
+          () => undefined,
+        );
+        void AsyncStorage.setItem(
+          CART_TIMESTAMP_KEY,
+          String(Date.now()),
+        ).catch(() => undefined);
         startTimer();
         return next;
       });
@@ -191,12 +220,14 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       const next = prev.filter(
         (i) => !(i.productId === productId && i.seatLabel === seatLabel),
       );
-      AsyncStorage.setItem(CART_KEY, JSON.stringify(next));
+      void AsyncStorage.setItem(CART_KEY, JSON.stringify(next)).catch(
+        () => undefined,
+      );
       if (next.length > 0) {
         resetTimer();
       } else {
         if (timerRef.current) clearTimeout(timerRef.current);
-        AsyncStorage.removeItem(CART_TIMESTAMP_KEY);
+        void AsyncStorage.removeItem(CART_TIMESTAMP_KEY).catch(() => undefined);
       }
       return next;
     });
@@ -216,12 +247,16 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
                   ? { ...i, quantity }
                   : i,
               );
-        AsyncStorage.setItem(CART_KEY, JSON.stringify(next));
+        void AsyncStorage.setItem(CART_KEY, JSON.stringify(next)).catch(
+          () => undefined,
+        );
         if (next.length > 0) {
           resetTimer();
         } else {
           if (timerRef.current) clearTimeout(timerRef.current);
-          AsyncStorage.removeItem(CART_TIMESTAMP_KEY);
+          void AsyncStorage.removeItem(CART_TIMESTAMP_KEY).catch(
+            () => undefined,
+          );
         }
         return next;
       });
