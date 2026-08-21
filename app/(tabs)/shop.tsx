@@ -1,29 +1,33 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Text,
-  View,
   FlatList,
-  TouchableOpacity,
-  TextInput,
   RefreshControl,
-  Dimensions,
   ScrollView,
   StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
 } from "react-native";
-import { Image } from "expo-image";
 import { useRouter } from "expo-router";
-import { ScreenContainer } from "@/components/screen-container";
-import { useColors } from "@/hooks/use-colors";
-import { IconSymbol } from "@/components/ui/icon-symbol";
-import { getShopData, type WCProduct } from "@/lib/api/catalog";
-import { formatAriary, decodeHtmlEntities } from "@/lib/format";
-import { useFavorites } from "@/lib/favorites-provider";
+import { CatalogImage } from "@/components/catalog-image";
 import { PointsBadge } from "@/components/points-badge";
+import { ScreenContainer } from "@/components/screen-container";
+import { IconSymbol } from "@/components/ui/icon-symbol";
+import { useColors } from "@/hooks/use-colors";
+import { getShopData, type WCProduct } from "@/lib/api/catalog";
+import { prefetchCatalogImages } from "@/lib/catalog-image-prefetch";
+import { useFavorites } from "@/lib/favorites-provider";
+import { decodeHtmlEntities, formatAriary } from "@/lib/format";
 
-const { width: SCREEN_W } = Dimensions.get("window");
-const CARD_W = (SCREEN_W - 48) / 2;
-
-function ShopSkeleton({ colors }: { colors: any }) {
+function ShopSkeleton({
+  colors,
+  cardWidth,
+}: {
+  colors: any;
+  cardWidth: number;
+}) {
   return (
     <View style={styles.skeletonGrid}>
       {[0, 1, 2, 3].map((item) => (
@@ -31,11 +35,15 @@ function ShopSkeleton({ colors }: { colors: any }) {
           key={item}
           style={[
             styles.skeletonCard,
+            { width: cardWidth },
             { backgroundColor: colors.surface, borderColor: colors.border },
           ]}
         >
           <View
-            style={[styles.skeletonImage, { backgroundColor: colors.border }]}
+            style={[
+              styles.skeletonImage,
+              { width: cardWidth, backgroundColor: colors.border },
+            ]}
           />
           <View style={styles.skeletonBody}>
             <View
@@ -58,6 +66,7 @@ function ShopSkeleton({ colors }: { colors: any }) {
 export default function ShopScreen() {
   const colors = useColors();
   const router = useRouter();
+  const { width } = useWindowDimensions();
   const { isFavorite, toggleFavorite } = useFavorites();
   const [products, setProducts] = useState<WCProduct[]>([]);
   const [shopCats, setShopCats] = useState<
@@ -70,6 +79,7 @@ export default function ShopScreen() {
   const [search, setSearch] = useState("");
   const [selectedCat, setSelectedCat] = useState<number | null>(null);
   const requestId = useRef(0);
+  const cardWidth = Math.min(280, Math.max(140, (width - 48) / 2));
 
   const load = useCallback(async (forceRefresh = false) => {
     const activeRequest = ++requestId.current;
@@ -80,6 +90,7 @@ export default function ShopScreen() {
         forceRefresh,
       });
       if (requestId.current !== activeRequest) return;
+      void prefetchCatalogImages(p.map((product) => product.images?.[0]?.src));
       setProducts(p);
       // Build shop category chips from API data with colors
       const SHOP_CAT_COLORS: Record<string, string> = {
@@ -140,16 +151,15 @@ export default function ShopScreen() {
       onPress={() => router.push(`/product/${item.id}` as any)}
       style={[
         styles.productCard,
+        { width: cardWidth },
         { backgroundColor: colors.surface, borderColor: colors.border },
       ]}
     >
       <View style={{ position: "relative" }}>
-        <Image
-          source={{ uri: item.images?.[0]?.src }}
-          style={{ width: CARD_W, height: CARD_W }}
-          contentFit="cover"
-          cachePolicy="memory-disk"
-          transition={180}
+        <CatalogImage
+          uri={item.images?.[0]?.src}
+          style={{ width: cardWidth, aspectRatio: 1 }}
+          accessibilityLabel={`Photo de ${decodeHtmlEntities(item.name)}`}
           recyclingKey={`shop-${item.id}`}
         />
         <TouchableOpacity
@@ -275,7 +285,7 @@ export default function ShopScreen() {
       </ScrollView>
 
       {loading ? (
-        <ShopSkeleton colors={colors} />
+        <ShopSkeleton colors={colors} cardWidth={cardWidth} />
       ) : errorMessage && products.length === 0 ? (
         <View style={styles.errorContainer}>
           <IconSymbol
@@ -379,14 +389,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 4,
     gap: 12,
+    justifyContent: "center",
   },
   skeletonCard: {
-    width: CARD_W,
     borderRadius: 8,
     borderWidth: 1,
     overflow: "hidden",
   },
-  skeletonImage: { width: CARD_W, height: CARD_W },
+  skeletonImage: { aspectRatio: 1 },
   skeletonBody: { padding: 10, gap: 8 },
   skeletonLine: { height: 12, borderRadius: 5, width: "88%" },
   skeletonLineShort: { width: "54%" },
@@ -419,10 +429,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   retryButtonText: { color: "#fff", fontSize: 15, fontWeight: "700" },
-  columnWrapper: { paddingHorizontal: 16, gap: 12 },
+  columnWrapper: { paddingHorizontal: 16, gap: 12, justifyContent: "center" },
   productListContent: { paddingTop: 4, paddingBottom: 24 },
   productCard: {
-    width: CARD_W,
     borderRadius: 14,
     overflow: "hidden",
     borderWidth: 1,

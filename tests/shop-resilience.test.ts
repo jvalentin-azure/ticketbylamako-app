@@ -24,4 +24,11 @@ describe("shop resilience", () => {
     expect(source).toContain("Aucun résultat");
     expect(source).toContain("Essayez une autre recherche ou catégorie.");
   });
+
+  it("uses responsive cached catalogue images", () => {
+    expect(source).toContain("useWindowDimensions");
+    expect(source).toContain("<CatalogImage");
+    expect(source).toContain("prefetchCatalogImages");
+    expect(source).not.toContain('import { Image } from "expo-image"');
+  });
 });
