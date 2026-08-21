@@ -41,6 +41,8 @@ import { SeatPurchaseFlow } from "@/components/seating/SeatPurchaseFlow";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 
+type EventDetailsTab = "description" | "location" | "conditions";
+
 function isEventSalesClosed(event?: TCEvent | null) {
   return (
     event?.salesClosed === true ||
@@ -86,6 +88,8 @@ export default function EventDetailScreen() {
   const [showFullTerms, setShowFullTerms] = useState(false);
   const [showCartToast, setShowCartToast] = useState(false);
   const [cartToastName, setCartToastName] = useState("");
+  const [activeDetailsTab, setActiveDetailsTab] =
+    useState<EventDetailsTab>("description");
 
   useEffect(() => {
     if (!id) return;
@@ -96,6 +100,7 @@ export default function EventDetailScreen() {
     setSelectedTicket(null);
     setQty(1);
     setGalleryIndex(0);
+    setActiveDetailsTab("description");
     const eventId = Number(id);
     let cancelled = false;
     let detailApplied = false;
@@ -231,7 +236,9 @@ export default function EventDetailScreen() {
   }
 
   const name = decodeHtmlEntities(event.title.rendered);
-  const mobileDesc = event.mobileFields?.description;
+  const mobileDesc = event.mobileFields?.description
+    ? decodeHtmlEntities(event.mobileFields.description)
+    : "";
   const siteDesc = stripHtml(event.content?.rendered || "");
   const desc = mobileDesc || siteDesc;
   const gallery = event.mobileFields?.gallery;
@@ -240,6 +247,54 @@ export default function EventDetailScreen() {
   const hasSeating = tickets.some((t) => t.usesSeating);
   const eventClosed = isEventSalesClosed(event);
   const closedMessage = event.ticketingMessage || "Cet événement est terminé.";
+  const eventLocation = event.mobileFields?.event_location
+    ? decodeHtmlEntities(event.mobileFields.event_location).trim()
+    : "";
+  const eventTerms = event.mobileFields?.event_terms
+    ? decodeHtmlEntities(event.mobileFields.event_terms).trim()
+    : "";
+  const detailTabs: {
+    key: EventDetailsTab;
+    label: string;
+    icon: "doc.text.fill" | "mappin" | "checkmark.shield.fill";
+  }[] = [
+    ...(desc
+      ? [
+          {
+            key: "description" as const,
+            label: "Présentation",
+            icon: "doc.text.fill" as const,
+          },
+        ]
+      : []),
+    ...(eventLocation
+      ? [{ key: "location" as const, label: "Lieu", icon: "mappin" as const }]
+      : []),
+    ...(eventTerms
+      ? [
+          {
+            key: "conditions" as const,
+            label: "Conditions",
+            icon: "checkmark.shield.fill" as const,
+          },
+        ]
+      : []),
+  ];
+  const visibleDetailsTab = detailTabs.some(
+    (tab) => tab.key === activeDetailsTab,
+  )
+    ? activeDetailsTab
+    : detailTabs[0]?.key;
+
+  const openDirections = () => {
+    if (!eventLocation) return;
+    const query = encodeURIComponent(eventLocation);
+    void Linking.openURL(
+      Platform.OS === "ios"
+        ? `https://maps.apple.com/?q=${query}`
+        : `https://www.google.com/maps/search/?api=1&query=${query}`,
+    );
+  };
 
   // Build image list: featured image + gallery
   const allImages: string[] = [];
@@ -810,137 +865,162 @@ export default function EventDetailScreen() {
             </View>
           )}
 
-          {/* Description */}
-          {desc ? (
-            <View style={{ marginTop: 20 }}>
-              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-                Description
-              </Text>
-              <Text style={[styles.descText, { color: colors.muted }]}>
-                {desc}
-              </Text>
-            </View>
-          ) : null}
-
-          {/* Old countdown removed - now at top */}
-
-          {/* CONDITIONS */}
-          {event.mobileFields?.event_terms ? (
-            <View
-              style={[
-                styles.conditionsBox,
-                { backgroundColor: colors.surface, borderColor: colors.border },
-              ]}
-            >
-              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-                Conditions
-              </Text>
-              <Text style={[styles.conditionsTitle, { color: colors.primary }]}>
-                Termes et conditions :
-              </Text>
-              <Text
-                style={[styles.descText, { color: colors.muted }]}
-                numberOfLines={showFullTerms ? undefined : 3}
+          {detailTabs.length > 0 ? (
+            <View style={styles.detailsSection}>
+              <View
+                accessibilityRole="tablist"
+                style={[styles.detailsTabs, { borderColor: colors.border }]}
               >
-                {event.mobileFields.event_terms}
-              </Text>
-              {event.mobileFields.event_terms.length > 150 && (
-                <TouchableOpacity
-                  onPress={() => setShowFullTerms(!showFullTerms)}
-                >
-                  <Text
-                    style={[styles.showMoreText, { color: colors.primary }]}
-                  >
-                    {showFullTerms ? "Voir moins" : "Voir plus"}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          ) : null}
+                {detailTabs.map((tab) => {
+                  const selected = visibleDetailsTab === tab.key;
+                  return (
+                    <TouchableOpacity
+                      key={tab.key}
+                      accessibilityRole="tab"
+                      accessibilityState={{ selected }}
+                      accessibilityLabel={tab.label}
+                      onPress={() => setActiveDetailsTab(tab.key)}
+                      style={styles.detailsTab}
+                    >
+                      <IconSymbol
+                        name={tab.icon}
+                        size={15}
+                        color={selected ? colors.primary : colors.muted}
+                      />
+                      <Text
+                        numberOfLines={1}
+                        style={[
+                          styles.detailsTabText,
+                          { color: selected ? colors.primary : colors.muted },
+                        ]}
+                      >
+                        {tab.label}
+                      </Text>
+                      {selected ? (
+                        <View
+                          style={[
+                            styles.detailsTabIndicator,
+                            { backgroundColor: colors.primary },
+                          ]}
+                        />
+                      ) : null}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
 
-          {/* LOCATION ON MAP */}
-          {event.mobileFields?.event_location ? (
-            <View
-              style={[
-                styles.locationBox,
-                { backgroundColor: colors.surface, borderColor: colors.border },
-              ]}
-            >
-              <View style={styles.locationHeader}>
-                <Text
-                  style={[
-                    styles.sectionTitle,
-                    { color: colors.foreground, marginBottom: 0 },
-                  ]}
-                >
-                  Lieu
-                </Text>
-                <TouchableOpacity
-                  onPress={() => {
-                    const q = encodeURIComponent(
-                      event.mobileFields!.event_location!,
-                    );
-                    Linking.openURL(
-                      Platform.OS === "ios"
-                        ? `https://maps.apple.com/?q=${q}`
-                        : `https://www.google.com/maps/search/?api=1&query=${q}`,
-                    );
-                  }}
-                >
-                  <Text
-                    style={[styles.getDirections, { color: colors.primary }]}
-                  >
-                    Itinéraire
-                  </Text>
-                </TouchableOpacity>
+              <View style={styles.detailsPanel}>
+                {visibleDetailsTab === "description" && desc ? (
+                  <>
+                    <Text
+                      style={[
+                        styles.sectionTitle,
+                        { color: colors.foreground },
+                      ]}
+                    >
+                      À propos de l'événement
+                    </Text>
+                    <Text style={[styles.descText, { color: colors.muted }]}>
+                      {desc}
+                    </Text>
+                  </>
+                ) : null}
+
+                {visibleDetailsTab === "conditions" && eventTerms ? (
+                  <>
+                    <Text
+                      style={[
+                        styles.sectionTitle,
+                        { color: colors.foreground },
+                      ]}
+                    >
+                      Conditions d'accès
+                    </Text>
+                    <Text
+                      style={[styles.descText, { color: colors.muted }]}
+                      numberOfLines={showFullTerms ? undefined : 4}
+                    >
+                      {eventTerms}
+                    </Text>
+                    {eventTerms.length > 150 ? (
+                      <TouchableOpacity
+                        accessibilityRole="button"
+                        onPress={() => setShowFullTerms(!showFullTerms)}
+                      >
+                        <Text
+                          style={[
+                            styles.showMoreText,
+                            { color: colors.primary },
+                          ]}
+                        >
+                          {showFullTerms ? "Voir moins" : "Voir plus"}
+                        </Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </>
+                ) : null}
+
+                {visibleDetailsTab === "location" && eventLocation ? (
+                  <>
+                    <View style={styles.locationRow}>
+                      <IconSymbol
+                        name="mappin"
+                        size={18}
+                        color={colors.primary}
+                      />
+                      <Text
+                        style={[
+                          styles.locationText,
+                          { color: colors.foreground },
+                        ]}
+                      >
+                        {eventLocation}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      accessibilityRole="link"
+                      accessibilityLabel={`Afficher l'itinéraire vers ${eventLocation}`}
+                      onPress={openDirections}
+                      style={[
+                        styles.mapAction,
+                        {
+                          backgroundColor: colors.primary + "10",
+                          borderColor: colors.primary + "35",
+                        },
+                      ]}
+                    >
+                      <IconSymbol
+                        name="map.fill"
+                        size={22}
+                        color={colors.primary}
+                      />
+                      <View style={styles.mapActionCopy}>
+                        <Text
+                          style={[
+                            styles.mapActionTitle,
+                            { color: colors.foreground },
+                          ]}
+                        >
+                          Ouvrir l'itinéraire
+                        </Text>
+                        <Text
+                          style={[
+                            styles.mapActionHint,
+                            { color: colors.muted },
+                          ]}
+                        >
+                          Afficher le trajet dans votre application de cartes.
+                        </Text>
+                      </View>
+                      <IconSymbol
+                        name="chevron.right"
+                        size={18}
+                        color={colors.primary}
+                      />
+                    </TouchableOpacity>
+                  </>
+                ) : null}
               </View>
-              <View style={styles.locationRow}>
-                <IconSymbol name="mappin" size={16} color={colors.primary} />
-                <Text
-                  style={[styles.locationText, { color: colors.foreground }]}
-                >
-                  {event.mobileFields.event_location}
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => {
-                  const q = encodeURIComponent(
-                    event.mobileFields!.event_location!,
-                  );
-                  Linking.openURL(
-                    Platform.OS === "ios"
-                      ? `https://maps.apple.com/?q=${q}`
-                      : `https://www.google.com/maps/search/?api=1&query=${q}`,
-                  );
-                }}
-                style={[
-                  styles.mapAction,
-                  {
-                    backgroundColor: colors.primary + "10",
-                    borderColor: colors.primary + "35",
-                  },
-                ]}
-              >
-                <IconSymbol name="map.fill" size={22} color={colors.primary} />
-                <View style={styles.mapActionCopy}>
-                  <Text
-                    style={[
-                      styles.mapActionTitle,
-                      { color: colors.foreground },
-                    ]}
-                  >
-                    Ouvrir l'itinéraire
-                  </Text>
-                  <Text style={[styles.mapActionHint, { color: colors.muted }]}>
-                    Plans ou Google Maps affichera le trajet vers ce lieu.
-                  </Text>
-                </View>
-                <IconSymbol
-                  name="chevron.right"
-                  size={18}
-                  color={colors.primary}
-                />
-              </TouchableOpacity>
             </View>
           ) : null}
 
@@ -1391,23 +1471,34 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   countdownCompactLabel: { fontSize: 12, color: "rgba(255,255,255,0.75)" },
-  // Conditions
-  conditionsBox: {
-    marginTop: 20,
-    padding: 16,
-    borderRadius: 14,
-    borderWidth: 1,
+  detailsSection: { marginTop: 24 },
+  detailsTabs: {
+    minHeight: 50,
+    flexDirection: "row",
+    borderBottomWidth: 1,
   },
-  conditionsTitle: { fontSize: 13, fontWeight: "600", marginBottom: 6 },
-  showMoreText: { fontSize: 13, fontWeight: "600", marginTop: 8 },
-  // Location
-  locationBox: { marginTop: 20, padding: 16, borderRadius: 14, borderWidth: 1 },
-  locationHeader: {
+  detailsTab: {
+    minWidth: 0,
+    flex: 1,
+    minHeight: 50,
+    paddingHorizontal: 4,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 10,
+    justifyContent: "center",
+    gap: 5,
+    position: "relative",
   },
+  detailsTabText: { flexShrink: 1, fontSize: 12, fontWeight: "700" },
+  detailsTabIndicator: {
+    position: "absolute",
+    left: 8,
+    right: 8,
+    bottom: -1,
+    height: 3,
+    borderRadius: 2,
+  },
+  detailsPanel: { minHeight: 120, paddingTop: 18 },
+  showMoreText: { fontSize: 13, fontWeight: "600", marginTop: 8 },
   getDirections: { fontSize: 13, fontWeight: "600" },
   locationRow: {
     flexDirection: "row",

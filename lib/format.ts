@@ -65,15 +65,36 @@ export function stripHtml(html: string): string {
  * Decode HTML entities (&#8211; &amp; etc.)
  */
 export function decodeHtmlEntities(text: string): string {
-  return text
-    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code, 10)))
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, code) => String.fromCharCode(parseInt(code, 16)))
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&nbsp;/g, " ");
+  let decoded = text;
+
+  // WordPress content can be encoded more than once by legacy importers.
+  for (let pass = 0; pass < 3; pass += 1) {
+    const next = decoded
+      .replace(/&#(\d+);/g, (_, code) =>
+        String.fromCharCode(parseInt(code, 10)),
+      )
+      .replace(/&#x([0-9a-fA-F]+);/g, (_, code) =>
+        String.fromCharCode(parseInt(code, 16)),
+      )
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&lsquo;/g, "‘")
+      .replace(/&rsquo;/g, "’")
+      .replace(/&ldquo;/g, "“")
+      .replace(/&rdquo;/g, "”")
+      .replace(/&ndash;/g, "–")
+      .replace(/&mdash;/g, "—")
+      .replace(/&hellip;/g, "…")
+      .replace(/&nbsp;/g, " ");
+
+    if (next === decoded) break;
+    decoded = next;
+  }
+
+  return decoded;
 }
 
 /**
