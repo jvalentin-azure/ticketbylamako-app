@@ -63,7 +63,10 @@ Après rollback, retester `public/home-data`, `public/events-data`, `public/shop
 
 ## Builds de QA
 
-- Android staging APK : build EAS `e1138d3b-6211-41af-a858-8199f6ea28c1`, versionCode 46.
-- iOS staging TestFlight : build EAS `21670023-56a9-4f18-84a3-3d651cf220f2`, buildNumber 32.
+- Android staging APK : build EAS `e1138d3b-6211-41af-a858-8199f6ea28c1`, versionCode 46, terminé.
+  - Artefact : `https://expo.dev/artifacts/eas/Gg-0LCeDi_EmI5m3p-r7EZD3jdXFjimEwbcaBMdCE30.apk`
+- iOS staging TestFlight : build EAS `21670023-56a9-4f18-84a3-3d651cf220f2`, buildNumber 32, terminé.
+  - Artefact : `https://expo.dev/artifacts/eas/wTKUuZhEgGfsGj7TgpJ79BpHsjiGh2fPaE1LrSvws2M.ipa`
+  - Soumission TestFlight planifiée : `7aa7257e-e1de-4406-a3af-c8105dcf0612`.
 
 Les deux builds ont été lancés depuis `e4d32af` et pointent vers `https://staging.ticketbylamako.com`.
