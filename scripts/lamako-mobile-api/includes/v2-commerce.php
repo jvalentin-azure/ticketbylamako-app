@@ -10,24 +10,36 @@
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 if ( ! defined( 'LAMAKO_MOBILE_V2_CHECKOUT_TTL' ) ) {
-    define( 'LAMAKO_MOBILE_V2_CHECKOUT_TTL', 30 * MINUTE_IN_SECONDS );
+    define( 'LAMAKO_MOBILE_V2_CHECKOUT_TTL', 10 * MINUTE_IN_SECONDS );
+}
+
+if ( ! defined( 'LAMAKO_MOBILE_V2_PAYMENT_VERIFY_TTL' ) ) {
+    define( 'LAMAKO_MOBILE_V2_PAYMENT_VERIFY_TTL', HOUR_IN_SECONDS );
 }
 
 if ( ! defined( 'LAMAKO_MOBILE_V2_SEATING_TTL' ) ) {
-    define( 'LAMAKO_MOBILE_V2_SEATING_TTL', 30 * MINUTE_IN_SECONDS );
+    define( 'LAMAKO_MOBILE_V2_SEATING_TTL', 10 * MINUTE_IN_SECONDS );
 }
 
 add_action( 'rest_api_init', 'lamako_mobile_v2_register_routes' );
 add_action( 'template_redirect', 'lamako_mobile_v2_maybe_serve_payment_return', 2 );
+add_action( 'template_redirect', 'lamako_mobile_v2_maybe_serve_cybersource', 2 );
 add_action( 'template_redirect', 'lamako_mobile_v2_bridge_checkout_token', 4 );
 add_action( 'template_redirect', 'lamako_mobile_v2_begin_seating_checkout', 4 );
 add_action( 'template_redirect', 'lamako_mobile_v2_maybe_serve_seating_flow', 3 );
+add_action( 'lamako_mobile_v2_cleanup_seating_flow', 'lamako_mobile_v2_cleanup_seating_flow_option', 10, 1 );
+add_action( 'lamako_mobile_v2_process_async_payment', 'lamako_mobile_v2_process_async_payment', 10, 3 );
+add_action( 'lamako_mobile_v2_poll_provider_payment', 'lamako_mobile_v2_poll_provider_payment', 10, 3 );
+add_action( 'lamako_mobile_v2_reconcile_pending_payments', 'lamako_mobile_v2_reconcile_pending_payments' );
+add_action( 'init', 'lamako_mobile_v2_ensure_payment_reconciliation_schedule' );
+add_filter( 'cron_schedules', 'lamako_mobile_v2_payment_cron_schedules' );
 add_action( 'woocommerce_checkout_create_order', 'lamako_mobile_v2_mark_seating_order', 20, 2 );
 add_action( 'woocommerce_checkout_order_created', 'lamako_mobile_v2_link_seating_order_created', 20 );
 add_filter( 'woocommerce_get_return_url', 'lamako_mobile_v2_payment_return_url', 10000, 2 );
+add_filter( 'woocommerce_get_checkout_order_received_url', 'lamako_mobile_v2_payment_received_url', 10000, 2 );
 add_filter( 'woocommerce_get_cancel_order_url', 'lamako_mobile_v2_payment_cancel_url', 10000, 2 );
+add_filter( 'woocommerce_get_checkout_url', 'lamako_mobile_v2_provider_cancel_url', 10000, 1 );
 add_filter( 'tc_seat_chart_add_to_cart_url', 'lamako_mobile_v2_seating_cart_url', 10000 );
-add_filter( 'woocommerce_coupon_is_valid', 'lamako_mobile_v2_rewards_coupon_is_valid_for_cart', 20, 2 );
 
 function lamako_mobile_v2_register_routes() {
     $namespace = 'lamako-mobile/v2';
@@ -74,16 +86,58 @@ function lamako_mobile_v2_register_routes() {
         'permission_callback' => 'lamako_mobile_v2_require_user',
     ] );
 
+    register_rest_route( $namespace, '/checkouts/fields', [
+        'methods'             => WP_REST_Server::CREATABLE,
+        'callback'            => 'lamako_mobile_v2_get_checkout_fields_for_items',
+        'permission_callback' => 'lamako_mobile_v2_require_user',
+    ] );
+
     register_rest_route( $namespace, '/checkouts/(?P<token>[A-Za-z0-9_-]+)/status', [
         'methods'             => WP_REST_Server::READABLE,
         'callback'            => 'lamako_mobile_v2_get_checkout_status',
         'permission_callback' => 'lamako_mobile_v2_require_user',
     ] );
 
-    register_rest_route( $namespace, '/checkouts/fields', [
-        'methods'             => WP_REST_Server::CREATABLE,
-        'callback'            => 'lamako_mobile_v2_get_checkout_fields_for_items',
+    register_rest_route( $namespace, '/payments/(?P<token>[A-Za-z0-9_-]+)/methods', [
+        'methods'             => WP_REST_Server::READABLE,
+        'callback'            => 'lamako_mobile_v2_get_payment_methods',
         'permission_callback' => 'lamako_mobile_v2_require_user',
+    ] );
+
+    register_rest_route( $namespace, '/payments/(?P<token>[A-Za-z0-9_-]+)/coupon', [
+        'methods'             => WP_REST_Server::CREATABLE,
+        'callback'            => 'lamako_mobile_v2_update_payment_coupon',
+        'permission_callback' => 'lamako_mobile_v2_require_user',
+    ] );
+
+    register_rest_route( $namespace, '/payments/(?P<token>[A-Za-z0-9_-]+)/start', [
+        'methods'             => WP_REST_Server::CREATABLE,
+        'callback'            => 'lamako_mobile_v2_start_payment',
+        'permission_callback' => 'lamako_mobile_v2_require_user',
+    ] );
+
+    register_rest_route( $namespace, '/payments/(?P<token>[A-Za-z0-9_-]+)/verify', [
+        'methods'             => WP_REST_Server::CREATABLE,
+        'callback'            => 'lamako_mobile_v2_verify_payment',
+        'permission_callback' => 'lamako_mobile_v2_require_user',
+    ] );
+
+    register_rest_route( $namespace, '/payments/(?P<token>[A-Za-z0-9_-]+)/cancel', [
+        'methods'             => WP_REST_Server::CREATABLE,
+        'callback'            => 'lamako_mobile_v2_cancel_payment',
+        'permission_callback' => 'lamako_mobile_v2_require_user',
+    ] );
+
+    register_rest_route( $namespace, '/payments/mvola/callback', [
+        'methods'             => 'PUT',
+        'callback'            => 'lamako_mobile_v2_mvola_callback',
+        'permission_callback' => 'lamako_mobile_v2_allow_mvola_callback',
+    ] );
+
+    register_rest_route( $namespace, '/payments/orange/callback', [
+        'methods'             => WP_REST_Server::CREATABLE,
+        'callback'            => 'lamako_mobile_v2_orange_callback',
+        'permission_callback' => 'lamako_mobile_v2_allow_orange_callback',
     ] );
 
     register_rest_route( $namespace, '/seating-sessions', [
@@ -96,6 +150,12 @@ function lamako_mobile_v2_register_routes() {
         'methods'             => WP_REST_Server::READABLE,
         'callback'            => 'lamako_mobile_v2_get_seating_session_status',
         'permission_callback' => 'lamako_mobile_v2_require_user',
+    ] );
+
+    register_rest_route( $namespace, '/seating-sessions/(?P<token>[A-Za-z0-9_-]+)/order', [
+        'methods'             => WP_REST_Server::CREATABLE,
+        'callback'            => 'lamako_mobile_v2_create_seating_order',
+        'permission_callback' => 'lamako_mobile_v2_allow_seating_flow_session',
     ] );
 
     register_rest_route( $namespace, '/payment-return/(?P<token>[A-Za-z0-9_-]+)/status', [
@@ -132,6 +192,12 @@ function lamako_mobile_v2_register_routes() {
         'methods'             => WP_REST_Server::READABLE,
         'callback'            => 'lamako_mobile_v2_rewards_balance',
         'permission_callback' => 'lamako_mobile_v2_require_user',
+    ] );
+
+    register_rest_route( $namespace, '/rewards/config', [
+        'methods'             => WP_REST_Server::READABLE,
+        'callback'            => 'lamako_mobile_v2_rewards_config',
+        'permission_callback' => '__return_true',
     ] );
 
     register_rest_route( $namespace, '/rewards/history', [
@@ -173,6 +239,37 @@ function lamako_mobile_v2_require_user( WP_REST_Request $request ) {
     return true;
 }
 
+function lamako_mobile_v2_payment_cron_schedules( $schedules ) {
+    if ( empty( $schedules['lamako_mobile_minute'] ) ) {
+        $schedules['lamako_mobile_minute'] = [
+            'interval' => MINUTE_IN_SECONDS,
+            'display'  => 'Every minute (Lamako mobile payments)',
+        ];
+    }
+    return $schedules;
+}
+
+function lamako_mobile_v2_ensure_payment_reconciliation_schedule() {
+    if ( ! wp_next_scheduled( 'lamako_mobile_v2_reconcile_pending_payments' ) ) {
+        wp_schedule_event( time() + MINUTE_IN_SECONDS, 'lamako_mobile_minute', 'lamako_mobile_v2_reconcile_pending_payments' );
+    }
+}
+
+function lamako_mobile_v2_allow_mvola_callback( WP_REST_Request $request ) {
+    $body      = $request->get_json_params();
+    $body      = is_array( $body ) ? $body : [];
+    $reference = sanitize_text_field( $body['serverCorrelationId'] ?? '' );
+    $status    = sanitize_key( $body['transactionStatus'] ?? '' );
+
+    if ( ! preg_match( '/^[a-f0-9-]{20,64}$/i', $reference ) ) {
+        return new WP_Error( 'lamako_v2_mvola_callback_invalid', 'Invalid callback payload.', [ 'status' => 400 ] );
+    }
+    if ( ! in_array( $status, [ 'pending', 'completed', 'failed' ], true ) ) {
+        return new WP_Error( 'lamako_v2_mvola_callback_invalid', 'Invalid callback payload.', [ 'status' => 400 ] );
+    }
+    return true;
+}
+
 function lamako_mobile_v2_meta_first( $post_id, array $keys, $default = '' ) {
     foreach ( $keys as $key ) {
         $value = get_post_meta( $post_id, $key, true );
@@ -196,166 +293,48 @@ function lamako_mobile_v2_rewards_enabled_meta_keys() {
         '_tbl_lamako_rewards_enabled',
         '_lper_lamako_rewards_enabled',
         'lper_lamako_rewards_enabled',
-        'lamakoRewardsEnabled',
-        '_lamakoRewardsEnabled',
         'lamako_rewards_enabled',
         '_lamako_rewards_enabled',
-        'lamako_mobile_rewards_enabled',
-        '_lamako_mobile_rewards_enabled',
-        'rewards_enabled',
-        '_rewards_enabled',
+        'rewards_redeem_enabled',
+        '_rewards_redeem_enabled',
+        'rewardsRedeemEnabled',
+        '_rewardsRedeemEnabled',
     ];
 }
 
-function lamako_mobile_v2_event_rewards_enabled( $event_id ) {
-    $event_id = absint( $event_id );
-    return $event_id > 0 && lamako_mobile_v2_truthy_meta( $event_id, lamako_mobile_v2_rewards_enabled_meta_keys() );
+function lamako_mobile_v2_rewards_redeem_enabled( $post_id ) {
+    return lamako_mobile_v2_truthy_meta( $post_id, lamako_mobile_v2_rewards_enabled_meta_keys() );
 }
 
-function lamako_mobile_v2_rewards_enabled_for_post( $post_id, $default = true ) {
-    $value = lamako_mobile_v2_meta_first( $post_id, [
-        'lamakoRewardsEnabled',
-        '_lamakoRewardsEnabled',
-        'lamako_rewards_enabled',
-        '_lamako_rewards_enabled',
-        'lamako_mobile_rewards_enabled',
-        '_lamako_mobile_rewards_enabled',
-        'rewards_enabled',
-        '_rewards_enabled',
-    ], null );
-
-    if ( $value === null || $value === '' ) {
-        return (bool) apply_filters( 'lamako_mobile_v2_rewards_enabled_default', $default, $post_id );
-    }
-
-    return ! in_array( strtolower( (string) $value ), [ '0', 'no', 'false', 'off', 'disabled' ], true );
-}
-
-function lamako_mobile_v2_parse_event_timestamp( $value, $end_of_day = false ) {
-    if ( is_array( $value ) ) {
-        $value = $value['date'] ?? $value['datetime'] ?? $value['value'] ?? '';
-    }
-
-    $value = trim( (string) $value );
-    if ( $value === '' ) {
-        return 0;
-    }
-
-    if ( is_numeric( $value ) ) {
-        $timestamp = (int) $value;
-        return $timestamp > 0 ? $timestamp : 0;
-    }
-
-    if ( $end_of_day && preg_match( '/^\d{4}-\d{2}-\d{2}$/', $value ) ) {
-        $value .= ' 23:59:59';
-    }
-
-    $timezone = function_exists( 'wp_timezone' ) ? wp_timezone() : new DateTimeZone( 'UTC' );
-    try {
-        $date = new DateTimeImmutable( $value, $timezone );
-        return $date->getTimestamp();
-    } catch ( Exception $e ) {
-        $timestamp = strtotime( $value );
-        return $timestamp ? (int) $timestamp : 0;
-    }
-}
-
-function lamako_mobile_v2_get_event_end_timestamp( $event_id ) {
-    $event_id = absint( $event_id );
-    if ( $event_id <= 0 ) {
-        return 0;
-    }
-
-    if ( function_exists( 'tbl_event_template_get_event_end_timestamp' ) ) {
-        return (int) tbl_event_template_get_event_end_timestamp( $event_id );
-    }
-
-    $end_keys = [
-        'event_end_date_time',
-        '_event_end_date_time',
-        'event_end_datetime',
-        'event_end_date',
-        '_event_end_date',
-        'event_end',
-        'tc_event_end_date',
-        '_tc_event_end_date',
-        '_EventEndDate',
-    ];
-
-    foreach ( $end_keys as $key ) {
-        $timestamp = lamako_mobile_v2_parse_event_timestamp( get_post_meta( $event_id, $key, true ), true );
-        if ( $timestamp > 0 ) {
-            return $timestamp;
-        }
-    }
-
-    $start_keys = [
-        'event_date_time',
-        '_event_date_time',
-        'event_start_date_time',
-        'event_start_datetime',
-        'event_date',
-        'event_start_date',
-        '_event_start_date',
-        'event_start',
-        'tc_event_date',
-        '_tc_event_date',
-        '_EventStartDate',
-    ];
-
-    foreach ( $start_keys as $key ) {
-        $timestamp = lamako_mobile_v2_parse_event_timestamp( get_post_meta( $event_id, $key, true ), true );
-        if ( $timestamp > 0 ) {
-            return $timestamp;
-        }
-    }
-
-    return 0;
-}
-
-function lamako_mobile_v2_is_past_event( $event_id ) {
-    $event_id = absint( $event_id );
-    if ( $event_id <= 0 ) {
+function lamako_mobile_v2_is_rewards_coupon_code( $coupon_code ) {
+    $coupon_code = trim( (string) $coupon_code );
+    if ( $coupon_code === '' ) {
         return false;
     }
 
-    if ( function_exists( 'tbl_event_template_is_past_event' ) ) {
-        return (bool) tbl_event_template_is_past_event( $event_id );
+    if ( stripos( $coupon_code, 'LR-' ) === 0 ) {
+        return true;
     }
 
-    $event_timestamp = lamako_mobile_v2_get_event_end_timestamp( $event_id );
-    if ( ! $event_timestamp ) {
-        return false;
+    if ( class_exists( 'WC_Coupon' ) ) {
+        $coupon = new WC_Coupon( $coupon_code );
+        if ( $coupon->get_id() > 0 && stripos( (string) $coupon->get_description(), 'Lamako Mobile v2 rewards coupon' ) !== false ) {
+            return true;
+        }
     }
 
-    $now = function_exists( 'current_time' ) ? (int) current_time( 'timestamp' ) : time();
-    return $event_timestamp < $now;
+    return false;
 }
 
-function lamako_mobile_v2_event_closed_payload( $event_id ) {
-    $is_past = lamako_mobile_v2_is_past_event( $event_id );
-    return [
-        'isPastEvent'      => $is_past,
-        'salesClosed'      => $is_past,
-        'ticketingStatus'  => $is_past ? 'ended' : 'available',
-        'ticketingMessage' => $is_past ? 'Cet événement est terminé.' : '',
-    ];
-}
+function lamako_mobile_v2_checkout_item_rewards_redeem_enabled( array $item ) {
+    $base_id  = absint( $item['base_id'] ?? 0 );
+    $event_id = absint( $item['event_id'] ?? 0 );
 
-function lamako_mobile_v2_catalog_version( array $post_types ) {
-    global $wpdb;
-    $post_types = array_values( array_filter( array_map( 'sanitize_key', $post_types ) ) );
-    if ( empty( $post_types ) ) {
-        return gmdate( 'YmdHis' );
+    if ( $event_id > 0 && lamako_mobile_v2_rewards_redeem_enabled( $event_id ) ) {
+        return true;
     }
 
-    $placeholders = implode( ',', array_fill( 0, count( $post_types ), '%s' ) );
-    $query = $wpdb->prepare(
-        "SELECT MAX(post_modified_gmt) FROM {$wpdb->posts} WHERE post_status = 'publish' AND post_type IN ($placeholders)",
-        $post_types
-    );
-    $modified = $wpdb->get_var( $query );
-    return $modified ? gmdate( 'YmdHis', strtotime( $modified ) ) : gmdate( 'YmdHis' );
+    return $base_id > 0 && lamako_mobile_v2_rewards_redeem_enabled( $base_id );
 }
 
 function lamako_mobile_v2_image_url_from_value( $value, $size = 'large' ) {
@@ -583,9 +562,10 @@ function lamako_mobile_v2_public_product_summary( WC_Product $product, $include_
         'categories'      => lamako_mobile_v2_public_product_categories( $product_id ),
         'stock_status'    => $product->get_stock_status(),
         'type'            => $product->get_type(),
+        'lamako_rewards_enabled' => lamako_mobile_v2_rewards_redeem_enabled( $product_id ),
+        'rewardsRedeemEnabled' => lamako_mobile_v2_rewards_redeem_enabled( $product_id ),
         'meta_data'       => [],
         'date_created'    => $product->get_date_created() ? $product->get_date_created()->date( 'c' ) : '',
-        'lamakoRewardsEnabled' => lamako_mobile_v2_rewards_enabled_for_post( $product_id, true ),
         'lamako_mobile'   => $include_details ? lamako_mobile_v2_public_product_mobile_fields( $product_id ) : null,
     ];
 
@@ -626,9 +606,24 @@ function lamako_mobile_v2_public_shop_products( $limit = 100, $include_details =
     return $products;
 }
 
-function lamako_mobile_v2_public_ticket_map() {
+function lamako_mobile_v2_public_ticket_map( $event_id = 0, $include_checkout_fields = true ) {
     if ( ! function_exists( 'wc_get_product' ) ) {
         return [];
+    }
+
+    $meta_query = [
+        [
+            'key'     => '_tc_is_ticket',
+            'value'   => [ 'yes', '1' ],
+            'compare' => 'IN',
+        ],
+    ];
+    if ( absint( $event_id ) > 0 ) {
+        $meta_query[] = [
+            'key'     => '_event_name',
+            'value'   => absint( $event_id ),
+            'compare' => '=',
+        ];
     }
 
     $posts = get_posts( [
@@ -636,13 +631,7 @@ function lamako_mobile_v2_public_ticket_map() {
         'post_status'    => 'publish',
         'posts_per_page' => 300,
         'fields'         => 'ids',
-        'meta_query'     => [
-            [
-                'key'     => '_tc_is_ticket',
-                'value'   => [ 'yes', '1' ],
-                'compare' => 'IN',
-            ],
-        ],
+        'meta_query'     => $meta_query,
     ] );
 
     $map = [];
@@ -656,11 +645,13 @@ function lamako_mobile_v2_public_ticket_map() {
             continue;
         }
 
-        $closed = lamako_mobile_v2_event_closed_payload( $event_id );
         if ( ! isset( $map[ $event_id ] ) ) {
             $map[ $event_id ] = [];
         }
-        $checkout_fields = lamako_mobile_v2_checkout_fields_for_ticket( $product_id, $event_id, 1 );
+        $form_template_id = absint( get_post_meta( $product_id, '_owner_form_template', true ) );
+        $checkout_fields  = $include_checkout_fields && $form_template_id > 0
+            ? lamako_mobile_v2_checkout_fields_for_ticket( $product_id, $event_id, 1 )
+            : [ 'hasFields' => false, 'requiresFields' => false ];
         $map[ $event_id ][] = [
             'id'           => $product_id,
             'name'         => html_entity_decode( $product->get_name(), ENT_QUOTES, 'UTF-8' ),
@@ -668,13 +659,10 @@ function lamako_mobile_v2_public_ticket_map() {
             'stock_status' => $product->get_stock_status(),
             'usesSeating'  => lamako_mobile_v2_truthy_meta( $product_id, [ '_tc_used_for_seatings' ] ),
             'eventId'      => (string) $event_id,
-            'hasCheckoutFields' => ! empty( $checkout_fields['hasFields'] ),
+            'hasCheckoutFields'      => ! empty( $checkout_fields['hasFields'] ),
             'requiresCheckoutFields' => ! empty( $checkout_fields['requiresFields'] ),
-            'purchasable'  => ! $closed['salesClosed'],
-            'salesClosed'  => $closed['salesClosed'],
-            'ticketingStatus' => $closed['ticketingStatus'],
-            'ticketingMessage' => $closed['ticketingMessage'],
-            'lamakoRewardsEnabled' => lamako_mobile_v2_event_rewards_enabled( $event_id ) && lamako_mobile_v2_rewards_enabled_for_post( $product_id, true ),
+            'lamako_rewards_enabled' => lamako_mobile_v2_rewards_redeem_enabled( $event_id ) || lamako_mobile_v2_rewards_redeem_enabled( $product_id ),
+            'rewardsRedeemEnabled' => lamako_mobile_v2_rewards_redeem_enabled( $event_id ) || lamako_mobile_v2_rewards_redeem_enabled( $product_id ),
         ];
     }
     return $map;
@@ -682,37 +670,33 @@ function lamako_mobile_v2_public_ticket_map() {
 
 function lamako_mobile_v2_public_event_mobile_fields( $event_id, $include_details = true ) {
     $fields = [
-        'description'         => null,
-        'gallery'             => null,
-        'practical_info'      => null,
         'event_date_time'     => lamako_mobile_v2_meta_first( $event_id, [ 'event_date_time', '_event_date_time', 'event_start_date', '_event_start_date' ], null ),
         'event_end_date_time' => lamako_mobile_v2_meta_first( $event_id, [ 'event_end_date_time', '_event_end_date_time', 'event_end_date', '_event_end_date' ], null ),
         'event_location'      => lamako_mobile_v2_meta_first( $event_id, [ 'event_location', '_event_location' ], null ),
-        'event_terms'         => null,
-        'event_logo'          => lamako_mobile_v2_image_url_from_value( lamako_mobile_v2_meta_first( $event_id, [ 'event_logo', '_event_logo' ], '' ) ),
-        'sponsors_logo'       => null,
-        'lamako_rewards_enabled' => lamako_mobile_v2_event_rewards_enabled( $event_id ),
     ];
 
-    if ( $include_details ) {
-        $fields['description'] = lamako_mobile_v2_meta_first( $event_id, [
+    if ( ! $include_details ) {
+        return $fields;
+    }
+
+    return array_merge( $fields, [
+        'description'         => lamako_mobile_v2_meta_first( $event_id, [
             'lamako_mobile_description',
             '_lamako_mobile_description',
             'mobile_description',
             '_mobile_description',
-        ], null );
-        $fields['gallery'] = lamako_mobile_v2_public_gallery( $event_id, [
+        ], null ),
+        'gallery'             => lamako_mobile_v2_public_gallery( $event_id, [
             'lamako_mobile_gallery',
             '_lamako_mobile_gallery',
             'mobile_gallery',
             '_mobile_gallery',
-        ] );
-        $fields['practical_info'] = lamako_mobile_v2_public_practical_info( $event_id );
-        $fields['event_terms'] = lamako_mobile_v2_meta_first( $event_id, [ 'event_terms', '_event_terms' ], null );
-        $fields['sponsors_logo'] = lamako_mobile_v2_image_url_from_value( lamako_mobile_v2_meta_first( $event_id, [ 'sponsors_logo', '_sponsors_logo' ], '' ) );
-    }
-
-    return $fields;
+        ] ),
+        'practical_info'      => lamako_mobile_v2_public_practical_info( $event_id ),
+        'event_terms'         => lamako_mobile_v2_meta_first( $event_id, [ 'event_terms', '_event_terms' ], null ),
+        'event_logo'          => lamako_mobile_v2_image_url_from_value( lamako_mobile_v2_meta_first( $event_id, [ 'event_logo', '_event_logo' ], '' ) ),
+        'sponsors_logo'       => lamako_mobile_v2_image_url_from_value( lamako_mobile_v2_meta_first( $event_id, [ 'sponsors_logo', '_sponsors_logo' ], '' ) ),
+    ] );
 }
 
 function lamako_mobile_v2_public_event_summary( WP_Post $event, array $ticket_map, $include_details = true ) {
@@ -738,7 +722,6 @@ function lamako_mobile_v2_public_event_summary( WP_Post $event, array $ticket_ma
 
     $thumb_id = get_post_thumbnail_id( $event_id );
     $featured = $thumb_id ? wp_get_attachment_image_url( $thumb_id, 'large' ) : '';
-    $closed = lamako_mobile_v2_event_closed_payload( $event_id );
 
     return [
         'id'              => $event_id,
@@ -753,17 +736,14 @@ function lamako_mobile_v2_public_event_summary( WP_Post $event, array $ticket_ma
         'featuredImage'   => $featured ?: null,
         'categoryNames'   => $category_names,
         'mobileFields'    => lamako_mobile_v2_public_event_mobile_fields( $event_id, $include_details ),
+        'lamako_rewards_enabled' => lamako_mobile_v2_rewards_redeem_enabled( $event_id ),
+        'rewardsRedeemEnabled' => lamako_mobile_v2_rewards_redeem_enabled( $event_id ),
         'tickets'         => $tickets,
         'minPrice'        => ! empty( $prices ) ? min( $prices ) : null,
         'maxPrice'        => ! empty( $prices ) ? max( $prices ) : null,
         'hasSeatingChart' => ! empty( array_filter( $tickets, function( $ticket ) {
             return ! empty( $ticket['usesSeating'] );
         } ) ) || lamako_mobile_v2_find_chart_for_event( $event_id ) > 0,
-        'lamakoRewardsEnabled' => lamako_mobile_v2_event_rewards_enabled( $event_id ),
-        'isPastEvent'     => $closed['isPastEvent'],
-        'salesClosed'     => $closed['salesClosed'],
-        'ticketingStatus' => $closed['ticketingStatus'],
-        'ticketingMessage' => $closed['ticketingMessage'],
     ];
 }
 
@@ -776,30 +756,26 @@ function lamako_mobile_v2_public_events( $limit = 50, $include_details = true ) 
         'order'          => 'DESC',
     ] );
 
-    $ticket_map = lamako_mobile_v2_public_ticket_map();
+    $ticket_map = lamako_mobile_v2_public_ticket_map( 0, $include_details );
     return array_map( function( $event ) use ( $ticket_map, $include_details ) {
         return lamako_mobile_v2_public_event_summary( $event, $ticket_map, $include_details );
     }, $events );
 }
 
 function lamako_mobile_v2_public_home_data( WP_REST_Request $request ) {
-    $summary = filter_var( $request->get_param( 'summary' ), FILTER_VALIDATE_BOOLEAN );
+    $include_details = ! rest_sanitize_boolean( $request->get_param( 'summary' ) );
     return rest_ensure_response( [
-        'events'     => lamako_mobile_v2_public_events( absint( $request->get_param( 'events_limit' ) ?: 50 ), ! $summary ),
+        'events'     => lamako_mobile_v2_public_events( absint( $request->get_param( 'events_limit' ) ?: 50 ), $include_details ),
         'products'   => lamako_mobile_v2_public_shop_products( absint( $request->get_param( 'products_limit' ) ?: 12 ) ),
         'categories' => lamako_mobile_v2_public_event_categories(),
-        'version'    => lamako_mobile_v2_catalog_version( [ 'tc_events', 'product' ] ),
-        'generatedAt'=> gmdate( 'c' ),
     ] );
 }
 
 function lamako_mobile_v2_public_events_data( WP_REST_Request $request ) {
-    $summary = filter_var( $request->get_param( 'summary' ), FILTER_VALIDATE_BOOLEAN );
+    $include_details = ! rest_sanitize_boolean( $request->get_param( 'summary' ) );
     return rest_ensure_response( [
-        'events'     => lamako_mobile_v2_public_events( absint( $request->get_param( 'limit' ) ?: 50 ), ! $summary ),
+        'events'     => lamako_mobile_v2_public_events( absint( $request->get_param( 'limit' ) ?: 50 ), $include_details ),
         'categories' => lamako_mobile_v2_public_event_categories(),
-        'version'    => lamako_mobile_v2_catalog_version( [ 'tc_events', 'product' ] ),
-        'generatedAt'=> gmdate( 'c' ),
     ] );
 }
 
@@ -810,7 +786,7 @@ function lamako_mobile_v2_public_event( WP_REST_Request $request ) {
         return new WP_Error( 'lamako_v2_event_not_found', 'Event not found.', [ 'status' => 404 ] );
     }
 
-    $ticket_map = lamako_mobile_v2_public_ticket_map();
+    $ticket_map = lamako_mobile_v2_public_ticket_map( $event_id, true );
     return rest_ensure_response( lamako_mobile_v2_public_event_summary( $event, $ticket_map, true ) );
 }
 
@@ -870,27 +846,26 @@ function lamako_mobile_v2_normalize_checkout_field_schema( $field, $scope = 'att
     }
 
     $post_field_type = sanitize_key( $field['post_field_type'] ?? ( ! empty( $field['post_meta'] ) || ! isset( $field['post_meta'] ) ? 'post_meta' : '' ) );
-    $storage_key = $field_name . ( $post_field_type ? '_' . $post_field_type : '' );
-    $visible = ! array_key_exists( 'form_visibility', $field ) || filter_var( $field['form_visibility'], FILTER_VALIDATE_BOOLEAN );
-    $options = lamako_mobile_v2_field_values( $field );
+    $storage_key     = $field_name . ( $post_field_type ? '_' . $post_field_type : '' );
+    $visible         = ! array_key_exists( 'form_visibility', $field ) || filter_var( $field['form_visibility'], FILTER_VALIDATE_BOOLEAN );
 
     return [
-        'key'           => $field_name,
-        'storageKey'    => $storage_key,
-        'label'         => html_entity_decode( (string) ( $field['field_title'] ?? $field_name ), ENT_QUOTES, 'UTF-8' ),
-        'type'          => $field_type,
-        'scope'         => $scope,
-        'required'      => ! empty( $field['required'] ),
-        'visible'       => $visible,
-        'custom'        => ! in_array( $field_name, $standard_names, true ),
-        'placeholder'   => html_entity_decode( (string) ( $field['field_placeholder'] ?? '' ), ENT_QUOTES, 'UTF-8' ),
-        'description'   => html_entity_decode( (string) ( $field['field_description'] ?? '' ), ENT_QUOTES, 'UTF-8' ),
-        'defaultValue'  => isset( $field['field_default_value'] ) ? (string) $field['field_default_value'] : ( isset( $field['default_value'] ) ? (string) $field['default_value'] : '' ),
-        'validation'    => sanitize_key( $field['validation_type'] ?? '' ),
-        'min'           => isset( $field['field_min'] ) ? (string) $field['field_min'] : '',
-        'max'           => isset( $field['field_max'] ) ? (string) $field['field_max'] : '',
-        'step'          => isset( $field['field_step'] ) ? (string) $field['field_step'] : '',
-        'options'       => $options,
+        'key'          => $field_name,
+        'storageKey'   => $storage_key,
+        'label'        => html_entity_decode( (string) ( $field['field_title'] ?? $field_name ), ENT_QUOTES, 'UTF-8' ),
+        'type'         => $field_type,
+        'scope'        => $scope,
+        'required'     => ! empty( $field['required'] ),
+        'visible'      => $visible,
+        'custom'       => ! in_array( $field_name, $standard_names, true ),
+        'placeholder'  => html_entity_decode( (string) ( $field['field_placeholder'] ?? '' ), ENT_QUOTES, 'UTF-8' ),
+        'description'  => html_entity_decode( (string) ( $field['field_description'] ?? '' ), ENT_QUOTES, 'UTF-8' ),
+        'defaultValue' => isset( $field['field_default_value'] ) ? (string) $field['field_default_value'] : ( isset( $field['default_value'] ) ? (string) $field['default_value'] : '' ),
+        'validation'   => sanitize_key( $field['validation_type'] ?? '' ),
+        'min'          => isset( $field['field_min'] ) ? (string) $field['field_min'] : '',
+        'max'          => isset( $field['field_max'] ) ? (string) $field['field_max'] : '',
+        'step'         => isset( $field['field_step'] ) ? (string) $field['field_step'] : '',
+        'options'      => lamako_mobile_v2_field_values( $field ),
     ];
 }
 
@@ -910,17 +885,16 @@ function lamako_mobile_v2_ticket_owner_fields_schema( $ticket_type_id ) {
         return [];
     }
 
-    $form = new $class_name( $ticket_type_id );
-    $fields = $form->get_owner_info_fields( $ticket_type_id );
+    $form     = new $class_name( $ticket_type_id );
+    $fields   = $form->get_owner_info_fields( $ticket_type_id );
     $standard = lamako_mobile_v2_standard_owner_field_names();
-    $schema = [];
+    $schema   = [];
 
     foreach ( (array) $fields as $field ) {
         $normalized = lamako_mobile_v2_normalize_checkout_field_schema( $field, 'attendee', $standard );
-        if ( ! $normalized || empty( $normalized['visible'] ) ) {
-            continue;
+        if ( $normalized && ! empty( $normalized['visible'] ) ) {
+            $schema[] = $normalized;
         }
-        $schema[] = $normalized;
     }
 
     return $schema;
@@ -932,17 +906,16 @@ function lamako_mobile_v2_buyer_fields_schema() {
         return [];
     }
 
-    $form = new $class_name();
-    $fields = $form->get_buyer_info_fields();
+    $form     = new $class_name();
+    $fields   = $form->get_buyer_info_fields();
     $standard = lamako_mobile_v2_standard_buyer_field_names();
-    $schema = [];
+    $schema   = [];
 
     foreach ( (array) $fields as $field ) {
         $normalized = lamako_mobile_v2_normalize_checkout_field_schema( $field, 'buyer', $standard );
-        if ( ! $normalized || empty( $normalized['visible'] ) || empty( $normalized['custom'] ) ) {
-            continue;
+        if ( $normalized && ! empty( $normalized['visible'] ) && ! empty( $normalized['custom'] ) ) {
+            $schema[] = $normalized;
         }
-        $schema[] = $normalized;
     }
 
     return $schema;
@@ -954,14 +927,12 @@ function lamako_mobile_v2_ticket_has_custom_checkout_fields( $ticket_type_id ) {
         return false;
     }
 
-    $post_type = get_post_type( $ticket_type_id );
-    if ( $post_type === 'product_variation' ) {
-        $parent_id = wp_get_post_parent_id( $ticket_type_id );
-        $template_id = get_post_meta( $parent_id, '_owner_form_template', true );
+    if ( get_post_type( $ticket_type_id ) === 'product_variation' ) {
+        $template_id = get_post_meta( wp_get_post_parent_id( $ticket_type_id ), '_owner_form_template', true );
     } else {
         $template_id = get_post_meta( $ticket_type_id, '_owner_form_template', true );
     }
-    if ( ! empty( $template_id ) ) {
+    if ( ! empty( $template_id ) && (int) $template_id > 0 ) {
         return true;
     }
 
@@ -975,10 +946,10 @@ function lamako_mobile_v2_ticket_has_custom_checkout_fields( $ticket_type_id ) {
 }
 
 function lamako_mobile_v2_checkout_fields_for_ticket( $ticket_type_id, $event_id = 0, $quantity = 1 ) {
-    $ticket_type_id = absint( $ticket_type_id );
-    $product = function_exists( 'wc_get_product' ) ? wc_get_product( $ticket_type_id ) : null;
+    $ticket_type_id   = absint( $ticket_type_id );
+    $product          = function_exists( 'wc_get_product' ) ? wc_get_product( $ticket_type_id ) : null;
     $has_custom_fields = lamako_mobile_v2_ticket_has_custom_checkout_fields( $ticket_type_id );
-    $owner_fields = $has_custom_fields ? lamako_mobile_v2_ticket_owner_fields_schema( $ticket_type_id ) : [];
+    $owner_fields     = $has_custom_fields ? lamako_mobile_v2_ticket_owner_fields_schema( $ticket_type_id ) : [];
 
     return [
         'productId'      => $ticket_type_id,
@@ -995,13 +966,13 @@ function lamako_mobile_v2_checkout_fields_for_ticket( $ticket_type_id, $event_id
 
 function lamako_mobile_v2_public_event_checkout_fields( WP_REST_Request $request ) {
     $event_id = absint( $request['event_id'] );
-    $event = get_post( $event_id );
+    $event    = get_post( $event_id );
     if ( ! $event || $event->post_type !== 'tc_events' || $event->post_status !== 'publish' ) {
         return new WP_Error( 'lamako_v2_event_not_found', 'Event not found.', [ 'status' => 404 ] );
     }
 
-    $ticket_map = lamako_mobile_v2_public_ticket_map();
-    $tickets = [];
+    $ticket_map = lamako_mobile_v2_public_ticket_map( $event_id, false );
+    $tickets    = [];
     foreach ( $ticket_map[ $event_id ] ?? [] as $ticket ) {
         $tickets[] = lamako_mobile_v2_checkout_fields_for_ticket( (int) $ticket['id'], $event_id, 1 );
     }
@@ -1024,15 +995,15 @@ function lamako_mobile_v2_public_event_checkout_fields( WP_REST_Request $request
 }
 
 function lamako_mobile_v2_get_checkout_fields_for_items( WP_REST_Request $request ) {
-    $body = $request->get_json_params();
-    $body = is_array( $body ) ? $body : [];
+    $body  = $request->get_json_params();
+    $body  = is_array( $body ) ? $body : [];
     $items = isset( $body['items'] ) && is_array( $body['items'] ) ? $body['items'] : [];
 
     if ( empty( $items ) ) {
         return new WP_Error( 'lamako_v2_items_required', 'Checkout items are required.', [ 'status' => 400 ] );
     }
 
-    $response_items = [];
+    $response_items  = [];
     $has_ticket_items = false;
     foreach ( $items as $index => $item ) {
         $validated_item = lamako_mobile_v2_validate_checkout_item( $item, $index );
@@ -1054,7 +1025,7 @@ function lamako_mobile_v2_get_checkout_fields_for_items( WP_REST_Request $reques
         }
 
         $has_ticket_items = true;
-        $ticket_type_id = $validated_item['variation_id'] > 0 ? $validated_item['variation_id'] : $validated_item['base_id'];
+        $ticket_type_id   = $validated_item['variation_id'] > 0 ? $validated_item['variation_id'] : $validated_item['base_id'];
         $response_items[] = lamako_mobile_v2_checkout_fields_for_ticket( $ticket_type_id, (int) $validated_item['event_id'], (int) $validated_item['quantity'] );
     }
 
@@ -1078,8 +1049,6 @@ function lamako_mobile_v2_public_shop_data( WP_REST_Request $request ) {
     return rest_ensure_response( [
         'products'   => lamako_mobile_v2_public_shop_products( absint( $request->get_param( 'limit' ) ?: 100 ) ),
         'categories' => lamako_mobile_v2_public_shop_categories(),
-        'version'    => lamako_mobile_v2_catalog_version( [ 'product' ] ),
-        'generatedAt'=> gmdate( 'c' ),
     ] );
 }
 
@@ -1121,17 +1090,93 @@ function lamako_mobile_v2_seating_transient_key( $token ) {
     return 'lamako_v2_seat_' . lamako_mobile_v2_token_hash( $token );
 }
 
+function lamako_mobile_v2_seating_option_key( $token ) {
+    return 'lamako_v2_seat_db_' . lamako_mobile_v2_token_hash( $token );
+}
+
+function lamako_mobile_v2_cleanup_seating_flow_option( $option_key ) {
+    $option_key = sanitize_key( $option_key );
+    if ( strpos( $option_key, 'lamako_v2_seat_db_' ) !== 0 ) {
+        return;
+    }
+
+    $flow = get_option( $option_key, false );
+    if ( is_array( $flow ) ) {
+        $order = lamako_mobile_v2_find_seating_order( $flow );
+        if ( $order instanceof WC_Order && lamako_mobile_v2_order_has_protected_payment_attempt( $order ) ) {
+            $delay = max( 5 * MINUTE_IN_SECONDS, lamako_mobile_v2_payment_verification_deadline( $order ) - time() + ( 5 * MINUTE_IN_SECONDS ) );
+            wp_schedule_single_event( time() + $delay, 'lamako_mobile_v2_cleanup_seating_flow', [ $option_key ] );
+            return;
+        }
+    }
+
+    delete_option( $option_key );
+}
+
+function lamako_mobile_v2_delete_seating_flow( $token ) {
+    if ( empty( $token ) ) {
+        return;
+    }
+
+    $option_key = lamako_mobile_v2_seating_option_key( $token );
+    delete_transient( lamako_mobile_v2_seating_transient_key( $token ) );
+    delete_option( $option_key );
+    wp_clear_scheduled_hook( 'lamako_mobile_v2_cleanup_seating_flow', [ $option_key ] );
+}
+
+function lamako_mobile_v2_seating_url( $token ) {
+    return home_url( '/lamako-mobile/seat/' . rawurlencode( $token ) . '/' );
+}
+
 function lamako_mobile_v2_get_seating_flow( $token ) {
     if ( empty( $token ) ) {
         return false;
     }
 
-    $flow = get_transient( lamako_mobile_v2_seating_transient_key( $token ) );
-    return is_array( $flow ) ? $flow : false;
+    $transient_key = lamako_mobile_v2_seating_transient_key( $token );
+    $flow          = get_transient( $transient_key );
+
+    if ( ! is_array( $flow ) ) {
+        $flow = get_option( lamako_mobile_v2_seating_option_key( $token ), false );
+    }
+
+    if ( ! is_array( $flow ) ) {
+        return false;
+    }
+
+    $expires_at = (int) ( $flow['expires_at'] ?? 0 );
+    if ( $expires_at > 0 && $expires_at < time() ) {
+        $order = lamako_mobile_v2_find_seating_order( $flow );
+        if ( ! $order instanceof WC_Order || ! lamako_mobile_v2_order_has_protected_payment_attempt( $order ) ) {
+            lamako_mobile_v2_delete_seating_flow( $token );
+            return false;
+        }
+
+        $remaining_ttl = max( 5 * MINUTE_IN_SECONDS, lamako_mobile_v2_payment_verification_deadline( $order ) - time() + ( 5 * MINUTE_IN_SECONDS ) );
+        set_transient( $transient_key, $flow, $remaining_ttl );
+        return $flow;
+    }
+
+    $remaining_ttl = $expires_at > 0
+        ? max( MINUTE_IN_SECONDS, $expires_at - time() + ( 5 * MINUTE_IN_SECONDS ) )
+        : LAMAKO_MOBILE_V2_SEATING_TTL + ( 5 * MINUTE_IN_SECONDS );
+    set_transient( $transient_key, $flow, $remaining_ttl );
+
+    return $flow;
 }
 
 function lamako_mobile_v2_save_seating_flow( $token, array $flow ) {
-    set_transient( lamako_mobile_v2_seating_transient_key( $token ), $flow, LAMAKO_MOBILE_V2_SEATING_TTL + ( 5 * MINUTE_IN_SECONDS ) );
+    $expires_at = (int) ( $flow['expires_at'] ?? 0 );
+    $ttl        = $expires_at > 0
+        ? max( MINUTE_IN_SECONDS, $expires_at - time() + ( 5 * MINUTE_IN_SECONDS ) )
+        : LAMAKO_MOBILE_V2_SEATING_TTL + ( 5 * MINUTE_IN_SECONDS );
+    $option_key = lamako_mobile_v2_seating_option_key( $token );
+
+    set_transient( lamako_mobile_v2_seating_transient_key( $token ), $flow, $ttl );
+    update_option( $option_key, $flow, false );
+
+    wp_clear_scheduled_hook( 'lamako_mobile_v2_cleanup_seating_flow', [ $option_key ] );
+    wp_schedule_single_event( time() + $ttl, 'lamako_mobile_v2_cleanup_seating_flow', [ $option_key ] );
 }
 
 function lamako_mobile_v2_extract_seating_token_from_request() {
@@ -1150,6 +1195,29 @@ function lamako_mobile_v2_extract_seating_token_from_request() {
     }
 
     return '';
+}
+
+function lamako_mobile_v2_extract_path_token( $route ) {
+    $request_uri = isset( $_SERVER['REQUEST_URI'] ) ? wp_unslash( $_SERVER['REQUEST_URI'] ) : '';
+    $path        = $request_uri ? wp_parse_url( $request_uri, PHP_URL_PATH ) : '';
+    if ( ! $path ) {
+        return '';
+    }
+
+    $route = trim( (string) $route, '/' );
+    if ( $route === '' ) {
+        return '';
+    }
+
+    if ( preg_match( '#/lamako-mobile/' . preg_quote( $route, '#' ) . '/([A-Za-z0-9_-]+)/?#', $path, $matches ) ) {
+        return sanitize_text_field( $matches[1] );
+    }
+
+    return '';
+}
+
+function lamako_mobile_v2_checkout_url( $token ) {
+    return home_url( '/lamako-mobile/checkout/' . rawurlencode( $token ) . '/' );
 }
 
 function lamako_mobile_v2_find_chart_for_event( $event_id ) {
@@ -1339,10 +1407,6 @@ function lamako_mobile_v2_validate_checkout_item( $raw_item, $index ) {
             return new WP_Error( 'lamako_v2_ticket_event_missing', 'Ticket product is not linked to a valid event.', [ 'status' => 400 ] );
         }
 
-        if ( lamako_mobile_v2_is_past_event( (int) $event_id ) ) {
-            return new WP_Error( 'lamako_v2_event_ended', 'Cet événement est terminé.', [ 'status' => 409 ] );
-        }
-
         if ( class_exists( '\Tickera\TC_Ticket' ) && method_exists( '\Tickera\TC_Ticket', 'is_sales_available' ) ) {
             $available = \Tickera\TC_Ticket::is_sales_available( $base_id );
             if ( ! $available ) {
@@ -1367,324 +1431,7 @@ function lamako_mobile_v2_validate_checkout_item( $raw_item, $index ) {
         'quantity'     => $quantity,
         'is_ticket'    => $is_ticket,
         'event_id'     => $event_id ? (int) $event_id : 0,
-        'rewards_enabled' => $is_ticket
-            ? ( $event_id ? lamako_mobile_v2_event_rewards_enabled( (int) $event_id ) : false )
-            : lamako_mobile_v2_rewards_enabled_for_post( $base_id, true ),
     ];
-}
-
-function lamako_mobile_v2_is_rewards_coupon( $coupon ) {
-    if ( $coupon instanceof WC_Coupon ) {
-        $code = $coupon->get_code();
-        $description = strtolower( (string) $coupon->get_description() );
-    } else {
-        $code = sanitize_text_field( (string) $coupon );
-        $description = '';
-        if ( class_exists( 'WC_Coupon' ) && $code !== '' ) {
-            try {
-                $wc_coupon = new WC_Coupon( $code );
-                if ( $wc_coupon->get_id() ) {
-                    $description = strtolower( (string) $wc_coupon->get_description() );
-                }
-            } catch ( Exception $e ) {
-                $description = '';
-            }
-        }
-    }
-
-    $code = trim( (string) $code );
-    if ( $code === '' ) {
-        return false;
-    }
-
-    return stripos( $code, 'LR-' ) === 0
-        || stripos( $code, 'LAMAKO-REWARD' ) === 0
-        || strpos( $description, 'lamako mobile v2 rewards' ) !== false
-        || strpos( $description, 'lamakorewards' ) !== false
-        || strpos( $description, 'rewards coupon' ) !== false;
-}
-
-function lamako_mobile_v2_validate_rewards_coupon_events( $coupon_code, array $event_ids ) {
-    if ( ! lamako_mobile_v2_is_rewards_coupon( $coupon_code ) ) {
-        return true;
-    }
-
-    $event_ids = array_values( array_unique( array_filter( array_map( 'absint', $event_ids ) ) ) );
-    foreach ( $event_ids as $event_id ) {
-        if ( ! lamako_mobile_v2_event_rewards_enabled( $event_id ) ) {
-            return new WP_Error(
-                'lamako_v2_rewards_not_enabled_for_event',
-                'LamakoRewards is not enabled for this event.',
-                [ 'status' => 422 ]
-            );
-        }
-    }
-
-    return true;
-}
-
-function lamako_mobile_v2_checkout_allows_rewards_coupon( array $validated_items ) {
-    foreach ( $validated_items as $item ) {
-        if ( empty( $item['rewards_enabled'] ) ) {
-            return false;
-        }
-    }
-    return true;
-}
-
-function lamako_mobile_v2_rewards_coupon_is_valid_for_cart( $valid, $coupon ) {
-    if ( ! $valid || ! lamako_mobile_v2_is_rewards_coupon( $coupon ) || ! function_exists( 'WC' ) || ! WC()->cart ) {
-        return $valid;
-    }
-
-    foreach ( WC()->cart->get_cart() as $item ) {
-        $product = isset( $item['data'] ) && $item['data'] instanceof WC_Product ? $item['data'] : null;
-        if ( ! $product ) {
-            continue;
-        }
-
-        $base_id = lamako_mobile_v2_product_base_id( $product, $product->get_id() );
-        $event_id = absint( get_post_meta( $base_id, '_event_name', true ) );
-        if ( $event_id > 0 && ! lamako_mobile_v2_event_rewards_enabled( $event_id ) ) {
-            return false;
-        }
-    }
-
-    return $valid;
-}
-
-function lamako_mobile_v2_checkout_value_is_empty( $value ) {
-    if ( is_array( $value ) ) {
-        foreach ( $value as $item ) {
-            if ( trim( (string) $item ) !== '' ) {
-                return false;
-            }
-        }
-        return true;
-    }
-    return trim( (string) $value ) === '';
-}
-
-function lamako_mobile_v2_checkout_field_value_from_payload( array $fields, array $field ) {
-    $key = $field['key'] ?? '';
-    $storage_key = $field['storageKey'] ?? $key;
-    if ( $key !== '' && array_key_exists( $key, $fields ) ) {
-        return $fields[ $key ];
-    }
-    if ( $storage_key !== '' && array_key_exists( $storage_key, $fields ) ) {
-        return $fields[ $storage_key ];
-    }
-    return null;
-}
-
-function lamako_mobile_v2_sanitize_checkout_field_value( $value, array $field ) {
-    $type = $field['type'] ?? 'text';
-    if ( $type === 'checkbox' ) {
-        $values = is_array( $value ) ? $value : explode( ',', (string) $value );
-        $values = array_values( array_filter( array_map( 'sanitize_text_field', $values ), function( $item ) {
-            return trim( (string) $item ) !== '';
-        } ) );
-        return implode( ',', $values );
-    }
-
-    if ( $type === 'textarea' ) {
-        return sanitize_textarea_field( (string) $value );
-    }
-
-    if ( $type === 'email' || ( $field['validation'] ?? '' ) === 'email' ) {
-        return sanitize_email( (string) $value );
-    }
-
-    return sanitize_text_field( (string) $value );
-}
-
-function lamako_mobile_v2_validate_checkout_field_value( $value, array $field, $ticket_type_id = 0, $index = 0 ) {
-    $label = $field['label'] ?? $field['key'] ?? 'Field';
-    if ( ! empty( $field['required'] ) && lamako_mobile_v2_checkout_value_is_empty( $value ) ) {
-        return new WP_Error( 'lamako_v2_checkout_field_required', sprintf( '%s is required for attendee %d.', $label, $index + 1 ), [ 'status' => 400 ] );
-    }
-
-    if ( lamako_mobile_v2_checkout_value_is_empty( $value ) ) {
-        return true;
-    }
-
-    $type = $field['type'] ?? 'text';
-    if ( $type === 'email' || ( $field['validation'] ?? '' ) === 'email' ) {
-        if ( ! is_email( (string) $value ) ) {
-            return new WP_Error( 'lamako_v2_checkout_field_invalid_email', sprintf( '%s must be a valid email.', $label ), [ 'status' => 400 ] );
-        }
-    }
-
-    if ( $type === 'number' && ! is_numeric( $value ) ) {
-        return new WP_Error( 'lamako_v2_checkout_field_invalid_number', sprintf( '%s must be a number.', $label ), [ 'status' => 400 ] );
-    }
-
-    $option_values = array_map( function( $option ) {
-        return (string) ( $option['value'] ?? '' );
-    }, $field['options'] ?? [] );
-    $option_values = array_values( array_filter( $option_values, function( $option ) {
-        return $option !== '';
-    } ) );
-
-    if ( ! empty( $option_values ) && in_array( $type, [ 'select', 'radio' ], true ) && ! in_array( (string) $value, $option_values, true ) ) {
-        return new WP_Error( 'lamako_v2_checkout_field_invalid_option', sprintf( '%s has an invalid value.', $label ), [ 'status' => 400 ] );
-    }
-
-    if ( ! empty( $option_values ) && $type === 'checkbox' ) {
-        $values = is_array( $value ) ? $value : explode( ',', (string) $value );
-        foreach ( $values as $selected ) {
-            $selected = trim( (string) $selected );
-            if ( $selected !== '' && ! in_array( $selected, $option_values, true ) ) {
-                return new WP_Error( 'lamako_v2_checkout_field_invalid_option', sprintf( '%s has an invalid value.', $label ), [ 'status' => 400 ] );
-            }
-        }
-    }
-
-    return true;
-}
-
-function lamako_mobile_v2_prepare_checkout_field_data( array $body, array $validated_items, array $billing ) {
-    $raw_items = isset( $body['items'] ) && is_array( $body['items'] ) ? $body['items'] : [];
-    $buyer_payload = isset( $body['buyerFields'] ) && is_array( $body['buyerFields'] )
-        ? $body['buyerFields']
-        : ( isset( $body['buyer_fields'] ) && is_array( $body['buyer_fields'] ) ? $body['buyer_fields'] : [] );
-
-    $field_data = [
-        'buyer_data' => [],
-        'owner_data' => [],
-        'attendees'  => [],
-    ];
-
-    $has_ticket_items = ! empty( array_filter( $validated_items, function( $item ) {
-        return ! empty( $item['is_ticket'] );
-    } ) );
-
-    if ( $has_ticket_items ) {
-        foreach ( lamako_mobile_v2_buyer_fields_schema() as $field ) {
-            $raw_value = lamako_mobile_v2_checkout_field_value_from_payload( $buyer_payload, $field );
-            $validation = lamako_mobile_v2_validate_checkout_field_value( $raw_value, $field, 0, 0 );
-            if ( is_wp_error( $validation ) ) {
-                return $validation;
-            }
-            if ( ! lamako_mobile_v2_checkout_value_is_empty( $raw_value ) ) {
-                $field_data['buyer_data'][ $field['storageKey'] ] = lamako_mobile_v2_sanitize_checkout_field_value( $raw_value, $field );
-            }
-        }
-    }
-
-    foreach ( $validated_items as $index => $item ) {
-        if ( empty( $item['is_ticket'] ) ) {
-            continue;
-        }
-
-        $ticket_type_id = ! empty( $item['variation_id'] ) ? (int) $item['variation_id'] : (int) $item['base_id'];
-        $schema = lamako_mobile_v2_checkout_fields_for_ticket( $ticket_type_id, (int) $item['event_id'], (int) $item['quantity'] );
-        $owner_fields = $schema['ownerFields'] ?? [];
-        if ( empty( $owner_fields ) ) {
-            continue;
-        }
-
-        $raw_item = isset( $raw_items[ $index ] ) && is_array( $raw_items[ $index ] ) ? $raw_items[ $index ] : [];
-        $attendees = isset( $raw_item['attendees'] ) && is_array( $raw_item['attendees'] ) ? array_values( $raw_item['attendees'] ) : [];
-        $quantity = max( 1, (int) $item['quantity'] );
-
-        for ( $i = 0; $i < $quantity; $i++ ) {
-            $attendee = isset( $attendees[ $i ] ) && is_array( $attendees[ $i ] ) ? $attendees[ $i ] : [];
-            $fields = isset( $attendee['fields'] ) && is_array( $attendee['fields'] ) ? $attendee['fields'] : $attendee;
-
-            $field_data['owner_data']['ticket_type_id_post_meta'][ $ticket_type_id ][ $i ] = (string) $ticket_type_id;
-            $field_data['attendees'][ $ticket_type_id ][ $i ]['ticket_type_id'] = (string) $ticket_type_id;
-
-            foreach ( $owner_fields as $field ) {
-                $raw_value = lamako_mobile_v2_checkout_field_value_from_payload( $fields, $field );
-                if ( lamako_mobile_v2_checkout_value_is_empty( $raw_value ) ) {
-                    if ( $field['key'] === 'first_name' ) {
-                        $raw_value = $billing['first_name'] ?? '';
-                    } elseif ( $field['key'] === 'last_name' ) {
-                        $raw_value = $billing['last_name'] ?? '';
-                    } elseif ( $field['key'] === 'owner_email' || $field['key'] === 'owner_confirm_email' ) {
-                        $raw_value = $billing['email'] ?? '';
-                    }
-                }
-
-                $validation = lamako_mobile_v2_validate_checkout_field_value( $raw_value, $field, $ticket_type_id, $i );
-                if ( is_wp_error( $validation ) ) {
-                    return $validation;
-                }
-
-                if ( lamako_mobile_v2_checkout_value_is_empty( $raw_value ) ) {
-                    continue;
-                }
-
-                $value = lamako_mobile_v2_sanitize_checkout_field_value( $raw_value, $field );
-                $storage_key = $field['storageKey'];
-                $meta_key = preg_replace( '/_post_meta$/', '', $storage_key );
-
-                $field_data['owner_data'][ $storage_key ][ $ticket_type_id ][ $i ] = $value;
-                $field_data['attendees'][ $ticket_type_id ][ $i ][ $meta_key ] = $value;
-            }
-        }
-    }
-
-    return $field_data;
-}
-
-function lamako_mobile_v2_merge_checkout_field_cart_info( WC_Order $order, array $field_data ) {
-    if ( empty( $field_data['owner_data'] ) && ! empty( $field_data['attendees'] ) ) {
-        $field_data['owner_data'] = [];
-        foreach ( (array) $field_data['attendees'] as $ticket_type_id => $attendees ) {
-            foreach ( (array) $attendees as $index => $fields ) {
-                foreach ( (array) $fields as $meta_key => $value ) {
-                    $meta_key = sanitize_key( (string) $meta_key );
-                    if ( $meta_key === '' ) {
-                        continue;
-                    }
-                    $storage_key = preg_match( '/_post_(meta|content)$/', $meta_key )
-                        ? $meta_key
-                        : $meta_key . '_post_meta';
-                    $field_data['owner_data'][ $storage_key ][ (int) $ticket_type_id ][ (int) $index ] = $value;
-                }
-            }
-        }
-    }
-
-    $cart_info = $order->get_meta( 'tc_cart_info' );
-    if ( ! is_array( $cart_info ) ) {
-        $cart_info = [
-            'buyer_data' => [],
-            'owner_data' => [],
-        ];
-    }
-    if ( ! isset( $cart_info['buyer_data'] ) || ! is_array( $cart_info['buyer_data'] ) ) {
-        $cart_info['buyer_data'] = [];
-    }
-    if ( ! isset( $cart_info['owner_data'] ) || ! is_array( $cart_info['owner_data'] ) ) {
-        $cart_info['owner_data'] = [];
-    }
-
-    foreach ( $field_data['buyer_data'] ?? [] as $key => $value ) {
-        $cart_info['buyer_data'][ $key ] = $value;
-    }
-
-    foreach ( $field_data['owner_data'] ?? [] as $key => $ticket_values ) {
-        if ( ! isset( $cart_info['owner_data'][ $key ] ) || ! is_array( $cart_info['owner_data'][ $key ] ) ) {
-            $cart_info['owner_data'][ $key ] = [];
-        }
-        foreach ( (array) $ticket_values as $ticket_type_id => $values ) {
-            $cart_info['owner_data'][ $key ][ $ticket_type_id ] = array_values( (array) $values );
-        }
-    }
-
-    if ( function_exists( 'tickera_sanitize_array' ) ) {
-        $cart_info = tickera_sanitize_array( $cart_info, false, true );
-    }
-
-    $order->update_meta_data( 'tc_cart_info', $cart_info );
-    update_post_meta( $order->get_id(), 'tc_cart_info', $cart_info );
-    if ( ! empty( $field_data['owner_data'] ) || ! empty( $field_data['buyer_data'] ) ) {
-        $order->update_meta_data( '_lamako_has_checkout_fields', 'yes' );
-        update_post_meta( $order->get_id(), '_lamako_has_checkout_fields', 'yes' );
-    }
 }
 
 function lamako_mobile_v2_temporarily_disable_legacy_product_overrides() {
@@ -1733,9 +1480,6 @@ function lamako_mobile_v2_create_checkout( WP_REST_Request $request ) {
         }
         $validated[] = $validated_item;
     }
-    $checkout_event_ids = array_values( array_unique( array_filter( array_map( function( $item ) {
-        return absint( $item['event_id'] ?? 0 );
-    }, $validated ) ) ) );
 
     $user_id = get_current_user_id();
     $user    = get_user_by( 'id', $user_id );
@@ -1751,20 +1495,16 @@ function lamako_mobile_v2_create_checkout( WP_REST_Request $request ) {
     $source     = sanitize_text_field( $body['source'] ?? 'native_cart' );
     $coupon     = sanitize_text_field( $body['couponCode'] ?? $body['coupon_code'] ?? '' );
 
-    if ( $coupon !== '' ) {
-        $rewards_event_check = lamako_mobile_v2_validate_rewards_coupon_events( $coupon, $checkout_event_ids );
-        if ( is_wp_error( $rewards_event_check ) ) {
-            return $rewards_event_check;
+    if ( lamako_mobile_v2_is_rewards_coupon_code( $coupon ) ) {
+        foreach ( $validated as $item ) {
+            if ( ! lamako_mobile_v2_checkout_item_rewards_redeem_enabled( $item ) ) {
+                return new WP_Error(
+                    'lamako_v2_rewards_not_participating',
+                    'Rewards reductions are available only on participating events and offers.',
+                    [ 'status' => 403 ]
+                );
+            }
         }
-    }
-
-    if ( $coupon !== '' && lamako_mobile_v2_is_rewards_coupon( $coupon ) && ! lamako_mobile_v2_checkout_allows_rewards_coupon( $validated ) ) {
-        return new WP_Error( 'lamako_v2_rewards_not_available_for_cart', 'LamakoRewards points are not available for one or more items in this cart.', [ 'status' => 403 ] );
-    }
-
-    $checkout_field_data = lamako_mobile_v2_prepare_checkout_field_data( $body, $validated, $billing );
-    if ( is_wp_error( $checkout_field_data ) ) {
-        return $checkout_field_data;
     }
 
     $removed_filters = lamako_mobile_v2_temporarily_disable_legacy_product_overrides();
@@ -1803,22 +1543,15 @@ function lamako_mobile_v2_create_checkout( WP_REST_Request $request ) {
         $order->calculate_totals();
         $order->set_status( 'pending' );
         $order->set_created_via( 'lamako_mobile_v2' );
-        $order->update_meta_data( '_lamako_order_channel', 'mobile' );
         $order->update_meta_data( '_lamako_mobile_order', 'yes' );
         $order->update_meta_data( '_lamako_mobile_v2', 'yes' );
         $order->update_meta_data( '_lamako_checkout_source', $source );
-        $order->update_meta_data( '_lamako_rewards_enabled', lamako_mobile_v2_checkout_allows_rewards_coupon( $validated ) ? 'yes' : 'partial' );
         $order->update_meta_data( '_lamako_v2_checkout_token_hash', $token_hash );
         $order->update_meta_data( '_lamako_v2_checkout_expires_at', gmdate( 'c', $expires_at ) );
-        if ( $coupon !== '' && lamako_mobile_v2_is_rewards_coupon( $coupon ) ) {
-            $order->update_meta_data( '_lamako_rewards_coupon', 'yes' );
-            $order->update_meta_data( '_lamako_rewards_coupon_code', $coupon );
-            $order->update_meta_data( '_lamako_rewards_discount_amount', (float) $order->get_discount_total() );
-        }
         $order->add_order_note( 'Lamako Mobile v2 checkout session created.' );
         $order->save();
 
-        $ticket_result = lamako_mobile_v2_ensure_ticket_instances_for_order( $order, [], [], $checkout_field_data );
+        $ticket_result = lamako_mobile_v2_ensure_ticket_instances_for_order( $order );
         if ( is_wp_error( $ticket_result ) ) {
             $order->delete( true );
             lamako_mobile_v2_restore_legacy_product_overrides( $removed_filters );
@@ -1835,7 +1568,7 @@ function lamako_mobile_v2_create_checkout( WP_REST_Request $request ) {
 
     return rest_ensure_response( [
         'checkoutToken' => $token,
-        'checkoutUrl'   => home_url( '/?lamako_checkout_token=' . rawurlencode( $token ) ),
+        'checkoutUrl'   => lamako_mobile_v2_checkout_url( $token ),
         'orderId'       => $order->get_id(),
         'expiresAt'     => gmdate( 'c', $expires_at ),
         'total'         => $order->get_total(),
@@ -1856,10 +1589,6 @@ function lamako_mobile_v2_create_seating_session( WP_REST_Request $request ) {
     $event = get_post( $event_id );
     if ( ! $event || $event->post_type !== 'tc_events' || $event->post_status !== 'publish' ) {
         return new WP_Error( 'lamako_v2_event_not_found', 'Event not found.', [ 'status' => 404 ] );
-    }
-
-    if ( lamako_mobile_v2_is_past_event( $event_id ) ) {
-        return new WP_Error( 'lamako_v2_event_ended', 'Cet événement est terminé.', [ 'status' => 409 ] );
     }
 
     $chart_id = lamako_mobile_v2_find_chart_for_event( $event_id );
@@ -1892,7 +1621,7 @@ function lamako_mobile_v2_create_seating_session( WP_REST_Request $request ) {
         'flowToken' => $token,
         'eventId'   => $event_id,
         'chartId'   => $chart_id,
-        'seatUrl'   => home_url( '/lamako-mobile/seat/' . rawurlencode( $token ) ),
+        'seatUrl'   => lamako_mobile_v2_seating_url( $token ),
         'expiresAt' => gmdate( 'c', $expires_at ),
     ] );
 }
@@ -1950,10 +1679,1524 @@ function lamako_mobile_v2_get_seating_session_status( WP_REST_Request $request )
         'chartId'       => (int) ( $flow['chart_id'] ?? 0 ),
         'status'        => $status,
         'expiresAt'     => ! empty( $flow['expires_at'] ) ? gmdate( 'c', (int) $flow['expires_at'] ) : null,
-        'seatUrl'       => home_url( '/lamako-mobile/seat/' . rawurlencode( $token ) ),
+        'seatUrl'       => lamako_mobile_v2_seating_url( $token ),
         'checkoutUrl'   => function_exists( 'wc_get_checkout_url' ) ? wc_get_checkout_url() : home_url( '/checkout/' ),
         'order'         => $order ? lamako_mobile_v2_order_summary( $order, true ) : null,
         'ticketsReady'  => $order ? count( lamako_mobile_v2_get_tickets_for_order( $order ) ) > 0 : false,
+    ] );
+}
+
+function lamako_mobile_v2_allow_seating_flow_session( WP_REST_Request $request ) {
+    $token = sanitize_text_field( $request['token'] ?? '' );
+    $flow  = lamako_mobile_v2_get_seating_flow( $token );
+    if ( ! is_array( $flow ) ) {
+        return new WP_Error( 'lamako_v2_seating_session_not_found', 'Seating session not found.', [ 'status' => 404 ] );
+    }
+    if ( ! empty( $flow['expires_at'] ) && (int) $flow['expires_at'] < time() ) {
+        return new WP_Error( 'lamako_v2_seating_session_expired', 'Seating session expired.', [ 'status' => 410 ] );
+    }
+
+    $user_id = get_current_user_id();
+    if ( $user_id > 0 && ( (int) $flow['user_id'] === $user_id || current_user_can( 'manage_woocommerce' ) ) ) {
+        return true;
+    }
+
+    $cookie_token = ! empty( $_COOKIE['lamako_mobile_seat_flow'] )
+        ? sanitize_text_field( wp_unslash( $_COOKIE['lamako_mobile_seat_flow'] ) )
+        : '';
+    if ( $cookie_token !== '' && hash_equals( $token, $cookie_token ) ) {
+        return true;
+    }
+
+    return new WP_Error( 'lamako_v2_forbidden', 'You cannot access this seating session.', [ 'status' => 403 ] );
+}
+
+function lamako_mobile_v2_create_seating_order( WP_REST_Request $request ) {
+    $token = sanitize_text_field( $request['token'] ?? '' );
+    $flow  = lamako_mobile_v2_get_seating_flow( $token );
+    if ( ! is_array( $flow ) ) {
+        return new WP_Error( 'lamako_v2_seating_session_not_found', 'Seating session not found.', [ 'status' => 404 ] );
+    }
+
+    $existing = lamako_mobile_v2_find_seating_order( $flow );
+    if ( $existing ) {
+        return rest_ensure_response( [
+            'flowToken' => $token,
+            'order'     => lamako_mobile_v2_order_summary( $existing, true ),
+        ] );
+    }
+
+    if ( function_exists( 'wc_load_cart' ) && ( ! function_exists( 'WC' ) || ! WC()->cart ) ) {
+        wc_load_cart();
+    }
+    if ( ! function_exists( 'WC' ) || ! WC()->cart || WC()->cart->is_empty() ) {
+        return new WP_Error( 'lamako_v2_seating_cart_empty', 'No confirmed seat is available in this session.', [ 'status' => 409 ] );
+    }
+
+    $event_id = (int) ( $flow['event_id'] ?? 0 );
+    foreach ( WC()->cart->get_cart() as $cart_item ) {
+        $product_id    = absint( $cart_item['product_id'] ?? 0 );
+        $ticket_event  = absint( get_post_meta( $product_id, '_event_name', true ) );
+        if ( $product_id <= 0 || ( $ticket_event > 0 && $ticket_event !== $event_id ) ) {
+            return new WP_Error( 'lamako_v2_seating_cart_mismatch', 'The selected seats do not belong to this event.', [ 'status' => 409 ] );
+        }
+    }
+
+    $seat_cookie = lamako_mobile_v2_get_seating_cart_cookie();
+    if ( empty( $seat_cookie ) ) {
+        return new WP_Error( 'lamako_v2_seating_metadata_missing', 'No confirmed seat metadata is available in this session.', [ 'status' => 409 ] );
+    }
+
+    $user = get_user_by( 'id', (int) ( $flow['user_id'] ?? 0 ) );
+    if ( ! $user ) {
+        return new WP_Error( 'lamako_v2_user_missing', 'Current user not found.', [ 'status' => 401 ] );
+    }
+
+    $checkout = WC()->checkout();
+    $data     = [
+        'billing_first_name' => get_user_meta( $user->ID, 'billing_first_name', true ) ?: get_user_meta( $user->ID, 'first_name', true ),
+        'billing_last_name'  => get_user_meta( $user->ID, 'billing_last_name', true ) ?: get_user_meta( $user->ID, 'last_name', true ),
+        'billing_email'      => $user->user_email,
+        'billing_phone'      => get_user_meta( $user->ID, 'billing_phone', true ),
+        'billing_country'    => get_user_meta( $user->ID, 'billing_country', true ) ?: 'MG',
+        'payment_method'     => '',
+    ];
+
+    try {
+        $order_id = $checkout->create_order( $data );
+    } catch ( Throwable $error ) {
+        return new WP_Error( 'lamako_v2_seating_order_failed', $error->getMessage(), [ 'status' => 500 ] );
+    }
+    if ( is_wp_error( $order_id ) ) {
+        return new WP_Error( 'lamako_v2_seating_order_failed', $order_id->get_error_message(), [ 'status' => 500 ] );
+    }
+
+    $order = wc_get_order( $order_id );
+    if ( ! $order ) {
+        return new WP_Error( 'lamako_v2_seating_order_failed', 'The seating order could not be loaded.', [ 'status' => 500 ] );
+    }
+
+    $order->set_customer_id( $user->ID );
+    $order->set_created_via( 'lamako_mobile_seating_v2' );
+    $order->set_status( 'pending' );
+    $order->update_meta_data( '_lamako_mobile_order', 'yes' );
+    $order->update_meta_data( '_lamako_mobile_v2', 'yes' );
+    $order->update_meta_data( '_lamako_checkout_source', 'seating' );
+    $order->update_meta_data( '_lamako_seating_flow_hash', $flow['token_hash'] ?? lamako_mobile_v2_token_hash( $token ) );
+    $order->update_meta_data( '_lamako_seating_event_id', $event_id );
+    $order->update_meta_data( '_lamako_seating_chart_id', (int) ( $flow['chart_id'] ?? 0 ) );
+    $order->add_order_note( 'Lamako Mobile native seating order created.' );
+    $order->save();
+
+    $ticket_result = lamako_mobile_v2_ensure_ticket_instances_for_order( $order, $seat_cookie, $flow );
+    if ( is_wp_error( $ticket_result ) ) {
+        $order->add_order_note( 'Lamako Mobile ticket generation failed: ' . $ticket_result->get_error_message() );
+        $order->update_status( 'failed' );
+        $error_data = $ticket_result->get_error_data();
+        $status     = is_array( $error_data ) && ! empty( $error_data['status'] ) ? absint( $error_data['status'] ) : 500;
+        return new WP_Error( 'lamako_v2_ticket_create_failed', $ticket_result->get_error_message(), [ 'status' => $status ] );
+    }
+
+    $flow['order_id'] = $order->get_id();
+    lamako_mobile_v2_save_seating_flow( $token, $flow );
+    WC()->cart->empty_cart();
+
+    return rest_ensure_response( [
+        'flowToken' => $token,
+        'order'     => lamako_mobile_v2_order_summary( $order, true ),
+    ] );
+}
+
+function lamako_mobile_v2_payment_order( $token, $kind ) {
+    if ( $kind === 'checkout' ) {
+        return lamako_mobile_v2_find_order_by_token( $token );
+    }
+    if ( $kind === 'seating' ) {
+        $flow = lamako_mobile_v2_get_seating_flow( $token );
+        return is_array( $flow ) ? lamako_mobile_v2_find_seating_order( $flow ) : false;
+    }
+    return false;
+}
+
+function lamako_mobile_v2_payment_order_from_request( WP_REST_Request $request ) {
+    $token = sanitize_text_field( $request['token'] ?? '' );
+    $kind  = sanitize_key( $request->get_param( 'kind' ) ?: 'checkout' );
+    if ( ! in_array( $kind, [ 'checkout', 'seating' ], true ) ) {
+        return new WP_Error( 'lamako_v2_invalid_payment_kind', 'Payment kind must be checkout or seating.', [ 'status' => 400 ] );
+    }
+
+    $order = lamako_mobile_v2_payment_order( $token, $kind );
+    if ( ! $order ) {
+        return new WP_Error( 'lamako_v2_payment_order_not_found', 'Payment order not found.', [ 'status' => 404 ] );
+    }
+    if ( ! lamako_mobile_v2_is_order_owner( $order ) ) {
+        return new WP_Error( 'lamako_v2_forbidden', 'You cannot access this payment.', [ 'status' => 403 ] );
+    }
+
+    return [ $token, $kind, $order ];
+}
+
+function lamako_mobile_v2_payment_gateway_definitions() {
+    return apply_filters( 'lamako_mobile_v2_payment_gateway_definitions', [
+        'mvola_paiement'  => [ 'flow' => 'async', 'requiresPhone' => true,  'description' => 'Confirmez la demande MVola sur votre téléphone.', 'icon' => 'mvola-payment/assets/mvola.png' ],
+        'airtel_paiement' => [ 'flow' => 'async', 'requiresPhone' => true,  'description' => 'Confirmez la demande Airtel Money sur votre téléphone.', 'icon' => 'airtel-payment/assets/airtel.png' ],
+        'papi_paiement'   => [ 'flow' => 'redirect', 'requiresPhone' => false, 'description' => 'Vous serez dirigé vers Orange Money pour autoriser le paiement.', 'icon' => 'orange/assets/papi.png' ],
+        'cybersource'     => [ 'flow' => 'redirect', 'requiresPhone' => false, 'description' => 'Paiement sécurisé par carte bancaire.', 'icon' => 'cybersource-payment-gateway/gateway/assets/images/cybersource.png' ],
+    ] );
+}
+
+function lamako_mobile_v2_payment_gateway_icon_url( $gateway, $fallback_path = '' ) {
+    $icon_url = isset( $gateway->icon ) && is_string( $gateway->icon )
+        ? trim( $gateway->icon )
+        : '';
+    $home_host = strtolower( (string) wp_parse_url( home_url(), PHP_URL_HOST ) );
+
+    if ( $icon_url === '' && method_exists( $gateway, 'get_icon' ) ) {
+        $icon_html = (string) $gateway->get_icon();
+        if ( class_exists( 'WP_HTML_Tag_Processor' ) ) {
+            $processor = new WP_HTML_Tag_Processor( $icon_html );
+            if ( $processor->next_tag( 'IMG' ) ) {
+                $icon_url = (string) $processor->get_attribute( 'src' );
+            }
+        }
+    }
+
+    if ( strpos( $icon_url, '//' ) === 0 ) {
+        $icon_url = 'https:' . $icon_url;
+    } elseif ( strpos( $icon_url, '/' ) === 0 ) {
+        $icon_url = home_url( $icon_url );
+    }
+
+    $icon_host = strtolower( (string) wp_parse_url( $icon_url, PHP_URL_HOST ) );
+    if ( $icon_url !== '' && ( $icon_host === '' || $icon_host !== $home_host ) ) {
+        $icon_url = '';
+    }
+
+    $fallback_path = ltrim( (string) $fallback_path, '/' );
+    if ( $icon_url === '' && $fallback_path !== '' && is_readable( WP_PLUGIN_DIR . '/' . $fallback_path ) ) {
+        $icon_url = plugins_url( $fallback_path );
+    }
+
+    if ( strpos( $icon_url, '//' ) === 0 ) {
+        $icon_url = 'https:' . $icon_url;
+    } elseif ( strpos( $icon_url, '/' ) === 0 ) {
+        $icon_url = home_url( $icon_url );
+    }
+
+    $icon_host = strtolower( (string) wp_parse_url( $icon_url, PHP_URL_HOST ) );
+    if ( $icon_host !== '' && $icon_host === $home_host ) {
+        $icon_url = set_url_scheme( $icon_url, 'https' );
+    }
+
+    $icon_url = esc_url_raw( $icon_url, [ 'https' ] );
+    return $icon_url !== '' && wp_http_validate_url( $icon_url ) ? $icon_url : '';
+}
+
+function lamako_mobile_v2_enabled_payment_gateways() {
+    if ( ! function_exists( 'WC' ) || ! WC()->payment_gateways() ) {
+        return [];
+    }
+    $definitions = lamako_mobile_v2_payment_gateway_definitions();
+    $gateways    = WC()->payment_gateways()->payment_gateways();
+    $enabled     = [];
+    foreach ( $definitions as $gateway_id => $definition ) {
+        if ( empty( $gateways[ $gateway_id ] ) || $gateways[ $gateway_id ]->enabled !== 'yes' ) {
+            continue;
+        }
+        $gateway  = $gateways[ $gateway_id ];
+        $icon_url = lamako_mobile_v2_payment_gateway_icon_url( $gateway, $definition['icon'] ?? '' );
+        $enabled[] = [
+            'id'            => $gateway_id,
+            'title'         => wp_strip_all_tags( $gateway->get_title() ),
+            'description'   => $definition['description'],
+            'flow'          => $definition['flow'],
+            'requiresPhone' => (bool) $definition['requiresPhone'],
+            'iconUrl'       => $icon_url,
+        ];
+    }
+    return $enabled;
+}
+
+function lamako_mobile_v2_get_payment_methods( WP_REST_Request $request ) {
+    $context = lamako_mobile_v2_payment_order_from_request( $request );
+    if ( is_wp_error( $context ) ) {
+        return $context;
+    }
+    list( $token, $kind, $order ) = $context;
+
+    return rest_ensure_response( [
+        'kind'       => $kind,
+        'token'      => $token,
+        'methods'    => (float) $order->get_total() > 0 ? lamako_mobile_v2_enabled_payment_gateways() : [],
+        'order'      => lamako_mobile_v2_order_summary( $order, true ),
+        'zeroTotal'  => (float) $order->get_total() <= 0,
+        'pollAfterMs'=> 2500,
+    ] );
+}
+
+function lamako_mobile_v2_update_payment_coupon( WP_REST_Request $request ) {
+    $context = lamako_mobile_v2_payment_order_from_request( $request );
+    if ( is_wp_error( $context ) ) {
+        return $context;
+    }
+    list( $token, $kind, $order ) = $context;
+    if ( $order->is_paid() ) {
+        return new WP_Error( 'lamako_v2_order_already_paid', 'This order is already paid.', [ 'status' => 409 ] );
+    }
+
+    $body   = $request->get_json_params();
+    $body   = is_array( $body ) ? $body : [];
+    $action = sanitize_key( $body['action'] ?? 'apply' );
+    $code   = wc_format_coupon_code( $body['code'] ?? '' );
+
+    if ( $action === 'remove' ) {
+        if ( $code !== '' ) {
+            $order->remove_coupon( $code );
+        } else {
+            foreach ( $order->get_coupon_codes() as $coupon_code ) {
+                $order->remove_coupon( $coupon_code );
+            }
+        }
+    } else {
+        if ( $code === '' ) {
+            return new WP_Error( 'lamako_v2_coupon_required', 'Coupon code is required.', [ 'status' => 422 ] );
+        }
+        if ( lamako_mobile_v2_is_rewards_coupon_code( $code ) && ! in_array( $code, $order->get_coupon_codes(), true ) ) {
+            return new WP_Error( 'lamako_v2_rewards_coupon_flow_required', 'Use the LamakoRewards redemption flow for this coupon.', [ 'status' => 403 ] );
+        }
+        $result = $order->apply_coupon( $code );
+        if ( is_wp_error( $result ) ) {
+            return new WP_Error( 'lamako_v2_coupon_invalid', $result->get_error_message(), [ 'status' => 422 ] );
+        }
+    }
+
+    $order->calculate_totals();
+    $order->save();
+    return rest_ensure_response( [
+        'kind'  => $kind,
+        'token' => $token,
+        'order' => lamako_mobile_v2_order_summary( $order, true ),
+    ] );
+}
+
+function lamako_mobile_v2_gateway_response( WC_Order $order, $gateway_id, $attempt_id, $result ) {
+    $status       = lamako_mobile_v2_normalize_payment_status( $order );
+    $redirect_url = is_array( $result ) ? esc_url_raw( $result['redirect'] ?? '' ) : '';
+    $result_code  = is_array( $result ) ? sanitize_key( $result['result'] ?? '' ) : '';
+    $flow         = 'failed';
+    if ( $status === 'success' ) {
+        $flow = 'success';
+    } elseif ( $redirect_url !== '' && $result_code === 'success' ) {
+        $flow = 'redirect';
+    } elseif ( in_array( $status, [ 'pending', 'unknown' ], true ) && $result_code !== 'fail' && $result_code !== 'error' ) {
+        $flow = 'pending';
+    }
+
+    return [
+        'flow'          => $flow,
+        'paymentStatus' => $status,
+        'redirectUrl'   => $redirect_url,
+        'orderId'       => $order->get_id(),
+        'gatewayId'     => $gateway_id,
+        'attemptId'     => $attempt_id,
+        'pollAfterMs'   => 2500,
+        'order'         => lamako_mobile_v2_order_summary( $order, true ),
+    ];
+}
+
+function lamako_mobile_v2_cybersource_bridge_url( $token, $kind ) {
+    return add_query_arg(
+        [ 'kind' => in_array( $kind, [ 'checkout', 'seating' ], true ) ? $kind : 'checkout' ],
+        home_url( '/lamako-mobile/cybersource/' . rawurlencode( $token ) . '/' )
+    );
+}
+
+function lamako_mobile_v2_start_cybersource( WC_Order $order, $attempt_id, $token, $kind ) {
+    $gateway = lamako_mobile_v2_provider_gateway( 'cybersource' );
+    if ( is_wp_error( $gateway ) ) {
+        return $gateway;
+    }
+
+    $redirect_url = lamako_mobile_v2_cybersource_bridge_url( $token, $kind );
+    $response     = [
+        'flow'          => 'redirect',
+        'paymentStatus' => lamako_mobile_v2_normalize_payment_status( $order ),
+        'redirectUrl'   => $redirect_url,
+        'orderId'       => $order->get_id(),
+        'gatewayId'     => 'cybersource',
+        'attemptId'     => $attempt_id,
+        'pollAfterMs'   => 2500,
+        'order'         => lamako_mobile_v2_order_summary( $order, true ),
+    ];
+
+    $order->set_payment_method( $gateway );
+    $order->update_meta_data( '_lamako_v2_payment_attempt_status', 'redirect' );
+    $order->update_meta_data( '_lamako_v2_payment_result', wp_json_encode( $response ) );
+    $order->delete_meta_data( '_lamako_v2_payment_error' );
+    $order->save();
+
+    return $response;
+}
+
+function lamako_mobile_v2_release_unconfirmed_cybersource_attempt( WC_Order $order ) {
+    if ( 'cybersource' !== $order->get_payment_method() ) {
+        return;
+    }
+
+    $attempt_status = sanitize_key( $order->get_meta( '_lamako_v2_payment_attempt_status' ) );
+    $started_at     = absint( $order->get_meta( '_lamako_v2_payment_attempt_started_at' ) );
+    $cached_result  = json_decode( (string) $order->get_meta( '_lamako_v2_payment_result' ), true );
+    if (
+        ! in_array( $attempt_status, [ 'queued', 'processing' ], true )
+        || is_array( $cached_result )
+        || $started_at <= 0
+        || ( time() - $started_at ) < 30
+    ) {
+        return;
+    }
+
+    $order->update_meta_data( '_lamako_v2_payment_attempt_status', 'failed' );
+    $order->update_meta_data( '_lamako_v2_payment_error', 'CyberSource did not return a payment redirect.' );
+    $order->save();
+}
+
+function lamako_mobile_v2_prevent_gateway_order_delete( $order_id ) {
+    $protected_order_id = absint( $GLOBALS['lamako_mobile_v2_protected_order_id'] ?? 0 );
+    if ( $protected_order_id > 0 && absint( $order_id ) === $protected_order_id ) {
+        throw new RuntimeException( 'The mobile payment order must remain available for retry.' );
+    }
+}
+
+function lamako_mobile_v2_invoke_gateway( WC_Order $order, $gateway_id, $attempt_id, $token = '', $kind = 'checkout' ) {
+    $gateways = WC()->payment_gateways()->payment_gateways();
+    if ( empty( $gateways[ $gateway_id ] ) || $gateways[ $gateway_id ]->enabled !== 'yes' ) {
+        return new WP_Error( 'lamako_v2_gateway_unavailable', 'This payment method is unavailable.', [ 'status' => 409 ] );
+    }
+
+    $gateway = $gateways[ $gateway_id ];
+    $order->set_payment_method( $gateway );
+    $order->update_meta_data( '_lamako_v2_payment_attempt_id', $attempt_id );
+    $order->update_meta_data( '_lamako_v2_payment_attempt_status', 'processing' );
+    $order->update_meta_data( '_lamako_v2_payment_attempt_started_at', time() );
+    $order->save();
+
+    if ( function_exists( 'wc_clear_notices' ) ) {
+        wc_clear_notices();
+    }
+    $output_level = ob_get_level();
+    $GLOBALS['lamako_mobile_v2_protected_order_id'] = $order->get_id();
+    $GLOBALS['lamako_mobile_v2_gateway_context'] = [
+        'order_id'   => $order->get_id(),
+        'gateway_id' => $gateway_id,
+        'token'      => sanitize_text_field( $token ),
+        'kind'       => in_array( $kind, [ 'checkout', 'seating' ], true ) ? $kind : 'checkout',
+    ];
+    add_action( 'woocommerce_before_delete_order', 'lamako_mobile_v2_prevent_gateway_order_delete', 1, 1 );
+    ob_start();
+    try {
+        $result = $gateway->process_payment( $order->get_id() );
+    } catch ( Throwable $error ) {
+        $order->update_meta_data( '_lamako_v2_payment_attempt_status', 'failed' );
+        $order->update_meta_data( '_lamako_v2_payment_error', sanitize_text_field( $error->getMessage() ) );
+        $order->save();
+        return new WP_Error( 'lamako_v2_payment_failed', 'The payment provider could not be started.', [ 'status' => 502 ] );
+    } finally {
+        while ( ob_get_level() > $output_level ) {
+            ob_end_clean();
+        }
+        remove_action( 'woocommerce_before_delete_order', 'lamako_mobile_v2_prevent_gateway_order_delete', 1 );
+        unset( $GLOBALS['lamako_mobile_v2_protected_order_id'] );
+        unset( $GLOBALS['lamako_mobile_v2_gateway_context'] );
+    }
+
+    $fresh_order = wc_get_order( $order->get_id() );
+    if ( ! $fresh_order ) {
+        return new WP_Error( 'lamako_v2_payment_order_lost', 'The payment provider removed the order after an error.', [ 'status' => 502 ] );
+    }
+    $response = lamako_mobile_v2_gateway_response( $fresh_order, $gateway_id, $attempt_id, $result );
+    $fresh_order->update_meta_data( '_lamako_v2_payment_attempt_status', $response['flow'] );
+    $fresh_order->update_meta_data( '_lamako_v2_payment_result', wp_json_encode( $response ) );
+    $fresh_order->save();
+    return $response;
+}
+
+function lamako_mobile_v2_provider_gateway( $gateway_id ) {
+    if ( ! function_exists( 'WC' ) || ! WC()->payment_gateways() ) {
+        return new WP_Error( 'lamako_v2_gateway_unavailable', 'Payment services are unavailable.', [ 'status' => 503 ] );
+    }
+
+    $gateways = WC()->payment_gateways()->payment_gateways();
+    if ( empty( $gateways[ $gateway_id ] ) || $gateways[ $gateway_id ]->enabled !== 'yes' ) {
+        return new WP_Error( 'lamako_v2_gateway_unavailable', 'This payment method is unavailable.', [ 'status' => 409 ] );
+    }
+
+    return $gateways[ $gateway_id ];
+}
+
+function lamako_mobile_v2_orange_endpoint( $gateway, $property, $fallback ) {
+    $url  = isset( $gateway->{$property} ) ? esc_url_raw( (string) $gateway->{$property} ) : '';
+    $url  = $url !== '' ? $url : $fallback;
+    $host = strtolower( (string) wp_parse_url( $url, PHP_URL_HOST ) );
+
+    if ( 'https' !== strtolower( (string) wp_parse_url( $url, PHP_URL_SCHEME ) ) || 'api.orange.com' !== $host ) {
+        return new WP_Error(
+            'lamako_v2_orange_config_invalid',
+            'Orange Money is temporarily unavailable.',
+            [ 'status' => 502 ]
+        );
+    }
+
+    return $url;
+}
+
+function lamako_mobile_v2_orange_token( $gateway ) {
+    $endpoint = lamako_mobile_v2_orange_endpoint(
+        $gateway,
+        'api_token_url',
+        'https://api.orange.com/oauth/v3/token'
+    );
+    if ( is_wp_error( $endpoint ) ) {
+        return $endpoint;
+    }
+
+    $consumer_key = isset( $gateway->consumer_key ) ? trim( (string) $gateway->consumer_key ) : '';
+    if ( $consumer_key === '' ) {
+        return new WP_Error(
+            'lamako_v2_orange_config_invalid',
+            'Orange Money is temporarily unavailable.',
+            [ 'status' => 502 ]
+        );
+    }
+
+    $response = wp_remote_post( $endpoint, [
+        'headers' => [
+            'Authorization' => 'Basic ' . $consumer_key,
+            'Accept'        => 'application/json',
+            'Content-Type'  => 'application/x-www-form-urlencoded',
+        ],
+        'body'    => [ 'grant_type' => 'client_credentials' ],
+        'timeout' => 20,
+    ] );
+    $body = lamako_mobile_v2_json_response(
+        $response,
+        [ 200 ],
+        'lamako_v2_orange_token_failed',
+        'Orange Money is temporarily unavailable.'
+    );
+
+    if ( is_wp_error( $body ) || empty( $body['access_token'] ) ) {
+        return is_wp_error( $body )
+            ? $body
+            : new WP_Error(
+                'lamako_v2_orange_token_failed',
+                'Orange Money is temporarily unavailable.',
+                [ 'status' => 502 ]
+            );
+    }
+
+    return sanitize_text_field( $body['access_token'] );
+}
+
+function lamako_mobile_v2_initiate_orange( WC_Order $order, $gateway, $attempt_id, $token, $kind ) {
+    $access_token = lamako_mobile_v2_orange_token( $gateway );
+    if ( is_wp_error( $access_token ) ) {
+        return $access_token;
+    }
+
+    $endpoint = lamako_mobile_v2_orange_endpoint(
+        $gateway,
+        'api_payment_url',
+        'https://api.orange.com/orange-money-webpay/mg/v1/webpayment'
+    );
+    if ( is_wp_error( $endpoint ) ) {
+        return $endpoint;
+    }
+
+    $merchant_key = isset( $gateway->merchant_key ) ? trim( (string) $gateway->merchant_key ) : '';
+    if ( $merchant_key === '' ) {
+        return new WP_Error(
+            'lamako_v2_orange_config_invalid',
+            'Orange Money is temporarily unavailable.',
+            [ 'status' => 502 ]
+        );
+    }
+
+    $return_url = lamako_mobile_v2_payment_page_url( $token, $kind, 'payment-return' );
+    $cancel_url = lamako_mobile_v2_payment_page_url( $token, $kind, 'payment-cancel', 'cancelled' );
+    $notif_url  = rest_url( 'lamako-mobile/v2/payments/orange/callback' );
+
+    $payload = [
+        'merchant_key' => $merchant_key,
+        'order_id'     => 'TBL' . $order->get_id() . gmdate( 'YmdHis' ),
+        'amount'       => (int) round( (float) $order->get_total() ),
+        'reference'    => 'Ticket_' . $order->get_id(),
+        'return_url'   => $return_url,
+        'cancel_url'   => $cancel_url,
+        'notif_url'    => $notif_url,
+        'lang'         => 'fr',
+        'currency'     => 'MGA',
+    ];
+    $response = wp_remote_post( $endpoint, [
+        'headers' => [
+            'Authorization' => 'Bearer ' . $access_token,
+            'Accept'        => 'application/json',
+            'Content-Type'  => 'application/json',
+        ],
+        'body'    => wp_json_encode( $payload ),
+        'timeout' => 25,
+    ] );
+    $body = lamako_mobile_v2_json_response(
+        $response,
+        [ 201 ],
+        'lamako_v2_orange_start_failed',
+        'Orange Money could not start the payment request.'
+    );
+    if ( is_wp_error( $body ) ) {
+        return $body;
+    }
+
+    $redirect_url = esc_url_raw( $body['payment_url'] ?? '' );
+    $pay_token    = sanitize_text_field( $body['pay_token'] ?? '' );
+    $notif_token  = sanitize_text_field( $body['notif_token'] ?? '' );
+    if (
+        $redirect_url === ''
+        || 'https' !== strtolower( (string) wp_parse_url( $redirect_url, PHP_URL_SCHEME ) )
+        || $pay_token === ''
+        || $notif_token === ''
+    ) {
+        return new WP_Error(
+            'lamako_v2_orange_start_failed',
+            'Orange Money could not start the payment request.',
+            [ 'status' => 502 ]
+        );
+    }
+
+    $order->update_meta_data( '_papi_pay_token', $pay_token );
+    $order->update_meta_data( '_papi_notif_token', $notif_token );
+    $order->update_meta_data( '_lamako_v2_provider_reference', $pay_token );
+    $order->update_meta_data( '_lamako_v2_provider_correlation', $notif_token );
+    $order->update_status( 'on-hold', 'Orange Money payment authorization started.' );
+    $result = lamako_mobile_v2_gateway_response(
+        $order,
+        'papi_paiement',
+        $attempt_id,
+        [ 'result' => 'success', 'redirect' => $redirect_url ]
+    );
+    $order->update_meta_data( '_lamako_v2_payment_attempt_status', 'redirect' );
+    $order->update_meta_data( '_lamako_v2_payment_result', wp_json_encode( $result ) );
+    $order->save();
+
+    return $result;
+}
+
+function lamako_mobile_v2_json_response( $response, array $success_codes, $error_code, $error_message ) {
+    if ( is_wp_error( $response ) ) {
+        return new WP_Error( $error_code, $error_message, [ 'status' => 502 ] );
+    }
+
+    $status = (int) wp_remote_retrieve_response_code( $response );
+    $body   = json_decode( (string) wp_remote_retrieve_body( $response ), true );
+    if ( ! in_array( $status, $success_codes, true ) || ! is_array( $body ) ) {
+        return new WP_Error( $error_code, $error_message, [ 'status' => 502 ] );
+    }
+
+    return $body;
+}
+
+function lamako_mobile_v2_normalize_mg_phone( $phone, $local_prefix = true ) {
+    $digits = preg_replace( '/\D+/', '', (string) $phone );
+    if ( strpos( $digits, '261' ) === 0 ) {
+        $digits = substr( $digits, 3 );
+    } elseif ( strpos( $digits, '0' ) === 0 ) {
+        $digits = substr( $digits, 1 );
+    }
+    $digits = strlen( $digits ) > 9 ? substr( $digits, -9 ) : $digits;
+    if ( strlen( $digits ) !== 9 ) {
+        return '';
+    }
+    return $local_prefix ? '0' . $digits : $digits;
+}
+
+function lamako_mobile_v2_schedule_provider_poll( WC_Order $order, $gateway_id, $attempt_id, $delay = 4 ) {
+    $run_at  = time() + max( 2, absint( $delay ) );
+    $planned = absint( $order->get_meta( '_lamako_v2_payment_next_poll_at' ) );
+    if ( $planned > time() ) {
+        return;
+    }
+
+    $order->update_meta_data( '_lamako_v2_payment_next_poll_at', $run_at );
+    $order->save();
+    $args = [ $order->get_id(), $gateway_id, $attempt_id ];
+    if ( function_exists( 'as_schedule_single_action' ) ) {
+        // A running Action Scheduler job cannot schedule its successor as a
+        // unique action because the current job is considered a duplicate.
+        as_schedule_single_action( $run_at, 'lamako_mobile_v2_poll_provider_payment', $args, 'lamako-mobile-payments', false );
+    } else {
+        wp_schedule_single_event( $run_at, 'lamako_mobile_v2_poll_provider_payment', $args );
+    }
+}
+
+function lamako_mobile_v2_provider_poll_delay( WC_Order $order ) {
+    $poll_count = absint( $order->get_meta( '_lamako_v2_payment_poll_count' ) );
+    if ( $poll_count < 12 ) {
+        return 5;
+    }
+    if ( $poll_count < 36 ) {
+        return 15;
+    }
+    return 60;
+}
+
+function lamako_mobile_v2_pending_provider_response( WC_Order $order, $gateway_id, $attempt_id ) {
+    $pending_until = time() + LAMAKO_MOBILE_V2_PAYMENT_VERIFY_TTL;
+    $order->update_meta_data( '_lamako_v2_payment_attempt_status', 'pending' );
+    $order->update_meta_data( '_lamako_v2_payment_pending_until', $pending_until );
+    $order->update_meta_data( '_lamako_v2_payment_last_checked_at', time() );
+    $order->update_meta_data( '_lamako_v2_payment_poll_count', 0 );
+    $order->update_meta_data( '_lamako_v2_payment_error', '' );
+    $order->save();
+    $response = [
+        'flow'          => 'pending',
+        'paymentStatus' => 'pending',
+        'orderId'       => $order->get_id(),
+        'gatewayId'     => $gateway_id,
+        'attemptId'     => $attempt_id,
+        'pollAfterMs'   => 3000,
+        'order'         => lamako_mobile_v2_order_summary( $order, true ),
+    ];
+    $order->update_meta_data( '_lamako_v2_payment_result', wp_json_encode( $response ) );
+    $order->save();
+    return $response;
+}
+
+function lamako_mobile_v2_provider_failure( WC_Order $order, $message ) {
+    $safe_message = sanitize_text_field( $message );
+    $order->update_meta_data( '_lamako_v2_payment_next_poll_at', 0 );
+    $order->update_meta_data( '_lamako_v2_payment_attempt_status', 'failed' );
+    $order->update_meta_data( '_lamako_v2_payment_error', $safe_message );
+    if ( ! $order->has_status( [ 'failed', 'cancelled' ] ) ) {
+        $order->update_status( 'failed', 'Lamako Mobile payment failed: ' . $safe_message );
+    } else {
+        $order->add_order_note( 'Lamako Mobile payment failed: ' . $safe_message );
+        $order->save();
+    }
+}
+
+function lamako_mobile_v2_cancel_unpaid_payment( WC_Order $order, $reason = 'Customer cancelled the payment.' ) {
+    if ( $order->is_paid() ) {
+        return false;
+    }
+
+    $safe_reason = sanitize_text_field( $reason );
+    $order->update_meta_data( '_lamako_v2_payment_next_poll_at', 0 );
+    $order->update_meta_data( '_lamako_v2_payment_pending_until', 0 );
+    $order->update_meta_data( '_lamako_v2_payment_attempt_status', 'cancelled' );
+    $order->update_meta_data( '_lamako_v2_payment_error', $safe_reason );
+
+    if ( ! $order->has_status( 'cancelled' ) ) {
+        $order->update_status( 'cancelled', 'Lamako Mobile: ' . $safe_reason );
+    } else {
+        $order->save();
+    }
+
+    return true;
+}
+
+function lamako_mobile_v2_payment_active_attempt_statuses() {
+    return [ 'queued', 'processing', 'pending', 'redirect' ];
+}
+
+function lamako_mobile_v2_payment_review_attempt_statuses() {
+    return [ 'verification_delayed', 'review' ];
+}
+
+function lamako_mobile_v2_order_has_protected_payment_attempt( $order ) {
+    if ( ! $order instanceof WC_Order || $order->is_paid() ) {
+        return false;
+    }
+
+    $attempt_id = (string) $order->get_meta( '_lamako_v2_payment_attempt_id' );
+    $status     = sanitize_key( $order->get_meta( '_lamako_v2_payment_attempt_status' ) );
+    return $attempt_id !== '' && in_array(
+        $status,
+        array_merge( lamako_mobile_v2_payment_active_attempt_statuses(), lamako_mobile_v2_payment_review_attempt_statuses() ),
+        true
+    );
+}
+
+function lamako_mobile_v2_payment_verification_deadline( WC_Order $order ) {
+    $deadline = absint( $order->get_meta( '_lamako_v2_payment_pending_until' ) );
+    if ( $deadline > 0 ) {
+        return $deadline;
+    }
+
+    $started_at = absint( $order->get_meta( '_lamako_v2_payment_attempt_started_at' ) );
+    return ( $started_at > 0 ? $started_at : time() ) + LAMAKO_MOBILE_V2_PAYMENT_VERIFY_TTL;
+}
+
+function lamako_mobile_v2_mark_payment_for_review( WC_Order $order, $message ) {
+    $order->update_meta_data( '_lamako_v2_payment_next_poll_at', 0 );
+    $order->update_meta_data( '_lamako_v2_payment_attempt_status', 'verification_delayed' );
+    $order->update_meta_data( '_lamako_v2_payment_error', sanitize_text_field( $message ) );
+    if ( 'yes' !== $order->get_meta( '_lamako_v2_payment_review_noted' ) ) {
+        $order->add_order_note( 'Lamako Mobile: provider verification delayed. Do not cancel or retry the debit before manual verification.' );
+        $order->update_meta_data( '_lamako_v2_payment_review_noted', 'yes' );
+    }
+    $order->save();
+}
+
+function lamako_mobile_v2_mvola_token( $gateway ) {
+    $response = wp_remote_post( 'https://api.mvola.mg/token', [
+        'headers' => [
+            'Content-Type'  => 'application/x-www-form-urlencoded',
+            'Authorization' => 'Basic ' . (string) $gateway->consumer_key,
+            'Accept'        => 'application/json',
+        ],
+        'body'    => [ 'grant_type' => 'client_credentials', 'scope' => 'EXT_INT_MVOLA_SCOPE' ],
+        'timeout' => 20,
+    ] );
+    $body = lamako_mobile_v2_json_response( $response, [ 200 ], 'lamako_v2_mvola_token_failed', 'MVola is temporarily unavailable.' );
+    if ( is_wp_error( $body ) || empty( $body['access_token'] ) ) {
+        return is_wp_error( $body ) ? $body : new WP_Error( 'lamako_v2_mvola_token_failed', 'MVola is temporarily unavailable.', [ 'status' => 502 ] );
+    }
+    return sanitize_text_field( $body['access_token'] );
+}
+
+function lamako_mobile_v2_mvola_headers( $gateway, $token, $correlation_id ) {
+    return [
+        'Content-Type'          => 'application/json',
+        'Authorization'         => 'Bearer ' . $token,
+        'Accept'                => 'application/json',
+        'Version'               => '1.0',
+        'X-CorrelationID'       => $correlation_id,
+        'UserAccountIdentifier' => 'msisdn;' . (string) $gateway->merchant_key,
+        'UserLanguage'          => 'MG',
+        'partnerName'           => 'TicketByLamako',
+        'Accept-Charset'        => 'utf-8',
+        'Cache-Control'         => 'no-cache',
+    ];
+}
+
+function lamako_mobile_v2_initiate_mvola( WC_Order $order, $gateway, $attempt_id ) {
+    // Match the production WooCommerce gateway payload during provider parity tests.
+    $phone = trim( (string) $order->get_billing_phone() );
+    if ( $phone === '' ) {
+        return new WP_Error( 'lamako_v2_phone_invalid', 'Enter a valid Madagascar mobile number.', [ 'status' => 422 ] );
+    }
+
+    $token = lamako_mobile_v2_mvola_token( $gateway );
+    if ( is_wp_error( $token ) ) {
+        return $token;
+    }
+    $correlation_id = wp_generate_uuid4();
+    $amount         = (string) (int) round( (float) $order->get_total() );
+    $reference          = 'Lamako_' . $order->get_id();
+    $original_reference = '_' . $order->get_id() . '_';
+    $now                = new DateTime( 'now', new DateTimeZone( 'UTC' ) );
+    $milliseconds       = round( (int) $now->format( 'u' ) / 1000 );
+    $request_date       = $now->format( 'Y-m-d\TH:i:s.' ) . $milliseconds . 'Z';
+    $body = [
+        'amount'                                      => $amount,
+        'currency'                                    => 'Ar',
+        'descriptionText'                             => 'Ticket ' . $order->get_id(),
+        'requestDate'                                 => $request_date,
+        'creditParty'                                 => [ [ 'key' => 'msisdn', 'value' => (string) $gateway->merchant_key ] ],
+        'debitParty'                                  => [ [ 'key' => 'msisdn', 'value' => $phone ] ],
+        'metadata'                                    => [
+            [ 'key' => 'partnerName', 'value' => 'TicketByLamako' ],
+            [ 'key' => 'amountFc', 'value' => $amount . 'Ar' ],
+            [ 'key' => 'fc', 'value' => 'Ariary' ],
+        ],
+        'requestingOrganisationTransactionReference' => $reference,
+        'originalTransactionReference'                => $original_reference,
+    ];
+    $response = wp_remote_post( 'https://api.mvola.mg/mvola/mm/transactions/type/merchantpay/1.0.0/', [
+        'headers' => lamako_mobile_v2_mvola_headers( $gateway, $token, $correlation_id ),
+        'body'    => wp_json_encode( $body ),
+        'timeout' => 25,
+    ] );
+    $payload = lamako_mobile_v2_json_response( $response, [ 200, 202 ], 'lamako_v2_mvola_start_failed', 'MVola could not start the payment request.' );
+    if ( is_wp_error( $payload ) || empty( $payload['serverCorrelationId'] ) ) {
+        return is_wp_error( $payload ) ? $payload : new WP_Error( 'lamako_v2_mvola_start_failed', 'MVola could not start the payment request.', [ 'status' => 502 ] );
+    }
+
+    $order->update_meta_data( '_lamako_v2_provider_reference', sanitize_text_field( $payload['serverCorrelationId'] ) );
+    $order->update_meta_data( '_lamako_v2_provider_correlation', $correlation_id );
+    $order->update_meta_data( '_lamako_v2_provider_partner_reference', $reference );
+    $order->update_meta_data( '_mvola_server_correlation_id', sanitize_text_field( $payload['serverCorrelationId'] ) );
+    $order->save();
+    lamako_mobile_v2_schedule_provider_poll( $order, 'mvola_paiement', $attempt_id );
+    return lamako_mobile_v2_pending_provider_response( $order, 'mvola_paiement', $attempt_id );
+}
+
+function lamako_mobile_v2_airtel_token( $gateway ) {
+    $api = untrailingslashit( (string) $gateway->api );
+    if ( $api === '' ) {
+        return new WP_Error( 'lamako_v2_airtel_config_invalid', 'Airtel Money is temporarily unavailable.', [ 'status' => 502 ] );
+    }
+    $response = wp_remote_post( $api . '/auth/oauth2/token', [
+        'headers' => [ 'Content-Type' => 'application/json', 'Accept' => '*/*' ],
+        'body'    => wp_json_encode( [
+            'client_id'     => (string) $gateway->id_client,
+            'client_secret' => (string) $gateway->secret_key,
+            'grant_type'    => 'client_credentials',
+        ] ),
+        'timeout' => 20,
+    ] );
+    $body = lamako_mobile_v2_json_response( $response, [ 200 ], 'lamako_v2_airtel_token_failed', 'Airtel Money is temporarily unavailable.' );
+    if ( is_wp_error( $body ) || empty( $body['access_token'] ) ) {
+        return is_wp_error( $body ) ? $body : new WP_Error( 'lamako_v2_airtel_token_failed', 'Airtel Money is temporarily unavailable.', [ 'status' => 502 ] );
+    }
+    return sanitize_text_field( $body['access_token'] );
+}
+
+function lamako_mobile_v2_airtel_headers( $token ) {
+    return [
+        'Content-Type'  => 'application/json',
+        'Authorization' => 'Bearer ' . $token,
+        'Accept'        => 'application/json',
+        'X-Country'     => 'MG',
+        'X-Currency'    => 'MGA',
+        'Cache-Control' => 'no-cache',
+    ];
+}
+
+function lamako_mobile_v2_initiate_airtel( WC_Order $order, $gateway, $attempt_id ) {
+    $phone = lamako_mobile_v2_normalize_mg_phone( $order->get_billing_phone(), false );
+    if ( $phone === '' ) {
+        return new WP_Error( 'lamako_v2_phone_invalid', 'Enter a valid Madagascar mobile number.', [ 'status' => 422 ] );
+    }
+    $token = lamako_mobile_v2_airtel_token( $gateway );
+    if ( is_wp_error( $token ) ) {
+        return $token;
+    }
+    $transaction_id = str_replace( '-', '', wp_generate_uuid4() );
+    $payload = [
+        'reference'  => 'TK_' . $order->get_id(),
+        'subscriber' => [ 'country' => 'MG', 'currency' => 'MGA', 'msisdn' => $phone ],
+        'transaction'=> [
+            'amount'   => (float) $order->get_total(),
+            'country'  => 'MG',
+            'currency' => 'MGA',
+            'id'       => $transaction_id,
+        ],
+    ];
+    $response = wp_remote_post( untrailingslashit( (string) $gateway->api ) . '/merchant/v1/payments/', [
+        'headers' => lamako_mobile_v2_airtel_headers( $token ),
+        'body'    => wp_json_encode( $payload ),
+        'timeout' => 25,
+    ] );
+    $body = lamako_mobile_v2_json_response( $response, [ 200 ], 'lamako_v2_airtel_start_failed', 'Airtel Money could not start the payment request.' );
+    $provider_id = is_array( $body ) ? sanitize_text_field( $body['data']['transaction']['id'] ?? '' ) : '';
+    $accepted    = is_array( $body ) && ! empty( $body['status']['success'] ) && $provider_id !== '';
+    if ( is_wp_error( $body ) || ! $accepted ) {
+        return is_wp_error( $body ) ? $body : new WP_Error( 'lamako_v2_airtel_start_failed', 'Airtel Money could not start the payment request.', [ 'status' => 502 ] );
+    }
+
+    $order->update_meta_data( '_lamako_v2_provider_reference', $provider_id );
+    $order->update_meta_data( '_lamako_v2_provider_correlation', $transaction_id );
+    $order->save();
+    lamako_mobile_v2_schedule_provider_poll( $order, 'airtel_paiement', $attempt_id );
+    return lamako_mobile_v2_pending_provider_response( $order, 'airtel_paiement', $attempt_id );
+}
+
+function lamako_mobile_v2_initiate_async_payment( WC_Order $order, $gateway_id, $attempt_id ) {
+    $gateway = lamako_mobile_v2_provider_gateway( $gateway_id );
+    if ( is_wp_error( $gateway ) ) {
+        return $gateway;
+    }
+
+    $order->update_meta_data( '_lamako_v2_payment_attempt_status', 'processing' );
+    $order->update_meta_data( '_lamako_v2_payment_attempt_started_at', time() );
+    $order->save();
+    if ( $gateway_id === 'mvola_paiement' ) {
+        return lamako_mobile_v2_initiate_mvola( $order, $gateway, $attempt_id );
+    }
+    if ( $gateway_id === 'airtel_paiement' ) {
+        return lamako_mobile_v2_initiate_airtel( $order, $gateway, $attempt_id );
+    }
+    return new WP_Error( 'lamako_v2_gateway_invalid', 'Unsupported mobile payment method.', [ 'status' => 422 ] );
+}
+
+function lamako_mobile_v2_poll_provider_payment( $order_id, $gateway_id, $attempt_id ) {
+    global $wpdb;
+
+    $lock_name = 'lamako_payment_' . absint( $order_id );
+    $locked    = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 0)', $lock_name ) );
+    if ( 1 !== $locked ) {
+        return;
+    }
+
+    try {
+        lamako_mobile_v2_poll_provider_payment_unlocked( $order_id, $gateway_id, $attempt_id );
+    } finally {
+        $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
+    }
+}
+
+function lamako_mobile_v2_poll_provider_payment_unlocked( $order_id, $gateway_id, $attempt_id ) {
+    $order = wc_get_order( absint( $order_id ) );
+    if ( ! $order || $order->is_paid() || (string) $order->get_meta( '_lamako_v2_payment_attempt_id' ) !== (string) $attempt_id ) {
+        return;
+    }
+
+    $deadline = lamako_mobile_v2_payment_verification_deadline( $order );
+    $delayed  = time() > $deadline;
+    $order->update_meta_data( '_lamako_v2_payment_next_poll_at', 0 );
+    $order->update_meta_data( '_lamako_v2_payment_last_checked_at', time() );
+    $order->update_meta_data( '_lamako_v2_payment_poll_count', absint( $order->get_meta( '_lamako_v2_payment_poll_count' ) ) + 1 );
+    $order->save();
+
+    $gateway = lamako_mobile_v2_provider_gateway( $gateway_id );
+    if ( is_wp_error( $gateway ) ) {
+        if ( $delayed ) {
+            lamako_mobile_v2_mark_payment_for_review( $order, $gateway->get_error_message() );
+        } else {
+            lamako_mobile_v2_schedule_provider_poll( $order, $gateway_id, $attempt_id, lamako_mobile_v2_provider_poll_delay( $order ) );
+        }
+        return;
+    }
+    $reference     = sanitize_text_field( $order->get_meta( '_lamako_v2_provider_reference' ) );
+    $correlation   = sanitize_text_field( $order->get_meta( '_lamako_v2_provider_correlation' ) );
+    $status        = 'pending';
+    $transaction_id = '';
+
+    if ( $gateway_id === 'mvola_paiement' ) {
+        $token = lamako_mobile_v2_mvola_token( $gateway );
+        if ( is_wp_error( $token ) ) {
+            if ( $delayed ) {
+                lamako_mobile_v2_mark_payment_for_review( $order, 'MVola verification is temporarily unavailable.' );
+            } else {
+                lamako_mobile_v2_schedule_provider_poll( $order, $gateway_id, $attempt_id, lamako_mobile_v2_provider_poll_delay( $order ) );
+            }
+            return;
+        }
+        $response = wp_remote_get( 'https://api.mvola.mg/mvola/mm/transactions/type/merchantpay/1.0.0/status/' . rawurlencode( $reference ), [
+            'headers' => lamako_mobile_v2_mvola_headers( $gateway, $token, $correlation ?: wp_generate_uuid4() ),
+            'timeout' => 20,
+        ] );
+        $body = lamako_mobile_v2_json_response( $response, [ 200 ], 'lamako_v2_mvola_status_failed', 'MVola status is temporarily unavailable.' );
+        if ( is_wp_error( $body ) ) {
+            if ( $delayed ) {
+                lamako_mobile_v2_mark_payment_for_review( $order, 'MVola verification is delayed.' );
+            } else {
+                lamako_mobile_v2_schedule_provider_poll( $order, $gateway_id, $attempt_id, lamako_mobile_v2_provider_poll_delay( $order ) );
+            }
+            return;
+        }
+        $returned_reference = sanitize_text_field( $body['serverCorrelationId'] ?? '' );
+        if ( $returned_reference !== '' && ! hash_equals( $reference, $returned_reference ) ) {
+            lamako_mobile_v2_mark_payment_for_review( $order, 'MVola returned an inconsistent payment reference.' );
+            return;
+        }
+        $status         = sanitize_key( $body['status'] ?? 'pending' );
+        $transaction_id = sanitize_text_field( $body['objectReference'] ?? $reference );
+    } elseif ( $gateway_id === 'airtel_paiement' ) {
+        $token = lamako_mobile_v2_airtel_token( $gateway );
+        if ( is_wp_error( $token ) ) {
+            if ( $delayed ) {
+                lamako_mobile_v2_mark_payment_for_review( $order, 'Airtel Money verification is temporarily unavailable.' );
+            } else {
+                lamako_mobile_v2_schedule_provider_poll( $order, $gateway_id, $attempt_id, lamako_mobile_v2_provider_poll_delay( $order ) );
+            }
+            return;
+        }
+        $response = wp_remote_get( untrailingslashit( (string) $gateway->api ) . '/standard/v1/payments/' . rawurlencode( $reference ), [
+            'headers' => lamako_mobile_v2_airtel_headers( $token ),
+            'timeout' => 20,
+        ] );
+        $body = lamako_mobile_v2_json_response( $response, [ 200 ], 'lamako_v2_airtel_status_failed', 'Airtel Money status is temporarily unavailable.' );
+        if ( is_wp_error( $body ) ) {
+            if ( $delayed ) {
+                lamako_mobile_v2_mark_payment_for_review( $order, 'Airtel Money verification is delayed.' );
+            } else {
+                lamako_mobile_v2_schedule_provider_poll( $order, $gateway_id, $attempt_id, lamako_mobile_v2_provider_poll_delay( $order ) );
+            }
+            return;
+        }
+        $status         = strtoupper( sanitize_text_field( $body['data']['transaction']['status'] ?? 'TIP' ) );
+        $transaction_id = sanitize_text_field( $body['data']['transaction']['airtel_money_id'] ?? $reference );
+    }
+
+    $success = ( $gateway_id === 'mvola_paiement' && $status === 'completed' ) || ( $gateway_id === 'airtel_paiement' && $status === 'TS' );
+    $cancelled = ( $gateway_id === 'mvola_paiement' && $status === 'cancelled' )
+        || ( $gateway_id === 'airtel_paiement' && $status === 'CANCELLED' );
+    $failed  = ( $gateway_id === 'mvola_paiement' && in_array( $status, [ 'failed', 'rejected' ], true ) )
+        || ( $gateway_id === 'airtel_paiement' && in_array( $status, [ 'TF', 'FAILED', 'REJECTED' ], true ) );
+
+    if ( $success ) {
+        $order->update_meta_data( '_lamako_v2_payment_next_poll_at', 0 );
+        $order->payment_complete( $transaction_id );
+        $order->update_meta_data( '_lamako_v2_payment_attempt_status', 'success' );
+        $order->add_order_note( ucfirst( str_replace( '_paiement', '', $gateway_id ) ) . ' payment confirmed by the provider.' );
+        $order->save();
+        $response = lamako_mobile_v2_gateway_response( $order, $gateway_id, $attempt_id, [ 'result' => 'success' ] );
+        $order->update_meta_data( '_lamako_v2_payment_result', wp_json_encode( $response ) );
+        $order->save();
+        return;
+    }
+    if ( $cancelled ) {
+        lamako_mobile_v2_cancel_unpaid_payment( $order, 'The operator reported that the customer cancelled the payment.' );
+        return;
+    }
+    if ( $failed ) {
+        $order->update_meta_data( '_lamako_v2_payment_next_poll_at', 0 );
+        $order->save();
+        lamako_mobile_v2_provider_failure( $order, 'The operator declined or cancelled the payment.' );
+        return;
+    }
+
+    if ( $delayed ) {
+        lamako_mobile_v2_mark_payment_for_review( $order, 'The operator has not returned a final payment status yet.' );
+        return;
+    }
+
+    lamako_mobile_v2_schedule_provider_poll( $order, $gateway_id, $attempt_id, lamako_mobile_v2_provider_poll_delay( $order ) );
+}
+
+function lamako_mobile_v2_find_order_by_provider_reference( $reference ) {
+    $orders = wc_get_orders( [
+        'limit'          => 2,
+        'payment_method' => 'mvola_paiement',
+        'meta_query'     => [
+            [
+                'key'     => '_lamako_v2_provider_reference',
+                'value'   => sanitize_text_field( $reference ),
+                'compare' => '=',
+            ],
+        ],
+        'orderby'        => 'date',
+        'order'          => 'DESC',
+        'return'         => 'objects',
+    ] );
+
+    foreach ( $orders as $order ) {
+        if ( $order instanceof WC_Order && 'mvola_paiement' === $order->get_payment_method() ) {
+            return $order;
+        }
+    }
+    return false;
+}
+
+function lamako_mobile_v2_mvola_callback( WP_REST_Request $request ) {
+    $body      = $request->get_json_params();
+    $body      = is_array( $body ) ? $body : [];
+    $reference = sanitize_text_field( $body['serverCorrelationId'] ?? '' );
+    $hint      = sanitize_key( $body['transactionStatus'] ?? '' );
+    $order     = lamako_mobile_v2_find_order_by_provider_reference( $reference );
+
+    if ( $order instanceof WC_Order && ! $order->is_paid() ) {
+        $throttle = 'lamako_mvola_callback_' . hash( 'sha256', $reference );
+        if ( get_transient( $throttle ) ) {
+            return new WP_REST_Response( [ 'received' => true ], 202 );
+        }
+        set_transient( $throttle, 1, 5 );
+
+        $attempt_id = sanitize_text_field( $order->get_meta( '_lamako_v2_payment_attempt_id' ) );
+        if ( $attempt_id !== '' ) {
+            $order->update_meta_data( '_lamako_v2_mvola_callback_received_at', time() );
+            $order->update_meta_data( '_lamako_v2_mvola_callback_hint', $hint );
+            $order->update_meta_data( '_lamako_v2_payment_next_poll_at', 0 );
+            $order->save();
+
+            // The callback is only a wake-up signal. The authenticated MVola
+            // status API remains the source of truth before payment_complete().
+            $args = [ $order->get_id(), 'mvola_paiement', $attempt_id ];
+            if ( function_exists( 'as_enqueue_async_action' ) ) {
+                as_enqueue_async_action( 'lamako_mobile_v2_poll_provider_payment', $args, 'lamako-mobile-payments', false );
+            } else {
+                wp_schedule_single_event( time() + 1, 'lamako_mobile_v2_poll_provider_payment', $args );
+            }
+        }
+    }
+
+    return new WP_REST_Response( [ 'received' => true ], 202 );
+}
+
+function lamako_mobile_v2_allow_orange_callback( WP_REST_Request $request ) {
+    $body        = $request->get_json_params();
+    $body        = is_array( $body ) ? $body : [];
+    $notif_token = sanitize_text_field( $body['notif_token'] ?? '' );
+    $status      = strtoupper( sanitize_text_field( $body['status'] ?? '' ) );
+
+    if ( strlen( $notif_token ) < 16 || ! in_array( $status, [ 'SUCCESS', 'COMPLETED', 'TS', 'FAILED', 'CANCELLED', 'INSUFFICIENT_BALANCE', 'PENDING', 'TIP' ], true ) ) {
+        return new WP_Error( 'lamako_v2_orange_callback_invalid', 'Invalid callback.', [ 'status' => 403 ] );
+    }
+
+    return true;
+}
+
+function lamako_mobile_v2_find_orange_order_by_notif_token( $notif_token ) {
+    $orders = wc_get_orders( [
+        'limit'          => 2,
+        'payment_method' => 'papi_paiement',
+        'meta_query'     => [
+            [
+                'key'     => '_papi_notif_token',
+                'value'   => sanitize_text_field( $notif_token ),
+                'compare' => '=',
+            ],
+        ],
+        'orderby'        => 'date',
+        'order'          => 'DESC',
+        'return'         => 'objects',
+    ] );
+
+    foreach ( $orders as $order ) {
+        if ( ! $order instanceof WC_Order || 'papi_paiement' !== $order->get_payment_method() ) {
+            continue;
+        }
+        $stored = (string) $order->get_meta( '_papi_notif_token' );
+        if ( $stored !== '' && hash_equals( $stored, (string) $notif_token ) ) {
+            return $order;
+        }
+    }
+
+    return false;
+}
+
+function lamako_mobile_v2_orange_callback( WP_REST_Request $request ) {
+    $body          = $request->get_json_params();
+    $body          = is_array( $body ) ? $body : [];
+    $notif_token   = sanitize_text_field( $body['notif_token'] ?? '' );
+    $status        = strtoupper( sanitize_text_field( $body['status'] ?? '' ) );
+    $transaction_id = sanitize_text_field( $body['transaction_id'] ?? ( $body['txnid'] ?? '' ) );
+    $order         = lamako_mobile_v2_find_orange_order_by_notif_token( $notif_token );
+
+    if ( ! $order instanceof WC_Order ) {
+        return new WP_REST_Response( [ 'received' => false ], 404 );
+    }
+
+    if ( $order->is_paid() ) {
+        return new WP_REST_Response( [ 'received' => true ], 200 );
+    }
+
+    $attempt_id = sanitize_text_field( $order->get_meta( '_lamako_v2_payment_attempt_id' ) );
+    if ( $attempt_id === '' ) {
+        return new WP_REST_Response( [ 'received' => false ], 409 );
+    }
+
+    if ( in_array( $status, [ 'SUCCESS', 'COMPLETED', 'TS' ], true ) ) {
+        $order->payment_complete( $transaction_id !== '' ? $transaction_id : (string) $order->get_meta( '_papi_pay_token' ) );
+        $order->update_meta_data( '_lamako_v2_payment_attempt_status', 'success' );
+        $order->update_meta_data( '_lamako_v2_payment_next_poll_at', 0 );
+        $order->add_order_note( 'Orange Money payment confirmed by the provider callback.' );
+        $result = lamako_mobile_v2_gateway_response( $order, 'papi_paiement', $attempt_id, [ 'result' => 'success' ] );
+        $order->update_meta_data( '_lamako_v2_payment_result', wp_json_encode( $result ) );
+        $order->save();
+        return new WP_REST_Response( [ 'received' => true ], 200 );
+    }
+
+    if ( $status === 'CANCELLED' ) {
+        lamako_mobile_v2_cancel_unpaid_payment( $order, 'Orange Money reported that the customer cancelled the payment.' );
+        return new WP_REST_Response( [ 'received' => true ], 200 );
+    }
+
+    if ( in_array( $status, [ 'FAILED', 'INSUFFICIENT_BALANCE' ], true ) ) {
+        lamako_mobile_v2_provider_failure( $order, 'The operator declined or cancelled the payment.' );
+        return new WP_REST_Response( [ 'received' => true ], 200 );
+    }
+
+    if ( $order->has_status( [ 'failed', 'cancelled' ] ) ) {
+        return new WP_REST_Response( [ 'received' => true ], 200 );
+    }
+
+    $order->update_status( 'on-hold', 'Orange Money payment confirmation is pending.' );
+    $order->update_meta_data( '_lamako_v2_payment_attempt_status', 'pending' );
+    $order->save();
+    return new WP_REST_Response( [ 'received' => true ], 202 );
+}
+
+function lamako_mobile_v2_reconcile_pending_payments() {
+    global $wpdb;
+
+    if ( ! function_exists( 'wc_get_orders' ) ) {
+        return;
+    }
+
+    $lock_name = 'lamako_payment_reconciliation';
+    $locked    = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 0)', $lock_name ) );
+    if ( 1 !== $locked ) {
+        return;
+    }
+
+    $started_at = time();
+    $checked    = 0;
+    update_option( 'lamako_mobile_v2_payment_reconciliation_health', [
+        'started_at'  => $started_at,
+        'finished_at' => 0,
+        'checked'     => 0,
+    ], false );
+
+    try {
+        foreach ( [ 'mvola_paiement', 'airtel_paiement' ] as $gateway_id ) {
+            $orders = wc_get_orders( [
+                'limit'          => 50,
+                'payment_method' => $gateway_id,
+                'status'         => [ 'pending', 'on-hold', 'checkout-draft', 'failed' ],
+                'date_created'   => '>' . ( time() - DAY_IN_SECONDS ),
+                'orderby'        => 'date',
+                'order'          => 'DESC',
+                'return'         => 'objects',
+            ] );
+
+            foreach ( $orders as $order ) {
+                if ( ! lamako_mobile_v2_order_has_protected_payment_attempt( $order ) ) {
+                    continue;
+                }
+                $attempt_id = sanitize_text_field( $order->get_meta( '_lamako_v2_payment_attempt_id' ) );
+                if ( $attempt_id !== '' ) {
+                    $checked++;
+                    lamako_mobile_v2_poll_provider_payment( $order->get_id(), $gateway_id, $attempt_id );
+                }
+            }
+        }
+    } finally {
+        update_option( 'lamako_mobile_v2_payment_reconciliation_health', [
+            'started_at'  => $started_at,
+            'finished_at' => time(),
+            'checked'     => $checked,
+        ], false );
+        $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
+    }
+}
+
+function lamako_mobile_v2_process_async_payment( $order_id, $gateway_id, $attempt_id ) {
+    $order = wc_get_order( absint( $order_id ) );
+    if ( ! $order || $order->is_paid() ) {
+        return;
+    }
+    $result = lamako_mobile_v2_initiate_async_payment( $order, sanitize_key( $gateway_id ), sanitize_text_field( $attempt_id ) );
+    if ( is_wp_error( $result ) ) {
+        lamako_mobile_v2_provider_failure( $order, $result->get_error_message() );
+    }
+}
+
+function lamako_mobile_v2_existing_payment_response( WC_Order $order ) {
+    if ( ! lamako_mobile_v2_order_has_protected_payment_attempt( $order ) ) {
+        return false;
+    }
+
+    $attempt_id     = (string) $order->get_meta( '_lamako_v2_payment_attempt_id' );
+    $attempt_status = sanitize_key( $order->get_meta( '_lamako_v2_payment_attempt_status' ) );
+    $cached_result  = json_decode( (string) $order->get_meta( '_lamako_v2_payment_result' ), true );
+    if ( is_array( $cached_result ) && in_array( $attempt_status, lamako_mobile_v2_payment_active_attempt_statuses(), true ) ) {
+        $cached_result['order']         = lamako_mobile_v2_order_summary( $order, true );
+        $cached_result['paymentStatus'] = $cached_result['order']['paymentStatus'];
+        return $cached_result;
+    }
+
+    return [
+        'flow'          => 'pending',
+        'paymentStatus' => in_array( $attempt_status, lamako_mobile_v2_payment_review_attempt_statuses(), true ) ? 'review' : 'pending',
+        'orderId'       => $order->get_id(),
+        'gatewayId'     => $order->get_payment_method(),
+        'attemptId'     => $attempt_id,
+        'pollAfterMs'   => 5000,
+        'order'         => lamako_mobile_v2_order_summary( $order, true ),
+    ];
+}
+
+function lamako_mobile_v2_start_payment( WP_REST_Request $request ) {
+    $context = lamako_mobile_v2_payment_order_from_request( $request );
+    if ( is_wp_error( $context ) ) {
+        return $context;
+    }
+    list( $token, $kind, $order ) = $context;
+    if ( $order->is_paid() ) {
+        return rest_ensure_response( [
+            'flow'          => 'success',
+            'paymentStatus' => 'success',
+            'orderId'       => $order->get_id(),
+            'order'         => lamako_mobile_v2_order_summary( $order, true ),
+        ] );
+    }
+
+    lamako_mobile_v2_release_unconfirmed_cybersource_attempt( $order );
+    $protected_response = lamako_mobile_v2_existing_payment_response( $order );
+    if ( is_array( $protected_response ) ) {
+        return rest_ensure_response( $protected_response );
+    }
+
+    if ( $kind === 'checkout' && lamako_mobile_v2_is_checkout_expired( $order ) ) {
+        return new WP_Error( 'lamako_v2_checkout_expired', 'This payment session has expired.', [ 'status' => 410 ] );
+    }
+    if ( $kind === 'seating' ) {
+        $flow = lamako_mobile_v2_get_seating_flow( $token );
+        if ( ! is_array( $flow ) || ( ! empty( $flow['expires_at'] ) && (int) $flow['expires_at'] < time() ) ) {
+            return new WP_Error( 'lamako_v2_seating_session_expired', 'This seating session has expired.', [ 'status' => 410 ] );
+        }
+    }
+
+    $body       = $request->get_json_params();
+    $body       = is_array( $body ) ? $body : [];
+    $gateway_id = sanitize_key( $body['paymentMethod'] ?? '' );
+    $attempt_id = sanitize_text_field( $body['attemptId'] ?? '' );
+    $phone      = sanitize_text_field( $body['billingPhone'] ?? '' );
+    if ( $attempt_id === '' || strlen( $attempt_id ) > 80 ) {
+        return new WP_Error( 'lamako_v2_attempt_required', 'A valid payment attempt identifier is required.', [ 'status' => 422 ] );
+    }
+
+    if ( (float) $order->get_total() <= 0 ) {
+        $order->set_payment_method( '' );
+        $order->set_payment_method_title( 'Coupon 100 %' );
+        $order->update_meta_data( '_lamako_zero_total_order', 'yes' );
+        $order->payment_complete();
+        $order->save();
+        return rest_ensure_response( [
+            'flow'          => 'success',
+            'paymentStatus' => 'success',
+            'orderId'       => $order->get_id(),
+            'order'         => lamako_mobile_v2_order_summary( $order, true ),
+        ] );
+    }
+
+    $definitions = lamako_mobile_v2_payment_gateway_definitions();
+    if ( empty( $definitions[ $gateway_id ] ) ) {
+        return new WP_Error( 'lamako_v2_gateway_invalid', 'Select an available payment method.', [ 'status' => 422 ] );
+    }
+    if ( $definitions[ $gateway_id ]['requiresPhone'] && $phone === '' && $order->get_billing_phone() === '' ) {
+        return new WP_Error( 'lamako_v2_phone_required', 'A phone number is required for this payment method.', [ 'status' => 422 ] );
+    }
+    if ( $phone !== '' ) {
+        $order->set_billing_phone( $phone );
+    }
+    if ( $kind === 'seating' && ! empty( $flow['expires_at'] ) ) {
+        $order->update_meta_data( '_lamako_v2_reservation_expires_at', gmdate( 'c', (int) $flow['expires_at'] ) );
+    } else {
+        $checkout_expires = (string) $order->get_meta( '_lamako_v2_checkout_expires_at' );
+        if ( $checkout_expires !== '' ) {
+            $order->update_meta_data( '_lamako_v2_reservation_expires_at', $checkout_expires );
+        }
+    }
+
+    $cached_attempt = (string) $order->get_meta( '_lamako_v2_payment_attempt_id' );
+    $cached_result  = json_decode( (string) $order->get_meta( '_lamako_v2_payment_result' ), true );
+    if ( $cached_attempt === $attempt_id && is_array( $cached_result ) ) {
+        return rest_ensure_response( $cached_result );
+    }
+
+    $order->set_payment_method( $gateway_id );
+    $gateways = WC()->payment_gateways()->payment_gateways();
+    if ( ! empty( $gateways[ $gateway_id ] ) ) {
+        $order->set_payment_method_title( wp_strip_all_tags( $gateways[ $gateway_id ]->get_title() ) );
+    }
+    $order->update_meta_data( '_lamako_v2_payment_attempt_id', $attempt_id );
+    $order->update_meta_data( '_lamako_v2_payment_attempt_status', 'queued' );
+    $order->update_meta_data( '_lamako_v2_payment_attempt_started_at', time() );
+    $order->update_meta_data( '_lamako_v2_payment_pending_until', time() + LAMAKO_MOBILE_V2_PAYMENT_VERIFY_TTL );
+    $order->update_meta_data( '_lamako_v2_payment_last_checked_at', 0 );
+    $order->update_meta_data( '_lamako_v2_payment_poll_count', 0 );
+    $order->update_meta_data( '_lamako_v2_payment_next_poll_at', 0 );
+    $order->delete_meta_data( '_lamako_v2_payment_review_noted' );
+    $order->update_meta_data( '_lamako_v2_payment_return_url', lamako_mobile_v2_payment_page_url( $token, $kind, 'payment-return' ) );
+    $order->update_meta_data( '_lamako_v2_payment_cancel_url', lamako_mobile_v2_payment_page_url( $token, $kind, 'payment-cancel', 'cancelled' ) );
+    $order->save();
+
+    if ( $definitions[ $gateway_id ]['flow'] === 'async' ) {
+        $response = lamako_mobile_v2_initiate_async_payment( $order, $gateway_id, $attempt_id );
+        if ( is_wp_error( $response ) ) {
+            lamako_mobile_v2_provider_failure( $order, $response->get_error_message() );
+            return $response;
+        }
+        return rest_ensure_response( $response );
+    }
+
+    if ( $gateway_id === 'papi_paiement' ) {
+        $gateway = lamako_mobile_v2_provider_gateway( $gateway_id );
+        if ( is_wp_error( $gateway ) ) {
+            return $gateway;
+        }
+        $response = lamako_mobile_v2_initiate_orange( $order, $gateway, $attempt_id, $token, $kind );
+        if ( is_wp_error( $response ) ) {
+            $order->update_meta_data( '_lamako_v2_payment_attempt_status', 'failed' );
+            $order->update_meta_data( '_lamako_v2_payment_error', $response->get_error_message() );
+            $order->save();
+            return $response;
+        }
+        return rest_ensure_response( $response );
+    }
+
+    if ( $gateway_id === 'cybersource' ) {
+        $response = lamako_mobile_v2_start_cybersource( $order, $attempt_id, $token, $kind );
+        if ( is_wp_error( $response ) ) {
+            $order->update_meta_data( '_lamako_v2_payment_attempt_status', 'failed' );
+            $order->update_meta_data( '_lamako_v2_payment_error', $response->get_error_message() );
+            $order->save();
+            return $response;
+        }
+        return rest_ensure_response( $response );
+    }
+
+    $response = lamako_mobile_v2_invoke_gateway( $order, $gateway_id, $attempt_id, $token, $kind );
+    if ( is_wp_error( $response ) ) {
+        return $response;
+    }
+    return rest_ensure_response( $response );
+}
+
+function lamako_mobile_v2_verify_payment( WP_REST_Request $request ) {
+    $context = lamako_mobile_v2_payment_order_from_request( $request );
+    if ( is_wp_error( $context ) ) {
+        return $context;
+    }
+
+    list( $token, $kind, $order ) = $context;
+    if ( ! $order->is_paid() && lamako_mobile_v2_order_has_protected_payment_attempt( $order ) ) {
+        $gateway_id = sanitize_key( $order->get_payment_method() );
+        $attempt_id = sanitize_text_field( $order->get_meta( '_lamako_v2_payment_attempt_id' ) );
+
+        // MVola and Airtel expose a server-to-server status endpoint. Calling
+        // this function never initiates a new debit; it only verifies the
+        // existing provider reference before WooCommerce can mark it paid.
+        if ( in_array( $gateway_id, [ 'mvola_paiement', 'airtel_paiement' ], true ) && $attempt_id !== '' ) {
+            lamako_mobile_v2_poll_provider_payment( $order->get_id(), $gateway_id, $attempt_id );
+            $order = wc_get_order( $order->get_id() );
+        }
+    }
+
+    if ( ! $order ) {
+        return new WP_Error( 'lamako_v2_payment_order_not_found', 'Payment order not found.', [ 'status' => 404 ] );
+    }
+
+    $summary = lamako_mobile_v2_order_summary( $order, true );
+
+    return rest_ensure_response( [
+        'kind'          => $kind,
+        'token'         => $token,
+        'status'        => $summary['paymentStatus'],
+        'paymentStatus' => $summary['paymentStatus'],
+        'order'         => $summary,
+        'ticketsReady'  => ! empty( $summary['ticketsReady'] ),
+    ] );
+}
+
+function lamako_mobile_v2_cancel_payment( WP_REST_Request $request ) {
+    $context = lamako_mobile_v2_payment_order_from_request( $request );
+    if ( is_wp_error( $context ) ) {
+        return $context;
+    }
+
+    list( $token, $kind, $order ) = $context;
+    if ( $order->is_paid() ) {
+        return new WP_Error(
+            'lamako_v2_payment_already_confirmed',
+            'This payment is already confirmed and cannot be cancelled.',
+            [ 'status' => 409 ]
+        );
+    }
+
+    lamako_mobile_v2_cancel_unpaid_payment( $order, 'Customer cancelled the payment from the mobile application.' );
+    $order = wc_get_order( $order->get_id() );
+    $summary = lamako_mobile_v2_order_summary( $order, true );
+
+    return rest_ensure_response( [
+        'kind'          => $kind,
+        'token'         => $token,
+        'status'        => 'cancelled',
+        'paymentStatus' => 'cancelled',
+        'order'         => $summary,
+        'ticketsReady'  => false,
     ] );
 }
 
@@ -1975,7 +3218,7 @@ function lamako_mobile_v2_get_payment_return_status( WP_REST_Request $request ) 
         }
 
         $order_summary = lamako_mobile_v2_order_summary( $order, true );
-        if ( lamako_mobile_v2_is_checkout_expired( $order ) && in_array( $order->get_status(), [ 'pending', 'checkout-draft' ], true ) ) {
+        if ( lamako_mobile_v2_is_checkout_expired( $order ) && ! lamako_mobile_v2_order_has_protected_payment_attempt( $order ) && in_array( $order->get_status(), [ 'pending', 'checkout-draft' ], true ) ) {
             $order_summary['paymentStatus'] = 'expired';
         }
 
@@ -2045,16 +3288,96 @@ function lamako_mobile_v2_payment_page_url( $token, $kind, $page = 'payment-retu
     return add_query_arg( $args, home_url( '/lamako-mobile/' . $page . '/' . rawurlencode( $token ) ) );
 }
 
-function lamako_mobile_v2_app_payment_return_url( $token, $kind, $status = '' ) {
+function lamako_mobile_v2_maybe_serve_cybersource() {
+    $request_uri = isset( $_SERVER['REQUEST_URI'] ) ? wp_unslash( $_SERVER['REQUEST_URI'] ) : '';
+    $path        = $request_uri ? wp_parse_url( $request_uri, PHP_URL_PATH ) : '';
+    if ( ! $path || ! preg_match( '#/lamako-mobile/cybersource/([A-Za-z0-9_-]+)/?$#', $path, $matches ) ) {
+        return;
+    }
+
+    $token = sanitize_text_field( $matches[1] );
+    $kind  = ! empty( $_GET['kind'] ) ? sanitize_key( wp_unslash( $_GET['kind'] ) ) : 'checkout';
+    $kind  = in_array( $kind, [ 'checkout', 'seating' ], true ) ? $kind : 'checkout';
+    if ( 'seating' === $kind ) {
+        $flow  = lamako_mobile_v2_get_seating_flow( $token );
+        $order = is_array( $flow ) && ( empty( $flow['expires_at'] ) || (int) $flow['expires_at'] >= time() )
+            ? lamako_mobile_v2_find_seating_order( $flow )
+            : false;
+    } else {
+        $order = lamako_mobile_v2_find_order_by_token( $token );
+        if ( $order instanceof WC_Order && lamako_mobile_v2_is_checkout_expired( $order ) ) {
+            $order = false;
+        }
+    }
+
+    if ( ! $order instanceof WC_Order || 'cybersource' !== $order->get_payment_method() ) {
+        status_header( 404 );
+        nocache_headers();
+        wp_die( esc_html__( 'Payment session not found.', 'lamako-mobile-api' ), esc_html__( 'Payment unavailable', 'lamako-mobile-api' ), [ 'response' => 404 ] );
+    }
+    if ( $order->is_paid() ) {
+        wp_safe_redirect( lamako_mobile_v2_payment_page_url( $token, $kind ) );
+        exit;
+    }
+
+    $gateway = lamako_mobile_v2_provider_gateway( 'cybersource' );
+    if ( is_wp_error( $gateway ) || ! method_exists( $gateway, 'process_payment_page' ) ) {
+        $order->update_meta_data( '_lamako_v2_payment_attempt_status', 'failed' );
+        $order->update_meta_data( '_lamako_v2_payment_error', 'CyberSource payment page is unavailable.' );
+        $order->save();
+        status_header( 502 );
+        nocache_headers();
+        wp_die( esc_html__( 'Card payment is temporarily unavailable.', 'lamako-mobile-api' ), esc_html__( 'Payment unavailable', 'lamako-mobile-api' ), [ 'response' => 502 ] );
+    }
+
+    status_header( 200 );
+    nocache_headers();
+    header( 'X-Robots-Tag: noindex, nofollow', true );
+    $GLOBALS['lamako_mobile_v2_gateway_context'] = [
+        'order_id'   => $order->get_id(),
+        'gateway_id' => 'cybersource',
+        'token'      => $token,
+        'kind'       => $kind,
+    ];
+    ?><!doctype html>
+    <html <?php language_attributes(); ?>><head>
+        <meta charset="<?php bloginfo( 'charset' ); ?>">
+        <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+        <title><?php echo esc_html__( 'Secure card payment', 'lamako-mobile-api' ); ?></title>
+        <style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#fff;color:#111827;font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;text-align:center}.loading-payment-text{padding:24px}.loading-payment-text img{display:block;width:40px;height:40px;margin:18px auto}</style>
+    </head><body><?php
+    try {
+        $result = $gateway->process_payment_page( $order->get_id() );
+        if ( false === $result ) {
+            $order->update_meta_data( '_lamako_v2_payment_attempt_status', 'failed' );
+            $order->update_meta_data( '_lamako_v2_payment_error', 'CyberSource could not initialize the signed payment form.' );
+            $order->save();
+        }
+    } catch ( Throwable $error ) {
+        $order->update_meta_data( '_lamako_v2_payment_attempt_status', 'failed' );
+        $order->update_meta_data( '_lamako_v2_payment_error', sanitize_text_field( $error->getMessage() ) );
+        $order->save();
+        echo '<p>' . esc_html__( 'Card payment could not be initialized. Please return to the application and try again.', 'lamako-mobile-api' ) . '</p>';
+    }
+    unset( $GLOBALS['lamako_mobile_v2_gateway_context'] );
+    ?></body></html><?php
+    exit;
+}
+
+function lamako_mobile_v2_app_payment_return_url( $token, $kind, $status = '', $order = null ) {
     $url = 'ticketbylamako://payment-return?kind=' . rawurlencode( $kind ) . '&token=' . rawurlencode( $token );
     if ( $status !== '' ) {
         $url .= '&status=' . rawurlencode( $status );
+    }
+    if ( is_array( $order ) && ! empty( $order['id'] ) ) {
+        $url .= '&orderId=' . rawurlencode( (string) absint( $order['id'] ) );
+        $url .= '&orderNumber=' . rawurlencode( (string) ( $order['number'] ?? $order['id'] ) );
     }
     return $url;
 }
 
 function lamako_mobile_v2_seating_checkout_url( $token ) {
-    return add_query_arg( 'lamako_seating_checkout', rawurlencode( $token ), home_url( '/' ) );
+    return home_url( '/lamako-mobile/seating-checkout/' . rawurlencode( $token ) . '/' );
 }
 
 function lamako_mobile_v2_get_cookie_token( $name ) {
@@ -2077,16 +3400,14 @@ function lamako_mobile_v2_seating_cart_url( $url ) {
 }
 
 function lamako_mobile_v2_maybe_apply_payment_return_hint( $order, $status_hint ) {
-    if ( ! $order instanceof WC_Order || ! in_array( $status_hint, [ 'cancelled', 'failed' ], true ) ) {
-        return $order;
+    if ( $order instanceof WC_Order && 'cancelled' === $status_hint && ! $order->is_paid() ) {
+        lamako_mobile_v2_cancel_unpaid_payment( $order, 'Customer returned through the payment provider cancellation URL.' );
+        return wc_get_order( $order->get_id() );
     }
 
-    if ( in_array( $order->get_status(), [ 'pending', 'checkout-draft' ], true ) ) {
-        $new_status = $status_hint === 'cancelled' ? 'cancelled' : 'failed';
-        $order->update_status( $new_status, 'Lamako Mobile payment return marked this order as ' . $new_status . '.' );
-    }
-
-    return wc_get_order( $order->get_id() );
+    // A success query string is never authoritative. Only a verified provider
+    // response or webhook may mark an order as paid.
+    return $order;
 }
 
 function lamako_mobile_v2_return_url_for_order( $return_url, $order, $page = 'payment-return', $status = '' ) {
@@ -2096,6 +3417,27 @@ function lamako_mobile_v2_return_url_for_order( $return_url, $order, $page = 'pa
 
     if ( $order->get_meta( '_lamako_mobile_v2' ) !== 'yes' ) {
         return $return_url;
+    }
+
+    $stored_url = 'payment-cancel' === $page
+        ? (string) $order->get_meta( '_lamako_v2_payment_cancel_url' )
+        : (string) $order->get_meta( '_lamako_v2_payment_return_url' );
+    if ( $stored_url !== '' ) {
+        return esc_url_raw( $stored_url );
+    }
+
+    $gateway_context = $GLOBALS['lamako_mobile_v2_gateway_context'] ?? null;
+    if (
+        is_array( $gateway_context )
+        && absint( $gateway_context['order_id'] ?? 0 ) === $order->get_id()
+        && ! empty( $gateway_context['token'] )
+    ) {
+        return lamako_mobile_v2_payment_page_url(
+            $gateway_context['token'],
+            $gateway_context['kind'] ?? 'checkout',
+            $page,
+            $status
+        );
     }
 
     $source = (string) $order->get_meta( '_lamako_checkout_source' );
@@ -2124,8 +3466,30 @@ function lamako_mobile_v2_payment_return_url( $return_url, $order ) {
     return lamako_mobile_v2_return_url_for_order( $return_url, $order, 'payment-return', '' );
 }
 
+function lamako_mobile_v2_payment_received_url( $return_url, $order ) {
+    return lamako_mobile_v2_return_url_for_order( $return_url, $order, 'payment-return', '' );
+}
+
 function lamako_mobile_v2_payment_cancel_url( $cancel_url, $order ) {
     return lamako_mobile_v2_return_url_for_order( $cancel_url, $order, 'payment-cancel', 'cancelled' );
+}
+
+function lamako_mobile_v2_provider_cancel_url( $checkout_url ) {
+    $context = $GLOBALS['lamako_mobile_v2_gateway_context'] ?? null;
+    if (
+        ! is_array( $context )
+        || 'papi_paiement' !== ( $context['gateway_id'] ?? '' )
+        || empty( $context['token'] )
+    ) {
+        return $checkout_url;
+    }
+
+    return lamako_mobile_v2_payment_page_url(
+        $context['token'],
+        $context['kind'] ?? 'checkout',
+        'payment-cancel',
+        'cancelled'
+    );
 }
 
 function lamako_mobile_v2_extract_payment_return_request() {
@@ -2178,7 +3542,7 @@ function lamako_mobile_v2_payment_context_from_token( $token, $kind = '', $statu
         if ( $order instanceof WC_Order ) {
             $order  = lamako_mobile_v2_maybe_apply_payment_return_hint( $order, $status_hint );
             $status = lamako_mobile_v2_normalize_payment_status( $order );
-            if ( lamako_mobile_v2_is_checkout_expired( $order ) && in_array( $order->get_status(), [ 'pending', 'checkout-draft' ], true ) ) {
+            if ( lamako_mobile_v2_is_checkout_expired( $order ) && ! lamako_mobile_v2_order_has_protected_payment_attempt( $order ) && in_array( $order->get_status(), [ 'pending', 'checkout-draft' ], true ) ) {
                 $status = 'expired';
             }
 
@@ -2230,7 +3594,10 @@ function lamako_mobile_v2_maybe_serve_payment_return() {
     $kind    = $context['kind'];
     $status  = $context['status'];
     $order   = is_array( $context['order'] ) ? $context['order'] : null;
-    $app_url = lamako_mobile_v2_app_payment_return_url( $token, $kind, $status );
+    $navigation_status = in_array( $request['statusHint'], [ 'failed', 'cancelled' ], true ) && $status !== 'success'
+        ? $request['statusHint']
+        : $status;
+    $app_url = lamako_mobile_v2_app_payment_return_url( $token, $kind, $navigation_status, $order );
 
     $title = 'Retour paiement';
     if ( $status === 'success' ) {
@@ -2313,8 +3680,8 @@ function lamako_mobile_v2_maybe_serve_payment_return() {
         post(Object.assign({}, envelope, { type: "RETURN_TO_APP", payload: Object.assign({}, envelope.payload, { reason: "payment_return" }) }));
       }, 250);
       setTimeout(function() {
-        window.location.href = <?php echo wp_json_encode( $app_url ); ?>;
-      }, 900);
+        window.location.replace(<?php echo wp_json_encode( $app_url ); ?>);
+      }, 80);
     })();
   </script>
 </body>
@@ -2357,7 +3724,7 @@ function lamako_mobile_v2_prepare_seating_web_session( $token, array &$flow ) {
 
 function lamako_mobile_v2_render_seating_checkout_notice( $token, $flow, $title, $message, $response = 200 ) {
     $flow_id  = is_array( $flow ) ? (string) ( $flow['flow_id'] ?? '' ) : '';
-    $seat_url = $token ? home_url( '/lamako-mobile/seat/' . rawurlencode( $token ) ) : home_url( '/' );
+    $seat_url = $token ? lamako_mobile_v2_seating_url( $token ) : home_url( '/' );
 
     nocache_headers();
     status_header( $response );
@@ -2515,53 +3882,7 @@ function lamako_mobile_v2_next_ticket_code_slot( $order_id ) {
     return count( $ids ) + 1;
 }
 
-function lamako_mobile_v2_apply_ticket_instance_checkout_fields( $ticket_id, array $attendee_fields, WC_Order $order ) {
-    $protected = [
-        'ticket_code'    => true,
-        'ticket_type_id' => true,
-        'event_id'       => true,
-        'item_id'        => true,
-        'chart_id'       => true,
-        'seat_id'        => true,
-        'seat_label'     => true,
-    ];
-
-    $defaults = [
-        'first_name'          => $order->get_billing_first_name(),
-        'last_name'           => $order->get_billing_last_name(),
-        'owner_email'         => $order->get_billing_email(),
-        'owner_confirm_email' => $order->get_billing_email(),
-    ];
-
-    foreach ( $defaults as $key => $value ) {
-        if ( ! array_key_exists( $key, $attendee_fields ) && trim( (string) $value ) !== '' ) {
-            $attendee_fields[ $key ] = $value;
-        }
-    }
-
-    foreach ( $attendee_fields as $key => $value ) {
-        $meta_key = sanitize_key( (string) $key );
-        if ( $meta_key === '' || isset( $protected[ $meta_key ] ) ) {
-            continue;
-        }
-
-        if ( is_array( $value ) ) {
-            $value = implode( ', ', array_map( 'sanitize_text_field', $value ) );
-        }
-
-        if ( $meta_key === 'owner_email' || $meta_key === 'owner_confirm_email' || strpos( $meta_key, 'email' ) !== false ) {
-            $sanitized = sanitize_email( (string) $value );
-        } else {
-            $sanitized = sanitize_text_field( (string) $value );
-        }
-
-        if ( $sanitized !== '' ) {
-            update_post_meta( $ticket_id, $meta_key, $sanitized );
-        }
-    }
-}
-
-function lamako_mobile_v2_create_ticket_instance_for_item( WC_Order $order, $item_id, $item, $ticket_type_id, $seat = null, array $flow = [], array $attendee_fields = [] ) {
+function lamako_mobile_v2_create_ticket_instance_for_item( WC_Order $order, $item_id, $item, $ticket_type_id, $seat = null, array $flow = [] ) {
     $order_id   = $order->get_id();
     $product_id = (int) $item->get_product_id();
     $event_id   = absint( get_post_meta( $product_id, '_event_name', true ) );
@@ -2569,12 +3890,9 @@ function lamako_mobile_v2_create_ticket_instance_for_item( WC_Order $order, $ite
         $event_id = absint( $flow['event_id'] );
     }
 
-    $owner_first = trim( (string) ( $attendee_fields['first_name'] ?? $order->get_billing_first_name() ) );
-    $owner_last  = trim( (string) ( $attendee_fields['last_name'] ?? $order->get_billing_last_name() ) );
-    $owner_email = trim( (string) ( $attendee_fields['owner_email'] ?? $order->get_billing_email() ) );
-    $owner_name = trim( $owner_first . ' ' . $owner_last );
+    $owner_name = trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() );
     if ( $owner_name === '' ) {
-        $owner_name = $owner_email;
+        $owner_name = $order->get_billing_email();
     }
     if ( $owner_name === '' ) {
         $owner_name = 'Ticket';
@@ -2606,7 +3924,15 @@ function lamako_mobile_v2_create_ticket_instance_for_item( WC_Order $order, $ite
     update_post_meta( $ticket_id, 'event_id', (int) $event_id );
     update_post_meta( $ticket_id, 'item_id', (int) $item_id );
 
-    lamako_mobile_v2_apply_ticket_instance_checkout_fields( $ticket_id, $attendee_fields, $order );
+    if ( $order->get_billing_first_name() ) {
+        update_post_meta( $ticket_id, 'first_name', sanitize_text_field( $order->get_billing_first_name() ) );
+    }
+    if ( $order->get_billing_last_name() ) {
+        update_post_meta( $ticket_id, 'last_name', sanitize_text_field( $order->get_billing_last_name() ) );
+    }
+    if ( $order->get_billing_email() ) {
+        update_post_meta( $ticket_id, 'owner_email', sanitize_email( $order->get_billing_email() ) );
+    }
 
     if ( is_array( $seat ) ) {
         update_post_meta( $ticket_id, 'chart_id', absint( $seat['chart_id'] ?? 0 ) );
@@ -2619,8 +3945,12 @@ function lamako_mobile_v2_create_ticket_instance_for_item( WC_Order $order, $ite
     return (int) $ticket_id;
 }
 
-function lamako_mobile_v2_ensure_ticket_instances_for_order( WC_Order $order, array $seat_cookie = [], array $flow = [], array $checkout_fields = [] ) {
-    $cart_contents = [];
+function lamako_mobile_v2_ensure_ticket_instances_for_order( WC_Order $order, array $seat_cookie = [], array $flow = [] ) {
+    $cart_contents    = [];
+    $ticket_type_meta = [];
+    $chart_id_meta    = [];
+    $seat_id_meta     = [];
+    $seat_label_meta  = [];
 
     foreach ( $order->get_items() as $item_id => $item ) {
         if ( ! is_object( $item ) || ! method_exists( $item, 'get_product_id' ) ) {
@@ -2641,21 +3971,43 @@ function lamako_mobile_v2_ensure_ticket_instances_for_order( WC_Order $order, ar
         }
         $cart_contents[ $ticket_type_id ] += $quantity;
 
-        $seats     = lamako_mobile_v2_expand_seating_cookie_for_ticket_type( $seat_cookie, $ticket_type_id );
+        $seats             = lamako_mobile_v2_expand_seating_cookie_for_ticket_type( $seat_cookie, $ticket_type_id );
+        $is_seating_ticket = get_post_meta( $ticket_type_id, '_tc_used_for_seatings', true ) === 'yes'
+            || get_post_meta( $product_id, '_tc_used_for_seatings', true ) === 'yes';
+
+        $assigned_seats = array_slice( $seats, 0, $quantity );
+        if ( $is_seating_ticket ) {
+            foreach ( $assigned_seats as $seat ) {
+                if ( empty( $seat['seat_id'] ) || empty( $seat['seat_label'] ) || empty( $seat['chart_id'] ) ) {
+                    return new WP_Error(
+                        'lamako_v2_seating_metadata_missing',
+                        'The selected seat metadata is incomplete. Please select the seats again.',
+                        [ 'status' => 409 ]
+                    );
+                }
+            }
+            if ( count( $assigned_seats ) < $quantity ) {
+                return new WP_Error(
+                    'lamako_v2_seating_metadata_missing',
+                    'The selected seat metadata is incomplete. Please select the seats again.',
+                    [ 'status' => 409 ]
+                );
+            }
+        }
+
+        $ticket_type_key = (string) $ticket_type_id;
+        if ( ! isset( $ticket_type_meta[ $ticket_type_key ] ) ) {
+            $ticket_type_meta[ $ticket_type_key ] = [];
+        }
+        for ( $i = 0; $i < $quantity; $i++ ) {
+            $ticket_type_meta[ $ticket_type_key ][] = $ticket_type_key;
+        }
+
         $instances = lamako_mobile_v2_get_ticket_instances_for_item( $order->get_id(), $item_id, $ticket_type_id );
 
         while ( count( $instances ) < $quantity ) {
             $next_index = count( $instances );
-            $attendee_fields = $checkout_fields['attendees'][ $ticket_type_id ][ $next_index ] ?? [];
-            $created = lamako_mobile_v2_create_ticket_instance_for_item(
-                $order,
-                $item_id,
-                $item,
-                $ticket_type_id,
-                $seats[ $next_index ] ?? null,
-                $flow,
-                is_array( $attendee_fields ) ? $attendee_fields : []
-            );
+            $created    = lamako_mobile_v2_create_ticket_instance_for_item( $order, $item_id, $item, $ticket_type_id, $assigned_seats[ $next_index ] ?? null, $flow );
             if ( is_wp_error( $created ) ) {
                 return $created;
             }
@@ -2666,20 +4018,11 @@ function lamako_mobile_v2_ensure_ticket_instances_for_order( WC_Order $order, ar
         $seat_ids    = [];
         $chart_ids   = [];
         for ( $i = 0; $i < $quantity; $i++ ) {
-            if ( empty( $instances[ $i ] ) ) {
+            if ( empty( $instances[ $i ] ) || empty( $assigned_seats[ $i ] ) ) {
                 continue;
             }
 
-            $attendee_fields = $checkout_fields['attendees'][ $ticket_type_id ][ $i ] ?? [];
-            if ( is_array( $attendee_fields ) && ! empty( $attendee_fields ) ) {
-                lamako_mobile_v2_apply_ticket_instance_checkout_fields( $instances[ $i ], $attendee_fields, $order );
-            }
-
-            if ( empty( $seats[ $i ] ) ) {
-                continue;
-            }
-
-            $seat = $seats[ $i ];
+            $seat = $assigned_seats[ $i ];
             update_post_meta( $instances[ $i ], 'chart_id', absint( $seat['chart_id'] ?? 0 ) );
             update_post_meta( $instances[ $i ], 'seat_id', sanitize_text_field( (string) ( $seat['seat_id'] ?? '' ) ) );
             update_post_meta( $instances[ $i ], 'seat_label', sanitize_text_field( (string) ( $seat['seat_label'] ?? '' ) ) );
@@ -2695,6 +4038,12 @@ function lamako_mobile_v2_ensure_ticket_instances_for_order( WC_Order $order, ar
             }
         }
 
+        if ( ! empty( $assigned_seats ) ) {
+            $chart_id_meta[ $ticket_type_key ]   = array_map( 'strval', array_column( $assigned_seats, 'chart_id' ) );
+            $seat_id_meta[ $ticket_type_key ]    = array_map( 'strval', array_column( $assigned_seats, 'seat_id' ) );
+            $seat_label_meta[ $ticket_type_key ] = array_map( 'strval', array_column( $assigned_seats, 'seat_label' ) );
+        }
+
         if ( ! empty( $seat_labels ) ) {
             $item->update_meta_data( '_lamako_seat_labels', implode( ', ', array_unique( $seat_labels ) ) );
             $item->update_meta_data( '_lamako_seat_ids', implode( ',', array_unique( $seat_ids ) ) );
@@ -2706,20 +4055,30 @@ function lamako_mobile_v2_ensure_ticket_instances_for_order( WC_Order $order, ar
 
     if ( ! empty( $cart_contents ) ) {
         $order->update_meta_data( 'tc_cart_contents', array_filter( $cart_contents ) );
-        if ( ! empty( $checkout_fields['owner_data'] ) || ! empty( $checkout_fields['buyer_data'] ) || ! empty( $checkout_fields['attendees'] ) ) {
-            lamako_mobile_v2_merge_checkout_field_cart_info( $order, $checkout_fields );
-        } else {
-            $cart_info = $order->get_meta( 'tc_cart_info' );
-            if ( ! is_array( $cart_info ) ) {
-                $order->update_meta_data( 'tc_cart_info', [
-                    'buyer_data' => [],
-                    'owner_data' => [],
-                ] );
+        $cart_info = $order->get_meta( 'tc_cart_info' );
+        $cart_info = is_array( $cart_info ) ? $cart_info : [];
+        $cart_info['buyer_data'] = isset( $cart_info['buyer_data'] ) && is_array( $cart_info['buyer_data'] )
+            ? $cart_info['buyer_data']
+            : [];
+        $owner_data = isset( $cart_info['owner_data'] ) && is_array( $cart_info['owner_data'] )
+            ? $cart_info['owner_data']
+            : [];
+
+        $owner_data['ticket_type_id_post_meta'] = $ticket_type_meta;
+        foreach ( [
+            'chart_id_post_meta'   => $chart_id_meta,
+            'seat_id_post_meta'    => $seat_id_meta,
+            'seat_label_post_meta' => $seat_label_meta,
+        ] as $meta_key => $meta_value ) {
+            if ( ! empty( $meta_value ) ) {
+                $owner_data[ $meta_key ] = $meta_value;
+            } else {
+                unset( $owner_data[ $meta_key ] );
             }
         }
-        $order->save();
-    } elseif ( ! empty( $checkout_fields['buyer_data'] ) ) {
-        lamako_mobile_v2_merge_checkout_field_cart_info( $order, $checkout_fields );
+
+        $cart_info['owner_data'] = $owner_data;
+        $order->update_meta_data( 'tc_cart_info', $cart_info );
         $order->save();
     }
 
@@ -2751,18 +4110,22 @@ function lamako_mobile_v2_clear_seating_cart_state() {
 }
 
 function lamako_mobile_v2_begin_seating_checkout() {
-    if ( empty( $_GET['lamako_seating_checkout'] ) ) {
+    $token = ! empty( $_GET['lamako_seating_checkout'] )
+        ? sanitize_text_field( wp_unslash( $_GET['lamako_seating_checkout'] ) )
+        : lamako_mobile_v2_extract_path_token( 'seating-checkout' );
+
+    if ( $token === '' ) {
         return;
     }
-
-    $token = sanitize_text_field( wp_unslash( $_GET['lamako_seating_checkout'] ) );
     $flow  = lamako_mobile_v2_get_seating_flow( $token );
 
     if ( ! is_array( $flow ) ) {
         lamako_mobile_v2_render_seating_checkout_notice( $token, [], 'Session introuvable', 'Cette session de reservation est introuvable. Merci de relancer le choix des places.', 404 );
     }
 
-    if ( ! empty( $flow['expires_at'] ) && (int) $flow['expires_at'] < time() ) {
+    $order = lamako_mobile_v2_find_seating_order( $flow );
+    if ( ! empty( $flow['expires_at'] ) && (int) $flow['expires_at'] < time()
+        && ( ! $order instanceof WC_Order || ! lamako_mobile_v2_order_has_protected_payment_attempt( $order ) ) ) {
         lamako_mobile_v2_render_seating_checkout_notice( $token, $flow, 'Session expiree', 'Cette session de reservation a expire. Merci de relancer le choix des places.', 410 );
     }
 
@@ -2882,9 +4245,10 @@ function lamako_mobile_v2_maybe_serve_seating_flow() {
 
     $flow_id      = esc_js( $flow['flow_id'] ?? '' );
     $event_title  = get_the_title( $event_id );
-    $checkout_url = function_exists( 'wc_get_checkout_url' ) ? wc_get_checkout_url() : home_url( '/checkout/' );
-    $seating_checkout_url = lamako_mobile_v2_seating_checkout_url( $token );
+    $checkout_url      = function_exists( 'wc_get_checkout_url' ) ? wc_get_checkout_url() : home_url( '/checkout/' );
+    $seating_order_url = rest_url( 'lamako-mobile/v2/seating-sessions/' . rawurlencode( $token ) . '/order' );
 
+    status_header( 200 );
     nocache_headers();
     ?>
 <!DOCTYPE html>
@@ -2918,7 +4282,7 @@ body.lamako-mobile-seat-flow { overflow-x: hidden !important; }
 <main class="lamako-seat-shell">
     <h1 class="lamako-seat-title"><?php echo esc_html( $event_title ?: 'Choisissez vos places' ); ?></h1>
     <p class="lamako-seat-helper">Sélectionnez vos sièges avec le plan officiel, puis confirmez votre sélection pour continuer vers le paiement.</p>
-    <?php echo do_shortcode( '[tc_seat_chart id="' . absint( $chart_id ) . '" show_legend="true" button_title="Choisir mes sieges" cart_title="Passer au paiement"]' ); ?>
+    <?php echo do_shortcode( '[tc_seat_chart id="' . absint( $chart_id ) . '" show_legend="true" button_title="Choisir mes sièges" cart_title="Passer au paiement"]' ); ?>
 </main>
 <div class="lamako-seat-notice" id="lamako-seat-notice"></div>
 <?php wp_footer(); ?>
@@ -2926,9 +4290,13 @@ body.lamako-mobile-seat-flow { overflow-x: hidden !important; }
 (function() {
   var flowId = "<?php echo $flow_id; ?>";
   var checkoutUrl = "<?php echo esc_js( $checkout_url ); ?>";
-  var seatingCheckoutUrl = "<?php echo esc_js( $seating_checkout_url ); ?>";
+  var seatingOrderUrl = "<?php echo esc_js( $seating_order_url ); ?>";
   var lastSeatKey = "";
   var noticeTimer = null;
+  var reportTimer = null;
+  var orderCreating = false;
+  var seatingOpened = false;
+  var seatingLaunchAttempts = 0;
   function post(type, payload) {
     if (!window.ReactNativeWebView) return;
     window.ReactNativeWebView.postMessage(JSON.stringify({
@@ -2951,6 +4319,57 @@ body.lamako-mobile-seat-flow { overflow-x: hidden !important; }
       notice.className = "lamako-seat-notice";
     }, 3600);
   }
+  function seatingChartVisible() {
+    var candidates = document.querySelectorAll(
+      ".tc_seat_unit, .tc-seatchart-map, .tc_seating_map, .ui-dialog-content"
+    );
+    for (var index = 0; index < candidates.length; index += 1) {
+      var rect = candidates[index].getBoundingClientRect();
+      var style = window.getComputedStyle(candidates[index]);
+      if (
+        rect.width > 0 &&
+        rect.height > 0 &&
+        style.display !== "none" &&
+        style.visibility !== "hidden"
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+  function openSeatingChart() {
+    if (seatingChartVisible()) {
+      if (!seatingOpened) {
+        seatingOpened = true;
+        window.scrollTo(0, 0);
+        post("SEATING_CHART_OPENED", { automatic: true });
+      }
+      return true;
+    }
+    if (seatingLaunchAttempts >= 32) {
+      showNotice("Le plan met plus de temps que prévu à s'ouvrir. Touchez « Choisir mes sièges » pour réessayer.");
+      return false;
+    }
+    var button = document.querySelector(".tc_seating_map_button, button.tc_seating_map_button");
+    seatingLaunchAttempts += 1;
+    if (!button) {
+      setTimeout(openSeatingChart, 250);
+      return false;
+    }
+    button.click();
+    setTimeout(function() {
+      if (seatingChartVisible()) {
+        seatingOpened = true;
+        window.scrollTo(0, 0);
+        post("SEATING_CHART_OPENED", { automatic: true });
+      } else {
+        seatingOpened = false;
+        setTimeout(openSeatingChart, 250);
+      }
+    }, 180);
+    return true;
+  }
+  window.lamakoOpenSeatingChart = openSeatingChart;
   function seatLabel(el) {
     if (!el) return "";
     var p = el.querySelector("span p, p, span");
@@ -2992,6 +4411,14 @@ body.lamako-mobile-seat-flow { overflow-x: hidden !important; }
     lastSeatKey = key;
     post("SEAT_SELECTION_CHANGED", { seats: seats, count: cartCount, selectedCount: seats.length, inCartCount: cartCount });
   }
+  function scheduleReport(delay) {
+    if (reportTimer) clearTimeout(reportTimer);
+    reportTimer = setTimeout(function() {
+      reportTimer = null;
+      reportSeats();
+      reportLocation();
+    }, typeof delay === "number" ? delay : 120);
+  }
   function reportLocation() {
     var url = window.location.href;
     if (url.indexOf("/checkout") !== -1 || url.indexOf("/commande") !== -1 || url.indexOf("lamako_checkout") !== -1) {
@@ -3002,21 +4429,58 @@ body.lamako-mobile-seat-flow { overflow-x: hidden !important; }
       post("RETURN_TO_APP", { reason: "payment_result" });
     }
   }
+  function setCheckoutButtonsBusy(busy) {
+    document.querySelectorAll(".tc-checkout-button, .tc_cart_button").forEach(function(el) {
+      if (!el.dataset.lamakoOriginalText) el.dataset.lamakoOriginalText = el.textContent || "Continuer";
+      el.classList.toggle("is-lamako-loading", busy);
+      el.textContent = busy ? "Preparation de la commande..." : el.dataset.lamakoOriginalText;
+      if ("disabled" in el) el.disabled = busy;
+      if (busy) el.setAttribute("aria-busy", "true");
+      else el.removeAttribute("aria-busy");
+      el.style.cssText += ";background:#15803d!important;color:#fff!important;-webkit-text-fill-color:#fff!important;opacity:1!important;visibility:visible!important;";
+    });
+  }
   function goToCheckout(source) {
     reportSeats();
     if (inCartCount() <= 0) {
-      showNotice("Choisissez un siege, puis confirmez-le dans la fenetre du plan de salle.");
+      showNotice("Choisissez un siège, puis confirmez-le dans la fenêtre du plan de salle.");
       return false;
     }
-    document.querySelectorAll(".tc-checkout-button, .tc_cart_button").forEach(function(el) {
-      el.classList.add("is-lamako-loading");
-      el.textContent = "Ouverture du paiement...";
-      if ("disabled" in el) el.disabled = true;
-      el.setAttribute("aria-busy", "true");
-      el.style.cssText += ";background:#15803d!important;color:#fff!important;-webkit-text-fill-color:#fff!important;opacity:1!important;visibility:visible!important;";
-    });
-    post("CHECKOUT_READY", { url: seatingCheckoutUrl, requested: true, source: source || "seat_flow" });
-    window.location.href = seatingCheckoutUrl;
+    if (orderCreating) return false;
+    orderCreating = true;
+    setCheckoutButtonsBusy(true);
+    post("CHECKOUT_READY", { requested: true, source: source || "seat_flow" });
+    fetch(seatingOrderUrl, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Accept": "application/json", "Content-Type": "application/json" },
+      body: "{}"
+    })
+      .then(function(response) {
+        return response.json().catch(function() { return {}; }).then(function(payload) {
+          if (!response.ok) {
+            var error = new Error(payload && payload.message ? payload.message : "Impossible de preparer la commande.");
+            error.code = payload && payload.code ? payload.code : "seating_order_failed";
+            throw error;
+          }
+          return payload;
+        });
+      })
+      .then(function(payload) {
+        post("SEATING_ORDER_CREATED", {
+          token: <?php echo wp_json_encode( $token ); ?>,
+          order: payload && payload.order ? payload.order : null
+        });
+      })
+      .catch(function(error) {
+        orderCreating = false;
+        setCheckoutButtonsBusy(false);
+        showNotice(error && error.message ? error.message : "Impossible de preparer la commande.");
+        post("ERROR", {
+          code: error && error.code ? error.code : "seating_order_failed",
+          message: error && error.message ? error.message : "Impossible de preparer la commande."
+        });
+      });
     return true;
   }
   window.lamakoGoToCheckoutFromApp = function() {
@@ -3031,21 +4495,15 @@ body.lamako-mobile-seat-flow { overflow-x: hidden !important; }
       goToCheckout("tickera_cart_button");
       return;
     }
-    setTimeout(reportSeats, 150);
+    scheduleReport(150);
   }, true);
-  document.addEventListener("touchend", function() { setTimeout(reportSeats, 250); }, true);
-  var observer = new MutationObserver(function() {
-    reportSeats();
-    reportLocation();
-  });
-  observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style", "data-in-cart"] });
-  post("FLOW_READY", { eventId: <?php echo (int) $event_id; ?>, chartId: <?php echo (int) $chart_id; ?>, checkoutUrl: seatingCheckoutUrl, wooCheckoutUrl: checkoutUrl });
-  reportSeats();
-  reportLocation();
-  setInterval(function() {
-    reportSeats();
-    reportLocation();
-  }, 1500);
+  document.addEventListener("touchend", function() { scheduleReport(220); }, true);
+  document.addEventListener("change", function() { scheduleReport(80); }, true);
+  post("FLOW_READY", { eventId: <?php echo (int) $event_id; ?>, chartId: <?php echo (int) $chart_id; ?>, wooCheckoutUrl: checkoutUrl });
+  setTimeout(openSeatingChart, 80);
+  scheduleReport(0);
+  setTimeout(function() { scheduleReport(0); }, 600);
+  setTimeout(function() { scheduleReport(0); }, 1800);
 })();
 </script>
 </body>
@@ -3075,7 +4533,6 @@ function lamako_mobile_v2_mark_seating_order( $order, $data ) {
         $order->set_customer_id( $user_id );
     }
     $order->set_created_via( 'lamako_mobile_seating_v2' );
-    $order->update_meta_data( '_lamako_order_channel', 'mobile' );
     $order->update_meta_data( '_lamako_mobile_order', 'yes' );
     $order->update_meta_data( '_lamako_mobile_v2', 'yes' );
     $order->update_meta_data( '_lamako_checkout_source', 'seating' );
@@ -3096,18 +4553,20 @@ function lamako_mobile_v2_link_seating_order_created( $order ) {
 }
 
 function lamako_mobile_v2_bridge_checkout_token() {
-    if ( empty( $_GET['lamako_checkout_token'] ) ) {
+    $token = ! empty( $_GET['lamako_checkout_token'] )
+        ? sanitize_text_field( wp_unslash( $_GET['lamako_checkout_token'] ) )
+        : lamako_mobile_v2_extract_path_token( 'checkout' );
+
+    if ( $token === '' ) {
         return;
     }
-
-    $token = sanitize_text_field( wp_unslash( $_GET['lamako_checkout_token'] ) );
     $order = lamako_mobile_v2_find_order_by_token( $token );
 
     if ( ! $order ) {
         wp_die( 'Checkout session not found.', 'Lamako Mobile', [ 'response' => 404 ] );
     }
 
-    if ( lamako_mobile_v2_is_checkout_expired( $order ) && $order->has_status( 'pending' ) ) {
+    if ( lamako_mobile_v2_is_checkout_expired( $order ) && ! lamako_mobile_v2_order_has_protected_payment_attempt( $order ) && $order->has_status( 'pending' ) ) {
         $order->update_status( 'cancelled', 'Lamako Mobile v2 checkout expired before payment.' );
         wp_die( 'Checkout session expired.', 'Lamako Mobile', [ 'response' => 410 ] );
     }
@@ -3120,6 +4579,8 @@ function lamako_mobile_v2_bridge_checkout_token() {
     $_GET['lamako_checkout'] = '1';
     $_GET['order_id']        = $order->get_id();
     $_GET['order_key']       = $order->get_order_key();
+    status_header( 200 );
+    nocache_headers();
 }
 
 function lamako_mobile_v2_normalize_payment_status( WC_Order $order ) {
@@ -3142,17 +4603,31 @@ function lamako_mobile_v2_order_allows_ticket_display( WC_Order $order ) {
     return in_array( $order->get_status(), [ 'completed', 'processing', 'cs-complete' ], true );
 }
 
-function lamako_mobile_v2_order_summary( WC_Order $order, $include_items = false ) {
+function lamako_mobile_v2_order_summary( WC_Order $order, $include_items = false, $include_tickets = false ) {
     $tickets = lamako_mobile_v2_order_allows_ticket_display( $order ) ? lamako_mobile_v2_get_tickets_for_order( $order ) : [];
+    $payment_status = lamako_mobile_v2_normalize_payment_status( $order );
+    $attempt_status = sanitize_key( $order->get_meta( '_lamako_v2_payment_attempt_status' ) );
+    if ( ! $order->is_paid() && $attempt_status === 'failed' ) {
+        $payment_status = 'failed';
+    } elseif ( ! $order->is_paid() && in_array( $attempt_status, lamako_mobile_v2_payment_review_attempt_statuses(), true ) ) {
+        $payment_status = 'review';
+    } elseif ( ! $order->is_paid() && in_array( $attempt_status, lamako_mobile_v2_payment_active_attempt_statuses(), true ) ) {
+        $payment_status = 'pending';
+    }
+    $reservation_expires_at = (string) $order->get_meta( '_lamako_v2_reservation_expires_at' );
+    if ( $reservation_expires_at === '' ) {
+        $reservation_expires_at = (string) $order->get_meta( '_lamako_v2_checkout_expires_at' );
+    }
     $data = [
         'id'                  => $order->get_id(),
         'number'              => $order->get_order_number(),
         'status'              => $order->get_status(),
-        'paymentStatus'       => lamako_mobile_v2_normalize_payment_status( $order ),
+        'paymentStatus'       => $payment_status,
         'total'               => $order->get_total(),
         'subtotal'            => method_exists( $order, 'get_subtotal' ) ? $order->get_subtotal() : '',
         'totalTax'            => $order->get_total_tax(),
         'discountTotal'       => $order->get_discount_total(),
+        'couponCodes'         => array_values( $order->get_coupon_codes() ),
         'shippingTotal'       => $order->get_shipping_total(),
         'currency'            => $order->get_currency(),
         'dateCreated'         => $order->get_date_created() ? $order->get_date_created()->date( 'c' ) : null,
@@ -3164,9 +4639,24 @@ function lamako_mobile_v2_order_summary( WC_Order $order, $include_items = false
         'ticketsReady'        => count( $tickets ) > 0,
         'ticketCount'         => count( $tickets ),
         'createdVia'          => $order->get_created_via(),
+        'reservationExpiresAt'=> $reservation_expires_at !== '' ? $reservation_expires_at : null,
+        'paymentAttemptStatus'=> $attempt_status !== '' ? $attempt_status : null,
+        'paymentPendingUntil' => absint( $order->get_meta( '_lamako_v2_payment_pending_until' ) ) > 0
+            ? gmdate( 'c', absint( $order->get_meta( '_lamako_v2_payment_pending_until' ) ) )
+            : null,
+        'paymentLastCheckedAt'=> absint( $order->get_meta( '_lamako_v2_payment_last_checked_at' ) ) > 0
+            ? gmdate( 'c', absint( $order->get_meta( '_lamako_v2_payment_last_checked_at' ) ) )
+            : null,
+        'paymentPollCount'    => absint( $order->get_meta( '_lamako_v2_payment_poll_count' ) ),
+        'requiresManualReview'=> 'review' === $payment_status,
     ];
 
     if ( $include_items ) {
+        if ( $include_tickets ) {
+            // Ticket counters already resolve these records. Returning them on
+            // demand avoids one authenticated request per order on mobile.
+            $data['tickets'] = $tickets;
+        }
         $data['billing'] = [
             'firstName' => $order->get_billing_first_name(),
             'lastName'  => $order->get_billing_last_name(),
@@ -3177,15 +4667,30 @@ function lamako_mobile_v2_order_summary( WC_Order $order, $include_items = false
         foreach ( $order->get_items() as $item_id => $item ) {
             $product = $item->get_product();
             $quantity = max( 1, (int) $item->get_quantity() );
+            $seat_labels_raw = (string) $item->get_meta( '_lamako_seat_labels', true );
+            if ( $seat_labels_raw === '' ) {
+                $seat_labels_raw = (string) $item->get_meta( 'Place', true );
+            }
+            $seat_ids_raw = (string) $item->get_meta( '_lamako_seat_ids', true );
+            $chart_ids_raw = (string) $item->get_meta( '_lamako_chart_ids', true );
+            $seat_labels = array_values( array_filter( array_map( 'trim', explode( ',', $seat_labels_raw ) ) ) );
+            $seat_ids = array_values( array_filter( array_map( 'trim', explode( ',', $seat_ids_raw ) ) ) );
+            $chart_ids = array_values( array_filter( array_map( 'absint', explode( ',', $chart_ids_raw ) ) ) );
+            $is_seating = ! empty( $seat_labels )
+                || ( $product && 'yes' === get_post_meta( $product->get_id(), '_tc_used_for_seatings', true ) );
             $data['items'][] = [
-                'id'        => $item_id,
-                'name'      => html_entity_decode( $item->get_name(), ENT_QUOTES, 'UTF-8' ),
-                'quantity'  => $quantity,
-                'productId' => $item->get_product_id(),
-                'total'     => $item->get_total(),
-                'subtotal'  => $item->get_subtotal(),
-                'price'     => (float) $item->get_total() / $quantity,
-                'sku'       => $product ? $product->get_sku() : '',
+                'id'         => $item_id,
+                'name'       => html_entity_decode( $item->get_name(), ENT_QUOTES, 'UTF-8' ),
+                'quantity'   => $quantity,
+                'productId'  => $item->get_product_id(),
+                'total'      => $item->get_total(),
+                'subtotal'   => $item->get_subtotal(),
+                'price'      => (float) $item->get_total() / $quantity,
+                'sku'        => $product ? $product->get_sku() : '',
+                'isSeating'  => $is_seating,
+                'seatLabels' => $seat_labels,
+                'seatIds'    => $seat_ids,
+                'chartIds'   => $chart_ids,
             ];
         }
     }
@@ -3203,7 +4708,7 @@ function lamako_mobile_v2_get_checkout_status( WP_REST_Request $request ) {
     }
 
     $order_summary = lamako_mobile_v2_order_summary( $order, true );
-    if ( lamako_mobile_v2_is_checkout_expired( $order ) && in_array( $order->get_status(), [ 'pending', 'checkout-draft' ], true ) ) {
+    if ( lamako_mobile_v2_is_checkout_expired( $order ) && ! lamako_mobile_v2_order_has_protected_payment_attempt( $order ) && in_array( $order->get_status(), [ 'pending', 'checkout-draft' ], true ) ) {
         $order_summary['paymentStatus'] = 'expired';
     }
 
@@ -3230,9 +4735,10 @@ function lamako_mobile_v2_get_orders( WP_REST_Request $request ) {
         $args['status'] = array_map( 'trim', explode( ',', $status ) );
     }
 
+    $include_tickets = rest_sanitize_boolean( $request->get_param( 'include_tickets' ) );
     $orders = wc_get_orders( $args );
-    $items  = array_map( function( $order ) {
-        return lamako_mobile_v2_order_summary( $order, true );
+    $items  = array_map( function( $order ) use ( $include_tickets ) {
+        return lamako_mobile_v2_order_summary( $order, true, $include_tickets );
     }, $orders );
 
     return rest_ensure_response( [
@@ -3436,6 +4942,49 @@ function lamako_mobile_v2_rewards_balance() {
     ] );
 }
 
+function lamako_mobile_v2_rewards_config( WP_REST_Request $request ) {
+    if ( function_exists( 'lr_rewards_public_config' ) ) {
+        return rest_ensure_response( lr_rewards_public_config( 'mobile' ) );
+    }
+
+    return rest_ensure_response( [
+        'version' => 1,
+        'platform' => 'mobile',
+        'program' => [
+            'enabled' => true,
+            'signup_bonus_points' => 100,
+            'earn_rate' => [
+                'points' => 1,
+                'amount_ariary' => 1000,
+            ],
+            'minimum_redeem_points' => 750,
+            'redemption_options' => [
+                [ 'points' => 1000, 'amount_ariary' => 20000 ],
+                [ 'points' => 2000, 'amount_ariary' => 40000 ],
+            ],
+            'referral' => [
+                'referrer_points' => 75,
+                'referred_points' => 25,
+            ],
+        ],
+        'popup' => [
+            'mobile' => [
+                'enabled' => true,
+                'audience' => 'guests',
+                'delay_seconds' => 12,
+                'frequency_days' => 7,
+                'max_impressions_per_user' => 3,
+                'cta_route' => '/rewards',
+            ],
+        ],
+        'copy' => [
+            'earn_message' => 'Gagnez des points sur vos achats eligibles.',
+            'redeem_message' => 'Utilisez vos points sur les evenements et offres participants Lamako Rewards.',
+            'minimum_redeem_message' => 'Les reductions Rewards sont debloquees a partir de 750 points.',
+        ],
+    ] );
+}
+
 function lamako_mobile_v2_rewards_is_order_ref( $ref, $description = '' ) {
     $ref         = strtolower( (string) $ref );
     $description = strtolower( (string) $description );
@@ -3481,16 +5030,16 @@ function lamako_mobile_v2_rewards_history_description( $row ) {
     if ( $points < 0 ) {
         if ( strpos( $ref, 'redeem' ) !== false || strpos( $ref, 'redemption' ) !== false || strpos( $ref, 'coupon' ) !== false || strpos( $ref, 'reward' ) !== false ) {
             if ( preg_match( '/(\d+)\s*pts?/i', $raw, $matches ) ) {
-                return sprintf( 'Réduction LamakoRewards: %s points utilisés', number_format_i18n( (int) $matches[1] ) );
+                return sprintf( 'R??duction LamakoRewards: %s points utilis??s', number_format_i18n( (int) $matches[1] ) );
             }
-            return $order_reference ? 'Points utilisés - ' . $order_reference : 'Points utilisés pour une réduction';
+            return $order_reference ? 'Points utilis??s - ' . $order_reference : 'Points utilis??s pour une r??duction';
         }
-        return $order_reference ? 'Points débités - ' . $order_reference : 'Points débités';
+        return $order_reference ? 'Points d??bit??s - ' . $order_reference : 'Points d??bit??s';
     }
 
     if ( lamako_mobile_v2_rewards_is_order_ref( $ref, $raw ) ) {
         $parts   = [];
-        $parts[] = $order_reference ? 'Achat ' . $order_reference : 'Achat validé';
+        $parts[] = $order_reference ? 'Achat ' . $order_reference : 'Achat valid??';
         if ( preg_match( '/\(([0-9\s,.]+)\s*Ar\)/i', $raw, $matches ) ) {
             $parts[] = trim( $matches[1] ) . ' Ar';
         }
@@ -3510,7 +5059,7 @@ function lamako_mobile_v2_rewards_history_description( $row ) {
         return 'Bonus de connexion';
     }
     if ( strpos( $ref, 'attendance' ) !== false || strpos( $ref, 'scan' ) !== false ) {
-        return 'Bonus présence événement';
+        return 'Bonus pr??sence ??v??nement';
     }
     if ( strpos( $ref, 'review' ) !== false || strpos( $ref, 'avis' ) !== false ) {
         return 'Bonus avis';
@@ -3522,7 +5071,7 @@ function lamako_mobile_v2_rewards_history_description( $row ) {
     if ( $raw ) {
         $translated = str_ireplace(
             [ 'Points for order', 'Product Purchase', 'Purchase', 'Order', 'Manual adjustment', 'Point payout', 'points', 'redemption', 'redeem' ],
-            [ 'Points pour commande', 'Achat produit', 'Achat', 'Commande', 'Ajustement manuel', 'Attribution de points', 'points', 'réduction', 'échange' ],
+            [ 'Points pour commande', 'Achat produit', 'Achat', 'Commande', 'Ajustement manuel', 'Attribution de points', 'points', 'r??duction', '??change' ],
             $raw
         );
         return $translated;
@@ -3573,17 +5122,34 @@ function lamako_mobile_v2_rewards_redeem( WP_REST_Request $request ) {
     $user_id = get_current_user_id();
     $points  = absint( $body['points'] ?? 0 );
 
-    $valid_tiers = [ 500 => 10000, 1000 => 20000, 2000 => 40000, 5000 => 100000 ];
+    $minimum_redeem_points = function_exists( 'lr_rewards_minimum_redeem_points' ) ? lr_rewards_minimum_redeem_points() : 750;
+    $valid_tiers = [];
+    if ( function_exists( 'lr_rewards_redemption_options' ) ) {
+        foreach ( lr_rewards_redemption_options() as $option ) {
+            $option_points = absint( $option['points'] ?? 0 );
+            $option_value  = absint( $option['amount_ariary'] ?? $option['value'] ?? 0 );
+            if ( $option_points > 0 && $option_value > 0 ) {
+                $valid_tiers[ $option_points ] = $option_value;
+            }
+        }
+    }
+    if ( empty( $valid_tiers ) ) {
+        $valid_tiers = [ 1000 => 20000, 2000 => 40000 ];
+    }
+
     if ( ! isset( $valid_tiers[ $points ] ) ) {
         return new WP_Error( 'lamako_v2_invalid_reward_points', 'Invalid redemption tier.', [ 'status' => 400 ] );
     }
 
     $total_earned = function_exists( 'lr_get_total_earned' ) ? lr_get_total_earned( $user_id ) : (float) get_user_meta( $user_id, 'mycred_default_total', true );
-    if ( defined( 'LR_REDEMPTION_MIN_LIFETIME' ) && $total_earned < LR_REDEMPTION_MIN_LIFETIME ) {
+    if ( $total_earned < $minimum_redeem_points ) {
         return new WP_Error( 'lamako_v2_rewards_locked', 'Rewards redemption is not unlocked for this account.', [ 'status' => 403 ] );
     }
 
     $balance = mycred_get_users_balance( $user_id );
+    if ( $balance < $minimum_redeem_points ) {
+        return new WP_Error( 'lamako_v2_rewards_minimum_balance_required', 'Rewards redemption requires at least 750 available points.', [ 'status' => 403 ] );
+    }
     if ( $balance < $points ) {
         return new WP_Error( 'lamako_v2_insufficient_points', 'Insufficient rewards balance.', [ 'status' => 400 ] );
     }
