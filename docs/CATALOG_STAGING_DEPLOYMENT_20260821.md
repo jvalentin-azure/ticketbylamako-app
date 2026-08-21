@@ -181,9 +181,9 @@ php -l /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins
 
 ## Billet et QR hors ligne - 21 août 2026
 
-Le détail d'un billet déjà consulté reste désormais disponible lorsque le
-réseau disparaît, y compris après un redémarrage de l'application tant que le
-JWT stocké n'est pas expiré.
+Les billets et leurs QR sont préchargés de façon chiffrée dès l'ouverture du
+wallet et restent disponibles lorsque le réseau disparaît, y compris après un
+redémarrage de l'application tant que le JWT stocké n'est pas expiré.
 
 - Cache natif chiffré avec `expo-secure-store`, séparé par utilisateur et par
   commande.
@@ -192,6 +192,8 @@ JWT stocké n'est pas expiré.
 - Aucun QR ou détail de facturation n'est placé dans `AsyncStorage`; seul
   l'index non sensible des numéros de commande y est conservé pour la purge.
 - Rafraîchissement serveur silencieux dès que le réseau est disponible.
+- Préchargement automatique des commandes visibles dans `Mes billets`, sans
+  obligation d'ouvrir chaque QR une première fois.
 - Bannière visible lorsque l'écran affiche une copie hors ligne.
 - Réponse serveur `401` ou `403` : suppression immédiate de la copie locale et
   aucun affichage du QR.
@@ -201,7 +203,7 @@ JWT stocké n'est pas expiré.
   une expiration encore valide; une réponse négative explicite du serveur reste
   prioritaire.
 - Validation : TypeScript, lint, contrôle des secrets et suite Vitest complète
-  réussis (`177` tests réussis, `4` ignorés).
+  réussis (`180` tests réussis, `4` ignorés).
 
 Aucun fichier PHP n'a été modifié ou redéployé pour cette brique. Aucun build
 EAS supplémentaire n'a été lancé afin de regrouper les changements avant le

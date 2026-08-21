@@ -21,6 +21,7 @@ import {
 import { CACHE_DURATIONS, getCachedValue, setCache } from "@/lib/api/cache";
 import { formatDateShort, decodeHtmlEntities } from "@/lib/format";
 import { filterWalletTickets, sortWalletTickets, type TicketWalletFilter } from "@/lib/ticket-wallet";
+import { setCachedTicketDetail } from "@/lib/ticket-detail-cache";
 
 interface TicketItem {
   key: string;
@@ -106,6 +107,14 @@ export default function TicketsScreen() {
             const orderTickets = Array.isArray(order.tickets)
               ? order.tickets
               : (await getMobileOrderTickets(order.id)).tickets;
+            if (order.ticketsReady && orderTickets.length > 0) {
+              void setCachedTicketDetail(userId, order, {
+                orderId: order.id,
+                orderStatus: order.status,
+                ticketsReady: true,
+                tickets: orderTickets,
+              }).catch(() => undefined);
+            }
             return orderTickets.map((ticket, index) => ({
               key: `${order.id}-${ticket.instanceId || `${ticket.eventId}-${index}`}`,
               instanceId: String(ticket.instanceId || ""),

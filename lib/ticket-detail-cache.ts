@@ -14,6 +14,26 @@ import {
 const CHUNK_SIZE = 1400;
 const INDEX_PREFIX = "tbl_ticket_detail_index_v1";
 const SECURE_PREFIX = "tbl.ticket.detail.v1";
+const mutationQueues = new Map<number, Promise<void>>();
+
+async function runSerializedMutation<T>(
+  userId: number,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const previous = mutationQueues.get(userId) || Promise.resolve();
+  const result = previous.then(operation, operation);
+  const barrier = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  mutationQueues.set(userId, barrier);
+
+  try {
+    return await result;
+  } finally {
+    if (mutationQueues.get(userId) === barrier) mutationQueues.delete(userId);
+  }
+}
 
 function isPositiveInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0;
@@ -79,12 +99,10 @@ async function readMetadata(
   }
 }
 
-export async function removeCachedTicketDetail(
+async function removeCachedTicketDetailInternal(
   userId: number,
   orderId: number,
 ): Promise<void> {
-  if (Platform.OS === "web" || !isPositiveInteger(userId)) return;
-
   const metadata = await readMetadata(userId, orderId).catch(() => null);
   await Promise.all([
     ...(metadata
@@ -104,6 +122,16 @@ export async function removeCachedTicketDetail(
     userId,
     orderIds.filter((value) => value !== orderId),
   ).catch(() => undefined);
+}
+
+export async function removeCachedTicketDetail(
+  userId: number,
+  orderId: number,
+): Promise<void> {
+  if (Platform.OS === "web" || !isPositiveInteger(userId)) return;
+  await runSerializedMutation(userId, () =>
+    removeCachedTicketDetailInternal(userId, orderId),
+  );
 }
 
 export async function getCachedTicketDetail(
@@ -142,20 +170,11 @@ export async function getCachedTicketDetail(
   }
 }
 
-export async function setCachedTicketDetail(
+async function setCachedTicketDetailInternal(
   userId: number,
   order: MobileOrderSummary,
   tickets: MobileOrderTicketsResponse,
 ): Promise<void> {
-  if (
-    Platform.OS === "web" ||
-    !isPositiveInteger(userId) ||
-    !isPositiveInteger(order.id) ||
-    tickets.orderId !== order.id
-  ) {
-    return;
-  }
-
   const payload: CachedTicketDetail = {
     version: TICKET_DETAIL_CACHE_VERSION,
     cachedAt: Date.now(),
@@ -210,24 +229,45 @@ export async function setCachedTicketDetail(
   }
 }
 
+export async function setCachedTicketDetail(
+  userId: number,
+  order: MobileOrderSummary,
+  tickets: MobileOrderTicketsResponse,
+): Promise<void> {
+  if (
+    Platform.OS === "web" ||
+    !isPositiveInteger(userId) ||
+    !isPositiveInteger(order.id) ||
+    tickets.orderId !== order.id
+  ) {
+    return;
+  }
+
+  await runSerializedMutation(userId, () =>
+    setCachedTicketDetailInternal(userId, order, tickets),
+  );
+}
+
 export async function clearTicketDetailCache(userId: number): Promise<void> {
   if (Platform.OS === "web" || !isPositiveInteger(userId)) return;
 
-  const orderIds = await readIndex(userId);
-  for (const orderId of orderIds) {
-    const metadata = await readMetadata(userId, orderId).catch(() => null);
-    await Promise.all([
-      ...(metadata
-        ? Array.from({ length: metadata.count }, (_, index) =>
-            SecureStore.deleteItemAsync(
-              chunkKey(userId, orderId, metadata.generation, index),
-            ).catch(() => undefined),
-          )
-        : []),
-      SecureStore.deleteItemAsync(metadataKey(userId, orderId)).catch(
-        () => undefined,
-      ),
-    ]);
-  }
-  await AsyncStorage.removeItem(indexKey(userId)).catch(() => undefined);
+  await runSerializedMutation(userId, async () => {
+    const orderIds = await readIndex(userId);
+    for (const orderId of orderIds) {
+      const metadata = await readMetadata(userId, orderId).catch(() => null);
+      await Promise.all([
+        ...(metadata
+          ? Array.from({ length: metadata.count }, (_, index) =>
+              SecureStore.deleteItemAsync(
+                chunkKey(userId, orderId, metadata.generation, index),
+              ).catch(() => undefined),
+            )
+          : []),
+        SecureStore.deleteItemAsync(metadataKey(userId, orderId)).catch(
+          () => undefined,
+        ),
+      ]);
+    }
+    await AsyncStorage.removeItem(indexKey(userId)).catch(() => undefined);
+  });
 }
