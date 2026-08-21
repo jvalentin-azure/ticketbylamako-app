@@ -4,7 +4,10 @@ export interface WalletTicketLike {
   key: string;
   eventName: string;
   date: string;
+  endDate?: string;
 }
+
+const EVENT_START_GRACE_MS = 24 * 60 * 60 * 1000;
 
 export function ticketTimestamp(date: string): number | null {
   if (!date) return null;
@@ -16,11 +19,19 @@ export function ticketTimestamp(date: string): number | null {
 }
 
 export function isPastWalletTicket(
-  ticket: Pick<WalletTicketLike, "date">,
+  ticket: Pick<WalletTicketLike, "date" | "endDate">,
   now = Date.now(),
 ): boolean {
-  const timestamp = ticketTimestamp(ticket.date);
-  return timestamp !== null && timestamp < now;
+  const endTimestamp = ticketTimestamp(ticket.endDate || "");
+  if (endTimestamp !== null) return endTimestamp < now;
+
+  const startTimestamp = ticketTimestamp(ticket.date);
+  if (startTimestamp === null) return false;
+  const hasExplicitTime = /[T\s]\d{1,2}:\d{2}/.test(ticket.date);
+  const expiryTimestamp = hasExplicitTime
+    ? startTimestamp + EVENT_START_GRACE_MS
+    : startTimestamp;
+  return expiryTimestamp < now;
 }
 
 export function filterWalletTickets<T extends WalletTicketLike>(

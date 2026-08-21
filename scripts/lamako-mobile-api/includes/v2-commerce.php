@@ -4916,7 +4916,8 @@ function lamako_mobile_v2_get_tickets_for_order( WC_Order $order ) {
         }
 
         $event_id = (int) get_post_meta( $product_id, '_event_name', true );
-        $event_date = $event_id ? ( get_post_meta( $event_id, 'event_date_time', true ) ?: get_post_meta( $event_id, '_event_date_time', true ) ) : '';
+        $event_date = $event_id ? lamako_mobile_v2_meta_first( $event_id, [ 'event_date_time', '_event_date_time', 'event_start_date', '_event_start_date' ], '' ) : '';
+        $event_end_date = $event_id ? lamako_mobile_v2_meta_first( $event_id, [ 'event_end_date_time', '_event_end_date_time', 'event_end_date', '_event_end_date' ], '' ) : '';
         $event_location = $event_id ? ( get_post_meta( $event_id, 'event_location', true ) ?: get_post_meta( $event_id, '_event_location', true ) ) : '';
         $quantity = max( 1, (int) $item->get_quantity() );
         $price = (float) $item->get_total() / $quantity;
@@ -4932,6 +4933,7 @@ function lamako_mobile_v2_get_tickets_for_order( WC_Order $order ) {
                 'eventId'       => $event_id,
                 'eventName'     => $event_id ? get_the_title( $event_id ) : '',
                 'eventDate'     => is_scalar( $event_date ) ? (string) $event_date : '',
+                'eventEndDate'  => is_scalar( $event_end_date ) ? (string) $event_end_date : '',
                 'eventLocation' => is_scalar( $event_location ) ? html_entity_decode( (string) $event_location, ENT_QUOTES, 'UTF-8' ) : '',
                 'seatLabel'     => get_post_meta( $instance_id, 'seat_label', true ),
                 'seatId'        => get_post_meta( $instance_id, 'seat_id', true ),

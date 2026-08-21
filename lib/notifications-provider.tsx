@@ -3,6 +3,7 @@ import * as Notifications from "expo-notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import {
+  mergeStoredNotification,
   notificationStorageKey,
   normalizeStoredNotifications,
   type AppNotification,
@@ -73,7 +74,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       read,
     };
     setNotifications((previous) => {
-      const updated = normalizeStoredNotifications([next, ...previous]);
+      const updated = mergeStoredNotification(previous, next);
       persist(updated);
       return updated;
     });

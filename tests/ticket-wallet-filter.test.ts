@@ -32,4 +32,25 @@ describe("ticket wallet filters", () => {
       )[0]?.key,
     ).toBe("past");
   });
+
+  it("keeps an in-progress event in the active wallet until its end", () => {
+    const inProgress = {
+      key: "live",
+      eventName: "En cours",
+      date: "2026-08-21T10:00:00Z",
+      endDate: "2026-08-21T18:00:00Z",
+    };
+    expect(filterWalletTickets([inProgress], "upcoming", now)).toEqual([
+      inProgress,
+    ]);
+  });
+
+  it("keeps timed legacy events available for a bounded grace period", () => {
+    const legacy = {
+      key: "legacy-live",
+      eventName: "Événement sans date de fin",
+      date: "2026-08-21T10:00:00Z",
+    };
+    expect(filterWalletTickets([legacy], "upcoming", now)).toEqual([legacy]);
+  });
 });

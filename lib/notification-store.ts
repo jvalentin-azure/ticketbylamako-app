@@ -88,6 +88,24 @@ export function normalizeStoredNotifications(
     .slice(0, MAX_NOTIFICATIONS);
 }
 
+export function mergeStoredNotification(
+  notifications: AppNotification[],
+  incoming: AppNotification,
+): AppNotification[] {
+  const existing = notifications.find((item) => item.id === incoming.id);
+  const merged = existing
+    ? {
+        ...incoming,
+        receivedAt: existing.receivedAt,
+        read: existing.read || incoming.read,
+      }
+    : incoming;
+  return normalizeStoredNotifications([
+    merged,
+    ...notifications.filter((item) => item.id !== incoming.id),
+  ]);
+}
+
 export function normalizeNotificationPreferences(
   value: unknown,
 ): NotificationPreferences {

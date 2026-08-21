@@ -147,3 +147,34 @@ Builds déclenchés après QA staging :
     `https://expo.dev/artifacts/eas/9cG_m-NjRRx2-x7MlQZjUdW6xPwV68grrdJ9jM-HJPM.ipa`.
   - Soumission TestFlight planifiée :
     `2281d531-4dd7-4c0e-9a37-330412dda176`.
+
+## Billets actifs pendant l'événement - 21 août 2026
+
+Le wallet utilise désormais la date de fin de l'événement pour distinguer les
+billets à venir des billets passés. Les événements historiques sans date de fin
+conservent une période de grâce bornée de 24 heures après leur début afin que le
+QR code ne disparaisse pas pendant l'exploitation terrain.
+
+- Réponse API enrichie avec `eventEndDate`, en lisant les clés Tickera actuelles
+  et historiques.
+- Les notifications déjà reçues conservent leur date lorsqu'elles sont ouvertes.
+- Backup serveur avant remplacement :
+  `/home/master/tbl-compliance-backups/wvvtwdcenn-20260821T154928Z-pre-ticket-end-date/v2-commerce.php`.
+- SHA-256 du backup :
+  `31388f6ee8093dedc800c17de9b27360c47a52d6a83040b7205dab95d9b6d08d`.
+- SHA-256 déployé :
+  `dd98baccfa346e91da5651cafd6ae587e1233d9b8a5a857dcc4e04081789a4d7`.
+- `php -l` local et distant : OK.
+- Contrat vérifié sur une commande staging existante : `eventEndDate` présent.
+- Catalogue, boutique, événement standard `13842` et événement seating `12673` :
+  HTTP 200.
+- Validation mobile : TypeScript et lint OK, 172 tests réussis, 4 ignorés,
+  contrôle des secrets mobile OK.
+- Aucun paiement, billet, commande ou check-in créé pendant cette validation.
+
+Rollback staging :
+
+```bash
+cp -p /home/master/tbl-compliance-backups/wvvtwdcenn-20260821T154928Z-pre-ticket-end-date/v2-commerce.php /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
+php -l /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
+```

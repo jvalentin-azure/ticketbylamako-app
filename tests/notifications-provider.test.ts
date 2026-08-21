@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
+  mergeStoredNotification,
   normalizeNotificationPreferences,
   normalizeStoredNotifications,
   notificationPreferencesStorageKey,
@@ -77,6 +78,15 @@ describe("notification storage normalization", () => {
     expect(notificationSectionLabel("2026-07-01T08:00:00.000Z", now)).toBe(
       "Plus tôt",
     );
+  });
+
+  it("marks a tapped notification read without changing its received date", () => {
+    const updated = mergeStoredNotification([validNotification], {
+      ...validNotification,
+      receivedAt: "2026-08-21T12:00:00.000Z",
+      read: true,
+    });
+    expect(updated[0]).toEqual({ ...validNotification, read: true });
   });
 });
 

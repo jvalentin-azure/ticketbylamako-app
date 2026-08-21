@@ -30,6 +30,7 @@ interface TicketItem {
   eventName: string;
   ticketType: string;
   date: string;
+  endDate?: string;
   status: string;
   seatLabel?: string;
   eventLocation?: string;
@@ -115,6 +116,7 @@ export default function TicketsScreen() {
               ),
               ticketType: decodeHtmlEntities(ticket.productName || "Standard"),
               date: ticket.eventDate || "",
+              endDate: ticket.eventEndDate || undefined,
               status: order.status,
               seatLabel: ticket.seatLabel || undefined,
               eventLocation: ticket.eventLocation || undefined,
@@ -142,6 +144,7 @@ export default function TicketsScreen() {
                 eventName: decodeHtmlEntities(item.name),
                 ticketType: "Standard",
                 date: "",
+                endDate: undefined,
                 status: order.status,
               });
             });

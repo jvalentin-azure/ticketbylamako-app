@@ -361,6 +361,7 @@ export interface MobileTicket {
   eventName: string;
   price?: number;
   eventDate?: string;
+  eventEndDate?: string;
   eventLocation?: string;
   seatLabel: string;
   seatId: string;
