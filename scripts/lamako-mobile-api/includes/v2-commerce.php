@@ -626,25 +626,9 @@ function lamako_mobile_v2_public_shop_products( $limit = 100, $include_details =
     return $products;
 }
 
-function lamako_mobile_v2_public_ticket_map( array $event_ids = [] ) {
+function lamako_mobile_v2_public_ticket_map() {
     if ( ! function_exists( 'wc_get_product' ) ) {
         return [];
-    }
-
-    $event_ids = array_values( array_filter( array_map( 'absint', $event_ids ) ) );
-    $meta_query = [
-        [
-            'key'     => '_tc_is_ticket',
-            'value'   => [ 'yes', '1' ],
-            'compare' => 'IN',
-        ],
-    ];
-    if ( ! empty( $event_ids ) ) {
-        $meta_query[] = [
-            'key'     => '_event_name',
-            'value'   => array_map( 'strval', $event_ids ),
-            'compare' => 'IN',
-        ];
     }
 
     $posts = get_posts( [
@@ -652,7 +636,13 @@ function lamako_mobile_v2_public_ticket_map( array $event_ids = [] ) {
         'post_status'    => 'publish',
         'posts_per_page' => 300,
         'fields'         => 'ids',
-        'meta_query'     => $meta_query,
+        'meta_query'     => [
+            [
+                'key'     => '_tc_is_ticket',
+                'value'   => [ 'yes', '1' ],
+                'compare' => 'IN',
+            ],
+        ],
     ] );
 
     $map = [];
@@ -786,10 +776,7 @@ function lamako_mobile_v2_public_events( $limit = 50, $include_details = true ) 
         'order'          => 'DESC',
     ] );
 
-    $event_ids = array_map( function( $event ) {
-        return (int) $event->ID;
-    }, $events );
-    $ticket_map = lamako_mobile_v2_public_ticket_map( $event_ids );
+    $ticket_map = lamako_mobile_v2_public_ticket_map();
     return array_map( function( $event ) use ( $ticket_map, $include_details ) {
         return lamako_mobile_v2_public_event_summary( $event, $ticket_map, $include_details );
     }, $events );
@@ -823,7 +810,7 @@ function lamako_mobile_v2_public_event( WP_REST_Request $request ) {
         return new WP_Error( 'lamako_v2_event_not_found', 'Event not found.', [ 'status' => 404 ] );
     }
 
-    $ticket_map = lamako_mobile_v2_public_ticket_map( [ $event_id ] );
+    $ticket_map = lamako_mobile_v2_public_ticket_map();
     return rest_ensure_response( lamako_mobile_v2_public_event_summary( $event, $ticket_map, true ) );
 }
 
@@ -1013,7 +1000,7 @@ function lamako_mobile_v2_public_event_checkout_fields( WP_REST_Request $request
         return new WP_Error( 'lamako_v2_event_not_found', 'Event not found.', [ 'status' => 404 ] );
     }
 
-    $ticket_map = lamako_mobile_v2_public_ticket_map( [ $event_id ] );
+    $ticket_map = lamako_mobile_v2_public_ticket_map();
     $tickets = [];
     foreach ( $ticket_map[ $event_id ] ?? [] as $ticket ) {
         $tickets[] = lamako_mobile_v2_checkout_fields_for_ticket( (int) $ticket['id'], $event_id, 1 );
