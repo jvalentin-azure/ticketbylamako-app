@@ -25,4 +25,15 @@ describe("mobile API catalogue query", () => {
       "lamako_mobile_v2_public_ticket_map( $event_id, false )",
     );
   });
+
+  it("caches public catalogues briefly and invalidates them after content changes", () => {
+    expect(source).toContain("LAMAKO_MOBILE_V2_CATALOG_TTL");
+    expect(source).toContain("lamako_mobile_v2_catalog_cached_response");
+    expect(source).toContain("lamako_mobile_v2_catalog_fresh_response");
+    expect(source).toContain("save_post_tc_events");
+    expect(source).toContain("save_post_product");
+    expect(source).toContain("created_event_category");
+    expect(source).toContain("created_product_cat");
+    expect(source).toContain("X-Lamako-Catalog-Cache");
+  });
 });

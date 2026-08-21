@@ -21,6 +21,10 @@ if ( ! defined( 'LAMAKO_MOBILE_V2_SEATING_TTL' ) ) {
     define( 'LAMAKO_MOBILE_V2_SEATING_TTL', 10 * MINUTE_IN_SECONDS );
 }
 
+if ( ! defined( 'LAMAKO_MOBILE_V2_CATALOG_TTL' ) ) {
+    define( 'LAMAKO_MOBILE_V2_CATALOG_TTL', 2 * MINUTE_IN_SECONDS );
+}
+
 add_action( 'rest_api_init', 'lamako_mobile_v2_register_routes' );
 add_action( 'template_redirect', 'lamako_mobile_v2_maybe_serve_payment_return', 2 );
 add_action( 'template_redirect', 'lamako_mobile_v2_maybe_serve_cybersource', 2 );
@@ -32,6 +36,16 @@ add_action( 'lamako_mobile_v2_process_async_payment', 'lamako_mobile_v2_process_
 add_action( 'lamako_mobile_v2_poll_provider_payment', 'lamako_mobile_v2_poll_provider_payment', 10, 3 );
 add_action( 'lamako_mobile_v2_reconcile_pending_payments', 'lamako_mobile_v2_reconcile_pending_payments' );
 add_action( 'init', 'lamako_mobile_v2_ensure_payment_reconciliation_schedule' );
+add_action( 'save_post_tc_events', 'lamako_mobile_v2_invalidate_catalog_cache' );
+add_action( 'save_post_product', 'lamako_mobile_v2_invalidate_catalog_cache' );
+add_action( 'before_delete_post', 'lamako_mobile_v2_invalidate_catalog_cache_for_deleted_post' );
+add_action( 'set_object_terms', 'lamako_mobile_v2_invalidate_catalog_cache_for_terms', 10, 6 );
+add_action( 'created_event_category', 'lamako_mobile_v2_invalidate_catalog_cache' );
+add_action( 'edited_event_category', 'lamako_mobile_v2_invalidate_catalog_cache' );
+add_action( 'delete_event_category', 'lamako_mobile_v2_invalidate_catalog_cache' );
+add_action( 'created_product_cat', 'lamako_mobile_v2_invalidate_catalog_cache' );
+add_action( 'edited_product_cat', 'lamako_mobile_v2_invalidate_catalog_cache' );
+add_action( 'delete_product_cat', 'lamako_mobile_v2_invalidate_catalog_cache' );
 add_filter( 'cron_schedules', 'lamako_mobile_v2_payment_cron_schedules' );
 add_action( 'woocommerce_checkout_create_order', 'lamako_mobile_v2_mark_seating_order', 20, 2 );
 add_action( 'woocommerce_checkout_order_created', 'lamako_mobile_v2_link_seating_order_created', 20 );
@@ -40,6 +54,62 @@ add_filter( 'woocommerce_get_checkout_order_received_url', 'lamako_mobile_v2_pay
 add_filter( 'woocommerce_get_cancel_order_url', 'lamako_mobile_v2_payment_cancel_url', 10000, 2 );
 add_filter( 'woocommerce_get_checkout_url', 'lamako_mobile_v2_provider_cancel_url', 10000, 1 );
 add_filter( 'tc_seat_chart_add_to_cart_url', 'lamako_mobile_v2_seating_cart_url', 10000 );
+
+function lamako_mobile_v2_catalog_cache_version() {
+    return max( 1, absint( get_option( 'lamako_mobile_v2_catalog_cache_version', 1 ) ) );
+}
+
+function lamako_mobile_v2_invalidate_catalog_cache() {
+    update_option(
+        'lamako_mobile_v2_catalog_cache_version',
+        lamako_mobile_v2_catalog_cache_version() + 1,
+        false
+    );
+}
+
+function lamako_mobile_v2_invalidate_catalog_cache_for_deleted_post( $post_id ) {
+    if ( in_array( get_post_type( $post_id ), [ 'tc_events', 'product' ], true ) ) {
+        lamako_mobile_v2_invalidate_catalog_cache();
+    }
+}
+
+function lamako_mobile_v2_invalidate_catalog_cache_for_terms( $object_id, $terms, $tt_ids, $taxonomy ) {
+    if ( in_array( $taxonomy, [ 'event_category', 'product_cat' ], true ) ) {
+        lamako_mobile_v2_invalidate_catalog_cache();
+    }
+}
+
+function lamako_mobile_v2_catalog_cache_key( $scope, array $parameters ) {
+    ksort( $parameters );
+    return 'lamako_v2_catalog_' . md5( wp_json_encode( [
+        'version'    => lamako_mobile_v2_catalog_cache_version(),
+        'scope'      => sanitize_key( $scope ),
+        'parameters' => $parameters,
+    ] ) );
+}
+
+function lamako_mobile_v2_catalog_cached_response( $cache_key ) {
+    $cached = get_transient( $cache_key );
+    if ( ! is_array( $cached ) ) {
+        return null;
+    }
+
+    $response = rest_ensure_response( $cached );
+    $response->header( 'X-Lamako-Catalog-Cache', 'HIT' );
+    $response->header( 'Cache-Control', 'public, max-age=30, stale-while-revalidate=120' );
+    return $response;
+}
+
+function lamako_mobile_v2_catalog_fresh_response( $cache_key, array $data ) {
+    $data['version']     = (string) lamako_mobile_v2_catalog_cache_version();
+    $data['generatedAt'] = gmdate( 'c' );
+    set_transient( $cache_key, $data, LAMAKO_MOBILE_V2_CATALOG_TTL );
+
+    $response = rest_ensure_response( $data );
+    $response->header( 'X-Lamako-Catalog-Cache', 'MISS' );
+    $response->header( 'Cache-Control', 'public, max-age=30, stale-while-revalidate=120' );
+    return $response;
+}
 
 function lamako_mobile_v2_register_routes() {
     $namespace = 'lamako-mobile/v2';
@@ -861,17 +931,39 @@ function lamako_mobile_v2_public_events( $limit = 50, $include_details = true ) 
 
 function lamako_mobile_v2_public_home_data( WP_REST_Request $request ) {
     $include_details = ! rest_sanitize_boolean( $request->get_param( 'summary' ) );
-    return rest_ensure_response( [
-        'events'     => lamako_mobile_v2_public_events( absint( $request->get_param( 'events_limit' ) ?: 50 ), $include_details ),
-        'products'   => lamako_mobile_v2_public_shop_products( absint( $request->get_param( 'products_limit' ) ?: 12 ) ),
+    $events_limit    = min( max( absint( $request->get_param( 'events_limit' ) ?: 50 ), 1 ), 100 );
+    $products_limit  = min( max( absint( $request->get_param( 'products_limit' ) ?: 12 ), 1 ), 100 );
+    $cache_key       = lamako_mobile_v2_catalog_cache_key( 'home', [
+        'include_details' => $include_details,
+        'events_limit'    => $events_limit,
+        'products_limit'  => $products_limit,
+    ] );
+    $cached = lamako_mobile_v2_catalog_cached_response( $cache_key );
+    if ( $cached ) {
+        return $cached;
+    }
+
+    return lamako_mobile_v2_catalog_fresh_response( $cache_key, [
+        'events'     => lamako_mobile_v2_public_events( $events_limit, $include_details ),
+        'products'   => lamako_mobile_v2_public_shop_products( $products_limit ),
         'categories' => lamako_mobile_v2_public_event_categories(),
     ] );
 }
 
 function lamako_mobile_v2_public_events_data( WP_REST_Request $request ) {
     $include_details = ! rest_sanitize_boolean( $request->get_param( 'summary' ) );
-    return rest_ensure_response( [
-        'events'     => lamako_mobile_v2_public_events( absint( $request->get_param( 'limit' ) ?: 50 ), $include_details ),
+    $limit           = min( max( absint( $request->get_param( 'limit' ) ?: 50 ), 1 ), 100 );
+    $cache_key       = lamako_mobile_v2_catalog_cache_key( 'events', [
+        'include_details' => $include_details,
+        'limit'           => $limit,
+    ] );
+    $cached = lamako_mobile_v2_catalog_cached_response( $cache_key );
+    if ( $cached ) {
+        return $cached;
+    }
+
+    return lamako_mobile_v2_catalog_fresh_response( $cache_key, [
+        'events'     => lamako_mobile_v2_public_events( $limit, $include_details ),
         'categories' => lamako_mobile_v2_public_event_categories(),
     ] );
 }
@@ -1143,8 +1235,15 @@ function lamako_mobile_v2_get_checkout_fields_for_items( WP_REST_Request $reques
 }
 
 function lamako_mobile_v2_public_shop_data( WP_REST_Request $request ) {
-    return rest_ensure_response( [
-        'products'   => lamako_mobile_v2_public_shop_products( absint( $request->get_param( 'limit' ) ?: 100 ) ),
+    $limit     = min( max( absint( $request->get_param( 'limit' ) ?: 100 ), 1 ), 100 );
+    $cache_key = lamako_mobile_v2_catalog_cache_key( 'shop', [ 'limit' => $limit ] );
+    $cached    = lamako_mobile_v2_catalog_cached_response( $cache_key );
+    if ( $cached ) {
+        return $cached;
+    }
+
+    return lamako_mobile_v2_catalog_fresh_response( $cache_key, [
+        'products'   => lamako_mobile_v2_public_shop_products( $limit ),
         'categories' => lamako_mobile_v2_public_shop_categories(),
     ] );
 }

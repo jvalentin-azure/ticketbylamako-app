@@ -300,3 +300,56 @@ php -l /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins
 Après rollback, retester les routes publiques et vérifier que le token factice
 `TBL-NOTIFICATION-PREF-QA-20260821` reste absent de l'option
 `lamako_push_tokens`.
+
+## Cache serveur du catalogue public - 21 août 2026
+
+Les routes publiques utilisées par l'accueil, la liste des événements et la
+boutique disposent maintenant d'un cache serveur court de deux minutes :
+
+- `public/home-data` ;
+- `public/events-data` ;
+- `public/shop-data`.
+
+Le cache est séparé par route et paramètres, expose les métadonnées `version`
+et `generatedAt`, et s'invalide automatiquement après modification ou
+suppression d'un événement ou produit, ainsi qu'après modification des
+catégories concernées. Les fiches détaillées, le checkout, les stocks validés
+pendant l'achat, les paiements et le seating restent hors de ce cache.
+
+Déploiement staging ciblé :
+
+- fichier actif avant déploiement :
+  `a0df2a89a766166a708594fd4e76177e3f5ced2d8c8be5ae84330f2fe57c239a` ;
+- fichier actif après fusion :
+  `87afad4634b2bd092cf40a4ed1748cf94f40cbf12631230a714129ed74269c2d` ;
+- backup :
+  `/home/master/tbl-compliance-backups/wvvtwdcenn-20260821T200058Z-pre-catalog-server-cache/includes/v2-commerce.php`.
+
+La fusion a été faite depuis le fichier réellement actif sur staging afin de
+préserver les changements seating et paiement déployés en parallèle. Aucun
+fichier de production n'a été modifié.
+
+Mesures staging, contrat réellement utilisé par l'application :
+
+- `home-data`, 12 événements et 8 produits : `12,5 Ko`, environ `3,0 s` à
+  froid puis `1,4-1,6 s` à chaud ;
+- `events-data`, limite 80 : `41,9 Ko`, environ `2,4 s` à froid puis `1,4 s` à
+  chaud ;
+- `shop-data`, limite 8 : `2 Ko`, environ `2,7 s` à froid puis `1,5-2,0 s` à
+  chaud.
+
+Les réponses exposent `X-Lamako-Catalog-Cache: MISS|HIT`. L'invalidation
+contrôlée a fait progresser la version de cache de `1` à `2`, sans modifier de
+donnée métier. Les warnings WP-CLI préexistants concernant les traductions
+WooCommerce/Eventchamp, WP Mail SMTP PHP 8.4 et `theme-helper.php` restent à
+traiter séparément.
+
+Rollback staging :
+
+```bash
+cp -p /home/master/tbl-compliance-backups/wvvtwdcenn-20260821T200058Z-pre-catalog-server-cache/includes/v2-commerce.php /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
+php -l /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
+```
+
+Après rollback, retester les trois routes catalogue, l'événement standard
+`13842` et l'événement seating `12673`.
