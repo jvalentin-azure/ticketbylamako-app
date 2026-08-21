@@ -3,23 +3,16 @@ import * as Device from "expo-device";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  normalizeNotificationPreferences,
+  type NotificationPreferences,
+} from "@/lib/notification-store";
+
+export type { NotificationPreferences } from "@/lib/notification-store";
 
 const PUSH_TOKEN_KEY = "tbl_push_token";
 const NOTIFICATION_PREFS_KEY = "tbl_notification_prefs";
-
-export interface NotificationPreferences {
-  newEvents: boolean;
-  orderUpdates: boolean;
-  eventReminders: boolean;
-  promotions: boolean;
-}
-
-const DEFAULT_PREFS: NotificationPreferences = {
-  newEvents: true,
-  orderUpdates: true,
-  eventReminders: true,
-  promotions: true,
-};
 
 /**
  * Configure the notification handler for foreground notifications
@@ -151,16 +144,24 @@ export async function getStoredPushToken(): Promise<string | null> {
 export async function getNotificationPreferences(): Promise<NotificationPreferences> {
   try {
     const data = await AsyncStorage.getItem(NOTIFICATION_PREFS_KEY);
-    if (data) return { ...DEFAULT_PREFS, ...JSON.parse(data) };
-  } catch {}
-  return DEFAULT_PREFS;
+    if (!data) return DEFAULT_NOTIFICATION_PREFERENCES;
+    return normalizeNotificationPreferences(JSON.parse(data));
+  } catch {
+    await AsyncStorage.removeItem(NOTIFICATION_PREFS_KEY).catch(
+      () => undefined,
+    );
+    return DEFAULT_NOTIFICATION_PREFERENCES;
+  }
 }
 
 /**
  * Save notification preferences
  */
 export async function saveNotificationPreferences(prefs: NotificationPreferences): Promise<void> {
-  await AsyncStorage.setItem(NOTIFICATION_PREFS_KEY, JSON.stringify(prefs));
+  await AsyncStorage.setItem(
+    NOTIFICATION_PREFS_KEY,
+    JSON.stringify(normalizeNotificationPreferences(prefs)),
+  );
 }
 
 /**

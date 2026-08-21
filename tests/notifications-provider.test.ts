@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { normalizeStoredNotifications } from "../lib/notification-store";
+import {
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  normalizeNotificationPreferences,
+  normalizeStoredNotifications,
+} from "../lib/notification-store";
 
 const validNotification = {
   id: "notification-1",
@@ -10,6 +14,20 @@ const validNotification = {
 };
 
 describe("notification storage normalization", () => {
+  it("normalizes malformed notification preferences", () => {
+    expect(
+      normalizeNotificationPreferences({
+        newEvents: false,
+        orderUpdates: "yes",
+        promotions: false,
+      }),
+    ).toEqual({
+      ...DEFAULT_NOTIFICATION_PREFERENCES,
+      newEvents: false,
+      promotions: false,
+    });
+  });
+
   it("rejects invalid storage values", () => {
     expect(normalizeStoredNotifications(null)).toEqual([]);
     expect(normalizeStoredNotifications({ notification: validNotification })).toEqual([]);
