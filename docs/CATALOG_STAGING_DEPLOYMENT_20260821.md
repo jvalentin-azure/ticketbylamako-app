@@ -178,3 +178,36 @@ Rollback staging :
 cp -p /home/master/tbl-compliance-backups/wvvtwdcenn-20260821T154928Z-pre-ticket-end-date/v2-commerce.php /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
 php -l /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
 ```
+
+## Billet et QR hors ligne - 21 août 2026
+
+Le détail d'un billet déjà consulté reste désormais disponible lorsque le
+réseau disparaît, y compris après un redémarrage de l'application tant que le
+JWT stocké n'est pas expiré.
+
+- Cache natif chiffré avec `expo-secure-store`, séparé par utilisateur et par
+  commande.
+- Écriture découpée et atomique afin de respecter les limites du Keychain et de
+  rejeter toute copie partielle ou corrompue.
+- Aucun QR ou détail de facturation n'est placé dans `AsyncStorage`; seul
+  l'index non sensible des numéros de commande y est conservé pour la purge.
+- Rafraîchissement serveur silencieux dès que le réseau est disponible.
+- Bannière visible lorsque l'écran affiche une copie hors ligne.
+- Réponse serveur `401` ou `403` : suppression immédiate de la copie locale et
+  aucun affichage du QR.
+- Déconnexion : purge du cache API général et de tous les billets chiffrés du
+  compte courant.
+- Démarrage hors ligne : le JWT est accepté localement uniquement s'il contient
+  une expiration encore valide; une réponse négative explicite du serveur reste
+  prioritaire.
+- Validation : TypeScript, lint, contrôle des secrets et suite Vitest complète
+  réussis (`177` tests réussis, `4` ignorés).
+
+Aucun fichier PHP n'a été modifié ou redéployé pour cette brique. Aucun build
+EAS supplémentaire n'a été lancé afin de regrouper les changements avant le
+prochain candidat QA.
+
+Rollback applicatif : revenir au commit précédant la fonctionnalité de cache
+hors ligne. Les anciennes installations ne contiennent aucune donnée sous les
+clés `tbl.ticket.detail.v1.*`; une déconnexion depuis la version corrigée purge
+les entrées créées.

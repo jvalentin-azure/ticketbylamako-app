@@ -26,6 +26,16 @@ import {
 import type { WCOrder, TicketInstance } from "@/lib/types/commerce";
 import { formatAriary, formatDate, decodeHtmlEntities } from "@/lib/format";
 import QRCode from "react-native-qrcode-svg";
+import { useAuth } from "@/lib/auth-provider";
+import {
+  getCachedTicketDetail,
+  removeCachedTicketDetail,
+  setCachedTicketDetail,
+} from "@/lib/ticket-detail-cache";
+import type {
+  MobileOrderSummary,
+  MobileOrderTicketsResponse,
+} from "@/lib/api/mobile";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 
@@ -271,13 +281,31 @@ export default function TicketDetailScreen() {
   }>();
   const colors = useColors();
   const router = useRouter();
+  const { user } = useAuth();
   const [order, setOrder] = useState<WCOrder | null>(null);
   const [tickets, setTickets] = useState<TicketInstance[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showingOfflineCopy, setShowingOfflineCopy] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
   const requestId = useRef(0);
+
+  const applyTicketDetail = useCallback(
+    (
+      orderResponse: MobileOrderSummary,
+      ticketsResponse: MobileOrderTicketsResponse,
+    ) => {
+      const orderData = mobileOrderToWCOrder(orderResponse);
+      setOrder(orderData);
+      setTickets(
+        ticketVisibleStatuses.has(orderData.status)
+          ? ticketsResponse.tickets.map(mobileTicketToTicketInstance)
+          : [],
+      );
+    },
+    [],
+  );
 
   const loadData = useCallback(async () => {
     const orderId = Number(id);
@@ -290,6 +318,18 @@ export default function TicketDetailScreen() {
     const activeRequest = ++requestId.current;
     setLoading(true);
     setErrorMessage(null);
+    setShowingOfflineCopy(false);
+
+    let hasCachedCopy = false;
+    if (user?.id) {
+      const cached = await getCachedTicketDetail(user.id, orderId);
+      if (requestId.current !== activeRequest) return;
+      if (cached) {
+        applyTicketDetail(cached.order, cached.tickets);
+        hasCachedCopy = true;
+        setLoading(false);
+      }
+    }
 
     try {
       const [orderResponse, ticketsResponse] = await Promise.all([
@@ -298,21 +338,42 @@ export default function TicketDetailScreen() {
       ]);
       if (requestId.current !== activeRequest) return;
 
-      const orderData = mobileOrderToWCOrder(orderResponse);
-      setOrder(orderData);
-      setTickets(
-        ticketVisibleStatuses.has(orderData.status)
-          ? ticketsResponse.tickets.map(mobileTicketToTicketInstance)
-          : [],
-      );
+      applyTicketDetail(orderResponse, ticketsResponse);
+      setShowingOfflineCopy(false);
+      setLoading(false);
+      if (user?.id) {
+        if (
+          ticketVisibleStatuses.has(orderResponse.status) &&
+          ticketsResponse.ticketsReady &&
+          ticketsResponse.tickets.length > 0
+        ) {
+          await setCachedTicketDetail(
+            user.id,
+            orderResponse,
+            ticketsResponse,
+          ).catch(() => undefined);
+        } else {
+          await removeCachedTicketDetail(user.id, orderId).catch(
+            () => undefined,
+          );
+        }
+      }
     } catch (error) {
       if (requestId.current !== activeRequest) return;
       if (error instanceof MobileApiError && error.status === 401) {
+        if (user?.id) await removeCachedTicketDetail(user.id, orderId);
+        setOrder(null);
+        setTickets([]);
         setErrorMessage(
           "Votre session a expiré. Reconnectez-vous pour afficher ce billet.",
         );
       } else if (error instanceof MobileApiError && error.status === 403) {
+        if (user?.id) await removeCachedTicketDetail(user.id, orderId);
+        setOrder(null);
+        setTickets([]);
         setErrorMessage("Ce billet n'est pas associé à votre compte.");
+      } else if (hasCachedCopy) {
+        setShowingOfflineCopy(true);
       } else {
         setErrorMessage(
           "Impossible de charger ce billet. Vérifiez votre connexion puis réessayez.",
@@ -321,7 +382,7 @@ export default function TicketDetailScreen() {
     } finally {
       if (requestId.current === activeRequest) setLoading(false);
     }
-  }, [id]);
+  }, [applyTicketDetail, id, user?.id]);
 
   useEffect(() => {
     void loadData();
@@ -479,6 +540,25 @@ export default function TicketDetailScreen() {
         <View style={{ width: 40 }} />
       </View>
 
+      {showingOfflineCopy ? (
+        <View
+          accessibilityRole="alert"
+          style={[
+            styles.offlineBanner,
+            { backgroundColor: colors.warning + "14" },
+          ]}
+        >
+          <IconSymbol
+            name="exclamationmark.triangle.fill"
+            size={15}
+            color={colors.warning}
+          />
+          <Text style={[styles.offlineText, { color: colors.foreground }]}>
+            Copie hors ligne. Le billet sera actualisé au retour du réseau.
+          </Text>
+        </View>
+      ) : null}
+
       {/* Ticket pagination dots */}
       {tickets.length > 1 && (
         <View style={styles.dotsRow}>
@@ -564,6 +644,18 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 18, fontWeight: "700" },
   headerSkeleton: { width: 112, height: 16, borderRadius: 4, opacity: 0.55 },
+  offlineBanner: {
+    minHeight: 38,
+    marginHorizontal: 16,
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  offlineText: { flex: 1, fontSize: 12, lineHeight: 17 },
   detailSkeleton: {
     margin: 16,
     padding: 18,

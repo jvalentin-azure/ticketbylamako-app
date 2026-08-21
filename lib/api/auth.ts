@@ -2,6 +2,7 @@ import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { parseStoredUser } from "@/lib/auth-user";
+import { isJwtLocallyUsable } from "@/lib/jwt-session";
 
 const SITE_URL = process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
 const TOKEN_KEY = "jwt_token";
@@ -193,14 +194,24 @@ export async function validateToken(): Promise<boolean> {
   const token = await getStoredToken();
   if (!token) return false;
 
+  const controller =
+    typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeout = controller
+    ? setTimeout(() => controller.abort(), 5000)
+    : null;
   try {
     const res = await fetch(`${SITE_URL}/wp-json/jwt-auth/v1/token/validate`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
+      signal: controller?.signal,
     });
     return res.ok;
   } catch {
-    return false;
+    // Preserve a still-valid local session when the venue has no network.
+    // An explicit server rejection still returns false above.
+    return isJwtLocallyUsable(token);
+  } finally {
+    if (timeout) clearTimeout(timeout);
   }
 }
 

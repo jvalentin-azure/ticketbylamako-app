@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { User, login as apiLogin, register as apiRegister, logout as apiLogout, getStoredUser, storeUser, validateToken } from "./api/auth";
 import { invalidateAllCaches } from "./api/cache";
+import { clearTicketDetailCache } from "./ticket-detail-cache";
 
 interface AuthState {
   user: User | null;
@@ -61,6 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    const currentUserId = state.user?.id;
     try {
       const { unregisterPushTokenWithBackend } = await import("./notifications");
       await Promise.race([
@@ -70,9 +72,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await apiLogout();
     } finally {
       await invalidateAllCaches();
+      if (currentUserId) await clearTicketDetailCache(currentUserId);
       setState({ user: null, isLoading: false, isAuthenticated: false });
     }
-  }, []);
+  }, [state.user?.id]);
 
   const loginWithUser = useCallback((user: User) => {
     setState({ user, isLoading: false, isAuthenticated: true });
