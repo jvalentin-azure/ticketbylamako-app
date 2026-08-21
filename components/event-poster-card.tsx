@@ -1,4 +1,10 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type DimensionValue,
+} from "react-native";
 
 import { CatalogImage } from "@/components/catalog-image";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -13,7 +19,7 @@ import {
 interface EventPosterCardProps {
   event: TCEvent;
   onPress: () => void;
-  width?: number;
+  width?: DimensionValue;
   favorite?: boolean;
   onToggleFavorite?: () => void;
 }

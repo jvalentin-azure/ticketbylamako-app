@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { CatalogImage } from "@/components/catalog-image";
+import { EventPosterCard } from "@/components/event-poster-card";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -22,16 +23,11 @@ import {
   type EventCategory,
 } from "@/lib/api/catalog";
 import { useFavorites } from "@/lib/favorites-provider";
-import {
-  formatAriary,
-  formatDateShort,
-  decodeHtmlEntities,
-} from "@/lib/format";
+import { formatDateShort, decodeHtmlEntities } from "@/lib/format";
 import {
   consumePendingCategory,
   subscribeToPendingCategory,
 } from "@/lib/filter-state";
-import { PointsBadge } from "@/components/points-badge";
 import { CATEGORY_COLOR_MAP } from "@/constants/category-colors";
 import { OrganizerEventCta } from "@/components/organizer-event-cta";
 
@@ -232,120 +228,23 @@ export default function EventsScreen() {
 
   const renderEvent = ({ item }: { item: TCEvent }) => {
     const name = decodeHtmlEntities(item.title.rendered);
-    const cats = item.categoryNames?.join(", ") || "";
-    const salesClosed =
-      item.salesClosed === true ||
-      item.isPastEvent === true ||
-      item.ticketingStatus === "ended";
     return (
-      <TouchableOpacity
-        activeOpacity={0.8}
-        onPress={() => router.push(`/event/${item.id}` as any)}
-        accessibilityRole="button"
-        accessibilityLabel={`Voir ${name}`}
-        style={[
-          styles.eventCard,
-          { backgroundColor: colors.surface, borderColor: colors.border },
-        ]}
-      >
-        <View style={{ position: "relative" }}>
-          <CatalogImage
-            uri={item.featuredImage}
-            style={styles.eventImage}
-            accessibilityLabel={`Affiche de ${name}`}
-            recyclingKey={`events-${item.id}`}
-          />
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel={
-              isFavorite(item.id, "event")
-                ? "Retirer des favoris"
-                : "Ajouter aux favoris"
-            }
-            onPress={(pressEvent) => {
-              pressEvent.stopPropagation();
-              toggleFavorite({
-                id: item.id,
-                type: "event",
-                name,
-                image: item.featuredImage,
-              });
-            }}
-            style={styles.favBtn}
-          >
-            <IconSymbol
-              name={isFavorite(item.id, "event") ? "heart.fill" : "heart"}
-              size={18}
-              color={isFavorite(item.id, "event") ? "#EF4444" : "#fff"}
-            />
-          </TouchableOpacity>
-        </View>
-        {item.hasSeatingChart && (
-          <View style={styles.seatingBadge}>
-            <IconSymbol name="mappin" size={10} color="#fff" />
-            <Text style={styles.seatingBadgeText}>Plan de salle</Text>
-          </View>
-        )}
-        {salesClosed && (
-          <View style={styles.closedBadge}>
-            <Text style={styles.closedBadgeText}>Terminé</Text>
-          </View>
-        )}
-        <View style={styles.eventBody}>
-          <Text
-            style={[styles.eventTitle, { color: colors.foreground }]}
-            numberOfLines={2}
-          >
-            {name}
-          </Text>
-          <View style={styles.metaRow}>
-            <View style={styles.metaItem}>
-              <IconSymbol name="clock" size={14} color={colors.muted} />
-              <Text style={[styles.metaText, { color: colors.muted }]}>
-                {formatDateShort(item.date)}
-              </Text>
-            </View>
-            {cats ? (
-              <View style={[styles.metaItem, { flex: 1 }]}>
-                <IconSymbol name="tag.fill" size={14} color={colors.muted} />
-                <Text
-                  style={[styles.metaText, { color: colors.muted }]}
-                  numberOfLines={1}
-                >
-                  {cats}
-                </Text>
-              </View>
-            ) : null}
-          </View>
-          <View style={styles.priceRow}>
-            <View style={{ flex: 1 }}>
-              {salesClosed ? (
-                <Text style={[styles.price, { color: colors.muted }]}>
-                  Billetterie fermée
-                </Text>
-              ) : item.minPrice != null ? (
-                <Text style={[styles.price, { color: colors.primary }]}>
-                  {item.minPrice === item.maxPrice
-                    ? formatAriary(item.minPrice)
-                    : `${formatAriary(item.minPrice)} – ${formatAriary(item.maxPrice!)}`}
-                </Text>
-              ) : (
-                <Text style={[styles.price, { color: colors.muted }]}>
-                  Prix non défini
-                </Text>
-              )}
-              {item.minPrice != null && item.lamakoRewardsEnabled !== false && (
-                <PointsBadge price={item.minPrice} />
-              )}
-            </View>
-            <View
-              style={[styles.buyButton, { backgroundColor: colors.primary }]}
-            >
-              <Text style={styles.buyButtonText}>Voir</Text>
-            </View>
-          </View>
-        </View>
-      </TouchableOpacity>
+      <View style={styles.catalogCard}>
+        <EventPosterCard
+          event={item}
+          width="100%"
+          favorite={isFavorite(item.id, "event")}
+          onPress={() => router.push(`/event/${item.id}` as any)}
+          onToggleFavorite={() =>
+            toggleFavorite({
+              id: item.id,
+              type: "event",
+              name,
+              image: item.featuredImage,
+            })
+          }
+        />
+      </View>
     );
   };
 
@@ -785,56 +684,10 @@ const styles = StyleSheet.create({
   eventsFooter: { marginTop: 10, marginBottom: 40 },
   organizerCta: { marginHorizontal: 16 },
   loadingContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
-  eventCard: {
+  catalogCard: {
     marginHorizontal: 16,
-    marginBottom: 14,
-    borderRadius: 16,
-    overflow: "hidden",
-    borderWidth: 1,
+    marginBottom: 16,
   },
-  eventImage: { width: "100%", height: 160 },
-  seatingBadge: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  seatingBadgeText: { color: "#fff", fontSize: 10, fontWeight: "600" },
-  closedBadge: {
-    position: "absolute",
-    top: 12,
-    left: 12,
-    backgroundColor: "#991b1b",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  closedBadgeText: { color: "#fff", fontSize: 10, fontWeight: "700" },
-  eventBody: { padding: 14 },
-  eventTitle: { fontSize: 16, fontWeight: "700" },
-  metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 6,
-    gap: 12,
-  },
-  metaItem: { flexDirection: "row", alignItems: "center" },
-  metaText: { fontSize: 12, marginLeft: 4 },
-  priceRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 8,
-  },
-  price: { fontSize: 16, fontWeight: "700" },
-  buyButton: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8 },
-  buyButtonText: { color: "#fff", fontSize: 13, fontWeight: "600" },
   emptyContainer: { alignItems: "center", paddingTop: 60 },
   emptyText: { fontSize: 15, marginTop: 12 },
   resetBtn: {
@@ -868,18 +721,6 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   modalOptionText: { fontSize: 15 },
-  favBtn: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 10,
-  },
   savedDataBanner: {
     minHeight: 40,
     marginHorizontal: 16,
