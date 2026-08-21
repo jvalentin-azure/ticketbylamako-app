@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Text, View, TouchableOpacity, ScrollView, Switch, StyleSheet, Platform, Linking, ActivityIndicator } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { Text, View, TouchableOpacity, ScrollView, Switch, StyleSheet, Platform, Linking, ActivityIndicator, Alert } from "react-native";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
@@ -9,6 +9,7 @@ import {
   saveNotificationPreferences,
   getStoredPushToken,
   registerForPushNotificationsAsync,
+  registerPushTokenWithBackend,
   cancelAllNotifications,
   type NotificationPreferences,
 } from "@/lib/notifications";
@@ -52,52 +53,143 @@ export default function NotificationSettingsScreen() {
   const colors = useColors();
   const router = useRouter();
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
-  const [pushToken, setPushToken] = useState<string | null>(null);
+  const [hasPushToken, setHasPushToken] = useState(false);
   const [permissionStatus, setPermissionStatus] = useState<string>("undetermined");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [enabling, setEnabling] = useState(false);
+  const [savingKey, setSavingKey] = useState<keyof NotificationPreferences | null>(null);
 
-  useEffect(() => {
-    async function load() {
+  const loadSettings = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
       const [p, token, perm] = await Promise.all([
         getNotificationPreferences(),
         getStoredPushToken(),
         Notifications.getPermissionsAsync(),
       ]);
       setPrefs(p);
-      setPushToken(token);
+      setHasPushToken(Boolean(token));
       setPermissionStatus(perm.status);
+    } catch {
+      setLoadError(
+        "Impossible de charger les paramètres de notifications. Vérifiez votre connexion puis réessayez.",
+      );
+    } finally {
       setLoading(false);
     }
-    load();
   }, []);
+
+  useEffect(() => {
+    void loadSettings();
+  }, [loadSettings]);
 
   const handleToggle = async (key: keyof NotificationPreferences) => {
     if (!prefs) return;
+    const previous = prefs;
     const updated = { ...prefs, [key]: !prefs[key] };
     setPrefs(updated);
-    await saveNotificationPreferences(updated);
-  };
-
-  const handleEnableNotifications = async () => {
-    const token = await registerForPushNotificationsAsync();
-    if (token) {
-      setPushToken(token);
-      setPermissionStatus("granted");
-    } else {
-      if (Platform.OS !== "web") {
-        Linking.openSettings();
-      }
+    setSavingKey(key);
+    try {
+      await saveNotificationPreferences(updated);
+    } catch {
+      setPrefs(previous);
+      Alert.alert(
+        "Modification non enregistrée",
+        "Ce réglage n'a pas pu être sauvegardé. Réessayez.",
+      );
+    } finally {
+      setSavingKey(null);
     }
   };
 
-  const handleClearAll = async () => {
-    await cancelAllNotifications();
+  const handleEnableNotifications = async () => {
+    if (enabling) return;
+    setEnabling(true);
+    try {
+      const token = await registerForPushNotificationsAsync();
+      const permission = await Notifications.getPermissionsAsync();
+      setPermissionStatus(permission.status);
+      if (token) {
+        setHasPushToken(true);
+        const registered = await registerPushTokenWithBackend();
+        if (!registered) {
+          Alert.alert(
+            "Synchronisation en attente",
+            "Les notifications sont autorisées sur cet appareil, mais la synchronisation avec votre compte devra être réessayée.",
+          );
+        }
+      } else if (permission.status !== "granted" && Platform.OS !== "web") {
+        Alert.alert(
+          "Autorisation requise",
+          "Activez les notifications dans les paramètres de votre appareil.",
+          [
+            { text: "Annuler", style: "cancel" },
+            { text: "Ouvrir les paramètres", onPress: () => Linking.openSettings() },
+          ],
+        );
+      } else {
+        Alert.alert(
+          "Notifications indisponibles",
+          "Le service de notifications n'a pas pu être initialisé. Réessayez plus tard.",
+        );
+      }
+    } catch {
+      Alert.alert(
+        "Notifications indisponibles",
+        "Impossible d'activer les notifications pour le moment.",
+      );
+    } finally {
+      setEnabling(false);
+    }
+  };
+
+  const handleClearAll = () => {
+    Alert.alert(
+      "Effacer les rappels planifiés ?",
+      "Les rappels déjà programmés sur cet appareil seront supprimés.",
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Effacer",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await cancelAllNotifications();
+              Alert.alert("Rappels effacés", "Les rappels planifiés ont été supprimés.");
+            } catch {
+              Alert.alert("Erreur", "Impossible d'effacer les rappels planifiés.");
+            }
+          },
+        },
+      ],
+    );
   };
 
   if (loading) {
     return (
       <ScreenContainer className="flex-1 items-center justify-center">
         <ActivityIndicator size="large" color={colors.primary} />
+      </ScreenContainer>
+    );
+  }
+
+  if (loadError || !prefs) {
+    return (
+      <ScreenContainer className="flex-1 items-center justify-center px-6">
+        <IconSymbol name="exclamationmark.triangle.fill" size={38} color={colors.primary} />
+        <Text style={[styles.errorTitle, { color: colors.foreground }]}>Notifications indisponibles</Text>
+        <Text style={[styles.errorMessage, { color: colors.muted }]}>{loadError}</Text>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Réessayer de charger les paramètres de notifications"
+          onPress={() => void loadSettings()}
+          style={[styles.retryButton, { backgroundColor: colors.primary }]}
+        >
+          <IconSymbol name="arrow.clockwise" size={18} color="#fff" />
+          <Text style={styles.retryButtonText}>Réessayer</Text>
+        </TouchableOpacity>
       </ScreenContainer>
     );
   }
@@ -118,10 +210,15 @@ export default function NotificationSettingsScreen() {
         {permissionStatus !== "granted" && (
           <TouchableOpacity
             onPress={handleEnableNotifications}
+            disabled={enabling}
             style={[styles.permissionBanner, { backgroundColor: "#F59E0B" + "15" }]}
             activeOpacity={0.8}
           >
-            <IconSymbol name="bell.fill" size={24} color="#F59E0B" />
+            {enabling ? (
+              <ActivityIndicator size="small" color="#F59E0B" />
+            ) : (
+              <IconSymbol name="bell.fill" size={24} color="#F59E0B" />
+            )}
             <View style={{ flex: 1, marginLeft: 12 }}>
               <Text style={[styles.permissionTitle, { color: "#F59E0B" }]}>Notifications désactivées</Text>
               <Text style={[styles.permissionSub, { color: colors.muted }]}>
@@ -133,17 +230,34 @@ export default function NotificationSettingsScreen() {
         )}
 
         {permissionStatus === "granted" && (
-          <View style={[styles.permissionBanner, { backgroundColor: "#22C55E" + "10" }]}>
-            <IconSymbol name="checkmark.circle.fill" size={24} color="#22C55E" />
+          <TouchableOpacity
+            accessibilityRole={hasPushToken ? undefined : "button"}
+            accessibilityLabel={hasPushToken ? undefined : "Réessayer la synchronisation des notifications"}
+            onPress={hasPushToken ? undefined : handleEnableNotifications}
+            disabled={hasPushToken || enabling}
+            activeOpacity={0.8}
+            style={[styles.permissionBanner, { backgroundColor: "#22C55E" + "10" }]}
+          >
+            {enabling ? (
+              <ActivityIndicator size="small" color="#22C55E" />
+            ) : (
+              <IconSymbol
+                name={hasPushToken ? "checkmark.circle.fill" : "arrow.clockwise"}
+                size={24}
+                color="#22C55E"
+              />
+            )}
             <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={[styles.permissionTitle, { color: "#22C55E" }]}>Notifications activées</Text>
-              {pushToken ? (
-                <Text style={[styles.permissionSub, { color: colors.muted }]} numberOfLines={1}>
-                  Token: {pushToken.substring(0, 30)}...
-                </Text>
-              ) : null}
+              <Text style={[styles.permissionTitle, { color: "#22C55E" }]}>
+                {hasPushToken ? "Notifications activées" : "Synchronisation en attente"}
+              </Text>
+              <Text style={[styles.permissionSub, { color: colors.muted }]}>
+                {hasPushToken
+                  ? "Cet appareil est prêt à recevoir vos alertes."
+                  : "Appuyez pour réessayer la connexion de cet appareil."}
+              </Text>
             </View>
-          </View>
+          </TouchableOpacity>
         )}
 
         {/* Notification Categories */}
@@ -163,8 +277,11 @@ export default function NotificationSettingsScreen() {
                 <Text style={[styles.settingDesc, { color: colors.muted }]}>{setting.description}</Text>
               </View>
               <Switch
+                accessibilityLabel={setting.title}
+                accessibilityHint={setting.description}
                 value={prefs[setting.key]}
                 onValueChange={() => handleToggle(setting.key)}
+                disabled={savingKey !== null}
                 trackColor={{ false: colors.border, true: colors.primary + "60" }}
                 thumbColor={prefs[setting.key] ? colors.primary : colors.muted}
               />
@@ -236,4 +353,8 @@ const styles = StyleSheet.create({
   settingDesc: { fontSize: 12, marginTop: 2 },
   actionRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 14 },
   infoText: { fontSize: 12, lineHeight: 18, textAlign: "center" },
+  errorTitle: { fontSize: 20, fontWeight: "800", marginTop: 14 },
+  errorMessage: { fontSize: 14, lineHeight: 21, textAlign: "center", marginTop: 8 },
+  retryButton: { minHeight: 48, marginTop: 18, paddingHorizontal: 20, borderRadius: 8, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  retryButtonText: { color: "#fff", fontSize: 15, fontWeight: "800" },
 });
