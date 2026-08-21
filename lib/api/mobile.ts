@@ -1,7 +1,8 @@
 import { getStoredToken } from "./auth";
 import type { CheckoutFieldSchema } from "@/lib/types/commerce";
 
-export const SITE_URL = process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
+export const SITE_URL =
+  process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
 export const MOBILE_V2_SEATING_ENABLED =
   process.env.EXPO_PUBLIC_ENABLE_MOBILE_V2_SEATING !== "false";
 
@@ -13,7 +14,12 @@ export class MobileApiError extends Error {
   code?: string;
   details?: unknown;
 
-  constructor(message: string, status: number, code?: string, details?: unknown) {
+  constructor(
+    message: string,
+    status: number,
+    code?: string,
+    details?: unknown,
+  ) {
     super(message);
     this.name = "MobileApiError";
     this.status = status;
@@ -31,7 +37,10 @@ interface MobileFetchOptions {
   timeoutMs?: number;
 }
 
-function mobileV2Url(endpoint: string, params: Record<string, QueryValue> = {}): string {
+function mobileV2Url(
+  endpoint: string,
+  params: Record<string, QueryValue> = {},
+): string {
   const normalized = endpoint.replace(/^\/+/, "");
   const url = new URL(`${SITE_URL}/wp-json/lamako-mobile/v2/${normalized}`);
   Object.entries(params).forEach(([key, value]) => {
@@ -54,13 +63,17 @@ async function parseResponse(res: Response): Promise<unknown> {
 
 export async function mobileV2Fetch<T>(
   endpoint: string,
-  options: MobileFetchOptions = {}
+  options: MobileFetchOptions = {},
 ): Promise<T> {
   const requireAuth = options.requireAuth !== false;
   const token = options.token ?? (requireAuth ? await getStoredToken() : null);
 
   if (requireAuth && !token) {
-    throw new MobileApiError("Authentication required", 401, "not_authenticated");
+    throw new MobileApiError(
+      "Authentication required",
+      401,
+      "not_authenticated",
+    );
   }
 
   const headers: Record<string, string> = {
@@ -81,7 +94,8 @@ export async function mobileV2Fetch<T>(
     res = await fetch(mobileV2Url(endpoint, options.params), {
       method: options.method || (options.body !== undefined ? "POST" : "GET"),
       headers,
-      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      body:
+        options.body !== undefined ? JSON.stringify(options.body) : undefined,
       signal: controller?.signal,
     });
   } catch (error: any) {
@@ -89,7 +103,7 @@ export async function mobileV2Fetch<T>(
       throw new MobileApiError(
         "La requête a expiré. Vérifiez votre connexion puis réessayez.",
         408,
-        "request_timeout"
+        "request_timeout",
       );
     }
     throw error;
@@ -99,9 +113,12 @@ export async function mobileV2Fetch<T>(
 
   const data = await parseResponse(res);
   if (!res.ok) {
-    const body = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+    const body =
+      data && typeof data === "object" ? (data as Record<string, unknown>) : {};
     const message =
-      typeof body.message === "string" ? body.message : `Mobile API error: ${res.status}`;
+      typeof body.message === "string"
+        ? body.message
+        : `Mobile API error: ${res.status}`;
     const code = typeof body.code === "string" ? body.code : undefined;
     throw new MobileApiError(message, res.status, code, data);
   }
@@ -379,6 +396,12 @@ export interface MobilePushTokenRequest {
   token: string;
   platform?: string;
   deviceId?: string;
+  preferences?: {
+    newEvents: boolean;
+    orderUpdates: boolean;
+    eventReminders: boolean;
+    promotions: boolean;
+  };
 }
 
 export interface MobileRewardsBalance {
@@ -434,8 +457,10 @@ export interface MobileReferralRegisterResponse {
   error?: string;
 }
 
-function normalizeCheckoutItems(items: MobileCheckoutItemInput[]): MobileCheckoutItemPayload[] {
-  return items.map(item => {
+function normalizeCheckoutItems(
+  items: MobileCheckoutItemInput[],
+): MobileCheckoutItemPayload[] {
+  return items.map((item) => {
     const productId = item.product_id ?? item.productId ?? 0;
     const variationId = item.variation_id ?? item.variationId;
     const eventId = item.event_id ?? item.eventId;
@@ -451,7 +476,7 @@ function normalizeCheckoutItems(items: MobileCheckoutItemInput[]): MobileCheckou
 }
 
 export async function getMobileCheckoutFields(
-  items: MobileCheckoutItemInput[]
+  items: MobileCheckoutItemInput[],
 ): Promise<MobileCheckoutFieldsResponse> {
   return mobileV2Fetch<MobileCheckoutFieldsResponse>("checkouts/fields", {
     method: "POST",
@@ -460,7 +485,7 @@ export async function getMobileCheckoutFields(
 }
 
 export async function createMobileCheckout(
-  request: CreateMobileCheckoutRequest
+  request: CreateMobileCheckoutRequest,
 ): Promise<CreateMobileCheckoutResponse> {
   return mobileV2Fetch<CreateMobileCheckoutResponse>("checkouts", {
     method: "POST",
@@ -472,10 +497,10 @@ export async function createMobileCheckout(
 }
 
 export async function getMobileCheckoutStatus(
-  checkoutToken: string
+  checkoutToken: string,
 ): Promise<MobileCheckoutStatusResponse> {
   return mobileV2Fetch<MobileCheckoutStatusResponse>(
-    `checkouts/${encodeURIComponent(checkoutToken)}/status`
+    `checkouts/${encodeURIComponent(checkoutToken)}/status`,
   );
 }
 
@@ -566,7 +591,7 @@ export async function startMobilePayment(
 }
 
 export async function createMobileSeatingSession(
-  request: CreateMobileSeatingSessionRequest
+  request: CreateMobileSeatingSessionRequest,
 ): Promise<CreateMobileSeatingSessionResponse> {
   return mobileV2Fetch<CreateMobileSeatingSessionResponse>("seating-sessions", {
     method: "POST",
@@ -575,20 +600,20 @@ export async function createMobileSeatingSession(
 }
 
 export async function getMobileSeatingSessionStatus(
-  flowToken: string
+  flowToken: string,
 ): Promise<MobileSeatingSessionStatusResponse> {
   return mobileV2Fetch<MobileSeatingSessionStatusResponse>(
-    `seating-sessions/${encodeURIComponent(flowToken)}/status`
+    `seating-sessions/${encodeURIComponent(flowToken)}/status`,
   );
 }
 
 export async function getMobilePaymentReturnStatus(
   kind: "checkout" | "seating",
-  token: string
+  token: string,
 ): Promise<MobilePaymentReturnStatusResponse> {
   return mobileV2Fetch<MobilePaymentReturnStatusResponse>(
     `payment-return/${encodeURIComponent(token)}/status`,
-    { params: { kind } }
+    { params: { kind } },
   );
 }
 
@@ -608,7 +633,10 @@ export async function verifyMobilePayment(
     throw new Error("Le serveur n'a pas pu vérifier le paiement.");
   }
   if (response.order) {
-    response.order = requireMobileOrder(response.order, "Vérification du paiement");
+    response.order = requireMobileOrder(
+      response.order,
+      "Vérification du paiement",
+    );
   }
   return response;
 }
@@ -629,16 +657,21 @@ export async function cancelMobilePayment(
     throw new Error("Le serveur n'a pas confirmé l'annulation du paiement.");
   }
   if (response.order) {
-    response.order = requireMobileOrder(response.order, "Annulation du paiement");
+    response.order = requireMobileOrder(
+      response.order,
+      "Annulation du paiement",
+    );
   }
   return response;
 }
 
-export async function getMobileOrders(params: {
-  status?: string;
-  limit?: number;
-  includeTickets?: boolean;
-} = {}): Promise<MobileOrderSummary[]> {
+export async function getMobileOrders(
+  params: {
+    status?: string;
+    limit?: number;
+    includeTickets?: boolean;
+  } = {},
+): Promise<MobileOrderSummary[]> {
   const response = await mobileV2Fetch<MobileOrdersResponse>("orders", {
     params: {
       status: params.status,
@@ -649,16 +682,20 @@ export async function getMobileOrders(params: {
   return response.orders;
 }
 
-export async function getMobileOrder(orderId: number): Promise<MobileOrderSummary> {
+export async function getMobileOrder(
+  orderId: number,
+): Promise<MobileOrderSummary> {
   return mobileV2Fetch<MobileOrderSummary>(`orders/${orderId}`);
 }
 
-export async function getMobileOrderTickets(orderId: number): Promise<MobileOrderTicketsResponse> {
+export async function getMobileOrderTickets(
+  orderId: number,
+): Promise<MobileOrderTicketsResponse> {
   return mobileV2Fetch<MobileOrderTicketsResponse>(`orders/${orderId}/tickets`);
 }
 
 export async function registerMobilePushToken(
-  request: MobilePushTokenRequest
+  request: MobilePushTokenRequest,
 ): Promise<{ success: boolean }> {
   return mobileV2Fetch<{ success: boolean }>("push-token", {
     method: "POST",
@@ -667,7 +704,7 @@ export async function registerMobilePushToken(
 }
 
 export async function unregisterMobilePushToken(
-  request: MobilePushTokenRequest
+  request: MobilePushTokenRequest,
 ): Promise<{ success: boolean; removed?: number }> {
   return mobileV2Fetch<{ success: boolean; removed?: number }>("push-token", {
     method: "DELETE",
@@ -679,16 +716,21 @@ export async function getMobileRewardsBalance(): Promise<MobileRewardsBalance> {
   return mobileV2Fetch<MobileRewardsBalance>("rewards/balance");
 }
 
-export async function getMobileRewardsHistory(limit = 20): Promise<MobileRewardTransaction[]> {
-  const response = await mobileV2Fetch<MobileRewardsHistoryResponse>("rewards/history", {
-    params: { limit },
-  });
+export async function getMobileRewardsHistory(
+  limit = 20,
+): Promise<MobileRewardTransaction[]> {
+  const response = await mobileV2Fetch<MobileRewardsHistoryResponse>(
+    "rewards/history",
+    {
+      params: { limit },
+    },
+  );
   return response.history;
 }
 
 export async function redeemMobileRewards(
   points: number,
-  idempotencyKey?: string
+  idempotencyKey?: string,
 ): Promise<MobileRewardsRedeemResponse> {
   return mobileV2Fetch<MobileRewardsRedeemResponse>("rewards/redeem", {
     method: "POST",
@@ -701,7 +743,7 @@ export async function getMobileReferralCode(): Promise<MobileReferralCodeRespons
 }
 
 export async function validateMobileReferralCode(
-  code: string
+  code: string,
 ): Promise<MobileReferralValidateResponse> {
   return mobileV2Fetch<MobileReferralValidateResponse>("referral/validate", {
     method: "POST",
@@ -711,7 +753,7 @@ export async function validateMobileReferralCode(
 }
 
 export async function registerMobileReferral(
-  referrerCode: string
+  referrerCode: string,
 ): Promise<MobileReferralRegisterResponse> {
   return mobileV2Fetch<MobileReferralRegisterResponse>("referral/register", {
     method: "POST",

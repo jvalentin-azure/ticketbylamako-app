@@ -2495,7 +2495,13 @@ function lamako_mobile_register_push_token( $request ) {
  * Send push notification to all registered Expo push tokens.
  * Uses Expo Push API: https://docs.expo.dev/push-notifications/sending-notifications/
  */
-function lamako_mobile_send_push_notification( $title, $body, $data = [], $channel_id = 'default' ) {
+function lamako_mobile_push_preference_enabled( $token_entry, $preference_key ) {
+    if ( $preference_key === '' ) return true;
+    if ( ! isset( $token_entry['preferences'] ) || ! is_array( $token_entry['preferences'] ) ) return true;
+    return ! array_key_exists( $preference_key, $token_entry['preferences'] ) || (bool) $token_entry['preferences'][ $preference_key ];
+}
+
+function lamako_mobile_send_push_notification( $title, $body, $data = [], $channel_id = 'default', $preference_key = '' ) {
     $tokens = get_option( 'lamako_push_tokens', [] );
     if ( ! is_array( $tokens ) || empty( $tokens ) ) return 0;
     
@@ -2503,6 +2509,7 @@ function lamako_mobile_send_push_notification( $title, $body, $data = [], $chann
     $messages = [];
     foreach ( $tokens as $t ) {
         if ( empty( $t['token'] ) || strpos( $t['token'], 'ExponentPushToken' ) === false ) continue;
+        if ( ! lamako_mobile_push_preference_enabled( $t, $preference_key ) ) continue;
         
         $messages[] = [
             'to'        => $t['token'],
@@ -2568,7 +2575,7 @@ function lamako_mobile_notify_new_event( $new_status, $old_status, $post ) {
         'url'      => '/event/' . $event_id,
     ];
     
-    lamako_mobile_send_push_notification( $title, $body, $data, 'events' );
+    lamako_mobile_send_push_notification( $title, $body, $data, 'events', 'newEvents' );
 }
 
 /**
@@ -2596,7 +2603,9 @@ function lamako_mobile_notify_order_status( $order_id, $old_status, $new_status,
     if ( ! is_array( $tokens ) ) return;
     
     $customer_tokens = array_filter( $tokens, function( $t ) use ( $customer_id ) {
-        return isset( $t['user_id'] ) && (int) $t['user_id'] === $customer_id;
+        return isset( $t['user_id'] )
+            && (int) $t['user_id'] === $customer_id
+            && lamako_mobile_push_preference_enabled( $t, 'orderUpdates' );
     } );
     
     if ( empty( $customer_tokens ) ) return;

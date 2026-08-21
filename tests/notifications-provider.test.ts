@@ -9,6 +9,7 @@ import {
   notificationPreferencesStorageKey,
   notificationSectionLabel,
   notificationStorageKey,
+  notificationTypeIsEnabled,
 } from "../lib/notification-store";
 import {
   notificationDestinationForAuth,
@@ -92,6 +93,23 @@ describe("notification storage normalization", () => {
     });
     expect(updated[0]).toEqual({ ...validNotification, read: true });
   });
+
+  it("maps notification categories to their user preference", () => {
+    const preferences = {
+      newEvents: false,
+      orderUpdates: true,
+      eventReminders: false,
+      promotions: false,
+    };
+    expect(notificationTypeIsEnabled("new_event", preferences)).toBe(false);
+    expect(notificationTypeIsEnabled("order_update", preferences)).toBe(true);
+    expect(notificationTypeIsEnabled("ticket_ready", preferences)).toBe(true);
+    expect(notificationTypeIsEnabled("event_reminder", preferences)).toBe(
+      false,
+    );
+    expect(notificationTypeIsEnabled("promotion", preferences)).toBe(false);
+    expect(notificationTypeIsEnabled("unknown_type", preferences)).toBe(true);
+  });
 });
 
 describe("notification account security", () => {
@@ -126,6 +144,24 @@ describe("notification account security", () => {
     expect(backend).toContain("lamako_mobile_v2_unregister_push_token");
     expect(backend).toContain("WP_REST_Server::DELETABLE");
     expect(backend).toContain("get_current_user_id()");
+  });
+
+  it("sends preferences with the token and filters remote pushes", () => {
+    const notifications = fs.readFileSync(
+      path.join(root, "lib", "notifications.ts"),
+      "utf8",
+    );
+    const plugin = fs.readFileSync(
+      path.join(root, "scripts", "lamako-mobile-api", "lamako-mobile-api.php"),
+      "utf8",
+    );
+    expect(notifications).toContain("preferences,");
+    expect(plugin).toContain("lamako_mobile_push_preference_enabled");
+    expect(plugin).toContain("'newEvents'");
+    expect(plugin).toContain("'orderUpdates'");
+    expect(backend).toContain("$existing['preferences'] = $preferences");
+    expect(backend).toContain("rest_sanitize_boolean");
+    expect(backend).toContain("$has_preferences || ! isset");
   });
 });
 

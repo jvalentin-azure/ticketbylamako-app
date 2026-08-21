@@ -6,6 +6,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   notificationPreferencesStorageKey,
+  notificationTypeIsEnabled,
   normalizeNotificationPreferences,
   type NotificationPreferences,
 } from "@/lib/notification-store";
@@ -19,13 +20,20 @@ const PUSH_TOKEN_KEY = "tbl_push_token";
  */
 export function setupNotificationHandler() {
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
+    handleNotification: async (notification) => {
+      const preferences = await getNotificationPreferences();
+      const enabled = notificationTypeIsEnabled(
+        notification.request.content.data?.type,
+        preferences,
+      );
+      return {
+        shouldShowAlert: enabled,
+        shouldPlaySound: enabled,
+        shouldSetBadge: enabled,
+        shouldShowBanner: enabled,
+        shouldShowList: enabled,
+      };
+    },
   });
 }
 
@@ -85,7 +93,9 @@ export async function registerForPushNotificationsAsync(
 
   try {
     // Get Expo push token
-    const projectId = Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
+    const projectId =
+      Constants.expoConfig?.extra?.eas?.projectId ||
+      Constants.easConfig?.projectId;
     const tokenData = await Notifications.getExpoPushTokenAsync({
       projectId: projectId || undefined,
     });
@@ -113,16 +123,19 @@ export async function registerPushTokenWithBackend(
     const token = await AsyncStorage.getItem(PUSH_TOKEN_KEY);
     if (!token) {
       // Try to get a new token first
-      const newToken = await registerForPushNotificationsAsync(requestPermission);
+      const newToken =
+        await registerForPushNotificationsAsync(requestPermission);
       if (!newToken) return false;
     }
     const storedToken = await AsyncStorage.getItem(PUSH_TOKEN_KEY);
     if (!storedToken) return false;
 
     const { registerMobilePushToken } = await import("@/lib/api/mobile");
+    const preferences = await getNotificationPreferences();
     const result = await registerMobilePushToken({
       token: storedToken,
       platform: Platform.OS,
+      preferences,
     });
     return result.success;
   } catch (error) {
@@ -141,18 +154,27 @@ export async function getStoredPushToken(): Promise<string | null> {
 /**
  * Get notification preferences
  */
-export async function getNotificationPreferences(userId?: number | null): Promise<NotificationPreferences> {
-  const resolvedUserId = userId === undefined
-    ? (await import("@/lib/api/auth").then(({ getStoredUser }) => getStoredUser()))?.id
-    : userId;
+export async function getNotificationPreferences(
+  userId?: number | null,
+): Promise<NotificationPreferences> {
+  const resolvedUserId =
+    userId === undefined
+      ? (
+          await import("@/lib/api/auth").then(({ getStoredUser }) =>
+            getStoredUser(),
+          )
+        )?.id
+      : userId;
   try {
-    const data = await AsyncStorage.getItem(notificationPreferencesStorageKey(resolvedUserId));
+    const data = await AsyncStorage.getItem(
+      notificationPreferencesStorageKey(resolvedUserId),
+    );
     if (!data) return DEFAULT_NOTIFICATION_PREFERENCES;
     return normalizeNotificationPreferences(JSON.parse(data));
   } catch {
-    await AsyncStorage.removeItem(notificationPreferencesStorageKey(resolvedUserId)).catch(
-      () => undefined,
-    );
+    await AsyncStorage.removeItem(
+      notificationPreferencesStorageKey(resolvedUserId),
+    ).catch(() => undefined);
     return DEFAULT_NOTIFICATION_PREFERENCES;
   }
 }
@@ -160,10 +182,18 @@ export async function getNotificationPreferences(userId?: number | null): Promis
 /**
  * Save notification preferences
  */
-export async function saveNotificationPreferences(prefs: NotificationPreferences, userId?: number | null): Promise<void> {
-  const resolvedUserId = userId === undefined
-    ? (await import("@/lib/api/auth").then(({ getStoredUser }) => getStoredUser()))?.id
-    : userId;
+export async function saveNotificationPreferences(
+  prefs: NotificationPreferences,
+  userId?: number | null,
+): Promise<void> {
+  const resolvedUserId =
+    userId === undefined
+      ? (
+          await import("@/lib/api/auth").then(({ getStoredUser }) =>
+            getStoredUser(),
+          )
+        )?.id
+      : userId;
   await AsyncStorage.setItem(
     notificationPreferencesStorageKey(resolvedUserId),
     JSON.stringify(normalizeNotificationPreferences(prefs)),
@@ -175,7 +205,10 @@ export async function unregisterPushTokenWithBackend(): Promise<boolean> {
     const token = await getStoredPushToken();
     if (!token) return true;
     const { unregisterMobilePushToken } = await import("@/lib/api/mobile");
-    const result = await unregisterMobilePushToken({ token, platform: Platform.OS });
+    const result = await unregisterMobilePushToken({
+      token,
+      platform: Platform.OS,
+    });
     return result.success === true;
   } catch {
     return false;
@@ -185,8 +218,15 @@ export async function unregisterPushTokenWithBackend(): Promise<boolean> {
 /**
  * Schedule event reminders (24h before AND 1h before)
  */
-export async function scheduleEventReminder(eventId: number, eventName: string, eventDate: Date): Promise<string | null> {
+export async function scheduleEventReminder(
+  eventId: number,
+  eventName: string,
+  eventDate: Date,
+): Promise<string | null> {
   try {
+    const preferences = await getNotificationPreferences();
+    if (!preferences.eventReminders) return null;
+
     const now = new Date();
     let lastId: string | null = null;
 
@@ -234,7 +274,10 @@ export async function scheduleEventReminder(eventId: number, eventName: string, 
 /**
  * Send a local notification for a new event
  */
-export async function notifyNewEvent(eventName: string, eventId: number): Promise<void> {
+export async function notifyNewEvent(
+  eventName: string,
+  eventId: number,
+): Promise<void> {
   try {
     const prefs = await getNotificationPreferences();
     if (!prefs.newEvents) return;
@@ -256,7 +299,10 @@ export async function notifyNewEvent(eventName: string, eventId: number): Promis
 /**
  * Send a local notification for payment confirmation
  */
-export async function notifyPaymentConfirmed(orderId: number, amount?: string): Promise<void> {
+export async function notifyPaymentConfirmed(
+  orderId: number,
+  amount?: string,
+): Promise<void> {
   try {
     const prefs = await getNotificationPreferences();
     if (!prefs.orderUpdates) return;
@@ -282,6 +328,20 @@ export async function notifyPaymentConfirmed(orderId: number, amount?: string): 
  */
 export async function cancelAllNotifications(): Promise<void> {
   await Notifications.cancelAllScheduledNotificationsAsync();
+}
+
+export async function cancelScheduledNotificationsByType(
+  type: string,
+): Promise<void> {
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  const matching = scheduled.filter(
+    (notification) => notification.content.data?.type === type,
+  );
+  await Promise.all(
+    matching.map((notification) =>
+      Notifications.cancelScheduledNotificationAsync(notification.identifier),
+    ),
+  );
 }
 
 /**

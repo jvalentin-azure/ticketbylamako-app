@@ -42,6 +42,28 @@ export function notificationType(
   return typeof type === "string" ? type : undefined;
 }
 
+export function notificationTypeIsEnabled(
+  type: unknown,
+  preferences: NotificationPreferences,
+): boolean {
+  if (typeof type !== "string") return true;
+
+  if (type === "new_event") return preferences.newEvents;
+  if (
+    type === "order_update" ||
+    type === "payment_confirmed" ||
+    type === "ticket_ready"
+  ) {
+    return preferences.orderUpdates;
+  }
+  if (type === "event_reminder") return preferences.eventReminders;
+  if (type === "promotion" || type === "promo" || type === "marketing") {
+    return preferences.promotions;
+  }
+
+  return true;
+}
+
 export function notificationSectionLabel(
   receivedAt: string,
   now = new Date(),

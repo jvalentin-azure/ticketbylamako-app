@@ -4979,6 +4979,14 @@ function lamako_mobile_v2_register_push_token( WP_REST_Request $request ) {
     $token    = sanitize_text_field( $body['token'] ?? '' );
     $platform = sanitize_text_field( $body['platform'] ?? 'unknown' );
     $device_id = sanitize_text_field( $body['deviceId'] ?? $body['device_id'] ?? '' );
+    $has_preferences = isset( $body['preferences'] ) && is_array( $body['preferences'] );
+    $preference_input = $has_preferences ? $body['preferences'] : [];
+    $preferences = [
+        'newEvents'      => ! array_key_exists( 'newEvents', $preference_input ) || rest_sanitize_boolean( $preference_input['newEvents'] ),
+        'orderUpdates'   => ! array_key_exists( 'orderUpdates', $preference_input ) || rest_sanitize_boolean( $preference_input['orderUpdates'] ),
+        'eventReminders' => ! array_key_exists( 'eventReminders', $preference_input ) || rest_sanitize_boolean( $preference_input['eventReminders'] ),
+        'promotions'     => ! array_key_exists( 'promotions', $preference_input ) || rest_sanitize_boolean( $preference_input['promotions'] ),
+    ];
     $user_id  = get_current_user_id();
 
     if ( $token === '' ) {
@@ -4996,6 +5004,9 @@ function lamako_mobile_v2_register_push_token( WP_REST_Request $request ) {
             $existing['user_id']    = $user_id;
             $existing['platform']   = $platform;
             $existing['device_id']  = $device_id;
+            if ( $has_preferences || ! isset( $existing['preferences'] ) || ! is_array( $existing['preferences'] ) ) {
+                $existing['preferences'] = $preferences;
+            }
             $existing['updated_at'] = current_time( 'mysql' );
             $found = true;
             break;
@@ -5009,6 +5020,7 @@ function lamako_mobile_v2_register_push_token( WP_REST_Request $request ) {
             'user_id'    => $user_id,
             'platform'   => $platform,
             'device_id'  => $device_id,
+            'preferences' => $preferences,
             'created_at' => current_time( 'mysql' ),
             'updated_at' => current_time( 'mysql' ),
         ];

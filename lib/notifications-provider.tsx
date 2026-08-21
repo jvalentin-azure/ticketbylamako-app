@@ -1,13 +1,22 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+} from "react";
 import * as Notifications from "expo-notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import {
   mergeStoredNotification,
+  notificationTypeIsEnabled,
   notificationStorageKey,
   normalizeStoredNotifications,
   type AppNotification,
 } from "./notification-store";
+import { getNotificationPreferences } from "./notifications";
 import { useAuth } from "./auth-provider";
 
 const LEGACY_NOTIFICATION_STORAGE_KEY = "tbl_notifications";
@@ -32,10 +41,17 @@ export function useNotifications() {
   return useContext(NotificationsContext);
 }
 
-export function NotificationsProvider({ children }: { children: React.ReactNode }) {
+export function NotificationsProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const storageKey = useMemo(() => notificationStorageKey(user?.id), [user?.id]);
+  const storageKey = useMemo(
+    () => notificationStorageKey(user?.id),
+    [user?.id],
+  );
 
   // Load stored notifications on mount
   useEffect(() => {
@@ -50,7 +66,9 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
         void AsyncStorage.removeItem(storageKey);
         return;
       }
-      setNotifications((current) => normalizeStoredNotifications([...current, ...stored]));
+      setNotifications((current) =>
+        normalizeStoredNotifications([...current, ...stored]),
+      );
     });
     void AsyncStorage.removeItem(LEGACY_NOTIFICATION_STORAGE_KEY);
     return () => {
@@ -59,60 +77,83 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   }, [storageKey]);
 
   // Save notifications to storage whenever they change
-  const persist = useCallback((notifs: AppNotification[]) => {
-    AsyncStorage.setItem(storageKey, JSON.stringify(notifs)).catch(() => {});
-  }, [storageKey]);
+  const persist = useCallback(
+    (notifs: AppNotification[]) => {
+      AsyncStorage.setItem(storageKey, JSON.stringify(notifs)).catch(() => {});
+    },
+    [storageKey],
+  );
 
-  const storeNotification = useCallback((notification: Notifications.Notification, read: boolean) => {
-    const content = notification.request.content;
-    const next: AppNotification = {
-      id: notification.request.identifier,
-      title: content.title || "Notification",
-      body: content.body || "",
-      data: content.data as Record<string, unknown> | undefined,
-      receivedAt: new Date().toISOString(),
-      read,
-    };
-    setNotifications((previous) => {
-      const updated = mergeStoredNotification(previous, next);
-      persist(updated);
-      return updated;
-    });
-  }, [persist]);
+  const storeNotification = useCallback(
+    (notification: Notifications.Notification, read: boolean) => {
+      const content = notification.request.content;
+      const next: AppNotification = {
+        id: notification.request.identifier,
+        title: content.title || "Notification",
+        body: content.body || "",
+        data: content.data as Record<string, unknown> | undefined,
+        receivedAt: new Date().toISOString(),
+        read,
+      };
+      setNotifications((previous) => {
+        const updated = mergeStoredNotification(previous, next);
+        persist(updated);
+        return updated;
+      });
+    },
+    [persist],
+  );
 
   // Listen for incoming notifications
   useEffect(() => {
     if (Platform.OS === "web") return;
 
-    const subscription = Notifications.addNotificationReceivedListener((notification) => {
-      storeNotification(notification, false);
-    });
-    const responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      storeNotification(response.notification, true);
-    });
+    const subscription = Notifications.addNotificationReceivedListener(
+      (notification) => {
+        void getNotificationPreferences(user?.id).then((preferences) => {
+          if (
+            notificationTypeIsEnabled(
+              notification.request.content.data?.type,
+              preferences,
+            )
+          ) {
+            storeNotification(notification, false);
+          }
+        });
+      },
+    );
+    const responseSubscription =
+      Notifications.addNotificationResponseReceivedListener((response) => {
+        storeNotification(response.notification, true);
+      });
 
     return () => {
       subscription.remove();
       responseSubscription.remove();
     };
-  }, [storeNotification]);
+  }, [storeNotification, user?.id]);
 
   const unreadCount = useMemo(
     () => notifications.filter((notification) => !notification.read).length,
     [notifications],
   );
 
-  const markAsRead = useCallback((id: string) => {
-    setNotifications(prev => {
-      const updated = prev.map(n => n.id === id ? { ...n, read: true } : n);
-      persist(updated);
-      return updated;
-    });
-  }, [persist]);
+  const markAsRead = useCallback(
+    (id: string) => {
+      setNotifications((prev) => {
+        const updated = prev.map((n) =>
+          n.id === id ? { ...n, read: true } : n,
+        );
+        persist(updated);
+        return updated;
+      });
+    },
+    [persist],
+  );
 
   const markAllAsRead = useCallback(() => {
-    setNotifications(prev => {
-      const updated = prev.map(n => ({ ...n, read: true }));
+    setNotifications((prev) => {
+      const updated = prev.map((n) => ({ ...n, read: true }));
       persist(updated);
       return updated;
     });
@@ -124,7 +165,15 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   }, [storageKey]);
 
   return (
-    <NotificationsContext.Provider value={{ notifications, unreadCount, markAsRead, markAllAsRead, clearAll }}>
+    <NotificationsContext.Provider
+      value={{
+        notifications,
+        unreadCount,
+        markAsRead,
+        markAllAsRead,
+        clearAll,
+      }}
+    >
       {children}
     </NotificationsContext.Provider>
   );

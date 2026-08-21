@@ -247,3 +247,56 @@ QA.
 
 Rollback applicatif : revenir au commit précédant la centralisation de la
 navigation des notifications. Le contrat PHP existant reste inchangé.
+
+## Préférences de notifications effectives - 21 août 2026
+
+Les quatre réglages de l'application sont désormais appliqués à la réception
+locale et aux envois serveur : nouveaux événements, suivi des commandes,
+rappels d'événement et promotions.
+
+- Le token Expo est resynchronisé avec ses préférences après chaque changement.
+- Les notifications désactivées ne sont ni affichées au premier plan ni ajoutées
+  à la boîte Notifications.
+- La désactivation des rappels annule les rappels locaux déjà planifiés.
+- Le serveur filtre les diffusions `newEvents` et les notifications
+  `orderUpdates` avant l'appel à Expo.
+- Les anciens tokens sans bloc `preferences` restent activés par défaut pour
+  préserver la compatibilité avec les versions déjà installées.
+- `POST /lamako-mobile/v2/push-token` reste protégé : HTTP 401 sans JWT.
+
+Déploiement limité au staging. Le fichier principal actif était une variante
+historique `2.0.0`, très différente de la source Git `2.0.4`; il a donc reçu un
+patch minimal au lieu d'un remplacement complet. Une modification seating de
+`v2-commerce.php`, déployée en parallèle, a également été conservée puis
+fusionnée avec le stockage des préférences.
+
+- Backup serveur :
+  `/home/master/tbl-compliance-backups/wvvtwdcenn-20260821T180033Z-pre-notification-preferences/`.
+- SHA-256 avant patch du fichier principal :
+  `f6cce7ae3e105f07650db41a5268f56c0f8613b9de06b8e6e5eef79d7d436dd1`.
+- SHA-256 avant patch du fichier v2 parallèle :
+  `7ce2f032099b343ce6713fcce528edb63e55bcc931f9222ce91bda9e5e4c7ff9`.
+- SHA-256 staging après déploiement du fichier principal :
+  `356c53b651b96f0363fa59f51290baed6e40a3a7bb1234f46d7455c80a4756fe`.
+- SHA-256 staging après fusion du fichier v2 :
+  `743a78616970e1c415954f00aaf7434ed37c1a2e38ade3fa3f3c580d4c9278f5`.
+- `php -l` local, transfert et fichiers actifs : OK.
+- Smoke tests publics : HTTP 200 pour home, événements, boutique, événement
+  standard `13842` et événement seating `12673`.
+- Test contrôlé avec un token Expo factice : préférences persistées avec les
+  quatre valeurs attendues, puis suppression vérifiée
+  (`CLEANUP_REMAINING=0`). Aucun push réel n'a été envoyé.
+- Aucun paiement, billet, commande ou check-in n'a été créé.
+
+Rollback staging ciblé :
+
+```bash
+cp /home/master/tbl-compliance-backups/wvvtwdcenn-20260821T180033Z-pre-notification-preferences/lamako-mobile-api.php /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/lamako-mobile-api.php
+cp /home/master/tbl-compliance-backups/wvvtwdcenn-20260821T180033Z-pre-notification-preferences/includes/v2-commerce-concurrent-pre-notification.php /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
+php -l /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/lamako-mobile-api.php
+php -l /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
+```
+
+Après rollback, retester les routes publiques et vérifier que le token factice
+`TBL-NOTIFICATION-PREF-QA-20260821` reste absent de l'option
+`lamako_push_tokens`.
