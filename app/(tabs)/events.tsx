@@ -22,6 +22,7 @@ import {
   type TCEvent,
   type EventCategory,
 } from "@/lib/api/catalog";
+import { prefetchCatalogImages } from "@/lib/catalog-image-prefetch";
 import { useFavorites } from "@/lib/favorites-provider";
 import { formatDateShort, decodeHtmlEntities } from "@/lib/format";
 import {
@@ -80,6 +81,9 @@ export default function EventsScreen() {
           upcoming.push(e);
         }
       });
+      void prefetchCatalogImages(
+        upcoming.map((event) => event.featuredImage),
+      );
       setEvents(upcoming);
       setFiltered(upcoming);
       setPastEvents(past);
@@ -169,7 +173,9 @@ export default function EventsScreen() {
       const now = new Date();
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       result = result.filter((e) => {
-        const eventDate = new Date(e.date);
+        const eventDate = new Date(
+          (e.mobileFields?.event_date_time || e.date).replace(" ", "T"),
+        );
         switch (dateFilter) {
           case "today":
             return (
