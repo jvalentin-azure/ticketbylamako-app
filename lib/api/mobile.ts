@@ -147,6 +147,36 @@ export interface MobileAddressInput {
   country?: string;
 }
 
+export interface MobileProfile {
+  id: number;
+  email: string;
+  displayName: string;
+  firstName: string;
+  lastName: string;
+  billing: {
+    phone: string;
+    address_1: string;
+    city: string;
+    country: string;
+  };
+}
+
+export async function getMobileProfile(): Promise<MobileProfile> {
+  return mobileV2Fetch<MobileProfile>("profile");
+}
+
+export async function updateMobileProfile(input: {
+  firstName: string;
+  lastName: string;
+  email: string;
+  billing: MobileProfile["billing"];
+}): Promise<MobileProfile> {
+  return mobileV2Fetch<MobileProfile>("profile", {
+    method: "POST",
+    body: input,
+  });
+}
+
 export interface CreateMobileCheckoutRequest {
   items: MobileCheckoutItemInput[];
   billing?: MobileAddressInput;

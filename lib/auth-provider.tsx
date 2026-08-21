@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { User, login as apiLogin, register as apiRegister, logout as apiLogout, getStoredUser, validateToken } from "./api/auth";
+import { User, login as apiLogin, register as apiRegister, logout as apiLogout, getStoredUser, storeUser, validateToken } from "./api/auth";
 import { invalidateAllCaches } from "./api/cache";
 
 interface AuthState {
@@ -12,6 +12,7 @@ interface AuthContextType extends AuthState {
   login: (username: string, password: string) => Promise<void>;
   register: (email: string, password: string, firstName: string, lastName: string) => Promise<void>;
   loginWithUser: (user: User) => void;
+  updateCurrentUser: (user: User) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -73,8 +74,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     syncPushTokenForAuthenticatedUser();
   }, []);
 
+  const updateCurrentUser = useCallback(async (user: User) => {
+    await storeUser(user);
+    setState({ user, isLoading: false, isAuthenticated: true });
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ ...state, login, register, loginWithUser, logout }}>
+    <AuthContext.Provider value={{ ...state, login, register, loginWithUser, updateCurrentUser, logout }}>
       {children}
     </AuthContext.Provider>
   );

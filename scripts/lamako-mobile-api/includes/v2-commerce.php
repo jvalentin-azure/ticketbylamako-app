@@ -188,6 +188,19 @@ function lamako_mobile_v2_register_routes() {
         'permission_callback' => 'lamako_mobile_v2_require_user',
     ] );
 
+    register_rest_route( $namespace, '/profile', [
+        [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => 'lamako_mobile_v2_get_profile',
+            'permission_callback' => 'lamako_mobile_v2_require_user',
+        ],
+        [
+            'methods'             => WP_REST_Server::EDITABLE,
+            'callback'            => 'lamako_mobile_v2_update_profile',
+            'permission_callback' => 'lamako_mobile_v2_require_user',
+        ],
+    ] );
+
     register_rest_route( $namespace, '/rewards/balance', [
         'methods'             => WP_REST_Server::READABLE,
         'callback'            => 'lamako_mobile_v2_rewards_balance',
@@ -237,6 +250,77 @@ function lamako_mobile_v2_require_user( WP_REST_Request $request ) {
         return new WP_Error( 'lamako_v2_not_authenticated', 'Authentication required.', [ 'status' => 401 ] );
     }
     return true;
+}
+
+function lamako_mobile_v2_profile_response( WP_User $user ) {
+    return [
+        'id'           => (int) $user->ID,
+        'email'        => (string) $user->user_email,
+        'displayName'  => (string) $user->display_name,
+        'firstName'    => (string) get_user_meta( $user->ID, 'first_name', true ),
+        'lastName'     => (string) get_user_meta( $user->ID, 'last_name', true ),
+        'billing'      => [
+            'phone'     => (string) get_user_meta( $user->ID, 'billing_phone', true ),
+            'address_1' => (string) get_user_meta( $user->ID, 'billing_address_1', true ),
+            'city'      => (string) get_user_meta( $user->ID, 'billing_city', true ),
+            'country'   => (string) ( get_user_meta( $user->ID, 'billing_country', true ) ?: 'MG' ),
+        ],
+    ];
+}
+
+function lamako_mobile_v2_get_profile( WP_REST_Request $request ) {
+    $user = wp_get_current_user();
+    if ( ! $user || ! $user->exists() ) {
+        return new WP_Error( 'lamako_v2_not_authenticated', 'Authentication required.', [ 'status' => 401 ] );
+    }
+    return rest_ensure_response( lamako_mobile_v2_profile_response( $user ) );
+}
+
+function lamako_mobile_v2_update_profile( WP_REST_Request $request ) {
+    $user = wp_get_current_user();
+    if ( ! $user || ! $user->exists() ) {
+        return new WP_Error( 'lamako_v2_not_authenticated', 'Authentication required.', [ 'status' => 401 ] );
+    }
+
+    $params     = $request->get_json_params();
+    $params     = is_array( $params ) ? $params : [];
+    $first_name = sanitize_text_field( $params['firstName'] ?? '' );
+    $last_name  = sanitize_text_field( $params['lastName'] ?? '' );
+    $email      = sanitize_email( $params['email'] ?? '' );
+    $billing    = isset( $params['billing'] ) && is_array( $params['billing'] ) ? $params['billing'] : [];
+
+    if ( $email === '' || ! is_email( $email ) ) {
+        return new WP_Error( 'lamako_v2_invalid_email', 'Please provide a valid email address.', [ 'status' => 400 ] );
+    }
+
+    $email_owner = get_user_by( 'email', $email );
+    if ( $email_owner && (int) $email_owner->ID !== (int) $user->ID ) {
+        return new WP_Error( 'lamako_v2_email_exists', 'This email address is already in use.', [ 'status' => 409 ] );
+    }
+
+    $updated = wp_update_user( [
+        'ID'           => $user->ID,
+        'user_email'   => $email,
+        'first_name'   => $first_name,
+        'last_name'    => $last_name,
+        'display_name' => trim( $first_name . ' ' . $last_name ) ?: $user->display_name,
+    ] );
+    if ( is_wp_error( $updated ) ) {
+        return new WP_Error( 'lamako_v2_profile_update_failed', $updated->get_error_message(), [ 'status' => 400 ] );
+    }
+
+    update_user_meta( $user->ID, 'billing_email', $email );
+    update_user_meta( $user->ID, 'billing_first_name', $first_name );
+    update_user_meta( $user->ID, 'billing_last_name', $last_name );
+    update_user_meta( $user->ID, 'billing_phone', sanitize_text_field( $billing['phone'] ?? '' ) );
+    update_user_meta( $user->ID, 'billing_address_1', sanitize_text_field( $billing['address_1'] ?? '' ) );
+    update_user_meta( $user->ID, 'billing_city', sanitize_text_field( $billing['city'] ?? '' ) );
+    $country = strtoupper( sanitize_text_field( $billing['country'] ?? 'MG' ) );
+    update_user_meta( $user->ID, 'billing_country', preg_match( '/^[A-Z]{2}$/', $country ) ? $country : 'MG' );
+
+    clean_user_cache( $user->ID );
+    $fresh_user = get_user_by( 'id', $user->ID );
+    return rest_ensure_response( lamako_mobile_v2_profile_response( $fresh_user ?: $user ) );
 }
 
 function lamako_mobile_v2_payment_cron_schedules( $schedules ) {

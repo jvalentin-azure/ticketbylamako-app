@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Text,
   View,
@@ -15,6 +15,11 @@ import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/lib/auth-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { getStoredToken } from "@/lib/api/auth";
+import {
+  getMobileProfile,
+  MobileApiError,
+  updateMobileProfile,
+} from "@/lib/api/mobile";
 
 const SITE_URL =
   process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
@@ -22,7 +27,7 @@ const SITE_URL =
 export default function EditProfileScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, updateCurrentUser } = useAuth();
 
   const [firstName, setFirstName] = useState(user?.firstName || "");
   const [lastName, setLastName] = useState(user?.lastName || "");
@@ -30,20 +35,50 @@ export default function EditProfileScreen() {
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const profileRequestId = useRef(0);
 
-  // Load saved billing info from AsyncStorage on mount
+  // Load the server profile first; local billing data is only a fallback.
   useEffect(() => {
+    const activeRequest = ++profileRequestId.current;
     (async () => {
       try {
+        const profile = await getMobileProfile();
+        if (profileRequestId.current !== activeRequest) return;
+        setFirstName(profile.firstName);
+        setLastName(profile.lastName);
+        setEmail(profile.email);
+        setPhone(profile.billing.phone);
+        setAddress(profile.billing.address_1);
+        setCity(profile.billing.city);
+        await AsyncStorage.setItem(
+          "billing_info",
+          JSON.stringify({
+            phone: profile.billing.phone,
+            address: profile.billing.address_1,
+            city: profile.billing.city,
+          }),
+        );
+      } catch {
         const saved = await AsyncStorage.getItem("billing_info");
-        if (saved) {
+        if (profileRequestId.current !== activeRequest || !saved) return;
+        try {
           const data = JSON.parse(saved);
           if (data.phone) setPhone(data.phone);
           if (data.address) setAddress(data.address);
           if (data.city) setCity(data.city);
+        } catch {
+          // Invalid local fallback: keep the authenticated identity fields.
         }
-      } catch {}
+      } finally {
+        if (profileRequestId.current === activeRequest) {
+          setLoadingProfile(false);
+        }
+      }
     })();
+    return () => {
+      profileRequestId.current += 1;
+    };
   }, []);
   const [saving, setSaving] = useState(false);
 
@@ -55,36 +90,47 @@ export default function EditProfileScreen() {
 
   const handleSaveProfile = async () => {
     if (!user) return;
+    if (!email.trim()) {
+      Alert.alert("Adresse e-mail requise", "Saisissez une adresse e-mail.");
+      return;
+    }
     setSaving(true);
     try {
-      const storedToken = await getStoredToken();
-      if (!storedToken) throw new Error("Non authentifié");
-      const res = await fetch(`${SITE_URL}/wp-json/wp/v2/users/${user.id}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${storedToken}`,
+      const profile = await updateMobileProfile({
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        email: email.trim().toLowerCase(),
+        billing: {
+          phone: phone.trim(),
+          address_1: address.trim(),
+          city: city.trim(),
+          country: "MG",
         },
-        body: JSON.stringify({
-          first_name: firstName,
-          last_name: lastName,
-          email: email,
-          meta: {
-            billing_phone: phone,
-            billing_address_1: address,
-            billing_city: city,
-          },
-        }),
       });
-      if (!res.ok) throw new Error("Erreur");
-      // Save billing info locally for checkout auto-fill
       await AsyncStorage.setItem(
         "billing_info",
-        JSON.stringify({ phone, address, city }),
+        JSON.stringify({
+          phone: profile.billing.phone,
+          address: profile.billing.address_1,
+          city: profile.billing.city,
+        }),
       );
+      await updateCurrentUser({
+        ...user,
+        email: profile.email,
+        displayName: profile.displayName,
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+      });
       Alert.alert("Succès", "Profil mis à jour avec succès");
-    } catch {
-      Alert.alert("Erreur", "Impossible de mettre à jour le profil");
+    } catch (error) {
+      const message =
+        error instanceof MobileApiError && error.status === 409
+          ? "Cette adresse e-mail est déjà utilisée."
+          : error instanceof MobileApiError && error.status === 401
+            ? "Votre session a expiré. Reconnectez-vous."
+            : "Impossible de mettre à jour le profil. Vérifiez votre connexion.";
+      Alert.alert("Erreur", message);
     } finally {
       setSaving(false);
     }
@@ -291,17 +337,17 @@ export default function EditProfileScreen() {
 
             <TouchableOpacity
               onPress={handleSaveProfile}
-              disabled={saving}
+              disabled={saving || loadingProfile}
               style={{
                 backgroundColor: colors.primary,
                 borderRadius: 12,
                 paddingVertical: 14,
                 alignItems: "center",
                 marginTop: 4,
-                opacity: saving ? 0.6 : 1,
+                opacity: saving || loadingProfile ? 0.6 : 1,
               }}
             >
-              {saving ? (
+              {saving || loadingProfile ? (
                 <ActivityIndicator color="#fff" />
               ) : (
                 <Text

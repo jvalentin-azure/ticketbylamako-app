@@ -49,6 +49,10 @@ async function secureSet(key: string, value: string) {
   }
 }
 
+export async function storeUser(user: User): Promise<void> {
+  await secureSet(USER_KEY, JSON.stringify(user));
+}
+
 async function secureGet(key: string): Promise<string | null> {
   if (Platform.OS === "web") {
     return AsyncStorage.getItem(key);
@@ -103,7 +107,7 @@ export async function login(username: string, password: string): Promise<User> {
     avatar: wpUser.avatar_urls?.["96"],
   };
 
-  await secureSet(USER_KEY, JSON.stringify(user));
+  await storeUser(user);
   return user;
 }
 
@@ -146,7 +150,7 @@ export async function register(email: string, password: string, firstName: strin
     avatar: data.user.avatar_url,
   };
 
-  await secureSet(USER_KEY, JSON.stringify(user));
+  await storeUser(user);
   return user;
 }
 
