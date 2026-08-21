@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/lib/auth-provider";
@@ -20,6 +19,7 @@ import {
   MobileApiError,
   updateMobileProfile,
 } from "@/lib/api/mobile";
+import { getBillingInfo, saveBillingInfo } from "@/lib/billing-store";
 
 const SITE_URL =
   process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
@@ -51,25 +51,17 @@ export default function EditProfileScreen() {
         setPhone(profile.billing.phone);
         setAddress(profile.billing.address_1);
         setCity(profile.billing.city);
-        await AsyncStorage.setItem(
-          "billing_info",
-          JSON.stringify({
-            phone: profile.billing.phone,
-            address: profile.billing.address_1,
-            city: profile.billing.city,
-          }),
-        );
+        await saveBillingInfo({
+          phone: profile.billing.phone,
+          address: profile.billing.address_1,
+          city: profile.billing.city,
+        });
       } catch {
-        const saved = await AsyncStorage.getItem("billing_info");
-        if (profileRequestId.current !== activeRequest || !saved) return;
-        try {
-          const data = JSON.parse(saved);
-          if (data.phone) setPhone(data.phone);
-          if (data.address) setAddress(data.address);
-          if (data.city) setCity(data.city);
-        } catch {
-          // Invalid local fallback: keep the authenticated identity fields.
-        }
+        const data = await getBillingInfo().catch(() => null);
+        if (profileRequestId.current !== activeRequest || !data) return;
+        if (data.phone) setPhone(data.phone);
+        if (data.address) setAddress(data.address);
+        if (data.city) setCity(data.city);
       } finally {
         if (profileRequestId.current === activeRequest) {
           setLoadingProfile(false);
@@ -107,14 +99,11 @@ export default function EditProfileScreen() {
           country: "MG",
         },
       });
-      await AsyncStorage.setItem(
-        "billing_info",
-        JSON.stringify({
-          phone: profile.billing.phone,
-          address: profile.billing.address_1,
-          city: profile.billing.city,
-        }),
-      );
+      await saveBillingInfo({
+        phone: profile.billing.phone,
+        address: profile.billing.address_1,
+        city: profile.billing.city,
+      });
       await updateCurrentUser({
         ...user,
         email: profile.email,

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert } from "react-native";
 import { useRouter } from "expo-router";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   CheckoutStateScreen,
   ConfirmStep,
@@ -26,6 +25,7 @@ import {
 import { estimatePointsForPrice, useRewards } from "@/lib/rewards-provider";
 import { useAuth } from "@/lib/auth-provider";
 import { formatAriary } from "@/lib/format";
+import { getBillingInfo } from "@/lib/billing-store";
 
 type CheckoutPhase =
   | "address"
@@ -34,8 +34,6 @@ type CheckoutPhase =
   | "creating"
   | "error";
 type CheckoutErrorSource = "fields" | "order";
-
-const BILLING_STORAGE_KEY = "billing_info";
 
 export default function CheckoutScreen() {
   const router = useRouter();
@@ -125,10 +123,9 @@ export default function CheckoutScreen() {
 
   useEffect(() => {
     let active = true;
-    AsyncStorage.getItem(BILLING_STORAGE_KEY)
-      .then((saved) => {
-        if (!active || !saved) return;
-        const billing = JSON.parse(saved);
+    getBillingInfo()
+      .then((billing) => {
+        if (!active || !billing) return;
         setShippingPhone((current) => current || billing.phone || "");
         setShippingAddress((current) => current || billing.address || "");
         setShippingCity((current) => current || billing.city || "");
