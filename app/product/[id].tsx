@@ -128,6 +128,9 @@ export default function ProductDetailScreen() {
                     source={{ uri: item }}
                     style={{ width: SCREEN_W, height: SCREEN_W * 0.85 }}
                     contentFit="cover"
+                    cachePolicy="memory-disk"
+                    transition={180}
+                    recyclingKey={`product-gallery-${product.id}-${item}`}
                   />
                 )}
               />
@@ -152,6 +155,9 @@ export default function ProductDetailScreen() {
               source={{ uri: allImages[0] }}
               style={{ width: SCREEN_W, height: SCREEN_W * 0.85 }}
               contentFit="cover"
+              cachePolicy="memory-disk"
+              transition={180}
+              recyclingKey={`product-featured-${product.id}`}
             />
           )}
           <TouchableOpacity

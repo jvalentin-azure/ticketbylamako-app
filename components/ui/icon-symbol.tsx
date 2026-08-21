@@ -75,6 +75,7 @@ const MAPPING = {
   "hand.raised.fill": "privacy-tip",
   "storefront.fill": "storefront",
   "calendar.badge.clock": "event-available",
+  photo: "image",
 } as IconMapping;
 
 /**

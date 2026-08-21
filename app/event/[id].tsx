@@ -325,6 +325,9 @@ export default function EventDetailScreen() {
                     source={{ uri: item }}
                     style={{ width: SCREEN_W, height: 280 }}
                     contentFit="cover"
+                    cachePolicy="memory-disk"
+                    transition={180}
+                    recyclingKey={`event-gallery-${event.id}-${item}`}
                   />
                 )}
               />
@@ -349,6 +352,9 @@ export default function EventDetailScreen() {
               source={{ uri: event.featuredImage }}
               style={{ width: SCREEN_W, height: 280 }}
               contentFit="cover"
+              cachePolicy="memory-disk"
+              transition={180}
+              recyclingKey={`event-featured-${event.id}`}
             />
           )}
           <TouchableOpacity
@@ -876,14 +882,13 @@ export default function EventDetailScreen() {
                   },
                 ]}
               >
-                <IconSymbol
-                  name="map.fill"
-                  size={22}
-                  color={colors.primary}
-                />
+                <IconSymbol name="map.fill" size={22} color={colors.primary} />
                 <View style={styles.mapActionCopy}>
                   <Text
-                    style={[styles.mapActionTitle, { color: colors.foreground }]}
+                    style={[
+                      styles.mapActionTitle,
+                      { color: colors.foreground },
+                    ]}
                   >
                     Ouvrir l'itinéraire
                   </Text>
@@ -948,6 +953,9 @@ export default function EventDetailScreen() {
                       source={{ uri: item.featuredImage }}
                       style={styles.upcomingCardImage}
                       contentFit="cover"
+                      cachePolicy="memory-disk"
+                      transition={180}
+                      recyclingKey={`event-related-${item.id}`}
                     />
                     <View style={styles.upcomingCardBody}>
                       <Text
@@ -1340,10 +1348,23 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   locationText: { fontSize: 14, flex: 1 },
-  mapAction: { minHeight: 72, borderRadius: 10, borderWidth: 1, padding: 13, flexDirection: "row", alignItems: "center", gap: 11 },
+  mapAction: {
+    minHeight: 72,
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 13,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+  },
   mapActionCopy: { flex: 1 },
   mapActionTitle: { fontSize: 14, fontFamily: "Raleway_700Bold" },
-  mapActionHint: { marginTop: 3, fontSize: 12, lineHeight: 16, fontFamily: "Raleway_500Medium" },
+  mapActionHint: {
+    marginTop: 3,
+    fontSize: 12,
+    lineHeight: 16,
+    fontFamily: "Raleway_500Medium",
+  },
   // Upcoming events
   upcomingHeader: {
     flexDirection: "row",

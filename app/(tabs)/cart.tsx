@@ -158,6 +158,9 @@ export default function CartScreen() {
               source={{ uri: item.image }}
               style={styles.cartItemImage}
               contentFit="cover"
+              cachePolicy="memory-disk"
+              transition={150}
+              recyclingKey={`cart-${item.productId}-${item.seatLabel || "general"}`}
             />
             <View style={styles.cartItemBody}>
               <View>
@@ -415,10 +418,17 @@ export default function CartScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => router.push("/(tabs)/events" as any)}
-              style={[styles.continueShoppingBtn, { borderColor: colors.border }]}
+              style={[
+                styles.continueShoppingBtn,
+                { borderColor: colors.border },
+              ]}
             >
               <IconSymbol name="arrow.left" size={17} color={colors.primary} />
-              <Text style={[styles.continueShoppingText, { color: colors.primary }]}>Continuer vos achats</Text>
+              <Text
+                style={[styles.continueShoppingText, { color: colors.primary }]}
+              >
+                Continuer vos achats
+              </Text>
             </TouchableOpacity>
           </>
         )}

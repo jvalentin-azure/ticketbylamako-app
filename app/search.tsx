@@ -151,6 +151,9 @@ export default function SearchScreen() {
           source={{ uri: item.image }}
           style={styles.cardImage}
           contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={180}
+          recyclingKey={`search-${item.type}-${item.id}`}
         />
       ) : (
         <View

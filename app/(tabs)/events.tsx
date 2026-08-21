@@ -11,8 +11,8 @@ import {
   StyleSheet,
   Modal,
 } from "react-native";
-import { Image } from "expo-image";
 import { useRouter } from "expo-router";
+import { CatalogImage } from "@/components/catalog-image";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -34,7 +34,6 @@ import {
 import { PointsBadge } from "@/components/points-badge";
 import { CATEGORY_COLOR_MAP } from "@/constants/category-colors";
 import { OrganizerEventCta } from "@/components/organizer-event-cta";
-// Single optimized endpoint returns events + categories in one request (no cache, always fresh)
 
 export default function EventsScreen() {
   const colors = useColors();
@@ -43,6 +42,8 @@ export default function EventsScreen() {
   const [filtered, setFiltered] = useState<TCEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [showingSavedData, setShowingSavedData] = useState(false);
   const [search, setSearch] = useState("");
   const [categories, setCategories] = useState<EventCategory[]>([]);
   const [selectedCat, setSelectedCat] = useState<number | null>(null);
@@ -55,16 +56,23 @@ export default function EventsScreen() {
   const [pastEvents, setPastEvents] = useState<TCEvent[]>([]);
 
   const load = useCallback(async (forceRefresh = false) => {
+    setLoadError(null);
     try {
-      // Single optimized endpoint - always fresh (stock-critical)
-      const { events: ev, categories: freshCats } = await getEventsData();
+      const {
+        events: ev,
+        categories: freshCats,
+        cacheStatus,
+      } = await getEventsData({
+        forceRefresh,
+      });
+      setShowingSavedData(cacheStatus === "stale");
       // Separate active (upcoming) from past events
       const now = new Date();
       const upcoming: TCEvent[] = [];
       const past: TCEvent[] = [];
       ev.forEach((e) => {
         const dateStr = e.mobileFields?.event_date_time || e.date;
-        const eventDate = new Date(dateStr);
+        const eventDate = new Date(dateStr.replace(" ", "T"));
         if (
           e.salesClosed === true ||
           e.isPastEvent === true ||
@@ -80,8 +88,10 @@ export default function EventsScreen() {
       setFiltered(upcoming);
       setPastEvents(past);
       setCategories(freshCats);
-    } catch (e) {
-      console.warn("Events load error:", e);
+    } catch {
+      setLoadError(
+        "Impossible de charger les événements. Vérifiez votre connexion puis réessayez.",
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -231,26 +241,36 @@ export default function EventsScreen() {
       <TouchableOpacity
         activeOpacity={0.8}
         onPress={() => router.push(`/event/${item.id}` as any)}
+        accessibilityRole="button"
+        accessibilityLabel={`Voir ${name}`}
         style={[
           styles.eventCard,
           { backgroundColor: colors.surface, borderColor: colors.border },
         ]}
       >
         <View style={{ position: "relative" }}>
-          <Image
-            source={{ uri: item.featuredImage }}
+          <CatalogImage
+            uri={item.featuredImage}
             style={styles.eventImage}
-            contentFit="cover"
+            accessibilityLabel={`Affiche de ${name}`}
+            recyclingKey={`events-${item.id}`}
           />
           <TouchableOpacity
-            onPress={() =>
+            accessibilityRole="button"
+            accessibilityLabel={
+              isFavorite(item.id, "event")
+                ? "Retirer des favoris"
+                : "Ajouter aux favoris"
+            }
+            onPress={(pressEvent) => {
+              pressEvent.stopPropagation();
               toggleFavorite({
                 id: item.id,
                 type: "event",
                 name,
                 image: item.featuredImage,
-              })
-            }
+              });
+            }}
             style={styles.favBtn}
           >
             <IconSymbol
@@ -356,6 +376,25 @@ export default function EventsScreen() {
         )}
       </View>
 
+      {showingSavedData ? (
+        <View
+          accessibilityRole="alert"
+          style={[
+            styles.savedDataBanner,
+            { backgroundColor: colors.primary + "18" },
+          ]}
+        >
+          <IconSymbol
+            name="info.circle.fill"
+            size={16}
+            color={colors.primary}
+          />
+          <Text style={[styles.savedDataText, { color: colors.foreground }]}>
+            Données enregistrées. Tirez vers le bas pour actualiser.
+          </Text>
+        </View>
+      ) : null}
+
       {/* Search */}
       <View
         style={[
@@ -365,6 +404,7 @@ export default function EventsScreen() {
       >
         <IconSymbol name="magnifyingglass" size={20} color={colors.muted} />
         <TextInput
+          accessibilityLabel="Rechercher un événement"
           placeholder="Rechercher un événement..."
           placeholderTextColor={colors.muted}
           value={search}
@@ -465,6 +505,30 @@ export default function EventsScreen() {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
+      ) : loadError && events.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <IconSymbol
+            name="exclamationmark.triangle.fill"
+            size={42}
+            color={colors.primary}
+          />
+          <Text style={[styles.emptyText, { color: colors.muted }]}>
+            {loadError}
+          </Text>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Réessayer de charger les événements"
+            onPress={() => {
+              setLoading(true);
+              void load(true);
+            }}
+            style={[styles.resetBtn, { borderColor: colors.primary }]}
+          >
+            <Text style={[styles.resetBtnText, { color: colors.primary }]}>
+              Réessayer
+            </Text>
+          </TouchableOpacity>
+        </View>
       ) : (
         <FlatList
           data={filtered}
@@ -526,10 +590,11 @@ export default function EventsScreen() {
                             borderColor: colors.border,
                           }}
                         >
-                          <Image
-                            source={{ uri: item.featuredImage }}
+                          <CatalogImage
+                            uri={item.featuredImage}
                             style={{ width: 220, height: 120 }}
-                            contentFit="cover"
+                            accessibilityLabel={`Affiche de ${name}`}
+                            recyclingKey={`events-past-${item.id}`}
                           />
                           <View style={{ padding: 10 }}>
                             <Text
@@ -815,4 +880,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     zIndex: 10,
   },
+  savedDataBanner: {
+    minHeight: 40,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  savedDataText: { flex: 1, fontSize: 12, lineHeight: 17, fontWeight: "600" },
 });

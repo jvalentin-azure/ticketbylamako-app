@@ -102,6 +102,9 @@ export default function ShopScreen() {
           source={{ uri: item.images?.[0]?.src }}
           style={{ width: CARD_W, height: CARD_W }}
           contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={180}
+          recyclingKey={`shop-${item.id}`}
         />
         <TouchableOpacity
           onPress={() =>

@@ -1,141 +1,180 @@
-import { useEffect, useState, useRef, useCallback } from "react";
-import {
-  ScrollView,
-  Text,
-  View,
-  FlatList,
-  Dimensions,
-  TouchableOpacity,
-  ActivityIndicator,
-  RefreshControl,
-  StyleSheet,
-  Image as RNImage,
-} from "react-native";
-import { Image } from "expo-image";
-
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { ScreenContainer } from "@/components/screen-container";
-import { useColors } from "@/hooks/use-colors";
-import { useAuth } from "@/lib/auth-provider";
-import { IconSymbol } from "@/components/ui/icon-symbol";
-import { getHomeData, type TCEvent, type WCProduct } from "@/lib/api/catalog";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  FlatList,
+  Image as RNImage,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
+
+import { CatalogImage } from "@/components/catalog-image";
+import { EventPosterCard } from "@/components/event-poster-card";
+import { HomeCatalogSkeleton } from "@/components/home-catalog-skeleton";
+import { OrganizerEventCta } from "@/components/organizer-event-cta";
+import { PointsBadge } from "@/components/points-badge";
+import { ScreenContainer } from "@/components/screen-container";
+import { IconSymbol } from "@/components/ui/icon-symbol";
+import { PARENT_CATEGORY_COLORS } from "@/constants/category-colors";
+import { useColors } from "@/hooks/use-colors";
+import { getHomeData, type TCEvent, type WCProduct } from "@/lib/api/catalog";
+import { useAuth } from "@/lib/auth-provider";
+import { useFavorites } from "@/lib/favorites-provider";
+import { setPendingCategory } from "@/lib/filter-state";
+import {
+  decodeHtmlEntities,
   formatAriary,
   formatDateShort,
-  decodeHtmlEntities,
 } from "@/lib/format";
-import { useRewards } from "@/lib/rewards-provider";
-import { useFavorites } from "@/lib/favorites-provider";
-import { LinearGradient } from "expo-linear-gradient";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { notifyNewEvent } from "@/lib/notifications";
-import { setPendingCategory } from "@/lib/filter-state";
-import { PARENT_CATEGORY_COLORS } from "@/constants/category-colors";
-import { PointsBadge } from "@/components/points-badge";
-import { OrganizerEventCta } from "@/components/organizer-event-cta";
-// Cache removed for stock-critical data (events/products) to ensure real-time availability
+import { useRewards } from "@/lib/rewards-provider";
 
-const { width: SCREEN_W } = Dimensions.get("window");
-const HERO_H = 220;
+const HERO_HEIGHT = 228;
 
-/** Check if an event is upcoming (event_date_time > now) */
 function isUpcoming(event: TCEvent): boolean {
   if (
-    event.salesClosed === true ||
-    event.isPastEvent === true ||
+    event.salesClosed ||
+    event.isPastEvent ||
     event.ticketingStatus === "ended"
-  ) {
+  )
     return false;
+  const value = event.mobileFields?.event_date_time;
+  if (!value) {
+    return (new Date(event.date).getTime() - Date.now()) / 86_400_000 > -7;
   }
-  const dateStr = event.mobileFields?.event_date_time;
-  if (!dateStr) {
-    // Fallback: use post date, assume events published in last 60 days are upcoming
-    const postDate = new Date(event.date);
-    const now = new Date();
-    const diffDays =
-      (postDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
-    return diffDays > -7; // within past week or future
-  }
-  const eventDate = new Date(dateStr.replace(" ", "T"));
-  return eventDate.getTime() > Date.now();
+  return new Date(value.replace(" ", "T")).getTime() > Date.now();
 }
 
 export default function HomeScreen() {
   const colors = useColors();
   const router = useRouter();
+  const { width } = useWindowDimensions();
   const { isAuthenticated, user } = useAuth();
-  const { state: rewardsState, currentTier } = useRewards();
+  const { state: rewards, currentTier } = useRewards();
   const { isFavorite, toggleFavorite } = useFavorites();
   const [events, setEvents] = useState<TCEvent[]>([]);
   const [products, setProducts] = useState<WCProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showingSavedData, setShowingSavedData] = useState(false);
   const [heroIndex, setHeroIndex] = useState(0);
-  const heroRef = useRef<FlatList>(null);
+  const heroRef = useRef<FlatList<TCEvent>>(null);
 
-  const load = useCallback(async (forceRefresh = false) => {
+  const upcoming = useMemo(() => events.filter(isUpcoming), [events]);
+  const past = useMemo(
+    () => events.filter((event) => !isUpcoming(event)),
+    [events],
+  );
+  const heroes = useMemo(() => upcoming.slice(0, 5), [upcoming]);
+  const posterWidth = Math.min(264, Math.max(224, width * 0.68));
+  const productWidth = Math.max(150, (width - 44) / 2);
+
+  const rememberEvents = useCallback(async (items: TCEvent[]) => {
     try {
-      // Single optimized endpoint - fresh data, no cache (stock-critical)
-      const { events: ev, products: pr } = await getHomeData();
-      setEvents(ev);
-      setProducts(pr);
-
-      // Check for new events and notify
-      try {
-        const knownIdsStr = await AsyncStorage.getItem("tbl_known_event_ids");
-        const knownIds: number[] = knownIdsStr ? JSON.parse(knownIdsStr) : [];
-        const currentIds = ev.map((e) => e.id);
-        if (knownIds.length > 0) {
-          const newEvents = ev.filter((e) => !knownIds.includes(e.id));
-          for (const ne of newEvents.slice(0, 3)) {
-            await notifyNewEvent(decodeHtmlEntities(ne.title.rendered), ne.id);
-          }
+      const raw = await AsyncStorage.getItem("tbl_known_event_ids");
+      const known: number[] = raw ? JSON.parse(raw) : [];
+      if (known.length) {
+        for (const item of items
+          .filter((event) => !known.includes(event.id))
+          .slice(0, 3)) {
+          await notifyNewEvent(
+            decodeHtmlEntities(item.title.rendered),
+            item.id,
+          );
         }
-        await AsyncStorage.setItem(
-          "tbl_known_event_ids",
-          JSON.stringify(currentIds),
-        );
-      } catch {}
-    } catch (e) {
-      console.warn("Load error:", e);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+      }
+      await AsyncStorage.setItem(
+        "tbl_known_event_ids",
+        JSON.stringify(items.map((item) => item.id)),
+      );
+    } catch {
+      // Notification bookkeeping must never block the catalogue.
     }
   }, []);
 
+  const load = useCallback(
+    async (forceRefresh = false) => {
+      setError(null);
+      try {
+        const data = await getHomeData({ forceRefresh });
+        setEvents(data.events);
+        setProducts(data.products);
+        setShowingSavedData(data.cacheStatus === "stale");
+        void rememberEvents(data.events);
+      } catch {
+        setError(
+          "Impossible de charger les événements. Vérifiez votre connexion puis réessayez.",
+        );
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [rememberEvents],
+  );
+
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
-  // Auto-scroll hero carousel
   useEffect(() => {
-    if (events.length < 2) return;
+    if (heroes.length < 2) return;
     const timer = setInterval(() => {
-      setHeroIndex((i) => {
-        const next = (i + 1) % Math.min(upcomingEvents.length, 5);
+      setHeroIndex((current) => {
+        const next = (current + 1) % heroes.length;
         heroRef.current?.scrollToIndex({ index: next, animated: true });
         return next;
       });
-    }, 4000);
+    }, 5000);
     return () => clearInterval(timer);
-  }, [events.length]);
-
-  // Split events into upcoming and past
-  const upcomingEvents = events.filter(isUpcoming);
-  const pastEvents = events.filter((e) => !isUpcoming(e));
-  const heroEvents = upcomingEvents.slice(0, 5);
+  }, [heroes.length]);
 
   if (loading) {
     return (
-      <ScreenContainer
-        edges={["left", "right"]}
-        className="flex-1 items-center justify-center"
-      >
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={[styles.loadingText, { color: colors.muted }]}>
-          Chargement...
-        </Text>
+      <ScreenContainer edges={["left", "right"]}>
+        <HomeCatalogSkeleton />
+      </ScreenContainer>
+    );
+  }
+
+  if (error && events.length === 0) {
+    return (
+      <ScreenContainer edges={["left", "right"]} className="flex-1">
+        <View style={styles.errorState}>
+          <IconSymbol
+            name="exclamationmark.triangle.fill"
+            size={34}
+            color={colors.primary}
+          />
+          <Text style={[styles.errorTitle, { color: colors.foreground }]}>
+            Catalogue indisponible
+          </Text>
+          <Text style={[styles.errorMessage, { color: colors.muted }]}>
+            {error}
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Réessayer de charger les événements"
+            onPress={() => {
+              setLoading(true);
+              void load(true);
+            }}
+            style={({ pressed }) => [
+              styles.retryButton,
+              { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 },
+            ]}
+          >
+            <IconSymbol name="arrow.clockwise" size={18} color="#fff" />
+            <Text style={styles.retryText}>Réessayer</Text>
+          </Pressable>
+        </View>
       </ScreenContainer>
     );
   }
@@ -149,666 +188,670 @@ export default function HomeScreen() {
             refreshing={refreshing}
             onRefresh={() => {
               setRefreshing(true);
-              load(true);
+              void load(true);
             }}
             tintColor={colors.primary}
           />
         }
       >
-        {/* GREETING */}
-        {isAuthenticated && user && (
-          <View style={styles.greetingContainer}>
-            <Text style={[styles.greetingText, { color: colors.muted }]}>
-              Bonjour, {user.firstName || user.displayName}
+        {showingSavedData ? (
+          <View
+            accessibilityRole="alert"
+            style={[
+              styles.savedDataBanner,
+              { backgroundColor: `${colors.primary}18` },
+            ]}
+          >
+            <IconSymbol
+              name="info.circle.fill"
+              size={16}
+              color={colors.primary}
+            />
+            <Text style={[styles.savedDataText, { color: colors.foreground }]}>
+              Données enregistrées. Actualisez quand la connexion revient.
             </Text>
           </View>
-        )}
+        ) : null}
+        {isAuthenticated && user ? (
+          <Text style={[styles.greeting, { color: colors.muted }]}>
+            Bonjour, {user.firstName || user.displayName}
+          </Text>
+        ) : null}
 
-        {/* HERO CAROUSEL */}
-        {heroEvents.length > 0 && (
-          <View style={{ height: HERO_H, marginBottom: 8 }}>
+        {heroes.length ? (
+          <View style={styles.heroSection}>
             <FlatList
               ref={heroRef}
-              data={heroEvents}
+              data={heroes}
               horizontal
               pagingEnabled
               showsHorizontalScrollIndicator={false}
               keyExtractor={(item) => String(item.id)}
               getItemLayout={(_, index) => ({
-                length: SCREEN_W,
-                offset: SCREEN_W * index,
+                length: width,
+                offset: width * index,
                 index,
               })}
-              onMomentumScrollEnd={(e) =>
+              onMomentumScrollEnd={(event) =>
                 setHeroIndex(
-                  Math.round(e.nativeEvent.contentOffset.x / SCREEN_W),
+                  Math.round(event.nativeEvent.contentOffset.x / width),
                 )
               }
               renderItem={({ item }) => (
-                <TouchableOpacity
-                  activeOpacity={0.9}
-                  onPress={() => router.push(`/event/${item.id}` as any)}
-                  style={{
-                    width: SCREEN_W,
-                    height: HERO_H,
-                    paddingHorizontal: 16,
-                  }}
-                >
-                  <View style={styles.heroCard}>
-                    <Image
-                      source={{ uri: item.featuredImage }}
-                      style={styles.heroImage}
-                      contentFit="cover"
-                    />
-                    <View style={styles.heroOverlay}>
-                      <Text style={styles.heroTitle} numberOfLines={1}>
-                        {decodeHtmlEntities(item.title.rendered)}
-                      </Text>
-                      <View style={styles.heroMeta}>
-                        <IconSymbol name="clock" size={14} color="#c79f6c" />
-                        <Text style={styles.heroDate}>
-                          {item.mobileFields?.event_date_time
-                            ? formatDateShort(item.mobileFields.event_date_time)
-                            : formatDateShort(item.date)}
-                        </Text>
-                        {item.minPrice != null && (
-                          <Text style={styles.heroPrice}>
-                            {item.minPrice === item.maxPrice
-                              ? formatAriary(item.minPrice)
-                              : `Dès ${formatAriary(item.minPrice)}`}
-                          </Text>
-                        )}
-                      </View>
-                    </View>
-                  </View>
-                </TouchableOpacity>
+                <Hero
+                  event={item}
+                  width={width}
+                  onPress={() => router.push(`/event/${item.id}` as never)}
+                />
               )}
             />
-            <View style={styles.dotsRow}>
-              {heroEvents.map((_, i) => (
+            <View
+              style={styles.dots}
+              accessibilityLabel={`Visuel ${heroIndex + 1} sur ${heroes.length}`}
+            >
+              {heroes.map((item, index) => (
                 <View
-                  key={i}
+                  key={item.id}
                   style={[
                     styles.dot,
                     {
-                      width: heroIndex === i ? 20 : 6,
                       backgroundColor:
-                        heroIndex === i ? colors.primary : colors.border,
+                        index === heroIndex ? colors.primary : colors.border,
                     },
                   ]}
                 />
               ))}
             </View>
           </View>
-        )}
+        ) : null}
 
-        {/* UPCOMING EVENTS - FULL CARDS (same style as Events tab) */}
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-            Événements à venir
-          </Text>
-          <TouchableOpacity
-            onPress={() => router.push("/(tabs)/events" as any)}
-          >
-            <Text style={[styles.seeAll, { color: colors.primary }]}>
-              Voir tout
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* CATEGORY FILTER - BEFORE EVENT CARDS */}
+        <SectionHeader
+          title="Événements à venir"
+          action="Voir tout"
+          onAction={() => router.push("/(tabs)/events" as never)}
+        />
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipsContainer}
+          contentContainerStyle={styles.chips}
         >
-          <TouchableOpacity
+          <CategoryChip
+            label="Tous"
+            color={colors.primary}
             onPress={() => {
               setPendingCategory(null);
-              router.push("/(tabs)/events" as any);
+              router.push("/(tabs)/events" as never);
             }}
-            style={[
-              styles.chip,
-              { backgroundColor: colors.primary, borderColor: colors.primary },
-            ]}
-          >
-            <Text style={[styles.chipText, { color: "#fff" }]}>Tous</Text>
-          </TouchableOpacity>
-          {PARENT_CATEGORY_COLORS.map((cat) => (
-            <TouchableOpacity
-              key={cat.id}
+          />
+          {PARENT_CATEGORY_COLORS.map((category) => (
+            <CategoryChip
+              key={category.id}
+              label={`${category.emoji} ${category.label}`}
+              color={category.color}
               onPress={() => {
-                setPendingCategory(cat.label);
-                router.push("/(tabs)/events" as any);
+                setPendingCategory(category.label);
+                router.push("/(tabs)/events" as never);
               }}
-              style={[
-                styles.chip,
-                { backgroundColor: cat.color + "18", borderColor: cat.color },
-              ]}
-            >
-              <Text style={[styles.chipText, { color: cat.color }]}>
-                {cat.emoji} {cat.label}
-              </Text>
-            </TouchableOpacity>
+            />
           ))}
         </ScrollView>
 
-        <View style={{ gap: 14 }}>
-          {upcomingEvents.slice(0, 6).map((item) => {
-            const itemName = decodeHtmlEntities(item.title.rendered);
-            const itemCats = item.categoryNames?.join(", ") || "";
-            return (
-              <TouchableOpacity
-                key={item.id}
-                activeOpacity={0.8}
-                onPress={() => router.push(`/event/${item.id}` as any)}
-                style={[
-                  styles.eventCardFull,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  },
-                ]}
-              >
-                <View style={{ position: "relative" }}>
-                  <Image
-                    source={{ uri: item.featuredImage }}
-                    style={styles.eventCardFullImage}
-                    contentFit="cover"
-                  />
-                  <TouchableOpacity
-                    onPress={() =>
-                      toggleFavorite({
-                        id: item.id,
-                        type: "event",
-                        name: itemName,
-                        image: item.featuredImage,
-                      })
-                    }
-                    style={styles.favBtn}
-                  >
-                    <IconSymbol
-                      name={
-                        isFavorite(item.id, "event") ? "heart.fill" : "heart"
-                      }
-                      size={18}
-                      color={isFavorite(item.id, "event") ? "#EF4444" : "#fff"}
-                    />
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.eventCardFullBody}>
-                  <Text
-                    style={[
-                      styles.eventCardFullTitle,
-                      { color: colors.foreground },
-                    ]}
-                    numberOfLines={2}
-                  >
-                    {itemName}
-                  </Text>
-                  <View style={styles.eventCardFullMeta}>
-                    <View
-                      style={{ flexDirection: "row", alignItems: "center" }}
-                    >
-                      <IconSymbol name="clock" size={14} color={colors.muted} />
-                      <Text
-                        style={[
-                          styles.eventCardFullMetaText,
-                          { color: colors.muted },
-                        ]}
-                      >
-                        {item.mobileFields?.event_date_time
-                          ? formatDateShort(item.mobileFields.event_date_time)
-                          : formatDateShort(item.date)}
-                      </Text>
-                    </View>
-                    {itemCats ? (
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          flex: 1,
-                        }}
-                      >
-                        <IconSymbol
-                          name="tag.fill"
-                          size={14}
-                          color={colors.muted}
-                        />
-                        <Text
-                          style={[
-                            styles.eventCardFullMetaText,
-                            { color: colors.muted },
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {itemCats}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-                  <View style={styles.eventCardFullPriceRow}>
-                    {item.minPrice != null ? (
-                      <Text
-                        style={[
-                          styles.eventCardFullPrice,
-                          { color: colors.primary },
-                        ]}
-                      >
-                        {item.minPrice === item.maxPrice
-                          ? formatAriary(item.minPrice)
-                          : `Dès ${formatAriary(item.minPrice)}`}
-                      </Text>
-                    ) : (
-                      <Text
-                        style={[
-                          styles.eventCardFullPrice,
-                          { color: colors.muted },
-                        ]}
-                      >
-                        Prix non défini
-                      </Text>
-                    )}
-                    <View
-                      style={[
-                        styles.eventCardFullBtn,
-                        { backgroundColor: colors.primary },
-                      ]}
-                    >
-                      <Text style={styles.eventCardFullBtnText}>Voir</Text>
-                    </View>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        {upcoming.length ? (
+          <FlatList
+            data={upcoming.slice(0, 8)}
+            horizontal
+            initialNumToRender={3}
+            windowSize={4}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.posterList}
+            keyExtractor={(item) => String(item.id)}
+            renderItem={({ item }) => (
+              <EventPosterCard
+                event={item}
+                width={posterWidth}
+                favorite={isFavorite(item.id, "event")}
+                onPress={() => router.push(`/event/${item.id}` as never)}
+                onToggleFavorite={() =>
+                  toggleFavorite({
+                    id: item.id,
+                    type: "event",
+                    name: decodeHtmlEntities(item.title.rendered),
+                    image: item.featuredImage,
+                  })
+                }
+              />
+            )}
+          />
+        ) : (
+          <Text style={[styles.emptyText, { color: colors.muted }]}>
+            Aucun événement à venir.
+          </Text>
+        )}
 
-        {/* PAST EVENTS - HORIZONTAL SCROLLER (same size as events tab: 220x120) */}
-        {pastEvents.length > 0 && (
+        {past.length ? (
           <>
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-                Événements passés
-              </Text>
-            </View>
+            <SectionHeader title="Événements passés" />
             <FlatList
-              data={pastEvents}
+              data={past.slice(0, 10)}
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}
+              contentContainerStyle={styles.pastList}
               keyExtractor={(item) => String(item.id)}
               renderItem={({ item }) => (
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={() => router.push(`/event/${item.id}` as any)}
-                  style={[
-                    styles.pastEventCard,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                    },
-                  ]}
-                >
-                  <Image
-                    source={{ uri: item.featuredImage }}
-                    style={styles.pastEventImage}
-                    contentFit="cover"
-                  />
-                  <View style={styles.pastEventBody}>
-                    <Text
-                      style={[
-                        styles.pastEventTitle,
-                        { color: colors.foreground },
-                      ]}
-                      numberOfLines={2}
-                    >
-                      {decodeHtmlEntities(item.title.rendered)}
-                    </Text>
-                    <Text
-                      style={[styles.pastEventDate, { color: colors.muted }]}
-                    >
-                      {item.mobileFields?.event_date_time
-                        ? formatDateShort(item.mobileFields.event_date_time)
-                        : formatDateShort(item.date)}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
+                <PastEvent
+                  event={item}
+                  onPress={() => router.push(`/event/${item.id}` as never)}
+                />
               )}
             />
           </>
-        )}
+        ) : null}
 
-        {/* SHOP HIGHLIGHTS */}
-        {products.length > 0 && (
-          <View style={{ marginTop: 24, paddingHorizontal: 16 }}>
-            <View style={styles.sectionHeaderInline}>
-              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-                Boutique
-              </Text>
-              <TouchableOpacity
-                onPress={() => router.push("/(tabs)/shop" as any)}
-              >
-                <Text style={[styles.seeAll, { color: colors.primary }]}>
-                  Voir tout
-                </Text>
-              </TouchableOpacity>
-            </View>
+        {products.length ? (
+          <View style={styles.shopSection}>
+            <SectionHeader
+              compact
+              title="Boutique"
+              action="Voir tout"
+              onAction={() => router.push("/(tabs)/shop" as never)}
+            />
             <View style={styles.shopGrid}>
-              {products.slice(0, 4).map((p) => (
-                <TouchableOpacity
-                  key={p.id}
-                  activeOpacity={0.8}
-                  onPress={() => router.push(`/product/${p.id}` as any)}
-                  style={[
-                    styles.shopCard,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                    },
-                  ]}
-                >
-                  <View style={{ position: "relative" }}>
-                    <Image
-                      source={{ uri: p.images?.[0]?.src }}
-                      style={{ width: "100%", height: 120 }}
-                      contentFit="cover"
-                    />
-                    <TouchableOpacity
-                      onPress={() =>
-                        toggleFavorite({
-                          id: p.id,
-                          type: "product",
-                          name: decodeHtmlEntities(p.name),
-                          image: p.images?.[0]?.src,
-                        })
-                      }
-                      style={styles.favBtn}
-                    >
-                      <IconSymbol
-                        name={
-                          isFavorite(p.id, "product") ? "heart.fill" : "heart"
-                        }
-                        size={18}
-                        color={isFavorite(p.id, "product") ? "#EF4444" : "#fff"}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                  <View style={{ padding: 10 }}>
-                    <Text
-                      style={[
-                        styles.shopCardName,
-                        { color: colors.foreground },
-                      ]}
-                      numberOfLines={2}
-                    >
-                      {decodeHtmlEntities(p.name)}
-                    </Text>
-                    <Text
-                      style={[styles.shopCardPrice, { color: colors.primary }]}
-                    >
-                      {formatAriary(p.price)}
-                    </Text>
-                    {p.lamakoRewardsEnabled !== false && (
-                      <PointsBadge price={p.price} />
-                    )}
-                  </View>
-                </TouchableOpacity>
+              {products.slice(0, 4).map((product) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  width={productWidth}
+                  favorite={isFavorite(product.id, "product")}
+                  onPress={() => router.push(`/product/${product.id}` as never)}
+                  onFavorite={() =>
+                    toggleFavorite({
+                      id: product.id,
+                      type: "product",
+                      name: decodeHtmlEntities(product.name),
+                      image: product.images?.[0]?.src,
+                    })
+                  }
+                />
               ))}
             </View>
           </View>
-        )}
+        ) : null}
 
         <OrganizerEventCta style={styles.organizerCta} />
-
-        {/* LAMAKO REWARDS BANNER */}
-        {isAuthenticated && (
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() => router.push("/rewards" as any)}
-            style={{ marginHorizontal: 16, marginTop: 24 }}
-          >
-            <LinearGradient
-              colors={["#663d17", "#8B5E34", "#c79f6c"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.rewardsBanner}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={styles.rewardsBannerTitle}>LamakoRewards</Text>
-                <Text style={styles.rewardsBannerSub}>
-                  {rewardsState.availablePoints} pts • {currentTier.name}
-                </Text>
-              </View>
-              <View style={styles.rewardsBannerIcon}>
-                <RNImage
-                  source={require("@/assets/images/lamako-rewards-white.png")}
-                  style={{ width: 80, height: 30 }}
-                  resizeMode="contain"
-                />
-              </View>
-              <IconSymbol
-                name="chevron.right"
-                size={16}
-                color="rgba(255,255,255,0.7)"
-              />
-            </LinearGradient>
-          </TouchableOpacity>
-        )}
-
-        {/* LAMAKO REWARDS TEASER (for non-authenticated users) */}
-        {!isAuthenticated && (
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() => router.push("/(auth)/login" as any)}
-            style={{ marginHorizontal: 16, marginTop: 24 }}
-          >
-            <LinearGradient
-              colors={["#663d17", "#8B5E34", "#c79f6c"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.rewardsBanner}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={styles.rewardsBannerTitle}>LamakoRewards</Text>
-                <Text style={styles.rewardsBannerSub}>
-                  Gagnez des points à chaque achat
-                </Text>
-              </View>
-              <View style={styles.rewardsBannerIcon}>
-                <RNImage
-                  source={require("@/assets/images/lamako-rewards-white.png")}
-                  style={{ width: 80, height: 30 }}
-                  resizeMode="contain"
-                />
-              </View>
-              <IconSymbol
-                name="chevron.right"
-                size={16}
-                color="rgba(255,255,255,0.7)"
-              />
-            </LinearGradient>
-          </TouchableOpacity>
-        )}
-
-        {/* LOGIN CTA */}
-        {!isAuthenticated && (
-          <View
-            style={[
-              styles.loginCta,
-              { backgroundColor: colors.surface, borderColor: colors.border },
-            ]}
-          >
-            <Text style={[styles.loginCtaTitle, { color: colors.foreground }]}>
-              Connectez-vous pour accéder à vos billets
-            </Text>
-            <Text style={[styles.loginCtaSub, { color: colors.muted }]}>
-              Gérez vos commandes et billets QR depuis l'app
-            </Text>
-            <TouchableOpacity
-              onPress={() => router.push("/(auth)/login" as any)}
-              style={[
-                styles.loginCtaButton,
-                { backgroundColor: colors.primary },
-              ]}
-            >
-              <Text style={styles.loginCtaButtonText}>Se connecter</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        <View style={{ height: 40 }} />
+        <RewardsBanner
+          authenticated={isAuthenticated}
+          points={rewards.availablePoints}
+          tier={currentTier.name}
+          onPress={() =>
+            router.push(
+              (isAuthenticated ? "/rewards" : "/(auth)/login") as never,
+            )
+          }
+        />
+        {!isAuthenticated ? (
+          <LoginCta onPress={() => router.push("/(auth)/login" as never)} />
+        ) : null}
+        <View style={styles.bottomSpace} />
       </ScrollView>
     </ScreenContainer>
   );
 }
 
+function Hero({
+  event,
+  width,
+  onPress,
+}: {
+  event: TCEvent;
+  width: number;
+  onPress: () => void;
+}) {
+  const title = decodeHtmlEntities(event.title.rendered);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Voir ${title}`}
+      onPress={onPress}
+      style={{ width, height: HERO_HEIGHT, paddingHorizontal: 16 }}
+    >
+      <View style={styles.heroCard}>
+        <CatalogImage
+          uri={event.featuredImage}
+          style={StyleSheet.absoluteFill}
+          accessibilityLabel={`Affiche de ${title}`}
+          recyclingKey={`hero-${event.id}`}
+        />
+        <LinearGradient
+          colors={["transparent", "rgba(9,10,15,0.92)"]}
+          style={styles.heroOverlay}
+        >
+          <Text style={styles.heroTitle} numberOfLines={2}>
+            {title}
+          </Text>
+          <View style={styles.heroMeta}>
+            <IconSymbol name="clock" size={14} color="#E7B64A" />
+            <Text style={styles.heroDate}>
+              {formatDateShort(
+                event.mobileFields?.event_date_time || event.date,
+              )}
+            </Text>
+            {event.minPrice != null ? (
+              <Text style={styles.heroPrice}>
+                {event.minPrice === event.maxPrice
+                  ? formatAriary(event.minPrice)
+                  : `Dès ${formatAriary(event.minPrice)}`}
+              </Text>
+            ) : null}
+          </View>
+        </LinearGradient>
+      </View>
+    </Pressable>
+  );
+}
+
+function SectionHeader({
+  title,
+  action,
+  onAction,
+  compact,
+}: {
+  title: string;
+  action?: string;
+  onAction?: () => void;
+  compact?: boolean;
+}) {
+  const colors = useColors();
+  return (
+    <View
+      style={[styles.sectionHeader, compact && styles.sectionHeaderCompact]}
+    >
+      <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+        {title}
+      </Text>
+      {action && onAction ? (
+        <Pressable accessibilityRole="button" onPress={onAction} hitSlop={8}>
+          <Text style={[styles.sectionAction, { color: colors.primary }]}>
+            {action}
+          </Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+function CategoryChip({
+  label,
+  color,
+  onPress,
+}: {
+  label: string;
+  color: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Filtrer par ${label}`}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.chip,
+        {
+          borderColor: color,
+          backgroundColor: `${color}18`,
+          opacity: pressed ? 0.75 : 1,
+        },
+      ]}
+    >
+      <Text style={[styles.chipText, { color }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function PastEvent({
+  event,
+  onPress,
+}: {
+  event: TCEvent;
+  onPress: () => void;
+}) {
+  const colors = useColors();
+  const title = decodeHtmlEntities(event.title.rendered);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Voir l'événement passé ${title}`}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.pastCard,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          opacity: pressed ? 0.9 : 1,
+        },
+      ]}
+    >
+      <CatalogImage
+        uri={event.featuredImage}
+        style={styles.pastImage}
+        accessibilityLabel={`Affiche de ${title}`}
+        recyclingKey={`past-${event.id}`}
+      />
+      <View style={styles.pastBody}>
+        <Text
+          style={[styles.pastTitle, { color: colors.foreground }]}
+          numberOfLines={2}
+        >
+          {title}
+        </Text>
+        <Text style={[styles.pastDate, { color: colors.muted }]}>
+          {formatDateShort(event.mobileFields?.event_date_time || event.date)}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
+function ProductCard({
+  product,
+  width,
+  favorite,
+  onPress,
+  onFavorite,
+}: {
+  product: WCProduct;
+  width: number;
+  favorite: boolean;
+  onPress: () => void;
+  onFavorite: () => void;
+}) {
+  const colors = useColors();
+  const title = decodeHtmlEntities(product.name);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Voir ${title}, ${formatAriary(product.price)}`}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.productCard,
+        {
+          width,
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          opacity: pressed ? 0.92 : 1,
+        },
+      ]}
+    >
+      <View style={styles.productMedia}>
+        <CatalogImage
+          uri={product.images?.[0]?.src}
+          style={StyleSheet.absoluteFill}
+          accessibilityLabel={`Photo de ${title}`}
+          recyclingKey={`product-${product.id}`}
+        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            favorite ? "Retirer des favoris" : "Ajouter aux favoris"
+          }
+          onPress={(event) => {
+            event.stopPropagation();
+            onFavorite();
+          }}
+          style={styles.favorite}
+        >
+          <IconSymbol
+            name={favorite ? "heart.fill" : "heart"}
+            size={18}
+            color={favorite ? "#EF4444" : "#fff"}
+          />
+        </Pressable>
+      </View>
+      <View style={styles.productBody}>
+        <Text
+          style={[styles.productName, { color: colors.foreground }]}
+          numberOfLines={2}
+        >
+          {title}
+        </Text>
+        <Text style={[styles.productPrice, { color: colors.primary }]}>
+          {formatAriary(product.price)}
+        </Text>
+        {product.lamakoRewardsEnabled !== false ? (
+          <PointsBadge price={product.price} />
+        ) : null}
+      </View>
+    </Pressable>
+  );
+}
+
+function RewardsBanner({
+  authenticated,
+  points,
+  tier,
+  onPress,
+}: {
+  authenticated: boolean;
+  points: number;
+  tier: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Ouvrir LamakoRewards"
+      onPress={onPress}
+      style={styles.rewardsWrap}
+    >
+      <LinearGradient
+        colors={["#4E2C13", "#83511F", "#C99A54"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.rewardsBanner}
+      >
+        <View style={styles.rewardsCopy}>
+          <Text style={styles.rewardsTitle}>LamakoRewards</Text>
+          <Text style={styles.rewardsSubtitle}>
+            {authenticated
+              ? `${points} pts · ${tier}`
+              : "Cumulez des points à chaque achat"}
+          </Text>
+        </View>
+        <RNImage
+          source={require("@/assets/images/lamako-rewards-white.png")}
+          style={styles.rewardsLogo}
+          resizeMode="contain"
+        />
+        <IconSymbol name="chevron.right" size={18} color="#fff" />
+      </LinearGradient>
+    </Pressable>
+  );
+}
+
+function LoginCta({ onPress }: { onPress: () => void }) {
+  const colors = useColors();
+  return (
+    <View
+      style={[
+        styles.loginCta,
+        { backgroundColor: colors.surface, borderColor: colors.border },
+      ]}
+    >
+      <Text style={[styles.loginTitle, { color: colors.foreground }]}>
+        Vos billets, toujours avec vous
+      </Text>
+      <Text style={[styles.loginSubtitle, { color: colors.muted }]}>
+        Connectez-vous pour retrouver vos commandes et QR codes.
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.loginButton,
+          { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 },
+        ]}
+      >
+        <Text style={styles.loginButtonText}>Se connecter</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  loadingText: { marginTop: 12, fontSize: 14 },
-  greetingContainer: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 4 },
-  greetingText: { fontSize: 15, fontWeight: "600" },
-  heroCard: { flex: 1, borderRadius: 16, overflow: "hidden" },
-  heroImage: { width: "100%", height: "100%" },
-  heroOverlay: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 16,
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
-  heroTitle: { color: "#fff", fontSize: 18, fontWeight: "700" },
-  heroMeta: { flexDirection: "row", alignItems: "center", marginTop: 4 },
-  heroDate: {
-    color: "#c79f6c",
-    fontSize: 13,
-    marginLeft: 4,
+  greeting: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 6,
+    fontSize: 15,
     fontWeight: "600",
+  },
+  heroSection: { height: HERO_HEIGHT + 22, marginTop: 4 },
+  heroCard: {
+    flex: 1,
+    borderRadius: 8,
+    overflow: "hidden",
+    backgroundColor: "#101116",
+  },
+  heroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "flex-end",
+    padding: 16,
+  },
+  heroTitle: { color: "#fff", fontSize: 20, lineHeight: 25, fontWeight: "800" },
+  heroMeta: { flexDirection: "row", alignItems: "center", marginTop: 7 },
+  heroDate: {
+    color: "#E7B64A",
+    fontSize: 13,
+    marginLeft: 5,
+    fontWeight: "700",
   },
   heroPrice: {
     color: "#fff",
     fontSize: 13,
     marginLeft: "auto",
-    fontWeight: "600",
+    fontWeight: "700",
   },
-  dotsRow: { flexDirection: "row", justifyContent: "center", marginTop: 8 },
-  dot: { height: 6, borderRadius: 3, marginHorizontal: 3 },
-  chipsContainer: { paddingHorizontal: 16, paddingVertical: 16, gap: 8 },
-  chip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
+  dots: {
+    height: 22,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
   },
-  chipText: { fontSize: 13, fontWeight: "600" },
+  dot: { width: 7, height: 7, borderRadius: 4 },
   sectionHeader: {
     paddingHorizontal: 16,
-    marginTop: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  sectionHeaderInline: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  sectionTitle: { fontSize: 18, fontWeight: "700" },
-  seeAll: { fontSize: 13, fontWeight: "600" },
-  organizerCta: { marginHorizontal: 16, marginTop: 20 },
-  // Full event cards (same as Events tab)
-  eventCardFull: {
-    marginHorizontal: 16,
-    borderRadius: 16,
-    overflow: "hidden",
-    borderWidth: 1,
-  },
-  eventCardFullImage: { width: "100%", height: 160 },
-  eventCardFullBody: { padding: 14 },
-  eventCardFullTitle: { fontSize: 16, fontWeight: "700" },
-  eventCardFullMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 6,
-    gap: 12,
-  },
-  eventCardFullMetaText: { fontSize: 12, marginLeft: 4 },
-  eventCardFullPriceRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 8,
-  },
-  eventCardFullPrice: { fontSize: 16, fontWeight: "700" },
-  eventCardFullBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  eventCardFullBtnText: { color: "#fff", fontSize: 13, fontWeight: "600" },
-  // Past events (horizontal scroller - same size as events tab: 220x120)
-  pastEventCard: {
-    width: 220,
-    borderRadius: 14,
-    overflow: "hidden",
-    borderWidth: 1,
-  },
-  pastEventImage: { width: 220, height: 120 },
-  pastEventBody: { padding: 10 },
-  pastEventTitle: { fontSize: 13, fontWeight: "600" },
-  pastEventDate: { fontSize: 11, marginTop: 4 },
-  // Shop
-  shopGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
-  shopCard: {
-    width: (SCREEN_W - 44) / 2,
-    borderRadius: 14,
-    overflow: "hidden",
-    borderWidth: 1,
-  },
-  shopCardName: { fontSize: 13, fontWeight: "600" },
-  shopCardPrice: { fontSize: 14, fontWeight: "700", marginTop: 4 },
-  // Login CTA
-  loginCta: {
-    marginHorizontal: 16,
     marginTop: 24,
-    padding: 20,
-    borderRadius: 16,
-    borderWidth: 1,
-  },
-  loginCtaTitle: { fontSize: 16, fontWeight: "600" },
-  loginCtaSub: { fontSize: 13, marginTop: 4 },
-  loginCtaButton: {
-    borderRadius: 12,
-    paddingVertical: 12,
-    marginTop: 14,
-    alignItems: "center",
-  },
-  loginCtaButtonText: { color: "#fff", fontSize: 15, fontWeight: "700" },
-  // Rewards
-  rewardsBanner: {
+    marginBottom: 12,
     flexDirection: "row",
     alignItems: "center",
-    padding: 16,
-    borderRadius: 14,
+    justifyContent: "space-between",
   },
-  rewardsBannerTitle: { color: "#fff", fontSize: 16, fontWeight: "700" },
-  rewardsBannerSub: {
-    color: "rgba(255,255,255,0.8)",
-    fontSize: 13,
-    marginTop: 2,
+  sectionHeaderCompact: { paddingHorizontal: 0, marginTop: 0 },
+  sectionTitle: { fontSize: 19, fontWeight: "800" },
+  sectionAction: { fontSize: 14, fontWeight: "700" },
+  chips: { paddingHorizontal: 16, paddingBottom: 16, gap: 8 },
+  chip: {
+    minHeight: 40,
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    borderWidth: 1,
   },
-  rewardsBannerIcon: { marginRight: 8 },
-  favBtn: {
+  chipText: { fontSize: 13, fontWeight: "700" },
+  posterList: { paddingHorizontal: 16, gap: 12 },
+  emptyText: { paddingHorizontal: 16, paddingVertical: 24, fontSize: 14 },
+  pastList: { paddingHorizontal: 16, gap: 12 },
+  pastCard: { width: 220, borderRadius: 8, overflow: "hidden", borderWidth: 1 },
+  pastImage: { width: 220, height: 124 },
+  pastBody: { padding: 11 },
+  pastTitle: { fontSize: 13, lineHeight: 18, fontWeight: "700" },
+  pastDate: { fontSize: 11, marginTop: 5 },
+  shopSection: { marginTop: 26, paddingHorizontal: 16 },
+  shopGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  productCard: { borderRadius: 8, overflow: "hidden", borderWidth: 1 },
+  productMedia: { width: "100%", aspectRatio: 1, position: "relative" },
+  favorite: {
     position: "absolute",
-    top: 8,
     right: 8,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "rgba(0,0,0,0.4)",
+    top: 8,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(17,19,24,0.75)",
     alignItems: "center",
     justifyContent: "center",
   },
+  productBody: { padding: 11 },
+  productName: { fontSize: 13, lineHeight: 18, fontWeight: "700" },
+  productPrice: { fontSize: 15, fontWeight: "800", marginTop: 6 },
+  organizerCta: { marginHorizontal: 16, marginTop: 24 },
+  rewardsWrap: { marginHorizontal: 16, marginTop: 24 },
+  rewardsBanner: {
+    minHeight: 82,
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    borderRadius: 8,
+  },
+  rewardsCopy: { flex: 1 },
+  rewardsTitle: { color: "#fff", fontSize: 16, fontWeight: "800" },
+  rewardsSubtitle: {
+    color: "rgba(255,255,255,0.84)",
+    fontSize: 13,
+    marginTop: 3,
+  },
+  rewardsLogo: { width: 76, height: 30, marginRight: 8 },
+  loginCta: {
+    marginHorizontal: 16,
+    marginTop: 24,
+    padding: 18,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  loginTitle: { fontSize: 16, fontWeight: "800" },
+  loginSubtitle: { fontSize: 13, lineHeight: 19, marginTop: 5 },
+  loginButton: {
+    minHeight: 48,
+    borderRadius: 8,
+    marginTop: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loginButtonText: { color: "#fff", fontSize: 15, fontWeight: "800" },
+  errorState: {
+    flex: 1,
+    padding: 28,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  errorTitle: { fontSize: 20, fontWeight: "800", marginTop: 14 },
+  errorMessage: {
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: "center",
+    marginTop: 8,
+  },
+  retryButton: {
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    marginTop: 18,
+  },
+  retryText: { color: "#fff", fontSize: 15, fontWeight: "800" },
+  bottomSpace: { height: 40 },
+  savedDataBanner: {
+    minHeight: 40,
+    marginHorizontal: 16,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  savedDataText: { flex: 1, fontSize: 12, lineHeight: 17, fontWeight: "600" },
 });
