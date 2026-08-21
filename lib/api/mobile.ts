@@ -665,6 +665,15 @@ export async function registerMobilePushToken(
   });
 }
 
+export async function unregisterMobilePushToken(
+  request: MobilePushTokenRequest
+): Promise<{ success: boolean; removed?: number }> {
+  return mobileV2Fetch<{ success: boolean; removed?: number }>("push-token", {
+    method: "DELETE",
+    body: request,
+  });
+}
+
 export async function getMobileRewardsBalance(): Promise<MobileRewardsBalance> {
   return mobileV2Fetch<MobileRewardsBalance>("rewards/balance");
 }

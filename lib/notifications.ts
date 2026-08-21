@@ -5,6 +5,7 @@ import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
+  notificationPreferencesStorageKey,
   normalizeNotificationPreferences,
   type NotificationPreferences,
 } from "@/lib/notification-store";
@@ -12,7 +13,6 @@ import {
 export type { NotificationPreferences } from "@/lib/notification-store";
 
 const PUSH_TOKEN_KEY = "tbl_push_token";
-const NOTIFICATION_PREFS_KEY = "tbl_notification_prefs";
 
 /**
  * Configure the notification handler for foreground notifications
@@ -141,13 +141,16 @@ export async function getStoredPushToken(): Promise<string | null> {
 /**
  * Get notification preferences
  */
-export async function getNotificationPreferences(): Promise<NotificationPreferences> {
+export async function getNotificationPreferences(userId?: number | null): Promise<NotificationPreferences> {
+  const resolvedUserId = userId === undefined
+    ? (await import("@/lib/api/auth").then(({ getStoredUser }) => getStoredUser()))?.id
+    : userId;
   try {
-    const data = await AsyncStorage.getItem(NOTIFICATION_PREFS_KEY);
+    const data = await AsyncStorage.getItem(notificationPreferencesStorageKey(resolvedUserId));
     if (!data) return DEFAULT_NOTIFICATION_PREFERENCES;
     return normalizeNotificationPreferences(JSON.parse(data));
   } catch {
-    await AsyncStorage.removeItem(NOTIFICATION_PREFS_KEY).catch(
+    await AsyncStorage.removeItem(notificationPreferencesStorageKey(resolvedUserId)).catch(
       () => undefined,
     );
     return DEFAULT_NOTIFICATION_PREFERENCES;
@@ -157,11 +160,26 @@ export async function getNotificationPreferences(): Promise<NotificationPreferen
 /**
  * Save notification preferences
  */
-export async function saveNotificationPreferences(prefs: NotificationPreferences): Promise<void> {
+export async function saveNotificationPreferences(prefs: NotificationPreferences, userId?: number | null): Promise<void> {
+  const resolvedUserId = userId === undefined
+    ? (await import("@/lib/api/auth").then(({ getStoredUser }) => getStoredUser()))?.id
+    : userId;
   await AsyncStorage.setItem(
-    NOTIFICATION_PREFS_KEY,
+    notificationPreferencesStorageKey(resolvedUserId),
     JSON.stringify(normalizeNotificationPreferences(prefs)),
   );
+}
+
+export async function unregisterPushTokenWithBackend(): Promise<boolean> {
+  try {
+    const token = await getStoredPushToken();
+    if (!token) return true;
+    const { unregisterMobilePushToken } = await import("@/lib/api/mobile");
+    const result = await unregisterMobilePushToken({ token, platform: Platform.OS });
+    return result.success === true;
+  } catch {
+    return false;
+  }
 }
 
 /**

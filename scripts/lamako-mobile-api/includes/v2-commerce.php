@@ -183,9 +183,16 @@ function lamako_mobile_v2_register_routes() {
     ] );
 
     register_rest_route( $namespace, '/push-token', [
-        'methods'             => WP_REST_Server::CREATABLE,
-        'callback'            => 'lamako_mobile_v2_register_push_token',
-        'permission_callback' => 'lamako_mobile_v2_require_user',
+        [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => 'lamako_mobile_v2_register_push_token',
+            'permission_callback' => 'lamako_mobile_v2_require_user',
+        ],
+        [
+            'methods'             => WP_REST_Server::DELETABLE,
+            'callback'            => 'lamako_mobile_v2_unregister_push_token',
+            'permission_callback' => 'lamako_mobile_v2_require_user',
+        ],
     ] );
 
     register_rest_route( $namespace, '/profile', [
@@ -5008,6 +5015,33 @@ function lamako_mobile_v2_register_push_token( WP_REST_Request $request ) {
     update_option( 'lamako_push_tokens', $tokens, false );
 
     return rest_ensure_response( [ 'success' => true ] );
+}
+
+function lamako_mobile_v2_unregister_push_token( WP_REST_Request $request ) {
+    $body    = $request->get_json_params();
+    $body    = is_array( $body ) ? $body : [];
+    $token   = sanitize_text_field( $body['token'] ?? '' );
+    $user_id = get_current_user_id();
+
+    if ( $token === '' ) {
+        return new WP_Error( 'lamako_v2_push_token_required', 'Push token is required.', [ 'status' => 400 ] );
+    }
+
+    $tokens = get_option( 'lamako_push_tokens', [] );
+    $tokens = is_array( $tokens ) ? $tokens : [];
+    $kept   = array_values( array_filter( $tokens, static function ( $entry ) use ( $token, $user_id ) {
+        if ( ! is_array( $entry ) ) {
+            return false;
+        }
+        return ! ( ( $entry['token'] ?? '' ) === $token && (int) ( $entry['user_id'] ?? 0 ) === $user_id );
+    } ) );
+
+    update_option( 'lamako_push_tokens', $kept, false );
+
+    return rest_ensure_response( [
+        'success' => true,
+        'removed' => count( $tokens ) - count( $kept ),
+    ] );
 }
 
 function lamako_mobile_v2_rewards_balance() {

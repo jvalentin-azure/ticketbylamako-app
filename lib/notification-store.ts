@@ -22,6 +22,41 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
 };
 
 const MAX_NOTIFICATIONS = 50;
+const NOTIFICATION_STORAGE_PREFIX = "tbl_notifications";
+const NOTIFICATION_PREFERENCES_PREFIX = "tbl_notification_prefs";
+
+export function notificationStorageKey(userId?: number | null): string {
+  return `${NOTIFICATION_STORAGE_PREFIX}:${userId && userId > 0 ? userId : "guest"}`;
+}
+
+export function notificationPreferencesStorageKey(
+  userId?: number | null,
+): string {
+  return `${NOTIFICATION_PREFERENCES_PREFIX}:${userId && userId > 0 ? userId : "guest"}`;
+}
+
+export function notificationType(
+  notification: AppNotification,
+): string | undefined {
+  const type = notification.data?.type;
+  return typeof type === "string" ? type : undefined;
+}
+
+export function notificationSectionLabel(
+  receivedAt: string,
+  now = new Date(),
+): "Aujourd'hui" | "Cette semaine" | "Plus tôt" {
+  const received = new Date(receivedAt);
+  if (Number.isNaN(received.getTime())) return "Plus tôt";
+
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+  if (received >= startOfToday) return "Aujourd'hui";
+
+  const startOfWeek = new Date(startOfToday);
+  startOfWeek.setDate(startOfWeek.getDate() - 6);
+  return received >= startOfWeek ? "Cette semaine" : "Plus tôt";
+}
 
 function isAppNotification(value: unknown): value is AppNotification {
   if (!value || typeof value !== "object") return false;
@@ -38,7 +73,9 @@ function isAppNotification(value: unknown): value is AppNotification {
   );
 }
 
-export function normalizeStoredNotifications(value: unknown): AppNotification[] {
+export function normalizeStoredNotifications(
+  value: unknown,
+): AppNotification[] {
   if (!Array.isArray(value)) return [];
   const seen = new Set<string>();
   return value

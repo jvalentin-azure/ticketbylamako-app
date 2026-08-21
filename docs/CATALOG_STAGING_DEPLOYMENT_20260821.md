@@ -106,3 +106,38 @@ php -l /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins
 
 Après rollback, retester les cinq endpoints catalogue ci-dessus et vérifier que
 `GET /lamako-mobile/v2/profile` redevient indisponible comme avant ce déploiement.
+
+## Wallet billets et révocation push - 21 août 2026
+
+Le fichier `v2-commerce.php` a été redéployé sur staging uniquement pour ajouter
+la route authentifiée `DELETE /lamako-mobile/v2/push-token`. Cette route retire
+uniquement le token appartenant à l'utilisateur JWT courant.
+
+- SHA-256 déployé :
+  `31388f6ee8093dedc800c17de9b27360c47a52d6a83040b7205dab95d9b6d08d`.
+- Backup serveur avant remplacement :
+  `/home/master/tbl-compliance-backups/wvvtwdcenn-20260821T140136Z-pre-push-token-revoke/v2-commerce.php`.
+- SHA-256 du backup :
+  `56240abcf554735d5b00533d312085487204ad51684f73e29b3918492d4f2867`.
+- `php -l` local et distant : OK.
+- Requête DELETE sans JWT : HTTP 401.
+- Smoke test avec deux comptes staging : inscription HTTP 200, suppression par
+  un autre utilisateur `removed: 0`, suppression par le propriétaire
+  `removed: 1`, puis stockage restauré à son état initial.
+- Catalogue, boutique, événement standard `13842` et événement seating `12673` :
+  HTTP 200 après déploiement.
+- Aucun paiement, billet, commande ou check-in créé pendant cette validation.
+
+Rollback staging :
+
+```bash
+cp -p /home/master/tbl-compliance-backups/wvvtwdcenn-20260821T140136Z-pre-push-token-revoke/v2-commerce.php /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
+php -l /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
+```
+
+Builds déclenchés après QA staging :
+
+- Android staging, versionCode `50` :
+  `8cf508cd-ed78-474b-a45a-a1504e5a0a89`.
+- iOS staging/TestFlight, buildNumber `36` :
+  `a98dc0be-5a49-4560-85bf-7f50ee71e6ed`.

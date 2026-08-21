@@ -2,7 +2,7 @@ import "@/global.css";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, router as expoRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import { Platform } from "react-native";
@@ -58,6 +58,7 @@ export const unstable_settings = {
 };
 
 export default function RootLayout() {
+  const handledNotificationId = useRef<string | null>(null);
   const initialInsets = initialWindowMetrics?.insets ?? DEFAULT_WEB_INSETS;
   const initialFrame = initialWindowMetrics?.frame ?? DEFAULT_WEB_FRAME;
 
@@ -78,22 +79,29 @@ export default function RootLayout() {
   // Set up push notifications
   useEffect(() => {
     if (Platform.OS === "web") return;
+    const openNotification = (response: Notifications.NotificationResponse) => {
+      const identifier = response.notification.request.identifier;
+      if (handledNotificationId.current === identifier) return;
+      handledNotificationId.current = identifier;
+      const data = response.notification.request.content.data;
+      if (data?.type === "event_reminder" && data?.eventId) {
+        expoRouter.push(`/event/${data.eventId}` as any);
+      } else if (data?.type === "order_update" && data?.orderId) {
+        expoRouter.push(`/order/${data.orderId}` as any);
+      } else if (data?.type === "new_event" && data?.eventId) {
+        expoRouter.push(`/event/${data.eventId}` as any);
+      }
+    };
     void setupAndroidChannel().catch((error) => {
       console.warn("Android channel setup failed:", error);
     });
     const responseListener =
-      Notifications.addNotificationResponseReceivedListener((response) => {
-        const data = response.notification.request.content.data;
-        if (data?.type === "event_reminder" && data?.eventId) {
-          expoRouter.push(`/event/${data.eventId}` as any);
-        }
-        if (data?.type === "order_update" && data?.orderId) {
-          expoRouter.push(`/order/${data.orderId}` as any);
-        }
-        if (data?.type === "new_event" && data?.eventId) {
-          expoRouter.push(`/event/${data.eventId}` as any);
-        }
-      });
+      Notifications.addNotificationResponseReceivedListener(openNotification);
+    void Notifications.getLastNotificationResponseAsync()
+      .then((response) => {
+        if (response) setTimeout(() => openNotification(response), 0);
+      })
+      .catch(() => undefined);
 
     return () => {
       responseListener.remove();

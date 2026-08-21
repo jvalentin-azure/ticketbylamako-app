@@ -3,12 +3,13 @@ import * as Notifications from "expo-notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import {
+  notificationStorageKey,
   normalizeStoredNotifications,
   type AppNotification,
 } from "./notification-store";
+import { useAuth } from "./auth-provider";
 
-const NOTIF_STORAGE_KEY = "tbl_notifications";
-const MAX_NOTIFICATIONS = 50;
+const LEGACY_NOTIFICATION_STORAGE_KEY = "tbl_notifications";
 
 interface NotificationsContextType {
   notifications: AppNotification[];
@@ -31,56 +32,69 @@ export function useNotifications() {
 }
 
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const storageKey = useMemo(() => notificationStorageKey(user?.id), [user?.id]);
 
   // Load stored notifications on mount
   useEffect(() => {
     let mounted = true;
-    void AsyncStorage.getItem(NOTIF_STORAGE_KEY).then((data) => {
+    setNotifications([]);
+    void AsyncStorage.getItem(storageKey).then((data) => {
       if (!mounted || !data) return;
       let stored: AppNotification[] = [];
       try {
         stored = normalizeStoredNotifications(JSON.parse(data));
       } catch {
-        void AsyncStorage.removeItem(NOTIF_STORAGE_KEY);
+        void AsyncStorage.removeItem(storageKey);
         return;
       }
       setNotifications((current) => normalizeStoredNotifications([...current, ...stored]));
     });
+    void AsyncStorage.removeItem(LEGACY_NOTIFICATION_STORAGE_KEY);
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [storageKey]);
 
   // Save notifications to storage whenever they change
   const persist = useCallback((notifs: AppNotification[]) => {
-    AsyncStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(notifs)).catch(() => {});
-  }, []);
+    AsyncStorage.setItem(storageKey, JSON.stringify(notifs)).catch(() => {});
+  }, [storageKey]);
+
+  const storeNotification = useCallback((notification: Notifications.Notification, read: boolean) => {
+    const content = notification.request.content;
+    const next: AppNotification = {
+      id: notification.request.identifier,
+      title: content.title || "Notification",
+      body: content.body || "",
+      data: content.data as Record<string, unknown> | undefined,
+      receivedAt: new Date().toISOString(),
+      read,
+    };
+    setNotifications((previous) => {
+      const updated = normalizeStoredNotifications([next, ...previous]);
+      persist(updated);
+      return updated;
+    });
+  }, [persist]);
 
   // Listen for incoming notifications
   useEffect(() => {
     if (Platform.OS === "web") return;
 
-    const subscription = Notifications.addNotificationReceivedListener(notification => {
-      const content = notification.request.content;
-      const newNotif: AppNotification = {
-        id: notification.request.identifier,
-        title: content.title || "Notification",
-        body: content.body || "",
-        data: content.data as Record<string, unknown> | undefined,
-        receivedAt: new Date().toISOString(),
-        read: false,
-      };
-
-      setNotifications(prev => {
-        const updated = normalizeStoredNotifications([newNotif, ...prev]);
-        persist(updated);
-        return updated;
-      });
+    const subscription = Notifications.addNotificationReceivedListener((notification) => {
+      storeNotification(notification, false);
+    });
+    const responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      storeNotification(response.notification, true);
     });
 
-    return () => subscription.remove();
-  }, [persist]);
+    return () => {
+      subscription.remove();
+      responseSubscription.remove();
+    };
+  }, [storeNotification]);
 
   const unreadCount = useMemo(
     () => notifications.filter((notification) => !notification.read).length,
@@ -105,8 +119,8 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
 
   const clearAll = useCallback(() => {
     setNotifications([]);
-    AsyncStorage.removeItem(NOTIF_STORAGE_KEY).catch(() => {});
-  }, []);
+    AsyncStorage.removeItem(storageKey).catch(() => {});
+  }, [storageKey]);
 
   return (
     <NotificationsContext.Provider value={{ notifications, unreadCount, markAsRead, markAllAsRead, clearAll }}>

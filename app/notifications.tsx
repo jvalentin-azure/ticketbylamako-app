@@ -2,7 +2,7 @@ import {
   View,
   Text,
   TouchableOpacity,
-  FlatList,
+  SectionList,
   StyleSheet,
 } from "react-native";
 import { useRouter } from "expo-router";
@@ -12,13 +12,27 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import {
   useNotifications,
 } from "@/lib/notifications-provider";
-import type { AppNotification } from "@/lib/notification-store";
+import {
+  notificationSectionLabel,
+  notificationType,
+  type AppNotification,
+} from "@/lib/notification-store";
+import { useMemo } from "react";
 
 export default function NotificationsScreen() {
   const colors = useColors();
   const router = useRouter();
   const { notifications, unreadCount, markAsRead, markAllAsRead } =
     useNotifications();
+  const sections = useMemo(() => {
+    const labels = ["Aujourd'hui", "Cette semaine", "Plus tôt"] as const;
+    return labels.map((title) => ({
+      title,
+      data: notifications.filter(
+        (notification) => notificationSectionLabel(notification.receivedAt) === title,
+      ),
+    })).filter((section) => section.data.length > 0);
+  }, [notifications]);
 
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -38,17 +52,28 @@ export default function NotificationsScreen() {
   const handleNotifPress = (notif: AppNotification) => {
     markAsRead(notif.id);
     // Navigate based on notification type
-    if (notif.data?.type === "event_reminder" && notif.data?.eventId) {
+    const type = notificationType(notif);
+    if (type === "event_reminder" && notif.data?.eventId) {
       router.push(`/event/${notif.data.eventId}` as any);
-    } else if (notif.data?.type === "new_event" && notif.data?.eventId) {
+    } else if (type === "new_event" && notif.data?.eventId) {
       router.push(`/event/${notif.data.eventId}` as any);
-    } else if (notif.data?.type === "order_update" && notif.data?.orderId) {
+    } else if (type === "order_update" && notif.data?.orderId) {
       router.push(`/order/${notif.data.orderId}` as any);
     }
   };
 
-  const renderNotif = ({ item }: { item: AppNotification }) => (
+  const renderNotif = ({ item }: { item: AppNotification }) => {
+    const type = notificationType(item);
+    const action = type === "order_update"
+      ? "Voir la commande"
+      : type === "event_reminder" || type === "new_event"
+        ? "Voir l'événement"
+        : null;
+    return (
     <TouchableOpacity
+      accessibilityRole="button"
+      accessibilityLabel={`${item.read ? "Notification lue" : "Nouvelle notification"}. ${item.title}. ${item.body}`}
+      accessibilityHint={action || "Marquer comme lue"}
       onPress={() => handleNotifPress(item)}
       style={[
         styles.notifItem,
@@ -69,11 +94,11 @@ export default function NotificationsScreen() {
       >
         <IconSymbol
           name={
-            item.data?.type === "event_reminder"
+            type === "event_reminder"
               ? "clock"
-              : item.data?.type === "new_event"
+              : type === "new_event"
                 ? "star.fill"
-                : item.data?.type === "order_update"
+                : type === "order_update"
                   ? "bag.fill"
                   : "bell.fill"
           }
@@ -100,18 +125,20 @@ export default function NotificationsScreen() {
         <Text style={[styles.notifTime, { color: colors.muted }]}>
           {formatTime(item.receivedAt)}
         </Text>
+        {action ? <Text style={[styles.notifAction, { color: colors.primary }]}>{action}</Text> : null}
       </View>
       {!item.read && (
         <View style={[styles.unreadDot, { backgroundColor: colors.primary }]} />
       )}
     </TouchableOpacity>
-  );
+    );
+  };
 
   return (
     <ScreenContainer edges={["top", "left", "right", "bottom"]}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Retour" onPress={() => router.back()} style={styles.backBtn}>
           <IconSymbol name="chevron.left" size={20} color={colors.foreground} />
           <Text style={[styles.backText, { color: colors.foreground }]}>
             Retour
@@ -122,13 +149,15 @@ export default function NotificationsScreen() {
         </Text>
         <View style={styles.headerRight}>
           {unreadCount > 0 && (
-            <TouchableOpacity onPress={markAllAsRead} style={styles.markAllBtn}>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Marquer toutes les notifications comme lues" onPress={markAllAsRead} style={styles.markAllBtn}>
               <Text style={[styles.markAllText, { color: colors.primary }]}>
                 Tout lire
               </Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Paramètres des notifications"
             onPress={() => router.push("/notification-settings" as any)}
             style={[styles.settingsBtn, { backgroundColor: colors.surface }]}
           >
@@ -151,10 +180,13 @@ export default function NotificationsScreen() {
           </Text>
         </View>
       ) : (
-        <FlatList
-          data={notifications}
+        <SectionList
+          sections={sections}
           keyExtractor={(item) => item.id}
           renderItem={renderNotif}
+          renderSectionHeader={({ section }) => (
+            <Text style={[styles.sectionTitle, { color: colors.muted, backgroundColor: colors.background }]}>{section.title}</Text>
+          )}
           showsVerticalScrollIndicator={false}
         />
       )}
@@ -203,6 +235,8 @@ const styles = StyleSheet.create({
   notifTitle: { fontSize: 14 },
   notifBody: { fontSize: 13, marginTop: 2, lineHeight: 18 },
   notifTime: { fontSize: 11, marginTop: 4 },
+  notifAction: { fontSize: 12, fontWeight: "700", marginTop: 6 },
+  sectionTitle: { fontSize: 12, fontWeight: "700", paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
   unreadDot: { width: 8, height: 8, borderRadius: 4 },
   emptyContainer: {
     flex: 1,

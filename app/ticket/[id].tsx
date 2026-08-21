@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Dimensions,
   Share,
+  Alert,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
@@ -66,11 +67,23 @@ function TicketCard({
   const qrValue = ticket.ticket_code;
 
   const handleShare = async () => {
-    try {
-      await Share.share({
-        message: `Billet ${decodeHtmlEntities(ticket.product_name)}${ticket.seat_label ? ` - Siège ${ticket.seat_label}` : ""}\nCode: ${ticket.ticket_code}\nCommande #${order.id}`,
-      });
-    } catch {}
+    Alert.alert(
+      "Partager ce billet ?",
+      "Le QR code donne accès à l'événement. Partagez-le uniquement avec une personne de confiance.",
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Partager",
+          onPress: async () => {
+            try {
+              await Share.share({
+                message: `Billet ${decodeHtmlEntities(ticket.product_name)}${ticket.seat_label ? ` - Siège ${ticket.seat_label}` : ""}\nCode: ${ticket.ticket_code}\nCommande #${order.id}`,
+              });
+            } catch {}
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -231,6 +244,8 @@ function TicketCard({
 
       {/* Share button */}
       <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel="Partager ce billet"
         onPress={handleShare}
         style={[styles.shareBtn, { borderTopColor: colors.border }]}
         activeOpacity={0.7}
@@ -249,9 +264,10 @@ function TicketCard({
 }
 
 export default function TicketDetailScreen() {
-  const { id, ticketCode } = useLocalSearchParams<{
+  const { id, ticketCode, ticketId } = useLocalSearchParams<{
     id: string;
     ticketCode?: string;
+    ticketId?: string;
   }>();
   const colors = useColors();
   const router = useRouter();
@@ -316,8 +332,12 @@ export default function TicketDetailScreen() {
 
   // If a specific ticket code was requested, scroll to it
   useEffect(() => {
-    if (ticketCode && tickets.length > 0) {
-      const idx = tickets.findIndex((t) => t.ticket_code === ticketCode);
+    if ((ticketCode || ticketId) && tickets.length > 0) {
+      const idx = tickets.findIndex((ticket) =>
+        ticketCode
+          ? ticket.ticket_code === ticketCode
+          : String(ticket.instance_id) === String(ticketId),
+      );
       if (idx >= 0) {
         setActiveIndex(idx);
         setTimeout(() => {
@@ -328,7 +348,7 @@ export default function TicketDetailScreen() {
         }, 300);
       }
     }
-  }, [ticketCode, tickets]);
+  }, [ticketCode, ticketId, tickets]);
 
   if (loading) {
     return (
@@ -448,7 +468,7 @@ export default function TicketDetailScreen() {
     <ScreenContainer edges={["top", "left", "right"]}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Retour à mes billets" onPress={() => router.back()} style={styles.backBtn}>
           <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>

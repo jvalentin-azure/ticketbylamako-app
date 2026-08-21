@@ -14,6 +14,7 @@ import {
   type NotificationPreferences,
 } from "@/lib/notifications";
 import * as Notifications from "expo-notifications";
+import { useAuth } from "@/lib/auth-provider";
 
 interface SettingItem {
   key: keyof NotificationPreferences;
@@ -52,6 +53,7 @@ const SETTINGS: SettingItem[] = [
 export default function NotificationSettingsScreen() {
   const colors = useColors();
   const router = useRouter();
+  const { user } = useAuth();
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
   const [hasPushToken, setHasPushToken] = useState(false);
   const [permissionStatus, setPermissionStatus] = useState<string>("undetermined");
@@ -65,7 +67,7 @@ export default function NotificationSettingsScreen() {
     setLoadError(null);
     try {
       const [p, token, perm] = await Promise.all([
-        getNotificationPreferences(),
+        getNotificationPreferences(user?.id),
         getStoredPushToken(),
         Notifications.getPermissionsAsync(),
       ]);
@@ -79,7 +81,7 @@ export default function NotificationSettingsScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     void loadSettings();
@@ -92,7 +94,7 @@ export default function NotificationSettingsScreen() {
     setPrefs(updated);
     setSavingKey(key);
     try {
-      await saveNotificationPreferences(updated);
+      await saveNotificationPreferences(updated, user?.id);
     } catch {
       setPrefs(previous);
       Alert.alert(

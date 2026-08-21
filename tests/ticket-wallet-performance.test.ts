@@ -30,4 +30,11 @@ describe("ticket wallet resilience", () => {
     expect(screen).toContain("Réessayer");
     expect(screen).toContain('s === "cs-complete"');
   });
+
+  it("opens the exact ticket instance and refreshes when the wallet regains focus", () => {
+    expect(screen).toContain("useFocusEffect");
+    expect(screen).toContain("ticketId: ticket.instanceId");
+    expect(screen).toContain("setFilter(value)");
+    expect(screen).toContain("PROCHAIN ÉVÉNEMENT");
+  });
 });

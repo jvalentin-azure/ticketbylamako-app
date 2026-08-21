@@ -79,6 +79,7 @@ const MAPPING = {
   "storefront.fill": "storefront",
   "calendar.badge.clock": "event-available",
   photo: "image",
+  qrcode: "qr-code-2",
 } as IconMapping;
 
 /**

@@ -62,6 +62,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
+      const { unregisterPushTokenWithBackend } = await import("./notifications");
+      await Promise.race([
+        unregisterPushTokenWithBackend(),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1500)),
+      ]);
       await apiLogout();
     } finally {
       await invalidateAllCaches();

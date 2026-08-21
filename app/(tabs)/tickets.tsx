@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useMemo, useRef, useState, useCallback } from "react";
 import {
   Text,
   View,
@@ -8,6 +8,7 @@ import {
   StyleSheet,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/lib/auth-provider";
@@ -19,10 +20,13 @@ import {
 } from "@/lib/api/mobile";
 import { CACHE_DURATIONS, getCachedValue, setCache } from "@/lib/api/cache";
 import { formatDateShort, decodeHtmlEntities } from "@/lib/format";
+import { filterWalletTickets, sortWalletTickets, type TicketWalletFilter } from "@/lib/ticket-wallet";
 
 interface TicketItem {
   key: string;
+  instanceId: string;
   orderId: number;
+  eventId: number;
   eventName: string;
   ticketType: string;
   date: string;
@@ -81,6 +85,7 @@ export default function TicketsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [filter, setFilter] = useState<TicketWalletFilter>("upcoming");
 
   const load = useCallback(async (userId: number, activeRequest: number) => {
     try {
@@ -102,12 +107,14 @@ export default function TicketsScreen() {
               : (await getMobileOrderTickets(order.id)).tickets;
             return orderTickets.map((ticket, index) => ({
               key: `${order.id}-${ticket.instanceId || `${ticket.eventId}-${index}`}`,
+              instanceId: String(ticket.instanceId || ""),
               orderId: order.id,
+              eventId: ticket.eventId,
               eventName: decodeHtmlEntities(
                 ticket.eventName || ticket.productName,
               ),
               ticketType: decodeHtmlEntities(ticket.productName || "Standard"),
-              date: ticket.eventDate || order.dateCreated || "",
+              date: ticket.eventDate || "",
               status: order.status,
               seatLabel: ticket.seatLabel || undefined,
               eventLocation: ticket.eventLocation || undefined,
@@ -129,10 +136,12 @@ export default function TicketsScreen() {
             (order.items || []).forEach((item, index) => {
               tix.push({
                 key: `${order.id}-${item.id || index}`,
+                instanceId: "",
                 orderId: order.id,
+                eventId: 0,
                 eventName: decodeHtmlEntities(item.name),
                 ticketType: "Standard",
-                date: order.dateCreated || "",
+                date: "",
                 status: order.status,
               });
             });
@@ -154,7 +163,7 @@ export default function TicketsScreen() {
     }
   }, []);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     const userId = user?.id;
     const activeRequest = ++requestId.current;
 
@@ -162,7 +171,7 @@ export default function TicketsScreen() {
       setTickets([]);
       setLoading(false);
       setErrorMessage(null);
-      return;
+      return undefined;
     }
 
     setTickets([]);
@@ -185,7 +194,7 @@ export default function TicketsScreen() {
     return () => {
       if (requestId.current === activeRequest) requestId.current += 1;
     };
-  }, [isAuthenticated, load, user?.id]);
+  }, [isAuthenticated, load, user?.id]));
 
   const refresh = useCallback(() => {
     if (!user?.id) return;
@@ -195,7 +204,20 @@ export default function TicketsScreen() {
     void load(user.id, activeRequest);
   }, [load, user?.id]);
 
-  const visibleTickets = tickets;
+  const visibleTickets = useMemo(
+    () => sortWalletTickets(filterWalletTickets(tickets, filter), filter) as TicketItem[],
+    [filter, tickets],
+  );
+  const nextTicket = useMemo(
+    () => sortWalletTickets(filterWalletTickets(tickets, "upcoming"), "upcoming")[0] as TicketItem | undefined,
+    [tickets],
+  );
+  const openTicket = useCallback((ticket: TicketItem) => {
+    router.push({
+      pathname: "/ticket/[id]",
+      params: { id: String(ticket.orderId), ...(ticket.instanceId ? { ticketId: ticket.instanceId } : {}) },
+    } as any);
+  }, [router]);
 
   if (!isAuthenticated) {
     return (
@@ -262,6 +284,16 @@ export default function TicketsScreen() {
           </View>
         ) : null}
       </View>
+      <View accessibilityRole="tablist" style={[styles.filterBar, { borderColor: colors.border }]}>
+        {([["upcoming", "À venir"], ["past", "Passés"], ["all", "Tous"]] as const).map(([value, label]) => {
+          const selected = filter === value;
+          return (
+            <TouchableOpacity key={value} accessibilityRole="tab" accessibilityState={{ selected }} onPress={() => setFilter(value)} style={[styles.filterOption, selected && { backgroundColor: colors.primary }]}>
+              <Text style={[styles.filterText, { color: selected ? "#fff" : colors.muted }]}>{label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
       {loading ? (
         <TicketListSkeleton color={colors.border} />
       ) : (
@@ -277,7 +309,19 @@ export default function TicketsScreen() {
             />
           }
           ListHeaderComponent={
-            errorMessage && visibleTickets.length > 0 ? (
+            <>
+            {filter === "upcoming" && nextTicket ? (
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Afficher le prochain billet pour ${nextTicket.eventName}`} onPress={() => openTicket(nextTicket)} style={[styles.nextEvent, { backgroundColor: colors.primary, borderColor: colors.primary }]}>
+                <View style={styles.nextEventTop}>
+                  <Text style={styles.nextEventEyebrow}>PROCHAIN ÉVÉNEMENT</Text>
+                  <IconSymbol name="qrcode" size={22} color="#fff" />
+                </View>
+                <Text style={styles.nextEventTitle} numberOfLines={2}>{nextTicket.eventName}</Text>
+                <Text style={styles.nextEventMeta}>{nextTicket.date ? formatDateShort(nextTicket.date) : "Date à confirmer"}{nextTicket.seatLabel ? ` · Place ${nextTicket.seatLabel}` : ""}</Text>
+                <Text style={styles.nextEventAction}>Afficher mon QR code</Text>
+              </TouchableOpacity>
+            ) : null}
+            {errorMessage && visibleTickets.length > 0 ? (
               <View
                 style={[
                   styles.inlineError,
@@ -309,14 +353,15 @@ export default function TicketsScreen() {
                   />
                 </TouchableOpacity>
               </View>
-            ) : null
+            ) : null}
+            </>
           }
           renderItem={({ item }) => (
             <TouchableOpacity
               accessibilityRole="button"
               accessibilityLabel={`Ouvrir le billet ${item.ticketType} pour ${item.eventName}`}
               activeOpacity={0.8}
-              onPress={() => router.push(`/ticket/${item.orderId}` as any)}
+              onPress={() => openTicket(item)}
               style={[
                 styles.ticketCard,
                 { backgroundColor: colors.surface, borderColor: colors.border },
@@ -345,7 +390,7 @@ export default function TicketsScreen() {
                   style={[styles.ticketMeta, { color: colors.muted }]}
                   numberOfLines={1}
                 >
-                  {item.ticketType} · {formatDateShort(item.date)}
+                  {item.ticketType}{item.date ? ` · ${formatDateShort(item.date)}` : ""}
                 </Text>
                 {item.seatLabel ? (
                   <Text style={[styles.seatText, { color: colors.primary }]}>
@@ -446,6 +491,9 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 22, fontWeight: "700" },
   headerSubtitle: { fontSize: 13, marginTop: 4 },
+  filterBar: { marginHorizontal: 16, marginBottom: 14, padding: 3, borderWidth: 1, borderRadius: 8, flexDirection: "row" },
+  filterOption: { flex: 1, minHeight: 40, borderRadius: 6, alignItems: "center", justifyContent: "center" },
+  filterText: { fontSize: 13, fontWeight: "700" },
   countBadge: {
     minWidth: 32,
     height: 32,
@@ -455,6 +503,12 @@ const styles = StyleSheet.create({
   },
   countText: { fontSize: 14, fontWeight: "700" },
   listContent: { paddingHorizontal: 16, paddingBottom: 28, flexGrow: 1 },
+  nextEvent: { borderRadius: 8, padding: 18, marginBottom: 14, borderWidth: 1 },
+  nextEventTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  nextEventEyebrow: { color: "#fff", fontSize: 11, fontWeight: "800" },
+  nextEventTitle: { color: "#fff", fontSize: 20, lineHeight: 25, fontWeight: "800", marginTop: 14 },
+  nextEventMeta: { color: "#fff", opacity: 0.82, fontSize: 13, marginTop: 7 },
+  nextEventAction: { color: "#fff", fontSize: 13, fontWeight: "800", marginTop: 18 },
   ticketCard: {
     borderRadius: 8,
     padding: 14,
