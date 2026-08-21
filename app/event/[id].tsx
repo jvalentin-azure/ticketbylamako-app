@@ -13,11 +13,12 @@ import {
   Share,
   Alert,
 } from "react-native";
-import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScreenContainer } from "@/components/screen-container";
 import { EventDetailSkeleton } from "@/components/event-detail-skeleton";
+import { EventPosterCard } from "@/components/event-poster-card";
+import { CatalogImage } from "@/components/catalog-image";
 import { useColors } from "@/hooks/use-colors";
 import { useCart } from "@/lib/cart-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -414,13 +415,11 @@ export default function EventDetailScreen() {
                   setGalleryIndex(idx);
                 }}
                 keyExtractor={(_, i) => String(i)}
-                renderItem={({ item }) => (
-                  <Image
-                    source={{ uri: item }}
+                renderItem={({ item, index }) => (
+                  <CatalogImage
+                    uri={item}
                     style={{ width: SCREEN_W, height: 280 }}
-                    contentFit="cover"
-                    cachePolicy="memory-disk"
-                    transition={180}
+                    accessibilityLabel={`Photo ${index + 1} de ${name}`}
                     recyclingKey={`event-gallery-${event.id}-${item}`}
                   />
                 )}
@@ -442,12 +441,10 @@ export default function EventDetailScreen() {
               </View>
             </View>
           ) : (
-            <Image
-              source={{ uri: event.featuredImage }}
+            <CatalogImage
+              uri={event.featuredImage}
               style={{ width: SCREEN_W, height: 280 }}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-              transition={180}
+              accessibilityLabel={`Affiche de ${name}`}
               recyclingKey={`event-featured-${event.id}`}
             />
           )}
@@ -1057,69 +1054,20 @@ export default function EventDetailScreen() {
                 }}
                 keyExtractor={(item) => String(item.id)}
                 renderItem={({ item }) => (
-                  <TouchableOpacity
-                    activeOpacity={0.8}
+                  <EventPosterCard
+                    event={item}
                     onPress={() => router.push(`/event/${item.id}` as any)}
-                    style={[
-                      styles.upcomingCard,
-                      {
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
-                      },
-                    ]}
-                  >
-                    <Image
-                      source={{ uri: item.featuredImage }}
-                      style={styles.upcomingCardImage}
-                      contentFit="cover"
-                      cachePolicy="memory-disk"
-                      transition={180}
-                      recyclingKey={`event-related-${item.id}`}
-                    />
-                    <View style={styles.upcomingCardBody}>
-                      <Text
-                        style={[
-                          styles.upcomingCardTitle,
-                          { color: colors.foreground },
-                        ]}
-                        numberOfLines={2}
-                      >
-                        {decodeHtmlEntities(item.title.rendered)}
-                      </Text>
-                      {item.mobileFields?.event_location && (
-                        <View
-                          style={{
-                            flexDirection: "row",
-                            alignItems: "center",
-                            gap: 4,
-                            marginTop: 4,
-                          }}
-                        >
-                          <IconSymbol
-                            name="mappin"
-                            size={11}
-                            color={colors.muted}
-                          />
-                          <Text
-                            style={{ color: colors.muted, fontSize: 11 }}
-                            numberOfLines={1}
-                          >
-                            {item.mobileFields.event_location}
-                          </Text>
-                        </View>
-                      )}
-                      {item.minPrice != null && (
-                        <Text
-                          style={[
-                            styles.upcomingCardPrice,
-                            { color: colors.primary },
-                          ]}
-                        >
-                          Dès {formatAriary(item.minPrice)}
-                        </Text>
-                      )}
-                    </View>
-                  </TouchableOpacity>
+                    width={218}
+                    favorite={isFavorite(item.id, "event")}
+                    onToggleFavorite={() =>
+                      toggleFavorite({
+                        id: item.id,
+                        type: "event",
+                        name: decodeHtmlEntities(item.title.rendered),
+                        image: item.featuredImage,
+                      })
+                    }
+                  />
                 )}
               />
             </View>
@@ -1531,14 +1479,4 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 4,
   },
-  upcomingCard: {
-    width: 200,
-    borderRadius: 14,
-    overflow: "hidden",
-    borderWidth: 1,
-  },
-  upcomingCardImage: { width: 200, height: 110 },
-  upcomingCardBody: { padding: 10 },
-  upcomingCardTitle: { fontSize: 13, fontWeight: "600" },
-  upcomingCardPrice: { fontSize: 13, fontWeight: "700", marginTop: 6 },
 });

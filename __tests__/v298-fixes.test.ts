@@ -4,25 +4,19 @@ import * as path from "path";
 
 const ROOT = path.resolve(__dirname, "..");
 
-describe("V2.9.8 - Onboarding Fix", () => {
-  it("should validate token server-side before skipping onboarding", () => {
+describe("Onboarding first-use experience", () => {
+  it("should not block startup on server-side token validation", () => {
     const layout = fs.readFileSync(path.join(ROOT, "app/_layout.tsx"), "utf-8");
-    // Must use validateToken() not just getStoredUser()
-    expect(layout).toContain("validateToken()");
-    expect(layout).toContain("getStoredToken");
-    // Must show splash when token is invalid
-    expect(layout).toContain("Token expired/invalid - show onboarding");
+    expect(layout).toContain("ONBOARDING_STORAGE_KEY");
+    expect(layout).toContain("AsyncStorage.getItem");
+    expect(layout).not.toContain("validateToken()");
   });
 
-  it("splash-screen should not use AsyncStorage to decide visibility", () => {
+  it("should avoid a duplicate welcome screen", () => {
     const splash = fs.readFileSync(path.join(ROOT, "components/splash-screen.tsx"), "utf-8");
-    // Should NOT check AsyncStorage for hasSeenSplash
-    expect(splash).not.toContain("hasSeenSplash");
-    expect(splash).not.toContain("@lamako_splash_seen");
-    // Should have the three buttons
-    expect(splash).toContain("S'inscrire");
-    expect(splash).toContain("Se connecter");
-    expect(splash).toContain("Explorer");
+    expect(splash).toContain("OnboardingScreen");
+    expect(splash).not.toContain("WelcomeScreen");
+    expect(splash).toContain("handleLogin");
   });
 });
 

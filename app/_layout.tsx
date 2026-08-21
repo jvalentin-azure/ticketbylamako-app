@@ -21,6 +21,7 @@ import {
 import type { EdgeInsets, Metrics, Rect } from "react-native-safe-area-context";
 // System font used - no custom font loading
 import * as SplashScreen from "expo-splash-screen";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { trpc, createTRPCClient } from "@/lib/trpc";
 import {
@@ -48,6 +49,8 @@ try {
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
+const ONBOARDING_STORAGE_KEY = "@ticketbylamako/onboarding-version";
+const ONBOARDING_VERSION = "2";
 
 // Prevent splash screen from auto-hiding while fonts load
 SplashScreen.preventAutoHideAsync();
@@ -124,49 +127,42 @@ export default function RootLayout() {
     };
   }, []);
 
-  // Decide whether to show onboarding intro screens.
-  // The onboarding is shown on EVERY launch unless the user is logged in with a valid token.
-  // This ensures new users always see the intro, and returning logged-in users skip it.
+  // Onboarding is a first-use experience, independent from authentication.
+  // Session validation belongs to AuthProvider and must not block app startup.
   useEffect(() => {
     if (!fontsLoaded && !fontError) return;
+    let isMounted = true;
+
     (async () => {
       try {
-        const { getStoredUser, getStoredToken, validateToken } =
-          await import("@/lib/api/auth");
-
-        // Check if user has a valid session
-        const user = await getStoredUser();
-        const token = await getStoredToken();
-
-        if (user && token) {
-          // User data + token exist - validate token is still valid
-          const isValid = await validateToken();
-          if (isValid) {
-            // Token is valid, user is truly logged in - skip onboarding
-            console.log(
-              "[Onboarding] User logged in with valid token, skipping onboarding",
-            );
-            setShowSplash(false);
-            SplashScreen.hideAsync();
-            return;
-          }
-        }
-
-        // No valid session - always show onboarding
-        console.log("[Onboarding] No valid session, showing onboarding");
-        setShowSplash(true);
-        setTimeout(() => SplashScreen.hideAsync(), 50);
-      } catch (err) {
-        // On error (network etc), show onboarding to be safe
-        console.log(
-          "[Onboarding] Error during auth check, showing onboarding:",
-          err,
+        const storedVersion = await AsyncStorage.getItem(
+          ONBOARDING_STORAGE_KEY,
         );
-        setShowSplash(true);
-        setTimeout(() => SplashScreen.hideAsync(), 50);
+        if (isMounted) {
+          setShowSplash(storedVersion !== ONBOARDING_VERSION);
+        }
+      } catch (err) {
+        console.warn("[Onboarding] Unable to read completion state:", err);
+        if (isMounted) setShowSplash(true);
+      } finally {
+        await SplashScreen.hideAsync().catch(() => undefined);
       }
     })();
+
+    return () => {
+      isMounted = false;
+    };
   }, [fontsLoaded, fontError]);
+
+  const handleOnboardingFinish = useCallback(async () => {
+    try {
+      await AsyncStorage.setItem(ONBOARDING_STORAGE_KEY, ONBOARDING_VERSION);
+    } catch (err) {
+      console.warn("[Onboarding] Unable to save completion state:", err);
+    } finally {
+      setShowSplash(false);
+    }
+  }, []);
 
   const handleSafeAreaUpdate = useCallback((metrics: Metrics) => {
     setInsets(metrics.insets);
@@ -226,7 +222,7 @@ export default function RootLayout() {
     return (
       <SafeAreaProvider initialMetrics={providerInitialMetrics}>
         <ThemeProvider>
-          <CustomSplash onFinish={() => setShowSplash(false)} />
+          <CustomSplash onFinish={handleOnboardingFinish} />
         </ThemeProvider>
       </SafeAreaProvider>
     );

@@ -15,6 +15,7 @@ import Animated, {
   Extrapolation,
   useAnimatedScrollHandler,
   runOnJS,
+  useReducedMotion,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -35,23 +36,24 @@ const SLIDES: OnboardingSlide[] = [
   {
     id: "1",
     image: require("@/assets/images/onboarding-1.jpg"),
-    title: "Votre partenaire ",
-    titleAccent: "billetterie",
+    title: "Madagascar se vit ",
+    titleAccent: "ici.",
     description:
-      "Concerts, festivals, spectacles et soirées — retrouvez tout ce qui se passe à Madagascar.",
+      "Découvrez les événements, réservez et retrouvez vos billets en quelques secondes.",
   },
   {
     id: "2",
     image: require("@/assets/images/onboarding-2.jpg"),
-    title: "Réservez vos ",
-    titleAccent: "billets en un clic",
+    title: "Vos billets, ",
+    titleAccent: "toujours avec vous.",
     description:
-      "Achetez vos places facilement avec un paiement rapide et sécurisé.",
+      "Paiement sécurisé, QR code et avantages LamakoRewards réunis dans votre poche.",
   },
 ];
 
 interface OnboardingScreenProps {
-  onFinish: () => void;
+  onFinish: () => void | Promise<void>;
+  onLogin?: () => void | Promise<void>;
 }
 
 /**
@@ -62,14 +64,17 @@ function SlideItem({
   index,
   scrollX,
   bottomPadding,
+  reducedMotion,
 }: {
   item: OnboardingSlide;
   index: number;
   scrollX: { value: number };
   bottomPadding: number;
+  reducedMotion: boolean;
 }) {
   // Parallax: shift the image opposite to scroll direction
   const imageAnimatedStyle = useAnimatedStyle(() => {
+    if (reducedMotion) return { transform: [{ translateX: 0 }] };
     const inputRange = [
       (index - 1) * width,
       index * width,
@@ -88,6 +93,7 @@ function SlideItem({
 
   // Text fade-in + slide up when slide becomes active
   const textAnimatedStyle = useAnimatedStyle(() => {
+    if (reducedMotion) return { opacity: 1, transform: [{ translateY: 0 }] };
     const inputRange = [
       (index - 0.5) * width,
       index * width,
@@ -244,11 +250,12 @@ function DotIndicator({
   );
 }
 
-export function OnboardingScreen({ onFinish }: OnboardingScreenProps) {
+export function OnboardingScreen({ onFinish, onLogin }: OnboardingScreenProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollViewRef = useRef<Animated.ScrollView>(null);
   const scrollX = useSharedValue(0);
   const insets = useSafeAreaInsets();
+  const reducedMotion = useReducedMotion();
 
   const updateIndex = useCallback((idx: number) => {
     setCurrentIndex(idx);
@@ -267,12 +274,15 @@ export function OnboardingScreen({ onFinish }: OnboardingScreenProps) {
   const handleNext = useCallback(() => {
     if (currentIndex < SLIDES.length - 1) {
       const nextIndex = currentIndex + 1;
-      scrollViewRef.current?.scrollTo({ x: nextIndex * width, animated: true });
+      scrollViewRef.current?.scrollTo({
+        x: nextIndex * width,
+        animated: !reducedMotion,
+      });
       setCurrentIndex(nextIndex);
     } else {
       onFinish();
     }
-  }, [currentIndex, onFinish]);
+  }, [currentIndex, onFinish, reducedMotion]);
 
   const handleSkip = useCallback(() => {
     onFinish();
@@ -300,6 +310,7 @@ export function OnboardingScreen({ onFinish }: OnboardingScreenProps) {
             index={index}
             scrollX={scrollX}
             bottomPadding={bottomPadding}
+            reducedMotion={reducedMotion}
           />
         ))}
       </Animated.ScrollView>
@@ -321,11 +332,13 @@ export function OnboardingScreen({ onFinish }: OnboardingScreenProps) {
         {/* Buttons row */}
         <View style={styles.buttonsRow}>
           <TouchableOpacity
-            onPress={handleSkip}
+            onPress={isLastSlide && onLogin ? onLogin : handleSkip}
             style={styles.skipBtn}
             activeOpacity={0.7}
           >
-            <Text style={styles.skipBtnText}>Passer</Text>
+            <Text style={styles.skipBtnText}>
+              {isLastSlide ? "Se connecter" : "Passer"}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -334,7 +347,7 @@ export function OnboardingScreen({ onFinish }: OnboardingScreenProps) {
             activeOpacity={0.85}
           >
             <Text style={styles.nextBtnText}>
-              {isLastSlide ? "Commencer" : "Suivant"}
+              {isLastSlide ? "Découvrir" : "Suivant"}
             </Text>
           </TouchableOpacity>
         </View>
