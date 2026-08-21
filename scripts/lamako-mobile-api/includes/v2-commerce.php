@@ -606,10 +606,15 @@ function lamako_mobile_v2_public_shop_products( $limit = 100, $include_details =
     return $products;
 }
 
-function lamako_mobile_v2_public_ticket_map( $event_id = 0, $include_checkout_fields = true ) {
+function lamako_mobile_v2_public_ticket_map( $event_ids = [], $include_checkout_fields = true ) {
     if ( ! function_exists( 'wc_get_product' ) ) {
         return [];
     }
+
+    if ( ! is_array( $event_ids ) ) {
+        $event_ids = absint( $event_ids ) > 0 ? [ absint( $event_ids ) ] : [];
+    }
+    $event_ids = array_values( array_unique( array_filter( array_map( 'absint', $event_ids ) ) ) );
 
     $meta_query = [
         [
@@ -618,11 +623,11 @@ function lamako_mobile_v2_public_ticket_map( $event_id = 0, $include_checkout_fi
             'compare' => 'IN',
         ],
     ];
-    if ( absint( $event_id ) > 0 ) {
+    if ( ! empty( $event_ids ) ) {
         $meta_query[] = [
             'key'     => '_event_name',
-            'value'   => absint( $event_id ),
-            'compare' => '=',
+            'value'   => $event_ids,
+            'compare' => 'IN',
         ];
     }
 
@@ -636,8 +641,8 @@ function lamako_mobile_v2_public_ticket_map( $event_id = 0, $include_checkout_fi
 
     $map = [];
     foreach ( $posts as $product_id ) {
-        $event_id = absint( get_post_meta( $product_id, '_event_name', true ) );
-        if ( $event_id <= 0 ) {
+        $ticket_event_id = absint( get_post_meta( $product_id, '_event_name', true ) );
+        if ( $ticket_event_id <= 0 ) {
             continue;
         }
         $product = wc_get_product( $product_id );
@@ -645,24 +650,24 @@ function lamako_mobile_v2_public_ticket_map( $event_id = 0, $include_checkout_fi
             continue;
         }
 
-        if ( ! isset( $map[ $event_id ] ) ) {
-            $map[ $event_id ] = [];
+        if ( ! isset( $map[ $ticket_event_id ] ) ) {
+            $map[ $ticket_event_id ] = [];
         }
         $form_template_id = absint( get_post_meta( $product_id, '_owner_form_template', true ) );
         $checkout_fields  = $include_checkout_fields && $form_template_id > 0
-            ? lamako_mobile_v2_checkout_fields_for_ticket( $product_id, $event_id, 1 )
+            ? lamako_mobile_v2_checkout_fields_for_ticket( $product_id, $ticket_event_id, 1 )
             : [ 'hasFields' => false, 'requiresFields' => false ];
-        $map[ $event_id ][] = [
+        $map[ $ticket_event_id ][] = [
             'id'           => $product_id,
             'name'         => html_entity_decode( $product->get_name(), ENT_QUOTES, 'UTF-8' ),
             'price'        => $product->get_price(),
             'stock_status' => $product->get_stock_status(),
             'usesSeating'  => lamako_mobile_v2_truthy_meta( $product_id, [ '_tc_used_for_seatings' ] ),
-            'eventId'      => (string) $event_id,
+            'eventId'      => (string) $ticket_event_id,
             'hasCheckoutFields'      => ! empty( $checkout_fields['hasFields'] ),
             'requiresCheckoutFields' => ! empty( $checkout_fields['requiresFields'] ),
-            'lamako_rewards_enabled' => lamako_mobile_v2_rewards_redeem_enabled( $event_id ) || lamako_mobile_v2_rewards_redeem_enabled( $product_id ),
-            'rewardsRedeemEnabled' => lamako_mobile_v2_rewards_redeem_enabled( $event_id ) || lamako_mobile_v2_rewards_redeem_enabled( $product_id ),
+            'lamako_rewards_enabled' => lamako_mobile_v2_rewards_redeem_enabled( $ticket_event_id ) || lamako_mobile_v2_rewards_redeem_enabled( $product_id ),
+            'rewardsRedeemEnabled' => lamako_mobile_v2_rewards_redeem_enabled( $ticket_event_id ) || lamako_mobile_v2_rewards_redeem_enabled( $product_id ),
         ];
     }
     return $map;
@@ -756,7 +761,8 @@ function lamako_mobile_v2_public_events( $limit = 50, $include_details = true ) 
         'order'          => 'DESC',
     ] );
 
-    $ticket_map = lamako_mobile_v2_public_ticket_map( 0, $include_details );
+    $event_ids  = wp_list_pluck( $events, 'ID' );
+    $ticket_map = lamako_mobile_v2_public_ticket_map( $event_ids, $include_details );
     return array_map( function( $event ) use ( $ticket_map, $include_details ) {
         return lamako_mobile_v2_public_event_summary( $event, $ticket_map, $include_details );
     }, $events );
