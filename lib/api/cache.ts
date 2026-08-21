@@ -115,4 +115,5 @@ export const CACHE_DURATIONS = {
   CATEGORIES: 30 * 60 * 1000, // 30 minutes for categories
   EVENT_DETAIL: 3 * 60 * 1000, // 3 minutes for single event
   PRODUCTS: 5 * 60 * 1000, // 5 minutes for products
+  TICKETS: 10 * 60 * 1000, // 10 minutes for non-sensitive ticket summaries
 } as const;
