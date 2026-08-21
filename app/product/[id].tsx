@@ -1,10 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ScrollView,
   Text,
   View,
   TouchableOpacity,
-  ActivityIndicator,
   Dimensions,
   FlatList,
   StyleSheet,
@@ -17,11 +16,62 @@ import { useColors } from "@/hooks/use-colors";
 import { useCart } from "@/lib/cart-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { getProduct, type WCProduct } from "@/lib/api/catalog";
+import { MobileApiError } from "@/lib/api/mobile";
 import { formatAriary, stripHtml, decodeHtmlEntities } from "@/lib/format";
 import { PointsBadge } from "@/components/points-badge";
 import { CartToast } from "@/components/cart-toast";
 
 const { width: SCREEN_W } = Dimensions.get("window");
+
+function getProductErrorMessage(error: unknown): string {
+  if (error instanceof MobileApiError) {
+    if (error.status === 404) return "Ce produit n'est plus disponible.";
+    if (error.status === 408)
+      return "Le chargement prend trop de temps. Vérifiez votre connexion.";
+    if (error.status >= 500)
+      return "La boutique est momentanément indisponible.";
+  }
+  return "Impossible de charger ce produit. Vérifiez votre connexion.";
+}
+
+function ProductDetailSkeleton({ colors }: { colors: any }) {
+  return (
+    <ScreenContainer edges={["top", "left", "right"]}>
+      <View
+        style={[styles.skeletonHero, { backgroundColor: colors.surface }]}
+      />
+      <View style={styles.skeletonContent}>
+        <View
+          style={[
+            styles.skeletonLine,
+            styles.skeletonTitle,
+            { backgroundColor: colors.surface },
+          ]}
+        />
+        <View
+          style={[
+            styles.skeletonLine,
+            styles.skeletonPrice,
+            { backgroundColor: colors.surface },
+          ]}
+        />
+        <View
+          style={[
+            styles.skeletonPanel,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
+        />
+        <View
+          style={[
+            styles.skeletonLine,
+            styles.skeletonBody,
+            { backgroundColor: colors.surface },
+          ]}
+        />
+      </View>
+    </ScreenContainer>
+  );
+}
 
 export default function ProductDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -31,31 +81,84 @@ export default function ProductDetailScreen() {
   const { addItem } = useCart();
   const [product, setProduct] = useState<WCProduct | null>(null);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
   const [qty, setQty] = useState(1);
   const [galleryIndex, setGalleryIndex] = useState(0);
   const [showCartToast, setShowCartToast] = useState(false);
   const [cartToastName, setCartToastName] = useState("");
+  const requestId = useRef(0);
+
+  const loadProduct = useCallback(
+    async (forceRefresh = false) => {
+      const productId = Number(id);
+      if (!Number.isFinite(productId) || productId <= 0) {
+        setProduct(null);
+        setErrorMessage("Ce produit n'est pas disponible.");
+        setLoading(false);
+        return;
+      }
+
+      const activeRequest = ++requestId.current;
+      setLoading(true);
+      setErrorMessage("");
+      try {
+        const nextProduct = await getProduct(productId, { forceRefresh });
+        if (requestId.current !== activeRequest) return;
+        setProduct(nextProduct);
+      } catch (error) {
+        if (requestId.current !== activeRequest) return;
+        setProduct(null);
+        setErrorMessage(getProductErrorMessage(error));
+      } finally {
+        if (requestId.current === activeRequest) setLoading(false);
+      }
+    },
+    [id],
+  );
 
   useEffect(() => {
-    if (!id) return;
-    getProduct(Number(id))
-      .then((p) => {
-        setProduct(p);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, [id]);
+    void loadProduct();
+    return () => {
+      requestId.current += 1;
+    };
+  }, [loadProduct]);
 
-  if (loading)
-    return (
-      <ScreenContainer className="flex-1 items-center justify-center">
-        <ActivityIndicator size="large" color={colors.primary} />
-      </ScreenContainer>
-    );
+  if (loading) return <ProductDetailSkeleton colors={colors} />;
   if (!product)
     return (
-      <ScreenContainer className="flex-1 items-center justify-center">
-        <Text style={{ color: colors.muted }}>Produit introuvable</Text>
+      <ScreenContainer className="flex-1 items-center justify-center px-6">
+        <View style={styles.errorState}>
+          <IconSymbol
+            name="exclamationmark.triangle.fill"
+            size={34}
+            color={colors.primary}
+          />
+          <Text style={[styles.errorTitle, { color: colors.foreground }]}>
+            Produit indisponible
+          </Text>
+          <Text style={[styles.errorMessage, { color: colors.muted }]}>
+            {errorMessage || "Ce produit n'est plus disponible."}
+          </Text>
+          <TouchableOpacity
+            onPress={() => void loadProduct(true)}
+            style={[styles.retryButton, { backgroundColor: colors.primary }]}
+            accessibilityRole="button"
+            accessibilityLabel="Réessayer le chargement du produit"
+          >
+            <Text style={styles.retryButtonText}>Réessayer</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.secondaryButton}
+            accessibilityRole="button"
+          >
+            <Text
+              style={[styles.secondaryButtonText, { color: colors.primary }]}
+            >
+              Retour à la boutique
+            </Text>
+          </TouchableOpacity>
+        </View>
       </ScreenContainer>
     );
 
@@ -386,6 +489,48 @@ export default function ProductDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+  skeletonHero: { width: SCREEN_W, height: SCREEN_W * 0.85 },
+  skeletonContent: { padding: 20, gap: 16 },
+  skeletonLine: { height: 18, borderRadius: 6 },
+  skeletonTitle: { width: "78%", height: 28 },
+  skeletonPrice: { width: "38%", height: 24 },
+  skeletonBody: { width: "92%", height: 80 },
+  skeletonPanel: {
+    height: 70,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 8,
+  },
+  errorState: { alignItems: "center", width: "100%", maxWidth: 420 },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    marginTop: 14,
+    textAlign: "center",
+  },
+  errorMessage: {
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 8,
+    textAlign: "center",
+  },
+  retryButton: {
+    minHeight: 48,
+    width: "100%",
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 22,
+  },
+  retryButtonText: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  secondaryButton: {
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 6,
+    paddingHorizontal: 18,
+  },
+  secondaryButtonText: { fontSize: 14, fontWeight: "600" },
   backButton: {
     position: "absolute",
     top: 12,

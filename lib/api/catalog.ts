@@ -290,10 +290,28 @@ export async function getShopData(
   }
 }
 
-export async function getProduct(id: number): Promise<WCProduct> {
-  return normalizeProduct(
-    await mobileV2Fetch<any>(`public/products/${id}`, { requireAuth: false }),
+export async function getProduct(
+  id: number,
+  options: CatalogRequestOptions = {},
+): Promise<WCProduct> {
+  const cacheKey = `product-${id}`;
+  const cache = await readCatalogCache<WCProduct>(
+    cacheKey,
+    CACHE_DURATIONS.PRODUCTS,
+    Boolean(options.forceRefresh),
   );
+  if (cache.fresh) return cache.fresh;
+
+  try {
+    const product = normalizeProduct(
+      await mobileV2Fetch<any>(`public/products/${id}`, { requireAuth: false }),
+    );
+    await setCache(cacheKey, product);
+    return product;
+  } catch (error) {
+    if (cache.fallback) return cache.fallback;
+    throw error;
+  }
 }
 
 export async function getTCEvent(id: number): Promise<TCEvent> {
