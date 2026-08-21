@@ -138,6 +138,12 @@ php -l /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins
 Builds déclenchés après QA staging :
 
 - Android staging, versionCode `50` :
-  `8cf508cd-ed78-474b-a45a-a1504e5a0a89`.
+  `8cf508cd-ed78-474b-a45a-a1504e5a0a89`, terminé.
+  - Artefact :
+    `https://expo.dev/artifacts/eas/ReSAeaP5Innet5bZ4jd1iAVG1pORHaOYlbKEOwQ0E8M.apk`.
 - iOS staging/TestFlight, buildNumber `36` :
-  `a98dc0be-5a49-4560-85bf-7f50ee71e6ed`.
+  `a98dc0be-5a49-4560-85bf-7f50ee71e6ed`, terminé.
+  - Artefact :
+    `https://expo.dev/artifacts/eas/9cG_m-NjRRx2-x7MlQZjUdW6xPwV68grrdJ9jM-HJPM.ipa`.
+  - Soumission TestFlight planifiée :
+    `2281d531-4dd7-4c0e-9a37-330412dda176`.
