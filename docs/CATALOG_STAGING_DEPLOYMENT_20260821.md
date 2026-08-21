@@ -70,3 +70,39 @@ Après rollback, retester `public/home-data`, `public/events-data`, `public/shop
   - Soumission TestFlight planifiée : `7aa7257e-e1de-4406-a3af-c8105dcf0612`.
 
 Les deux builds ont été lancés depuis `e4d32af` et pointent vers `https://staging.ticketbylamako.com`.
+
+## Extension profil mobile v2 - 21 août 2026
+
+Le même fichier PHP a été redéployé sur staging uniquement après l'ajout des
+routes authentifiées `GET/POST /lamako-mobile/v2/profile`.
+
+- Commit source : `cb518dc`.
+- Validation locale PHP 8.4 : aucune erreur de syntaxe.
+- Backup serveur avant remplacement :
+  `/home/master/tbl-compliance-backups/wvvtwdcenn-20260821T114634Z-pre-mobile-profile-v2/v2-commerce.php`.
+- SHA-256 du backup :
+  `e6e6c7bcd2e196274b22a5ca331a7c9a3d1e4519d0698ba55f5f49802fdae5f2`.
+- SHA-256 déployé :
+  `56240abcf554735d5b00533d312085487204ad51684f73e29b3918492d4f2867`.
+- `php -l` distant : OK avant et après remplacement.
+- Endpoints catalogue : HTTP 200 pour home, événements, boutique, événement
+  standard `13842` et événement seating `12673`.
+- Profil sans JWT : HTTP 401.
+- Profil avec utilisateur authentifié simulé par WP-CLI : HTTP 200, e-mail et
+  bloc billing présents. Aucune donnée utilisateur n'a été modifiée.
+- `debug.log` staging : absent au moment du contrôle; aucune erreur fatale
+  détectée.
+
+Deux warnings WP-CLI préexistants restent visibles hors réponse REST : chargement
+de traduction Eventchamp trop tôt et dépréciation PHP 8.4 dans WP Mail SMTP Pro.
+Ils ne sont pas causés par le fichier déployé.
+
+Rollback staging :
+
+```bash
+cp -p /home/master/tbl-compliance-backups/wvvtwdcenn-20260821T114634Z-pre-mobile-profile-v2/v2-commerce.php /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
+php -l /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
+```
+
+Après rollback, retester les cinq endpoints catalogue ci-dessus et vérifier que
+`GET /lamako-mobile/v2/profile` redevient indisponible comme avant ce déploiement.
