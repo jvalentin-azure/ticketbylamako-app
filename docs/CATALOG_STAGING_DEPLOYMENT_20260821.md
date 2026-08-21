@@ -213,3 +213,37 @@ Rollback applicatif : revenir au commit précédant la fonctionnalité de cache
 hors ligne. Les anciennes installations ne contiennent aucune donnée sous les
 clés `tbl.ticket.detail.v1.*`; une déconnexion depuis la version corrigée purge
 les entrées créées.
+
+Builds QA incluant le cache hors ligne :
+
+- Android staging, versionCode `51` :
+  `3ac651b7-dcef-4438-857e-2318ee64b74f`, terminé.
+- iOS staging/TestFlight, buildNumber `37` :
+  `8563dcbb-754a-4829-b356-f3db2f28428e`, terminé.
+- Soumission TestFlight planifiée :
+  `a559b4f8-4a22-4399-b235-991aaeafa07b`.
+
+## Navigation des notifications - 21 août 2026
+
+La navigation depuis une notification système ou la boîte Notifications est
+désormais centralisée et compatible avec les deux contrats historiques :
+`eventId` / `orderId` côté application et `event_id` / `order_id` côté PHP.
+
+- Les notifications événement ouvrent l'événement concerné.
+- Les notifications commande et billet sont privées. Si la session a expiré,
+  le login conserve la destination puis ramène vers la commande ou le billet.
+- L'ouverture à froid attend que l'onboarding, l'authentification et le routeur
+  soient prêts avant de naviguer.
+- La dernière réponse Expo est consommée après traitement afin d'éviter une
+  réouverture répétée au prochain démarrage.
+- Seules les routes locales événement, commande, billet et liste de commandes
+  sont autorisées. Les URLs externes et identifiants mal formés sont rejetés.
+- Validation : TypeScript, lint, contrôle des secrets, format et suite Vitest
+  complète réussis (`185` tests réussis, `4` ignorés).
+
+Aucun fichier PHP n'a été modifié ou redéployé. Aucun build EAS supplémentaire
+n'a été lancé pour cette brique afin de la regrouper avec le prochain candidat
+QA.
+
+Rollback applicatif : revenir au commit précédant la centralisation de la
+navigation des notifications. Le contrat PHP existant reste inchangé.

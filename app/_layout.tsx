@@ -1,6 +1,6 @@
 import "@/global.css";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack, router as expoRouter } from "expo-router";
+import { Stack, useRootNavigationState, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -8,7 +8,7 @@ import "react-native-reanimated";
 import { Platform } from "react-native";
 import "@/lib/_core/nativewind-pressable";
 import { ThemeProvider } from "@/lib/theme-provider";
-import { AuthProvider } from "@/lib/auth-provider";
+import { AuthProvider, useAuth } from "@/lib/auth-provider";
 import { CartProvider } from "@/lib/cart-provider";
 import { RewardsProvider } from "@/lib/rewards-provider";
 import { FavoritesProvider } from "@/lib/favorites-provider";
@@ -36,6 +36,11 @@ import {
   setupAndroidChannel,
 } from "@/lib/notifications";
 import { NotificationsProvider } from "@/lib/notifications-provider";
+import {
+  notificationDestinationForAuth,
+  notificationTargetFromData,
+  type NotificationTarget,
+} from "@/lib/notification-navigation";
 import * as Notifications from "expo-notifications";
 
 // Set up notification handler at module level (before any component renders)
@@ -57,8 +62,70 @@ export const unstable_settings = {
   anchor: "(tabs)",
 };
 
+function NotificationNavigationHandler() {
+  const router = useRouter();
+  const rootNavigationState = useRootNavigationState();
+  const { isAuthenticated, isLoading } = useAuth();
+  const handledNotificationIds = useRef(new Set<string>());
+  const [pendingTarget, setPendingTarget] = useState<NotificationTarget | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+
+    const queueNotification = (
+      response: Notifications.NotificationResponse,
+    ) => {
+      const identifier = response.notification.request.identifier;
+      if (handledNotificationIds.current.has(identifier)) return;
+      handledNotificationIds.current.add(identifier);
+
+      const target = notificationTargetFromData(
+        response.notification.request.content.data,
+      );
+      if (target) setPendingTarget(target);
+    };
+
+    void setupAndroidChannel().catch((error) => {
+      console.warn("Android channel setup failed:", error);
+    });
+    const subscription =
+      Notifications.addNotificationResponseReceivedListener(queueNotification);
+
+    void Notifications.getLastNotificationResponseAsync()
+      .then((response) => {
+        if (!response) return;
+        queueNotification(response);
+        return Notifications.clearLastNotificationResponseAsync();
+      })
+      .catch(() => undefined);
+
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    if (!pendingTarget || !rootNavigationState?.key || isLoading) return;
+
+    const destination = notificationDestinationForAuth(
+      pendingTarget,
+      isAuthenticated,
+    );
+
+    router.push(destination as any);
+    setPendingTarget(null);
+  }, [
+    isAuthenticated,
+    isLoading,
+    pendingTarget,
+    rootNavigationState?.key,
+    router,
+  ]);
+
+  return null;
+}
+
 export default function RootLayout() {
-  const handledNotificationId = useRef<string | null>(null);
   const initialInsets = initialWindowMetrics?.insets ?? DEFAULT_WEB_INSETS;
   const initialFrame = initialWindowMetrics?.frame ?? DEFAULT_WEB_FRAME;
 
@@ -74,38 +141,6 @@ export default function RootLayout() {
   // Initialize Manus runtime for cookie injection from parent container
   useEffect(() => {
     initManusRuntime();
-  }, []);
-
-  // Set up push notifications
-  useEffect(() => {
-    if (Platform.OS === "web") return;
-    const openNotification = (response: Notifications.NotificationResponse) => {
-      const identifier = response.notification.request.identifier;
-      if (handledNotificationId.current === identifier) return;
-      handledNotificationId.current = identifier;
-      const data = response.notification.request.content.data;
-      if (data?.type === "event_reminder" && data?.eventId) {
-        expoRouter.push(`/event/${data.eventId}` as any);
-      } else if (data?.type === "order_update" && data?.orderId) {
-        expoRouter.push(`/order/${data.orderId}` as any);
-      } else if (data?.type === "new_event" && data?.eventId) {
-        expoRouter.push(`/event/${data.eventId}` as any);
-      }
-    };
-    void setupAndroidChannel().catch((error) => {
-      console.warn("Android channel setup failed:", error);
-    });
-    const responseListener =
-      Notifications.addNotificationResponseReceivedListener(openNotification);
-    void Notifications.getLastNotificationResponseAsync()
-      .then((response) => {
-        if (response) setTimeout(() => openNotification(response), 0);
-      })
-      .catch(() => undefined);
-
-    return () => {
-      responseListener.remove();
-    };
   }, []);
 
   // Onboarding is a first-use experience, independent from authentication.
@@ -213,6 +248,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <trpc.Provider client={trpcClient} queryClient={queryClient}>
         <QueryClientProvider client={queryClient}>
+          <NotificationNavigationHandler />
           {/* Default to hiding native headers so raw route segments don't appear (e.g. "(tabs)", "products/[id]"). */}
           {/* If a screen needs the native header, explicitly enable it and set a human title via Stack.Screen options. */}
           {/* in order for ios apps tab switching to work properly, use presentation: "fullScreenModal" for login page, whenever you decide to use presentation: "modal*/}

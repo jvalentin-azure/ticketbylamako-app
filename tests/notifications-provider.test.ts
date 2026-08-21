@@ -10,6 +10,10 @@ import {
   notificationSectionLabel,
   notificationStorageKey,
 } from "../lib/notification-store";
+import {
+  notificationDestinationForAuth,
+  notificationTargetFromData,
+} from "../lib/notification-navigation";
 
 const validNotification = {
   id: "notification-1",
@@ -122,5 +126,79 @@ describe("notification account security", () => {
     expect(backend).toContain("lamako_mobile_v2_unregister_push_token");
     expect(backend).toContain("WP_REST_Server::DELETABLE");
     expect(backend).toContain("get_current_user_id()");
+  });
+});
+
+describe("notification navigation", () => {
+  it("supports server snake_case and app camelCase event payloads", () => {
+    expect(
+      notificationTargetFromData({ type: "new_event", event_id: 12673 }),
+    ).toEqual({
+      href: "/event/12673",
+      actionLabel: "Voir l'événement",
+      requiresAuth: false,
+    });
+    expect(
+      notificationTargetFromData({ type: "event_reminder", eventId: "12673" }),
+    ).toEqual({
+      href: "/event/12673",
+      actionLabel: "Voir l'événement",
+      requiresAuth: false,
+    });
+  });
+
+  it("routes private order and ticket notifications", () => {
+    expect(
+      notificationTargetFromData({ type: "order_update", order_id: "13749" }),
+    ).toEqual({
+      href: "/order/13749",
+      actionLabel: "Voir la commande",
+      requiresAuth: true,
+    });
+    expect(
+      notificationTargetFromData({ type: "ticket_ready", orderId: 13749 }),
+    ).toEqual({
+      href: "/ticket/13749",
+      actionLabel: "Voir le billet",
+      requiresAuth: true,
+    });
+  });
+
+  it("accepts only allowlisted local fallback URLs", () => {
+    expect(notificationTargetFromData({ url: "/orders" })?.href).toBe(
+      "/orders",
+    );
+    expect(notificationTargetFromData({ url: "/event/42" })?.href).toBe(
+      "/event/42",
+    );
+    expect(
+      notificationTargetFromData({ url: "https://example.com" }),
+    ).toBeNull();
+    expect(notificationTargetFromData({ url: "/checkout" })).toBeNull();
+  });
+
+  it("rejects malformed and unsafe identifiers", () => {
+    expect(
+      notificationTargetFromData({
+        type: "order_update",
+        order_id: "1/../../2",
+      }),
+    ).toBeNull();
+    expect(
+      notificationTargetFromData({ type: "new_event", event_id: -1 }),
+    ).toBeNull();
+    expect(notificationTargetFromData(null)).toBeNull();
+  });
+
+  it("preserves private destinations through login", () => {
+    const target = notificationTargetFromData({
+      type: "order_update",
+      order_id: 13749,
+    });
+    expect(target).not.toBeNull();
+    expect(notificationDestinationForAuth(target!, false)).toBe(
+      "/(auth)/login?returnTo=%2Forder%2F13749",
+    );
+    expect(notificationDestinationForAuth(target!, true)).toBe("/order/13749");
   });
 });
