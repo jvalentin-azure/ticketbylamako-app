@@ -5,6 +5,8 @@ import { Image } from "expo-image";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 
+const CATALOG_IMAGE_PLACEHOLDER = "|rF?hV%2WCj[ayj[a|j[azj[ayj[";
+
 interface CatalogImageProps {
   uri?: string | null;
   style?: StyleProp<ViewStyle>;
@@ -37,7 +39,9 @@ export function CatalogImage({
           style={StyleSheet.absoluteFill}
           contentFit={contentFit}
           cachePolicy="memory-disk"
-          transition={180}
+          placeholder={CATALOG_IMAGE_PLACEHOLDER}
+          placeholderContentFit={contentFit}
+          transition={{ duration: 160, effect: "cross-dissolve" }}
           recyclingKey={recyclingKey || uri}
           onError={() => setFailed(true)}
           accessibilityIgnoresInvertColors
