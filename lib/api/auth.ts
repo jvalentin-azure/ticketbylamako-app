@@ -1,6 +1,7 @@
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { parseStoredUser } from "@/lib/auth-user";
 
 const SITE_URL = process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
 const TOKEN_KEY = "jwt_token";
@@ -173,7 +174,12 @@ export async function getStoredUser(): Promise<User | null> {
   try {
     const data = await secureGet(USER_KEY);
     if (!data) return null;
-    return JSON.parse(data);
+    const user = parseStoredUser(data);
+    if (!user) {
+      await secureDelete(USER_KEY).catch(() => undefined);
+      return null;
+    }
+    return user;
   } catch {
     return null;
   }
