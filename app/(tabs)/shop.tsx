@@ -1,11 +1,10 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Text,
   View,
   FlatList,
   TouchableOpacity,
   TextInput,
-  ActivityIndicator,
   RefreshControl,
   Dimensions,
   ScrollView,
@@ -24,6 +23,38 @@ import { PointsBadge } from "@/components/points-badge";
 const { width: SCREEN_W } = Dimensions.get("window");
 const CARD_W = (SCREEN_W - 48) / 2;
 
+function ShopSkeleton({ colors }: { colors: any }) {
+  return (
+    <View style={styles.skeletonGrid}>
+      {[0, 1, 2, 3].map((item) => (
+        <View
+          key={item}
+          style={[
+            styles.skeletonCard,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
+        >
+          <View
+            style={[styles.skeletonImage, { backgroundColor: colors.border }]}
+          />
+          <View style={styles.skeletonBody}>
+            <View
+              style={[styles.skeletonLine, { backgroundColor: colors.border }]}
+            />
+            <View
+              style={[
+                styles.skeletonLine,
+                styles.skeletonLineShort,
+                { backgroundColor: colors.border },
+              ]}
+            />
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 export default function ShopScreen() {
   const colors = useColors();
   const router = useRouter();
@@ -35,13 +66,20 @@ export default function ShopScreen() {
   const [filtered, setFiltered] = useState<WCProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const [search, setSearch] = useState("");
   const [selectedCat, setSelectedCat] = useState<number | null>(null);
+  const requestId = useRef(0);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (forceRefresh = false) => {
+    const activeRequest = ++requestId.current;
+    setErrorMessage("");
     try {
       // Single optimized endpoint - ~3x faster than separate WC API calls
-      const { products: p, categories: cats } = await getShopData();
+      const { products: p, categories: cats } = await getShopData({
+        forceRefresh,
+      });
+      if (requestId.current !== activeRequest) return;
       setProducts(p);
       // Build shop category chips from API data with colors
       const SHOP_CAT_COLORS: Record<string, string> = {
@@ -60,16 +98,24 @@ export default function ShopScreen() {
         }));
       setShopCats(boutiqueCats);
       setFiltered(p);
-    } catch (e) {
-      console.warn("Shop load error:", e);
+    } catch {
+      if (requestId.current !== activeRequest) return;
+      setErrorMessage(
+        "Impossible de charger la boutique. Vérifiez votre connexion.",
+      );
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (requestId.current === activeRequest) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    load();
+    void load();
+    return () => {
+      requestId.current += 1;
+    };
   }, [load]);
 
   useEffect(() => {
@@ -229,8 +275,28 @@ export default function ShopScreen() {
       </ScrollView>
 
       {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
+        <ShopSkeleton colors={colors} />
+      ) : errorMessage && products.length === 0 ? (
+        <View style={styles.errorContainer}>
+          <IconSymbol
+            name="exclamationmark.triangle.fill"
+            size={36}
+            color={colors.primary}
+          />
+          <Text style={[styles.errorTitle, { color: colors.foreground }]}>
+            Boutique indisponible
+          </Text>
+          <Text style={[styles.errorText, { color: colors.muted }]}>
+            {errorMessage}
+          </Text>
+          <TouchableOpacity
+            onPress={() => void load(true)}
+            style={[styles.retryButton, { backgroundColor: colors.primary }]}
+            accessibilityRole="button"
+            accessibilityLabel="Réessayer le chargement de la boutique"
+          >
+            <Text style={styles.retryButtonText}>Réessayer</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <FlatList
@@ -245,7 +311,7 @@ export default function ShopScreen() {
               refreshing={refreshing}
               onRefresh={() => {
                 setRefreshing(true);
-                load();
+                void load(true);
               }}
               tintColor={colors.primary}
             />
@@ -254,10 +320,14 @@ export default function ShopScreen() {
             <View style={styles.emptyContainer}>
               <IconSymbol name="bag.fill" size={48} color={colors.muted} />
               <Text style={[styles.emptyText, { color: colors.muted }]}>
-                Aucun produit trouvé
+                {search.trim() || selectedCat
+                  ? "Aucun résultat"
+                  : "Aucun produit disponible"}
               </Text>
               <Text style={[styles.emptySubText, { color: colors.muted }]}>
-                La boutique sera bientôt disponible
+                {search.trim() || selectedCat
+                  ? "Essayez une autre recherche ou catégorie."
+                  : "Revenez prochainement pour découvrir la boutique."}
               </Text>
             </View>
           }
@@ -303,7 +373,52 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   chipText: { fontSize: 13, fontWeight: "600", lineHeight: 16 },
-  loadingContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
+  skeletonGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    gap: 12,
+  },
+  skeletonCard: {
+    width: CARD_W,
+    borderRadius: 8,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  skeletonImage: { width: CARD_W, height: CARD_W },
+  skeletonBody: { padding: 10, gap: 8 },
+  skeletonLine: { height: 12, borderRadius: 5, width: "88%" },
+  skeletonLineShort: { width: "54%" },
+  errorContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 28,
+    paddingBottom: 72,
+  },
+  errorTitle: {
+    fontSize: 19,
+    fontWeight: "700",
+    marginTop: 14,
+    textAlign: "center",
+  },
+  errorText: {
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 7,
+    textAlign: "center",
+  },
+  retryButton: {
+    minHeight: 48,
+    minWidth: 180,
+    borderRadius: 8,
+    marginTop: 20,
+    paddingHorizontal: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  retryButtonText: { color: "#fff", fontSize: 15, fontWeight: "700" },
   columnWrapper: { paddingHorizontal: 16, gap: 12 },
   productListContent: { paddingTop: 4, paddingBottom: 24 },
   productCard: {
