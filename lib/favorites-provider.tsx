@@ -1,15 +1,14 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, type ReactNode } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  normalizeStoredFavorites,
+  parseStoredFavorites,
+  type FavoriteItem,
+} from "./favorite-store";
 
 const STORAGE_KEY = "tbl_favorites";
 
-export interface FavoriteItem {
-  id: number;
-  type: "event" | "product";
-  name: string;
-  image?: string;
-  addedAt: string;
-}
+export type { FavoriteItem } from "./favorite-store";
 
 interface FavoritesContextType {
   favorites: FavoriteItem[];
@@ -40,21 +39,28 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
 
   // Load from AsyncStorage on mount
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY).then(data => {
-      if (data) {
-        try {
-          setFavorites(JSON.parse(data));
-        } catch {
-          // Invalid data, reset
-          setFavorites([]);
+    let mounted = true;
+    void AsyncStorage.getItem(STORAGE_KEY)
+      .then((data) => {
+        if (!mounted || !data) return;
+        const stored = parseStoredFavorites(data);
+        if (stored.length === 0) {
+          void AsyncStorage.removeItem(STORAGE_KEY).catch(() => undefined);
+          return;
         }
-      }
-    });
+        setFavorites((current) => normalizeStoredFavorites([...current, ...stored]));
+      })
+      .catch(() => undefined);
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   // Persist to AsyncStorage whenever favorites change
   const persist = useCallback((items: FavoriteItem[]) => {
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    void AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(items)).catch(
+      () => undefined,
+    );
   }, []);
 
   const isFavorite = useCallback((id: number, type: "event" | "product") => {
@@ -83,8 +89,14 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
     });
   }, [persist]);
 
-  const favoriteEvents = favorites.filter(f => f.type === "event");
-  const favoriteProducts = favorites.filter(f => f.type === "product");
+  const favoriteEvents = useMemo(
+    () => favorites.filter((favorite) => favorite.type === "event"),
+    [favorites],
+  );
+  const favoriteProducts = useMemo(
+    () => favorites.filter((favorite) => favorite.type === "product"),
+    [favorites],
+  );
 
   return (
     <FavoritesContext.Provider value={{
