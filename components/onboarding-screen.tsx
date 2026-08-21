@@ -36,18 +36,17 @@ const SLIDES: OnboardingSlide[] = [
   {
     id: "1",
     image: require("@/assets/images/onboarding-1.jpg"),
-    title: "Madagascar se vit ",
-    titleAccent: "ici.",
-    description:
-      "Découvrez les événements, réservez et retrouvez vos billets en quelques secondes.",
+    title: "Prenez place. ",
+    titleAccent: "Vivez grand.",
+    description: "Découvrez ce qui fait vibrer Madagascar.",
   },
   {
     id: "2",
     image: require("@/assets/images/onboarding-2.jpg"),
-    title: "Vos billets, ",
-    titleAccent: "toujours avec vous.",
+    title: "Votre prochain souvenir ",
+    titleAccent: "commence ici.",
     description:
-      "Paiement sécurisé, QR code et avantages LamakoRewards réunis dans votre poche.",
+      "Réservez, payez et entrez avec votre billet toujours dans votre poche.",
   },
 ];
 

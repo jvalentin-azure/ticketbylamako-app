@@ -40,6 +40,9 @@ describe("startup and onboarding experience", () => {
     expect(splash).not.toContain("WelcomeScreen");
     expect(slideMatches).toHaveLength(2);
     expect(onboarding).toContain("useReducedMotion");
+    expect(onboarding).toContain("Prenez place.");
+    expect(onboarding).toContain("Vivez grand.");
+    expect(onboarding).toContain("Votre prochain souvenir");
     expect(onboarding).toContain("Découvrir");
     expect(onboarding).toContain("Se connecter");
   });

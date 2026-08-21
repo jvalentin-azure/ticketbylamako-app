@@ -55,9 +55,9 @@ describe("Onboarding Flow", () => {
     const content = fs.readFileSync(onboardingPath, "utf-8");
 
     // Verify French content
-    expect(content).toContain("Madagascar se vit");
-    expect(content).toContain("toujours avec vous");
-    expect(content).toContain("LamakoRewards");
+    expect(content).toContain("Prenez place.");
+    expect(content).toContain("Vivez grand.");
+    expect(content).toContain("Votre prochain souvenir");
     // Buttons
     expect(content).toContain("Passer");
     expect(content).toContain("Suivant");
