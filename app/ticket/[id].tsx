@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import {
   ScrollView,
   Text,
@@ -13,7 +13,11 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { getMobileOrder, getMobileOrderTickets } from "@/lib/api/mobile";
+import {
+  getMobileOrder,
+  getMobileOrderTickets,
+  MobileApiError,
+} from "@/lib/api/mobile";
 import {
   mobileOrderToWCOrder,
   mobileTicketToTicketInstance,
@@ -26,6 +30,7 @@ const { width: SCREEN_W } = Dimensions.get("window");
 
 const statusMap: Record<string, { label: string; color: string }> = {
   completed: { label: "Validé", color: "#22C55E" },
+  "cs-complete": { label: "Validé", color: "#22C55E" },
   processing: { label: "Actif", color: "#F59E0B" },
   "on-hold": { label: "En attente", color: "#6366F1" },
   pending: { label: "En attente", color: "#6366F1" },
@@ -57,7 +62,7 @@ function TicketCard({
     label: order.status,
     color: colors.muted,
   };
-  const isValid = order.status === "completed" || order.status === "processing";
+  const isValid = ticketVisibleStatuses.has(order.status);
   const qrValue = ticket.ticket_code;
 
   const handleShare = async () => {
@@ -253,34 +258,61 @@ export default function TicketDetailScreen() {
   const [order, setOrder] = useState<WCOrder | null>(null);
   const [tickets, setTickets] = useState<TicketInstance[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
+  const requestId = useRef(0);
 
-  useEffect(() => {
-    if (!id) return;
-
-    async function loadData() {
-      try {
-        const orderData = mobileOrderToWCOrder(
-          await getMobileOrder(Number(id)),
-        );
-        setOrder(orderData);
-
-        if (ticketVisibleStatuses.has(orderData.status)) {
-          const apiTickets = await getMobileOrderTickets(Number(id));
-          if (apiTickets && apiTickets.tickets.length > 0) {
-            setTickets(apiTickets.tickets.map(mobileTicketToTicketInstance));
-          }
-        }
-      } catch {
-        // Minimal fallback
-      } finally {
-        setLoading(false);
-      }
+  const loadData = useCallback(async () => {
+    const orderId = Number(id);
+    if (!Number.isFinite(orderId) || orderId <= 0) {
+      setLoading(false);
+      setErrorMessage("Cette référence de billet est invalide.");
+      return;
     }
 
-    loadData();
+    const activeRequest = ++requestId.current;
+    setLoading(true);
+    setErrorMessage(null);
+
+    try {
+      const [orderResponse, ticketsResponse] = await Promise.all([
+        getMobileOrder(orderId),
+        getMobileOrderTickets(orderId),
+      ]);
+      if (requestId.current !== activeRequest) return;
+
+      const orderData = mobileOrderToWCOrder(orderResponse);
+      setOrder(orderData);
+      setTickets(
+        ticketVisibleStatuses.has(orderData.status)
+          ? ticketsResponse.tickets.map(mobileTicketToTicketInstance)
+          : [],
+      );
+    } catch (error) {
+      if (requestId.current !== activeRequest) return;
+      if (error instanceof MobileApiError && error.status === 401) {
+        setErrorMessage(
+          "Votre session a expiré. Reconnectez-vous pour afficher ce billet.",
+        );
+      } else if (error instanceof MobileApiError && error.status === 403) {
+        setErrorMessage("Ce billet n'est pas associé à votre compte.");
+      } else {
+        setErrorMessage(
+          "Impossible de charger ce billet. Vérifiez votre connexion puis réessayez.",
+        );
+      }
+    } finally {
+      if (requestId.current === activeRequest) setLoading(false);
+    }
   }, [id]);
+
+  useEffect(() => {
+    void loadData();
+    return () => {
+      requestId.current += 1;
+    };
+  }, [loadData]);
 
   // If a specific ticket code was requested, scroll to it
   useEffect(() => {
@@ -300,27 +332,70 @@ export default function TicketDetailScreen() {
 
   if (loading) {
     return (
-      <ScreenContainer className="flex-1 items-center justify-center">
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={{ color: colors.muted, marginTop: 12 }}>
-          Chargement des billets...
-        </Text>
+      <ScreenContainer>
+        <View style={[styles.header, { borderBottomColor: colors.border }]}>
+          <View style={styles.backBtn} />
+          <View
+            style={[styles.headerSkeleton, { backgroundColor: colors.border }]}
+          />
+          <View style={{ width: 40 }} />
+        </View>
+        <View
+          accessibilityLabel="Chargement du billet"
+          style={styles.detailSkeleton}
+        >
+          <View
+            style={[styles.heroSkeleton, { backgroundColor: colors.border }]}
+          />
+          <View style={[styles.qrSkeleton, { borderColor: colors.border }]}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+          <View
+            style={[styles.lineSkeleton, { backgroundColor: colors.border }]}
+          />
+          <View
+            style={[
+              styles.lineSkeletonShort,
+              { backgroundColor: colors.border },
+            ]}
+          />
+        </View>
       </ScreenContainer>
     );
   }
 
-  if (!order) {
+  if (errorMessage || !order) {
     return (
       <ScreenContainer className="flex-1 items-center justify-center">
-        <IconSymbol name="ticket.fill" size={48} color={colors.muted} />
-        <Text style={{ color: colors.muted, fontSize: 16, marginTop: 12 }}>
-          Commande introuvable
+        <View
+          style={[styles.errorIcon, { backgroundColor: colors.warning + "14" }]}
+        >
+          <IconSymbol
+            name="exclamationmark.triangle.fill"
+            size={34}
+            color={colors.warning}
+          />
+        </View>
+        <Text style={[styles.errorTitle, { color: colors.foreground }]}>
+          Billet indisponible
+        </Text>
+        <Text style={[styles.errorCopy, { color: colors.muted }]}>
+          {errorMessage || "Commande introuvable"}
         </Text>
         <TouchableOpacity
-          onPress={() => router.back()}
-          style={{ marginTop: 16 }}
+          accessibilityRole="button"
+          onPress={loadData}
+          style={[styles.retryButton, { backgroundColor: colors.primary }]}
         >
-          <Text style={{ color: colors.primary }}>Retour</Text>
+          <IconSymbol name="arrow.clockwise" size={18} color="#fff" />
+          <Text style={styles.retryText}>Réessayer</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          accessibilityRole="button"
+          onPress={() => router.back()}
+          style={styles.backLink}
+        >
+          <Text style={{ color: colors.primary }}>Retour à mes billets</Text>
         </TouchableOpacity>
       </ScreenContainer>
     );
@@ -468,6 +543,64 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   headerTitle: { fontSize: 18, fontWeight: "700" },
+  headerSkeleton: { width: 112, height: 16, borderRadius: 4, opacity: 0.55 },
+  detailSkeleton: {
+    margin: 16,
+    padding: 18,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  heroSkeleton: { width: "100%", height: 72, borderRadius: 8, opacity: 0.5 },
+  qrSkeleton: {
+    width: 204,
+    height: 204,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 28,
+  },
+  lineSkeleton: {
+    width: "68%",
+    height: 13,
+    borderRadius: 4,
+    marginTop: 26,
+    opacity: 0.5,
+  },
+  lineSkeletonShort: {
+    width: "42%",
+    height: 10,
+    borderRadius: 4,
+    marginTop: 12,
+    opacity: 0.4,
+  },
+  errorIcon: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  errorTitle: { fontSize: 18, fontWeight: "700", marginTop: 16 },
+  errorCopy: {
+    maxWidth: 320,
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: "center",
+    marginTop: 7,
+    paddingHorizontal: 24,
+  },
+  retryButton: {
+    minHeight: 44,
+    borderRadius: 8,
+    paddingHorizontal: 18,
+    marginTop: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  retryText: { color: "#fff", fontSize: 14, fontWeight: "700" },
+  backLink: { minHeight: 44, justifyContent: "center", marginTop: 4 },
   dotsRow: {
     flexDirection: "row",
     justifyContent: "center",
