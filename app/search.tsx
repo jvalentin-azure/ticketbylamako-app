@@ -8,8 +8,8 @@ import {
   StyleSheet,
   Platform,
 } from "react-native";
-import { Image } from "expo-image";
 import { useRouter } from "expo-router";
+import { CatalogImage } from "@/components/catalog-image";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -107,7 +107,9 @@ export default function SearchScreen() {
             type: "event" as const,
             title: decodeHtmlEntities(e.title.rendered),
             image: e.featuredImage,
-            subtitle: e.categoryNames?.join(", ") || formatDateShort(e.date),
+            subtitle:
+              e.categoryNames?.join(", ") ||
+              formatDateShort(e.mobileFields?.event_date_time || e.date),
             lamakoRewardsEnabled: e.lamakoRewardsEnabled !== false,
             price: e.minPrice ? `Dès ${formatAriary(e.minPrice)}` : undefined,
           }))
@@ -158,12 +160,10 @@ export default function SearchScreen() {
       ]}
     >
       {item.image ? (
-        <Image
-          source={{ uri: item.image }}
+        <CatalogImage
+          uri={item.image}
           style={styles.cardImage}
-          contentFit="cover"
-          cachePolicy="memory-disk"
-          transition={180}
+          accessibilityLabel={`Affiche de ${item.title}`}
           recyclingKey={`search-${item.type}-${item.id}`}
         />
       ) : (

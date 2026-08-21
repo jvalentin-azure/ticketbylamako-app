@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Text, View, FlatList, TouchableOpacity, StyleSheet } from "react-native";
-import { Image } from "expo-image";
 import { useRouter } from "expo-router";
+import { CatalogImage } from "@/components/catalog-image";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -30,7 +30,12 @@ export default function FavoritesScreen() {
       }}
       style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
     >
-      <Image source={{ uri: item.image }} style={styles.cardImage} contentFit="cover" />
+      <CatalogImage
+        uri={item.image}
+        style={styles.cardImage}
+        accessibilityLabel={`${item.type === "event" ? "Affiche" : "Image"} de ${item.name}`}
+        recyclingKey={`favorite-${item.type}-${item.id}`}
+      />
       <View style={styles.cardBody}>
         <View style={styles.cardHeader}>
           <View style={[styles.typeBadge, { backgroundColor: item.type === "event" ? colors.primary + "20" : "#c79f6c20" }]}>

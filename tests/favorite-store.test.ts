@@ -1,5 +1,12 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { normalizeStoredFavorites, parseStoredFavorites } from "../lib/favorite-store";
+
+const favoritesScreenSource = fs.readFileSync(
+  path.resolve(__dirname, "..", "app", "favorites.tsx"),
+  "utf8",
+);
 
 const favorite = {
   id: 12,
@@ -27,5 +34,11 @@ describe("favorite storage", () => {
         { ...favorite, id: 0 },
       ]),
     ).toEqual([favorite]);
+  });
+
+  it("renders saved catalog images with the shared resilient component", () => {
+    expect(favoritesScreenSource).toContain('import { CatalogImage }');
+    expect(favoritesScreenSource).toContain("<CatalogImage");
+    expect(favoritesScreenSource).not.toContain('from "expo-image"');
   });
 });

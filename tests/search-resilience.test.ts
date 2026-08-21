@@ -24,4 +24,11 @@ describe("search resilience", () => {
     expect(source).toContain("dataRequestId.current !== activeRequest");
     expect(source).toContain("Recherche indisponible");
   });
+
+  it("uses resilient catalog images and the business event date", () => {
+    expect(source).toContain('import { CatalogImage }');
+    expect(source).toContain("<CatalogImage");
+    expect(source).not.toContain('from "expo-image"');
+    expect(source).toContain("e.mobileFields?.event_date_time || e.date");
+  });
 });
