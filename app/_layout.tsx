@@ -34,7 +34,6 @@ import { RewardsPopup } from "@/components/rewards-popup";
 import {
   setupNotificationHandler,
   setupAndroidChannel,
-  registerPushTokenWithBackend,
 } from "@/lib/notifications";
 import { NotificationsProvider } from "@/lib/notifications-provider";
 import * as Notifications from "expo-notifications";
@@ -82,9 +81,6 @@ export default function RootLayout() {
     void setupAndroidChannel().catch((error) => {
       console.warn("Android channel setup failed:", error);
     });
-    // Restore an already-authorized device without prompting during startup.
-    void registerPushTokenWithBackend();
-
     const responseListener =
       Notifications.addNotificationResponseReceivedListener((response) => {
         const data = response.notification.request.content.data;

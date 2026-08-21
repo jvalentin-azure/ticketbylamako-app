@@ -14,7 +14,7 @@ const notifications = fs.readFileSync(
 describe("push permission flow", () => {
   it("does not request notification permission during app startup", () => {
     expect(rootLayout).not.toContain("registerForPushNotificationsAsync()");
-    expect(rootLayout).toContain("registerPushTokenWithBackend()");
+    expect(rootLayout).not.toContain("registerPushTokenWithBackend()");
   });
 
   it("keeps automatic backend sync non prompting by default", () => {
