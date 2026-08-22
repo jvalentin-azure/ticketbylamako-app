@@ -4801,8 +4801,13 @@ function lamako_mobile_v2_order_allows_ticket_display( WC_Order $order ) {
     return in_array( $order->get_status(), [ 'completed', 'processing', 'cs-complete' ], true );
 }
 
-function lamako_mobile_v2_order_summary( WC_Order $order, $include_items = false, $include_tickets = false ) {
-    $tickets = lamako_mobile_v2_order_allows_ticket_display( $order ) ? lamako_mobile_v2_get_tickets_for_order( $order ) : [];
+function lamako_mobile_v2_order_summary( WC_Order $order, $include_items = false, $include_tickets = false, $preloaded_tickets = null ) {
+    $tickets = [];
+    if ( lamako_mobile_v2_order_allows_ticket_display( $order ) ) {
+        $tickets = is_array( $preloaded_tickets )
+            ? $preloaded_tickets
+            : lamako_mobile_v2_get_tickets_for_order( $order );
+    }
     $payment_status = lamako_mobile_v2_normalize_payment_status( $order );
     $attempt_status = sanitize_key( $order->get_meta( '_lamako_v2_payment_attempt_status' ) );
     if ( ! $order->is_paid() && $attempt_status === 'failed' ) {
@@ -4935,8 +4940,12 @@ function lamako_mobile_v2_get_orders( WP_REST_Request $request ) {
 
     $include_tickets = rest_sanitize_boolean( $request->get_param( 'include_tickets' ) );
     $orders = wc_get_orders( $args );
-    $items  = array_map( function( $order ) use ( $include_tickets ) {
-        return lamako_mobile_v2_order_summary( $order, true, $include_tickets );
+    $ticket_map = $include_tickets ? lamako_mobile_v2_get_tickets_for_orders( $orders ) : [];
+    $items  = array_map( function( $order ) use ( $include_tickets, $ticket_map ) {
+        $preloaded_tickets = $include_tickets
+            ? ( $ticket_map[ $order->get_id() ] ?? [] )
+            : null;
+        return lamako_mobile_v2_order_summary( $order, true, $include_tickets, $preloaded_tickets );
     }, $orders );
 
     return rest_ensure_response( [
@@ -4956,6 +4965,135 @@ function lamako_mobile_v2_get_order( WP_REST_Request $request ) {
     }
 
     return rest_ensure_response( lamako_mobile_v2_order_summary( $order, true ) );
+}
+
+function lamako_mobile_v2_ticket_item_context( WC_Order $order, $item ) {
+    $product_id = $item->get_product_id();
+    $event_id = (int) get_post_meta( $product_id, '_event_name', true );
+    $event_date = $event_id ? lamako_mobile_v2_meta_first( $event_id, [ 'event_date_time', '_event_date_time', 'event_start_date', '_event_start_date' ], '' ) : '';
+    $event_end_date = $event_id ? lamako_mobile_v2_meta_first( $event_id, [ 'event_end_date_time', '_event_end_date_time', 'event_end_date', '_event_end_date' ], '' ) : '';
+    $event_location = $event_id ? ( get_post_meta( $event_id, 'event_location', true ) ?: get_post_meta( $event_id, '_event_location', true ) ) : '';
+    $quantity = max( 1, (int) $item->get_quantity() );
+
+    return [
+        'orderId'       => $order->get_id(),
+        'orderStatus'   => $order->get_status(),
+        'productId'     => (int) $product_id,
+        'productName'   => html_entity_decode( $item->get_name(), ENT_QUOTES, 'UTF-8' ),
+        'price'         => (float) $item->get_total() / $quantity,
+        'eventId'       => $event_id,
+        'eventName'     => $event_id ? get_the_title( $event_id ) : '',
+        'eventDate'     => is_scalar( $event_date ) ? (string) $event_date : '',
+        'eventEndDate'  => is_scalar( $event_end_date ) ? (string) $event_end_date : '',
+        'eventLocation' => is_scalar( $event_location ) ? html_entity_decode( (string) $event_location, ENT_QUOTES, 'UTF-8' ) : '',
+    ];
+}
+
+function lamako_mobile_v2_ticket_instance_data( array $context, $instance_id ) {
+    return array_merge( $context, [
+        'instanceId' => (int) $instance_id,
+        'ticketCode' => get_post_meta( $instance_id, 'ticket_code', true ),
+        'seatLabel'  => get_post_meta( $instance_id, 'seat_label', true ),
+        'seatId'     => get_post_meta( $instance_id, 'seat_id', true ),
+        'status'     => get_post_status( $instance_id ),
+    ] );
+}
+
+function lamako_mobile_v2_get_tickets_for_orders( array $orders ) {
+    $tickets_by_order = [];
+    $tickets_by_item = [];
+    $item_contexts = [];
+    $item_expected_counts = [];
+    $order_item_ids = [];
+
+    foreach ( $orders as $order ) {
+        if ( ! $order instanceof WC_Order ) {
+            continue;
+        }
+
+        $order_id = $order->get_id();
+        $tickets_by_order[ $order_id ] = [];
+        $order_item_ids[ $order_id ] = [];
+        if ( ! lamako_mobile_v2_order_allows_ticket_display( $order ) ) {
+            continue;
+        }
+
+        foreach ( $order->get_items() as $item_id => $item ) {
+            $product_id = $item->get_product_id();
+            if ( get_post_meta( $product_id, '_tc_is_ticket', true ) !== 'yes' ) {
+                continue;
+            }
+
+            $item_id = (int) $item_id;
+            $item_contexts[ $item_id ] = lamako_mobile_v2_ticket_item_context( $order, $item );
+            $tickets_by_item[ $item_id ] = [];
+            $item_expected_counts[ $item_id ] = max( 1, (int) $item->get_quantity() );
+            $order_item_ids[ $order_id ][] = $item_id;
+        }
+    }
+
+    $instance_counts = [];
+    if ( ! empty( $item_contexts ) ) {
+        $instance_ids = get_posts( [
+            'post_type'      => 'tc_tickets_instances',
+            'post_status'    => 'any',
+            'posts_per_page' => -1,
+            'fields'         => 'ids',
+            'no_found_rows'  => true,
+            'meta_query'     => [
+                [
+                    'key'     => 'item_id',
+                    'value'   => array_keys( $item_contexts ),
+                    'compare' => 'IN',
+                    'type'    => 'NUMERIC',
+                ],
+            ],
+        ] );
+
+        if ( ! empty( $instance_ids ) ) {
+            update_meta_cache( 'post', $instance_ids );
+        }
+
+        foreach ( $instance_ids as $instance_id ) {
+            $item_id = (int) get_post_meta( $instance_id, 'item_id', true );
+            if ( ! isset( $item_contexts[ $item_id ] ) ) {
+                continue;
+            }
+
+            $tickets_by_item[ $item_id ][] = lamako_mobile_v2_ticket_instance_data( $item_contexts[ $item_id ], $instance_id );
+            $instance_counts[ $item_id ] = ( $instance_counts[ $item_id ] ?? 0 ) + 1;
+        }
+    }
+
+    foreach ( $orders as $order ) {
+        if ( ! $order instanceof WC_Order || ! lamako_mobile_v2_order_allows_ticket_display( $order ) ) {
+            continue;
+        }
+
+        $order_id = $order->get_id();
+        $use_legacy_fallback = false;
+        foreach ( $order_item_ids[ $order_id ] ?? [] as $item_id ) {
+            if ( ( $instance_counts[ $item_id ] ?? 0 ) < $item_expected_counts[ $item_id ] ) {
+                // Preserve compatibility with legacy Tickera orders that only
+                // link instances through tc_orders and post_parent.
+                $tickets_by_order[ $order_id ] = lamako_mobile_v2_get_tickets_for_order( $order );
+                $use_legacy_fallback = true;
+                break;
+            }
+        }
+        if ( $use_legacy_fallback ) {
+            continue;
+        }
+
+        foreach ( $order_item_ids[ $order_id ] ?? [] as $item_id ) {
+            $tickets_by_order[ $order_id ] = array_merge(
+                $tickets_by_order[ $order_id ],
+                $tickets_by_item[ $item_id ] ?? []
+            );
+        }
+    }
+
+    return $tickets_by_order;
 }
 
 function lamako_mobile_v2_get_tickets_for_order( WC_Order $order ) {
@@ -5016,30 +5154,9 @@ function lamako_mobile_v2_get_tickets_for_order( WC_Order $order ) {
             }
         }
 
-        $event_id = (int) get_post_meta( $product_id, '_event_name', true );
-        $event_date = $event_id ? lamako_mobile_v2_meta_first( $event_id, [ 'event_date_time', '_event_date_time', 'event_start_date', '_event_start_date' ], '' ) : '';
-        $event_end_date = $event_id ? lamako_mobile_v2_meta_first( $event_id, [ 'event_end_date_time', '_event_end_date_time', 'event_end_date', '_event_end_date' ], '' ) : '';
-        $event_location = $event_id ? ( get_post_meta( $event_id, 'event_location', true ) ?: get_post_meta( $event_id, '_event_location', true ) ) : '';
-        $quantity = max( 1, (int) $item->get_quantity() );
-        $price = (float) $item->get_total() / $quantity;
+        $context = lamako_mobile_v2_ticket_item_context( $order, $item );
         foreach ( array_unique( $instance_ids ) as $instance_id ) {
-            $tickets[] = [
-                'instanceId'    => (int) $instance_id,
-                'ticketCode'    => get_post_meta( $instance_id, 'ticket_code', true ),
-                'productId'     => (int) $product_id,
-                'productName'   => html_entity_decode( $item->get_name(), ENT_QUOTES, 'UTF-8' ),
-                'price'         => $price,
-                'orderId'       => $order->get_id(),
-                'orderStatus'   => $order->get_status(),
-                'eventId'       => $event_id,
-                'eventName'     => $event_id ? get_the_title( $event_id ) : '',
-                'eventDate'     => is_scalar( $event_date ) ? (string) $event_date : '',
-                'eventEndDate'  => is_scalar( $event_end_date ) ? (string) $event_end_date : '',
-                'eventLocation' => is_scalar( $event_location ) ? html_entity_decode( (string) $event_location, ENT_QUOTES, 'UTF-8' ) : '',
-                'seatLabel'     => get_post_meta( $instance_id, 'seat_label', true ),
-                'seatId'        => get_post_meta( $instance_id, 'seat_id', true ),
-                'status'        => get_post_status( $instance_id ),
-            ];
+            $tickets[] = lamako_mobile_v2_ticket_instance_data( $context, $instance_id );
         }
     }
 

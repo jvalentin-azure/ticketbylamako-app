@@ -385,3 +385,63 @@ Rollback staging :
 cp -p /home/master/tbl-compliance-backups/wvvtwdcenn-20260821T201400Z-pre-catalog-image-sizing/includes/v2-commerce.php /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
 php -l /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
 ```
+
+## Regroupement des requêtes du wallet - 22 août 2026
+
+La route authentifiée `GET /lamako-mobile/v2/orders?include_tickets=1` charge
+désormais les instances Tickera des commandes visibles avec une requête
+groupée. Le rendu conserve l'ordre historique des lignes WooCommerce et le
+fallback `tc_orders` pour les anciennes commandes qui ne possèdent pas le lien
+direct `item_id`.
+
+Le déploiement a été fusionné depuis le fichier réellement actif sur staging,
+afin de préserver les changements seating et paiement présents sur le serveur
+mais issus d'un chantier parallèle. Aucun fichier de production n'a été
+modifié.
+
+Déploiement staging ciblé :
+
+- fichier actif avant la fonctionnalité :
+  `19c0dd956330717887d2e70c9d68bf6131abed0d584f29fda1efb5bbf391e426` ;
+- fichier actif final :
+  `15b1127000ba4a6cf156c913a85c24cc38de8b74bbf8048ef14f84afe4e9ee19` ;
+- backup complet avant la fonctionnalité :
+  `/home/master/tbl-compliance-backups/wallet-batch-20260822-070257/v2-commerce.php` ;
+- backup intermédiaire avant la correction de l'ordre des billets :
+  `/home/master/tbl-compliance-backups/wallet-order-20260822-071801/v2-commerce.php`.
+
+Benchmark WP-CLI en lecture seule, sur le même compte anonymisé, 20 commandes
+et 147 billets existants :
+
+- chemin historique à froid : environ `172 ms`, `317` requêtes observées ;
+- chemin groupé à froid : environ `65 ms`, `151` requêtes observées ;
+- exécution finale avec caches amorcés : `129 ms` pour le chemin historique et
+  `57 ms` pour le chemin groupé ; la recherche groupée des instances utilise
+  une seule requête ;
+- le nombre de commandes et de billets retournés est identique dans les deux
+  modes.
+
+QA après déploiement :
+
+- route orders sans JWT : HTTP 401 attendu ;
+- route orders avec JWT POS QA : HTTP 200, 4 commandes, contrat intact ;
+- `public/home-data`, `public/events-data`, `public/shop-data` : HTTP 200 ;
+- événement standard `13842` et événement seating `12673` : HTTP 200 ;
+- PHP 8.4 local et serveur : aucune erreur de syntaxe ;
+- TypeScript, ESLint et contrôle des secrets mobiles : OK ;
+- Vitest : 202 tests réussis, 4 ignorés ;
+- `git diff --check` : OK.
+
+Le `debug.log` contient des erreurs de syntaxe WP-CLI provoquées par une
+première tentative de benchmark mal échappée à `04:09 UTC`. Elles précèdent le
+déploiement final et ne proviennent pas d'une requête web ou du plugin actif.
+
+Rollback staging complet :
+
+```bash
+cp -p /home/master/tbl-compliance-backups/wallet-batch-20260822-070257/v2-commerce.php /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
+php -l /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
+```
+
+Après rollback, retester la route orders avec et sans JWT, les trois routes
+catalogue et les événements `13842` et `12673`.
