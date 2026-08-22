@@ -445,3 +445,26 @@ php -l /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins
 
 Après rollback, retester la route orders avec et sans JWT, les trois routes
 catalogue et les événements `13842` et `12673`.
+
+## Builds QA consolidés - 22 août 2026
+
+Les correctifs catalogue, wallet et notifications ont été regroupés dans un
+seul candidat QA par plateforme, construit depuis le commit
+`e44111c33d8f20251c318443a13af0f631afd6af`. Les deux builds pointent vers
+`https://staging.ticketbylamako.com`. Aucun déploiement de production n'a été
+effectué.
+
+- Android staging APK, versionCode `52` :
+  - build EAS : `19456a2c-a76c-40a8-8cad-708484c6a0c7` ;
+  - artefact :
+    `https://expo.dev/artifacts/eas/wCNqY6YrKYWKE4On8lx-7Fw3UPBlJ5BSZJ0BzOB57kM.apk` ;
+  - statut : terminé.
+- iOS staging/TestFlight, buildNumber `38` :
+  - build EAS : `bcd22973-8603-4ba3-87ea-c94126e9e6b7` ;
+  - statut build : terminé ;
+  - soumission TestFlight planifiée :
+    `ba8d5a29-0a52-4515-bc49-52aca706cec4`.
+
+QA physique requise avant toute promotion : authentification, catalogue et
+images, événement standard, seating chart, panier, coupons, quatre moyens de
+paiement, retour prestataire, Mes billets avec QR hors ligne et notifications.
