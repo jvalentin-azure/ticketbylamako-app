@@ -8,6 +8,7 @@ import {
   StyleSheet,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { Image } from "expo-image";
 import { useFocusEffect } from "@react-navigation/native";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
@@ -41,6 +42,7 @@ interface TicketItem {
   status: string;
   seatLabel?: string;
   eventLocation?: string;
+  eventImage?: string;
 }
 
 const ticketVisibleStatuses = new Set([
@@ -136,6 +138,7 @@ export default function TicketsScreen() {
               status: order.status,
               seatLabel: ticket.seatLabel || undefined,
               eventLocation: ticket.eventLocation || undefined,
+              eventImage: ticket.eventImage || undefined,
             }));
           } catch {
             return [];
@@ -470,18 +473,28 @@ export default function TicketsScreen() {
                 { backgroundColor: colors.surface, borderColor: colors.border },
               ]}
             >
-              <View
-                style={[
-                  styles.ticketIcon,
-                  { backgroundColor: colors.primary + "15" },
-                ]}
-              >
-                <IconSymbol
-                  name="ticket.fill"
-                  size={24}
-                  color={colors.primary}
+              {group.eventImage ? (
+                <Image
+                  accessibilityLabel={`Affiche de ${group.eventName}`}
+                  source={{ uri: group.eventImage }}
+                  contentFit="cover"
+                  transition={150}
+                  style={styles.ticketPoster}
                 />
-              </View>
+              ) : (
+                <View
+                  style={[
+                    styles.ticketIcon,
+                    { backgroundColor: colors.primary + "15" },
+                  ]}
+                >
+                  <IconSymbol
+                    name="ticket.fill"
+                    size={24}
+                    color={colors.primary}
+                  />
+                </View>
+              )}
               <View style={styles.ticketInfo}>
                 <Text
                   style={[styles.ticketName, { color: colors.foreground }]}
@@ -666,6 +679,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
+  },
+  ticketPoster: {
+    width: 68,
+    height: 86,
+    borderRadius: 8,
+    backgroundColor: "#E9E7E3",
   },
   ticketInfo: { flex: 1, marginLeft: 12 },
   ticketName: { fontSize: 15, fontWeight: "700", lineHeight: 20 },

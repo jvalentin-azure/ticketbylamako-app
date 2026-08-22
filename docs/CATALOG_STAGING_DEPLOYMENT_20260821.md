@@ -468,3 +468,42 @@ effectué.
 QA physique requise avant toute promotion : authentification, catalogue et
 images, événement standard, seating chart, panier, coupons, quatre moyens de
 paiement, retour prestataire, Mes billets avec QR hors ligne et notifications.
+
+## Affiches du wallet et carte Google Maps intégrée - 22 août 2026
+
+Le contrat des billets expose désormais `eventImage`, dérivé de l'image mise en
+avant du `tc_events` en taille `medium_large`. L'application l'utilise dans
+`Mes billets` sans requête supplémentaire par carte. Les anciens billets ou les
+événements sans image conservent l'icône billet comme fallback.
+
+Les pages événement et détail billet chargent maintenant une vraie carte Google
+Maps intégrée. Le bouton `Itinéraire vers le lieu` reste une action secondaire
+et ouvre le guidage Google Maps. Une seule WebView est montée pour le billet
+actif afin de ne pas multiplier le coût mémoire pour une commande multi-billets.
+
+Déploiement staging ciblé :
+
+- fichier PHP : `lamako-mobile-api/includes/v2-commerce.php` uniquement ;
+- fichier actif final :
+  `a55a6b8da19f1216214ee02a78b4646086ecac13327796c92b826ff1d2f1f3bc` ;
+- backup avant déploiement :
+  `/home/master/tbl-compliance-backups/event-map-20260822T152715Z/v2-commerce.php` ;
+- aucun fichier de production modifié.
+
+QA staging :
+
+- PHP local et serveur : aucune erreur de syntaxe ;
+- route commandes sans JWT : HTTP 401 attendu ;
+- route publique `public/home-data` : HTTP 200 ;
+- contrôle WP-CLI en lecture seule : 74 billets inspectés, 67 avec affiche ;
+- les 7 billets sans affiche utilisent le fallback visuel de l'application ;
+- ESLint, TypeScript et contrôle des secrets : OK ;
+- Vitest : 211 tests réussis, 4 ignorés ;
+- `git diff --check` : OK.
+
+Rollback staging :
+
+```bash
+cp -p /home/master/tbl-compliance-backups/event-map-20260822T152715Z/v2-commerce.php /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
+php -l /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
+```

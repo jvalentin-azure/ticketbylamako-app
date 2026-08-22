@@ -380,6 +380,7 @@ export interface MobileTicket {
   eventDate?: string;
   eventEndDate?: string;
   eventLocation?: string;
+  eventImage?: string;
   seatLabel: string;
   seatId: string;
   status: string;

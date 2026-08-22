@@ -8,8 +8,6 @@ import {
   Dimensions,
   StyleSheet,
   FlatList,
-  Platform,
-  Linking,
   Share,
   Alert,
 } from "react-native";
@@ -39,6 +37,7 @@ import {
 import { PointsBadge } from "@/components/points-badge";
 import { CartToast } from "@/components/cart-toast";
 import { SeatPurchaseFlow } from "@/components/seating/SeatPurchaseFlow";
+import { EmbeddedGoogleMap } from "@/components/maps/embedded-google-map";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 
@@ -286,16 +285,6 @@ export default function EventDetailScreen() {
   )
     ? activeDetailsTab
     : detailTabs[0]?.key;
-
-  const openDirections = () => {
-    if (!eventLocation) return;
-    const query = encodeURIComponent(eventLocation);
-    void Linking.openURL(
-      Platform.OS === "ios"
-        ? `https://maps.apple.com/?q=${query}`
-        : `https://www.google.com/maps/search/?api=1&query=${query}`,
-    );
-  };
 
   // Build image list: featured image + gallery
   const allImages: string[] = [];
@@ -974,47 +963,7 @@ export default function EventDetailScreen() {
                         {eventLocation}
                       </Text>
                     </View>
-                    <TouchableOpacity
-                      accessibilityRole="link"
-                      accessibilityLabel={`Afficher l'itinéraire vers ${eventLocation}`}
-                      onPress={openDirections}
-                      style={[
-                        styles.mapAction,
-                        {
-                          backgroundColor: colors.primary + "10",
-                          borderColor: colors.primary + "35",
-                        },
-                      ]}
-                    >
-                      <IconSymbol
-                        name="map.fill"
-                        size={22}
-                        color={colors.primary}
-                      />
-                      <View style={styles.mapActionCopy}>
-                        <Text
-                          style={[
-                            styles.mapActionTitle,
-                            { color: colors.foreground },
-                          ]}
-                        >
-                          Ouvrir l'itinéraire
-                        </Text>
-                        <Text
-                          style={[
-                            styles.mapActionHint,
-                            { color: colors.muted },
-                          ]}
-                        >
-                          Afficher le trajet dans votre application de cartes.
-                        </Text>
-                      </View>
-                      <IconSymbol
-                        name="chevron.right"
-                        size={18}
-                        color={colors.primary}
-                      />
-                    </TouchableOpacity>
+                    <EmbeddedGoogleMap location={eventLocation} />
                   </>
                 ) : null}
               </View>
@@ -1455,23 +1404,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   locationText: { fontSize: 14, flex: 1 },
-  mapAction: {
-    minHeight: 72,
-    borderRadius: 10,
-    borderWidth: 1,
-    padding: 13,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 11,
-  },
-  mapActionCopy: { flex: 1 },
-  mapActionTitle: { fontSize: 14, fontFamily: "Raleway_700Bold" },
-  mapActionHint: {
-    marginTop: 3,
-    fontSize: 12,
-    lineHeight: 16,
-    fontFamily: "Raleway_500Medium",
-  },
   // Upcoming events
   upcomingHeader: {
     flexDirection: "row",

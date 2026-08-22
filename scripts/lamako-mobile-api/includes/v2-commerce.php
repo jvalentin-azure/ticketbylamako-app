@@ -4973,6 +4973,7 @@ function lamako_mobile_v2_ticket_item_context( WC_Order $order, $item ) {
     $event_date = $event_id ? lamako_mobile_v2_meta_first( $event_id, [ 'event_date_time', '_event_date_time', 'event_start_date', '_event_start_date' ], '' ) : '';
     $event_end_date = $event_id ? lamako_mobile_v2_meta_first( $event_id, [ 'event_end_date_time', '_event_end_date_time', 'event_end_date', '_event_end_date' ], '' ) : '';
     $event_location = $event_id ? ( get_post_meta( $event_id, 'event_location', true ) ?: get_post_meta( $event_id, '_event_location', true ) ) : '';
+    $event_image = $event_id ? get_the_post_thumbnail_url( $event_id, 'medium_large' ) : '';
     $quantity = max( 1, (int) $item->get_quantity() );
 
     return [
@@ -4986,6 +4987,7 @@ function lamako_mobile_v2_ticket_item_context( WC_Order $order, $item ) {
         'eventDate'     => is_scalar( $event_date ) ? (string) $event_date : '',
         'eventEndDate'  => is_scalar( $event_end_date ) ? (string) $event_end_date : '',
         'eventLocation' => is_scalar( $event_location ) ? html_entity_decode( (string) $event_location, ENT_QUOTES, 'UTF-8' ) : '',
+        'eventImage'    => is_string( $event_image ) ? esc_url_raw( $event_image ) : '',
     ];
 }
 

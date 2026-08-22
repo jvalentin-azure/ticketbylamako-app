@@ -24,7 +24,7 @@ export function mobileOrderToWCOrder(order: MobileOrderSummary): WCOrder {
       email: order.billing?.email || "",
       phone: order.billing?.phone || "",
     },
-    line_items: (order.items || []).map(item => ({
+    line_items: (order.items || []).map((item) => ({
       id: item.id,
       name: item.name,
       quantity: item.quantity,
@@ -39,7 +39,9 @@ export function mobileOrderToWCOrder(order: MobileOrderSummary): WCOrder {
   };
 }
 
-export function mobileTicketToTicketInstance(ticket: MobileTicket): TicketInstance {
+export function mobileTicketToTicketInstance(
+  ticket: MobileTicket,
+): TicketInstance {
   return {
     instance_id: ticket.instanceId,
     ticket_code: ticket.ticketCode,
@@ -52,5 +54,6 @@ export function mobileTicketToTicketInstance(ticket: MobileTicket): TicketInstan
     event_name: ticket.eventName || "",
     event_date: ticket.eventDate || "",
     event_location: ticket.eventLocation || "",
+    event_image: ticket.eventImage || "",
   };
 }

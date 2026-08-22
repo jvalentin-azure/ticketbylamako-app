@@ -37,6 +37,7 @@ import type {
   MobileOrderSummary,
   MobileOrderTicketsResponse,
 } from "@/lib/api/mobile";
+import { EmbeddedGoogleMap } from "@/components/maps/embedded-google-map";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 
@@ -145,6 +146,7 @@ function TicketCard({
   total,
   colors,
   onOpenEntry,
+  showMap,
 }: {
   ticket: TicketInstance;
   order: WCOrder;
@@ -152,6 +154,7 @@ function TicketCard({
   total: number;
   colors: any;
   onOpenEntry: () => void;
+  showMap: boolean;
 }) {
   const st = statusMap[order.status] || {
     label: order.status,
@@ -309,6 +312,13 @@ function TicketCard({
             </View>
           ) : null}
         </View>
+
+        {showMap && ticket.event_location ? (
+          <EmbeddedGoogleMap
+            location={decodeHtmlEntities(ticket.event_location)}
+            height={190}
+          />
+        ) : null}
 
         {/* Attendee info */}
         <View style={[styles.attendeeRow, { borderTopColor: colors.border }]}>
@@ -684,6 +694,7 @@ export default function TicketDetailScreen() {
             total={1}
             colors={colors}
             onOpenEntry={() => setEntryIndex(0)}
+            showMap
           />
         </ScrollView>
       ) : (
@@ -714,6 +725,7 @@ export default function TicketDetailScreen() {
                 total={tickets.length}
                 colors={colors}
                 onOpenEntry={() => setEntryIndex(i)}
+                showMap={i === activeIndex}
               />
             </ScrollView>
           ))}

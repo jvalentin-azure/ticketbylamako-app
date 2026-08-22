@@ -84,6 +84,7 @@ describe("ticket wallet filters", () => {
         eventName: "Concert",
         date: "2026-08-22",
         seatLabel: "C15",
+        eventImage: "https://example.com/poster.jpg",
       },
       {
         ...baseTicket,
@@ -97,6 +98,7 @@ describe("ticket wallet filters", () => {
     expect(grouped).toHaveLength(1);
     expect(grouped[0]?.tickets).toHaveLength(2);
     expect(grouped[0]?.seatLabels).toEqual(["C15", "C16"]);
+    expect(grouped[0]?.eventImage).toBe("https://example.com/poster.jpg");
   });
 
   it("keeps different orders in separate wallet cards", () => {

@@ -10,6 +10,7 @@ export interface TicketInstance {
   event_name: string;
   event_date: string;
   event_location: string;
+  event_image?: string;
 }
 
 export interface OrderTicketsResponse {

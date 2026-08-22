@@ -10,6 +10,7 @@ export interface WalletTicketLike {
   endDate?: string;
   seatLabel?: string;
   eventLocation?: string;
+  eventImage?: string;
 }
 
 export interface WalletTicketGroup<T extends WalletTicketLike> {
@@ -20,6 +21,7 @@ export interface WalletTicketGroup<T extends WalletTicketLike> {
   date: string;
   endDate?: string;
   eventLocation?: string;
+  eventImage?: string;
   tickets: T[];
   ticketTypes: string[];
   seatLabels: string[];
@@ -121,6 +123,7 @@ export function groupWalletTickets<T extends WalletTicketLike>(
       date: ticket.date,
       endDate: ticket.endDate,
       eventLocation: ticket.eventLocation,
+      eventImage: ticket.eventImage,
       tickets: [ticket],
       ticketTypes: ticket.ticketType ? [ticket.ticketType] : [],
       seatLabels: ticket.seatLabel ? [ticket.seatLabel] : [],
