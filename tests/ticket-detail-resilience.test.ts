@@ -27,6 +27,9 @@ describe("ticket detail resilience", () => {
 
   it("provides a focused offline entry mode without sharing the raw code", () => {
     expect(screen).toContain('useKeepAwake("ticket-entry-mode")');
+    expect(screen).toContain("<SafeAreaProvider>");
+    expect(screen).toContain('edges={["top", "right", "bottom", "left"]}');
+    expect(screen).not.toContain("statusBarTranslucent");
     expect(screen).toContain("Mode entrée");
     expect(screen).toContain("disponible hors ligne");
     expect(screen).not.toContain("Share.share");

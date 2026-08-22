@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Linking,
@@ -10,6 +10,9 @@ import {
 } from "react-native";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
+
+const GOOGLE_MAPS_API_KEY =
+  process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY?.trim() || "";
 
 let WebViewComponent: any = null;
 if (Platform.OS !== "web") {
@@ -44,10 +47,14 @@ export function EmbeddedGoogleMap({
 }) {
   const colors = useColors();
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const normalizedLocation = location.trim();
   const encodedLocation = encodeURIComponent(normalizedLocation);
   const embedUrl = useMemo(
-    () => `https://www.google.com/maps?q=${encodedLocation}&output=embed`,
+    () =>
+      GOOGLE_MAPS_API_KEY
+        ? `https://www.google.com/maps/embed/v1/place?key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}&q=${encodedLocation}&zoom=15`
+        : "",
     [encodedLocation],
   );
   const directionsUrl = useMemo(
@@ -55,6 +62,11 @@ export function EmbeddedGoogleMap({
       `https://www.google.com/maps/dir/?api=1&destination=${encodedLocation}`,
     [encodedLocation],
   );
+
+  useEffect(() => {
+    setFailed(false);
+    setLoaded(false);
+  }, [embedUrl]);
 
   const openDirections = () => {
     void Linking.openURL(directionsUrl);
@@ -73,7 +85,7 @@ export function EmbeddedGoogleMap({
           },
         ]}
       >
-        {WebViewComponent && !failed ? (
+        {WebViewComponent && embedUrl && !failed ? (
           <WebViewComponent
             source={{ uri: embedUrl }}
             style={styles.webView}
@@ -82,17 +94,7 @@ export function EmbeddedGoogleMap({
             domStorageEnabled
             scrollEnabled={false}
             setSupportMultipleWindows={false}
-            startInLoadingState
-            renderLoading={() => (
-              <View
-                style={[styles.loading, { backgroundColor: colors.surface }]}
-              >
-                <ActivityIndicator color={colors.primary} />
-                <Text style={[styles.loadingText, { color: colors.muted }]}>
-                  Chargement de la carte…
-                </Text>
-              </View>
-            )}
+            onLoadEnd={() => setLoaded(true)}
             onError={() => setFailed(true)}
             onHttpError={() => setFailed(true)}
             onShouldStartLoadWithRequest={(request: { url: string }) =>
@@ -110,6 +112,14 @@ export function EmbeddedGoogleMap({
             </Text>
           </View>
         )}
+        {WebViewComponent && embedUrl && !failed && !loaded ? (
+          <View style={[styles.loading, { backgroundColor: colors.surface }]}>
+            <ActivityIndicator color={colors.primary} />
+            <Text style={[styles.loadingText, { color: colors.muted }]}>
+              Chargement de la carte…
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       <TouchableOpacity
@@ -146,7 +156,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     overflow: "hidden",
   },
-  webView: { flex: 1 },
+  webView: { width: "100%", height: "100%" },
   loading: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",

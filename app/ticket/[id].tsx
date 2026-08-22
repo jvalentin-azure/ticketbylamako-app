@@ -9,7 +9,7 @@ import {
   Dimensions,
   Modal,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { useKeepAwake } from "expo-keep-awake";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
@@ -78,63 +78,67 @@ function EntryMode({
       animationType="fade"
       onRequestClose={onClose}
       presentationStyle="fullScreen"
-      statusBarTranslucent
       visible
     >
-      <SafeAreaView style={styles.entryScreen}>
-        <View style={styles.entryHeader}>
-          <View>
-            <Text style={styles.entryEyebrow}>MODE ENTRÉE</Text>
-            <Text style={styles.entryCounter}>
-              Billet {index + 1} sur {total}
-            </Text>
-          </View>
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel="Fermer le mode entrée"
-            onPress={onClose}
-            style={styles.entryClose}
-          >
-            <IconSymbol name="xmark" size={24} color="#fff" />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.entryContent}>
-          <Text style={styles.entryEvent} numberOfLines={3}>
-            {decodeHtmlEntities(ticket.event_name || ticket.product_name)}
-          </Text>
-          <Text style={styles.entryType} numberOfLines={2}>
-            {decodeHtmlEntities(ticket.product_name)}
-          </Text>
-          {ticket.seat_label ? (
-            <View style={styles.entrySeat}>
-              <Text style={styles.entrySeatLabel}>PLACE</Text>
-              <Text style={styles.entrySeatValue}>{ticket.seat_label}</Text>
+      <SafeAreaProvider>
+        <SafeAreaView
+          edges={["top", "right", "bottom", "left"]}
+          style={styles.entryScreen}
+        >
+          <View style={styles.entryHeader}>
+            <View>
+              <Text style={styles.entryEyebrow}>MODE ENTRÉE</Text>
+              <Text style={styles.entryCounter}>
+                Billet {index + 1} sur {total}
+              </Text>
             </View>
-          ) : null}
-          <View style={styles.entryQr}>
-            <QRCode
-              value={ticket.ticket_code}
-              size={Math.min(SCREEN_W - 96, 280)}
-              backgroundColor="#fff"
-              color="#000"
-            />
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Fermer le mode entrée"
+              onPress={onClose}
+              style={styles.entryClose}
+            >
+              <IconSymbol name="xmark" size={24} color="#fff" />
+            </TouchableOpacity>
           </View>
-          <View style={styles.entryReady}>
-            <IconSymbol
-              name="checkmark.circle.fill"
-              size={20}
-              color="#59D98E"
-            />
-            <Text style={styles.entryReadyText}>
-              Prêt à être scanné · disponible hors ligne
+
+          <View style={styles.entryContent}>
+            <Text style={styles.entryEvent} numberOfLines={3}>
+              {decodeHtmlEntities(ticket.event_name || ticket.product_name)}
+            </Text>
+            <Text style={styles.entryType} numberOfLines={2}>
+              {decodeHtmlEntities(ticket.product_name)}
+            </Text>
+            {ticket.seat_label ? (
+              <View style={styles.entrySeat}>
+                <Text style={styles.entrySeatLabel}>PLACE</Text>
+                <Text style={styles.entrySeatValue}>{ticket.seat_label}</Text>
+              </View>
+            ) : null}
+            <View style={styles.entryQr}>
+              <QRCode
+                value={ticket.ticket_code}
+                size={Math.min(SCREEN_W - 96, 280)}
+                backgroundColor="#fff"
+                color="#000"
+              />
+            </View>
+            <View style={styles.entryReady}>
+              <IconSymbol
+                name="checkmark.circle.fill"
+                size={20}
+                color="#59D98E"
+              />
+              <Text style={styles.entryReadyText}>
+                Prêt à être scanné · disponible hors ligne
+              </Text>
+            </View>
+            <Text style={styles.entryOrder}>
+              Commande #{order.number || order.id}
             </Text>
           </View>
-          <Text style={styles.entryOrder}>
-            Commande #{order.number || order.id}
-          </Text>
-        </View>
-      </SafeAreaView>
+        </SafeAreaView>
+      </SafeAreaProvider>
     </Modal>
   );
 }
