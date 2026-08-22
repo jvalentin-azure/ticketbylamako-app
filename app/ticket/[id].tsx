@@ -8,6 +8,9 @@ import {
   StyleSheet,
   Dimensions,
   Modal,
+  Alert,
+  Linking,
+  Platform,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { useKeepAwake } from "expo-keep-awake";
@@ -38,6 +41,9 @@ import type {
   MobileOrderTicketsResponse,
 } from "@/lib/api/mobile";
 import { EmbeddedGoogleMap } from "@/components/maps/embedded-google-map";
+import { CatalogImage } from "@/components/catalog-image";
+import { LinearGradient } from "expo-linear-gradient";
+import { addTicketEventToCalendar } from "@/lib/event-calendar";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 
@@ -166,6 +172,50 @@ function TicketCard({
   };
   const isValid = ticketVisibleStatuses.has(order.status);
   const qrValue = ticket.ticket_code;
+  const [calendarBusy, setCalendarBusy] = useState(false);
+  const walletUrl =
+    Platform.OS === "ios" ? ticket.apple_wallet_url : ticket.google_wallet_url;
+
+  const handleAddToCalendar = async () => {
+    if (calendarBusy) return;
+    setCalendarBusy(true);
+    try {
+      const result = await addTicketEventToCalendar({
+        title: decodeHtmlEntities(ticket.event_name || ticket.product_name),
+        startDate: ticket.event_date,
+        endDate: ticket.event_end_date,
+        location: decodeHtmlEntities(ticket.event_location || ""),
+        notes: `Billet TicketByLamako · Commande #${order.number || order.id}`,
+      });
+      if (result === "created") {
+        Alert.alert(
+          "Ajouté au calendrier",
+          "Un rappel a été programmé une heure avant l'événement.",
+        );
+      }
+    } catch (error) {
+      Alert.alert(
+        "Calendrier indisponible",
+        error instanceof Error
+          ? error.message
+          : "Impossible d'ajouter cet événement au calendrier.",
+      );
+    } finally {
+      setCalendarBusy(false);
+    }
+  };
+
+  const handleAddToWallet = async () => {
+    if (!walletUrl) return;
+    try {
+      await Linking.openURL(walletUrl);
+    } catch {
+      Alert.alert(
+        "Wallet indisponible",
+        "Le pass n'a pas pu être ouvert. Réessayez dans quelques instants.",
+      );
+    }
+  };
 
   return (
     <View
@@ -174,34 +224,48 @@ function TicketCard({
         { backgroundColor: colors.surface, borderColor: colors.border },
       ]}
     >
-      {/* Ticket Header */}
-      <View
-        style={[
-          styles.ticketHeader,
-          { backgroundColor: isValid ? colors.primary : colors.muted },
-        ]}
-      >
-        <View style={{ flex: 1 }}>
-          <Text style={styles.ticketHeaderTitle} numberOfLines={2}>
-            {decodeHtmlEntities(ticket.product_name)}
-          </Text>
-          {ticket.event_name ? (
-            <Text style={styles.ticketHeaderSub}>
-              {decodeHtmlEntities(ticket.event_name)}
+      {/* Event identity */}
+      <View style={styles.ticketHero}>
+        {ticket.event_image ? (
+          <CatalogImage
+            uri={ticket.event_image}
+            style={StyleSheet.absoluteFill}
+            accessibilityLabel={`Affiche de ${decodeHtmlEntities(ticket.event_name || ticket.product_name)}`}
+            recyclingKey={`ticket-hero-${ticket.instance_id}`}
+          />
+        ) : null}
+        <LinearGradient
+          colors={
+            ticket.event_image
+              ? ["rgba(10,9,18,0.22)", "rgba(10,9,18,0.94)"]
+              : isValid
+                ? ["#2A1838", "#663D17"]
+                : ["#4B5563", "#1F2937"]
+          }
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.ticketHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.ticketEyebrow}>BILLET OFFICIEL</Text>
+            <Text style={styles.ticketHeaderTitle} numberOfLines={2}>
+              {decodeHtmlEntities(ticket.event_name || ticket.product_name)}
             </Text>
-          ) : null}
-        </View>
-        {total > 1 && (
-          <View style={styles.ticketBadge}>
-            <Text style={styles.ticketBadgeText}>
-              {index + 1}/{total}
+            <Text style={styles.ticketHeaderSub} numberOfLines={2}>
+              {decodeHtmlEntities(ticket.product_name)}
             </Text>
           </View>
-        )}
+          {total > 1 ? (
+            <View style={styles.ticketBadge}>
+              <Text style={styles.ticketBadgeText}>
+                {index + 1}/{total}
+              </Text>
+            </View>
+          ) : null}
+        </View>
       </View>
 
       {/* QR Code Section */}
-      <View style={styles.qrSection}>
+      <View style={[styles.qrSection, { backgroundColor: colors.background }]}>
         {isValid ? (
           <>
             <View style={styles.qrContainer}>
@@ -215,15 +279,72 @@ function TicketCard({
             <Text style={[styles.qrHint, { color: colors.muted }]}>
               Présentez ce QR code à l'entrée
             </Text>
-            <TouchableOpacity
-              accessibilityRole="button"
-              accessibilityLabel="Afficher le QR code en plein écran"
-              onPress={onOpenEntry}
-              style={[styles.entryButton, { backgroundColor: colors.primary }]}
-            >
-              <IconSymbol name="qrcode" size={19} color="#fff" />
-              <Text style={styles.entryButtonText}>Mode entrée</Text>
-            </TouchableOpacity>
+            <Text style={[styles.ticketReference, { color: colors.muted }]}>
+              Réf. {qrValue.slice(-8).toUpperCase()}
+            </Text>
+            <View style={styles.ticketActions}>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Afficher le QR code en plein écran"
+                onPress={onOpenEntry}
+                style={[
+                  styles.entryButton,
+                  { backgroundColor: colors.primary },
+                ]}
+              >
+                <IconSymbol name="qrcode" size={19} color="#fff" />
+                <Text style={styles.entryButtonText}>Mode entrée</Text>
+              </TouchableOpacity>
+              {ticket.event_date ? (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Ajouter l'événement au calendrier"
+                  disabled={calendarBusy}
+                  onPress={handleAddToCalendar}
+                  style={[
+                    styles.secondaryAction,
+                    { borderColor: colors.border },
+                  ]}
+                >
+                  {calendarBusy ? (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  ) : (
+                    <IconSymbol
+                      name="calendar.badge.clock"
+                      size={19}
+                      color={colors.primary}
+                    />
+                  )}
+                  <Text
+                    style={[
+                      styles.secondaryActionText,
+                      { color: colors.foreground },
+                    ]}
+                  >
+                    Calendrier
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+            {walletUrl ? (
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={
+                  Platform.OS === "ios"
+                    ? "Ajouter à Apple Wallet"
+                    : "Ajouter à Google Wallet"
+                }
+                onPress={handleAddToWallet}
+                style={styles.walletButton}
+              >
+                <IconSymbol name="wallet.fill" size={19} color="#fff" />
+                <Text style={styles.walletButtonText}>
+                  {Platform.OS === "ios"
+                    ? "Ajouter à Apple Wallet"
+                    : "Ajouter à Google Wallet"}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
           </>
         ) : (
           <View style={styles.invalidQr}>
@@ -835,12 +956,35 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   ticketSelectorText: { fontSize: 13, fontWeight: "700" },
-  ticketCard: { borderRadius: 20, borderWidth: 1, overflow: "hidden" },
+  ticketCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    overflow: "hidden",
+    shadowColor: "#120B05",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 24,
+    elevation: 5,
+  },
+  ticketHero: {
+    minHeight: 178,
+    overflow: "hidden",
+    justifyContent: "flex-end",
+  },
   ticketHeader: {
     padding: 20,
-    paddingBottom: 16,
+    paddingTop: 58,
+    paddingBottom: 18,
     flexDirection: "row",
     alignItems: "flex-start",
+  },
+  ticketEyebrow: {
+    color: "#F9C96B",
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: "800",
+    letterSpacing: 0,
+    marginBottom: 6,
   },
   ticketHeaderTitle: {
     color: "#fff",
@@ -863,7 +1007,8 @@ const styles = StyleSheet.create({
   ticketBadgeText: { color: "#fff", fontSize: 12, fontWeight: "700" },
   qrSection: {
     alignItems: "center",
-    paddingVertical: 24,
+    paddingTop: 28,
+    paddingBottom: 24,
     paddingHorizontal: 16,
   },
   qrContainer: {
@@ -876,18 +1021,49 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
-  qrHint: { fontSize: 12, marginTop: 6 },
+  qrHint: { fontSize: 12, marginTop: 10 },
+  ticketReference: { fontSize: 10, marginTop: 4, fontWeight: "600" },
+  ticketActions: {
+    width: "100%",
+    marginTop: 20,
+    flexDirection: "row",
+    gap: 10,
+  },
   entryButton: {
+    flex: 1,
     minHeight: 46,
     borderRadius: 8,
-    marginTop: 18,
-    paddingHorizontal: 22,
+    paddingHorizontal: 16,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 9,
   },
   entryButtonText: { color: "#fff", fontSize: 14, fontWeight: "800" },
+  secondaryAction: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+  },
+  secondaryActionText: { fontSize: 13, fontWeight: "700" },
+  walletButton: {
+    width: "100%",
+    minHeight: 48,
+    marginTop: 10,
+    borderRadius: 8,
+    backgroundColor: "#050505",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  walletButtonText: { color: "#fff", fontSize: 14, fontWeight: "700" },
   invalidQr: { alignItems: "center", paddingVertical: 20 },
   invalidText: { fontSize: 16, fontWeight: "600", marginTop: 12 },
   invalidSub: { fontSize: 13, marginTop: 4 },

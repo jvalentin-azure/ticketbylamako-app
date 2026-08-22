@@ -80,6 +80,7 @@ const MAPPING = {
   "calendar.badge.clock": "event-available",
   photo: "image",
   qrcode: "qr-code-2",
+  "wallet.fill": "account-balance-wallet",
 } as IconMapping;
 
 /**

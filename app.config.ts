@@ -135,6 +135,13 @@ const config: ExpoConfig = {
     "expo-router",
     "expo-apple-authentication",
     [
+      "expo-calendar",
+      {
+        calendarPermission:
+          "Autorisez TicketByLamako à ajouter vos événements à votre calendrier.",
+      },
+    ],
+    [
       "expo-splash-screen",
       {
         image: "./assets/images/logo-white.png",

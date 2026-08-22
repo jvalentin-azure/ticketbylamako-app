@@ -380,6 +380,14 @@ export default function EventDetailScreen() {
         itemName={cartToastName}
         onHide={() => setShowCartToast(false)}
       />
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel="Retour aux événements"
+        onPress={() => router.back()}
+        style={styles.persistentBackButton}
+      >
+        <IconSymbol name="chevron.left" size={22} color="#fff" />
+      </TouchableOpacity>
       <ScrollView
         showsVerticalScrollIndicator={false}
         style={styles.eventScroll}
@@ -437,12 +445,6 @@ export default function EventDetailScreen() {
               recyclingKey={`event-featured-${event.id}`}
             />
           )}
-          <TouchableOpacity
-            onPress={() => router.back()}
-            style={styles.backButton}
-          >
-            <IconSymbol name="chevron.left" size={22} color="#fff" />
-          </TouchableOpacity>
           {/* Share & Favorite buttons */}
           <View style={styles.topRightActions}>
             <TouchableOpacity
@@ -1131,7 +1133,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: "Raleway_700Bold",
   },
-  backButton: {
+  persistentBackButton: {
     position: "absolute",
     top: 12,
     left: 16,
@@ -1141,6 +1143,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.5)",
     alignItems: "center",
     justifyContent: "center",
+    zIndex: 40,
+    elevation: 8,
   },
   seatingOverlayBadge: {
     position: "absolute",

@@ -53,7 +53,10 @@ export function mobileTicketToTicketInstance(
     event_id: ticket.eventId,
     event_name: ticket.eventName || "",
     event_date: ticket.eventDate || "",
+    event_end_date: ticket.eventEndDate || "",
     event_location: ticket.eventLocation || "",
     event_image: ticket.eventImage || "",
+    apple_wallet_url: ticket.appleWalletUrl || "",
+    google_wallet_url: ticket.googleWalletUrl || "",
   };
 }

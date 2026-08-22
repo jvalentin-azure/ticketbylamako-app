@@ -9,8 +9,11 @@ export interface TicketInstance {
   event_id: number;
   event_name: string;
   event_date: string;
+  event_end_date?: string;
   event_location: string;
   event_image?: string;
+  apple_wallet_url?: string;
+  google_wallet_url?: string;
 }
 
 export interface OrderTicketsResponse {

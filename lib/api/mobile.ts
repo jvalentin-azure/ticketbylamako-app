@@ -381,6 +381,8 @@ export interface MobileTicket {
   eventEndDate?: string;
   eventLocation?: string;
   eventImage?: string;
+  appleWalletUrl?: string;
+  googleWalletUrl?: string;
   seatLabel: string;
   seatId: string;
   status: string;
