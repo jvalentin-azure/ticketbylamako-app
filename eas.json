@@ -29,6 +29,7 @@
     },
     "staging": {
       "distribution": "internal",
+      "channel": "staging",
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_SITE_URL": "https://staging.ticketbylamako.com",
@@ -42,6 +43,7 @@
     },
     "staging-testflight": {
       "distribution": "store",
+      "channel": "staging",
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_SITE_URL": "https://staging.ticketbylamako.com",
