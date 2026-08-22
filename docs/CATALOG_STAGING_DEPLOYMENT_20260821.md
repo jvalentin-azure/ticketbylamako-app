@@ -125,6 +125,28 @@ QA physique requise : affiches du wallet, commande multi-billets, QR plein
 écran et hors ligne, carte Google Maps intégrée, itinéraire, puis régression
 seating chart, panier, coupons et paiements.
 
+## Builds QA safe area et carte Google Maps - 22 août 2026
+
+Les deux candidats ont été construits depuis le commit
+`8a46d775e9a606e6ad15304f97f26061f9454936`. Ils ciblent le staging et
+n'incluent aucun déploiement WordPress ou de production.
+
+- Android staging APK, versionCode `54` :
+  - build EAS : `22160aa8-6c01-4502-b6cf-c954d183288f` ;
+  - artefact :
+    `https://expo.dev/artifacts/eas/bTQWyIE1LKpluMPEaPI4QysCpaUZ3Of-C4K5kb7H0j0.apk` ;
+  - statut : terminé.
+- iOS staging/TestFlight, buildNumber `40` :
+  - build EAS : `8386b858-4a8f-44f1-9926-37b7d8a58eae` ;
+  - soumission App Store Connect :
+    `e05910e2-8fad-4ac2-92de-2e8ec1a1d462` ;
+  - statut : binaire envoyé, traitement TestFlight Apple en cours.
+
+QA physique requise : ouvrir le mode d'entrée hors ligne sur un iPhone avec
+Dynamic Island et vérifier les zones haute/basse, puis vérifier le rendu de la
+carte intégrée et l'ouverture de l'itinéraire depuis les détails événement et
+billet. La clé Maps publique reste fournie par EAS et n'est pas versionnée.
+
 Après rollback, retester les cinq endpoints catalogue ci-dessus et vérifier que
 `GET /lamako-mobile/v2/profile` redevient indisponible comme avant ce déploiement.
 
