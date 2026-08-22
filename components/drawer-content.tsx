@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Alert,
   Linking,
+  useWindowDimensions,
 } from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
@@ -16,6 +17,7 @@ import { useThemeContext } from "@/lib/theme-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { LinearGradient } from "expo-linear-gradient";
 import { buildLamakoWhatsAppUrl } from "@/lib/contact";
+import { getAppVersionLabel } from "@/lib/app-version";
 
 interface DrawerContentProps {
   onClose?: () => void;
@@ -25,8 +27,14 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
   const colors = useColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const { isAuthenticated, user, logout } = useAuth();
   const { colorScheme, setColorScheme } = useThemeContext();
+  const userDisplayName = user
+    ? [user.firstName, user.lastName].filter(Boolean).join(" ") ||
+      user.displayName ||
+      user.email
+    : "";
 
   const navigate = (path: string) => {
     onClose?.();
@@ -53,46 +61,64 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
     const url = buildLamakoWhatsAppUrl(
       "Bonjour, je vous contacte depuis l'application TicketByLamako.",
     );
-    Linking.openURL(url).catch(() => {});
+    Linking.openURL(url).catch(() => {
+      Alert.alert(
+        "WhatsApp indisponible",
+        "Impossible d'ouvrir WhatsApp pour le moment.",
+      );
+    });
   };
 
   const menuSections = [
     {
-      title: "Mon Compte",
+      title: "Mon compte",
+      items: isAuthenticated
+        ? [
+            {
+              icon: "person.fill" as const,
+              label: "Mon profil",
+              onPress: () => navigate("/(tabs)/profile"),
+            },
+            {
+              icon: "ticket.fill" as const,
+              label: "Mes billets",
+              onPress: () => navigate("/(tabs)/tickets"),
+            },
+            {
+              icon: "clipboard.fill" as const,
+              label: "Mes commandes",
+              onPress: () => navigate("/orders"),
+            },
+            {
+              icon: "star.fill" as const,
+              label: "LamakoRewards",
+              onPress: () => navigate("/rewards"),
+            },
+            {
+              icon: "heart.fill" as const,
+              label: "Mes favoris",
+              onPress: () => navigate("/favorites"),
+            },
+          ]
+        : [],
+    },
+    {
+      title: "Préférences",
       items: [
-        ...(isAuthenticated
-          ? [
-              {
-                icon: "star.fill" as const,
-                label: "LamakoRewards",
-                onPress: () => navigate("/rewards"),
-              },
-              {
-                icon: "heart.fill" as const,
-                label: "Mes Favoris",
-                onPress: () => navigate("/favorites"),
-              },
-              {
-                icon: "clipboard.fill" as const,
-                label: "Mes Commandes",
-                onPress: () => navigate("/orders"),
-              },
-            ]
-          : []),
         {
           icon: (colorScheme === "dark" ? "sun.max.fill" : "moon.fill") as any,
-          label: colorScheme === "dark" ? "Mode Clair" : "Mode Sombre",
+          label: colorScheme === "dark" ? "Mode clair" : "Mode sombre",
           onPress: () =>
             setColorScheme(colorScheme === "dark" ? "light" : "dark"),
         },
         {
           icon: "bell.fill" as const,
           label: "Notifications",
-          onPress: () => navigate("/notification-settings"),
+          onPress: () => navigate("/notifications"),
         },
         {
           icon: "gearshape.fill" as const,
-          label: "Paramètres",
+          label: "Préférences de notifications",
           onPress: () => navigate("/notification-settings"),
         },
       ],
@@ -117,12 +143,12 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
         },
         {
           icon: "shield.fill" as const,
-          label: "Confidentialite et donnees",
+          label: "Confidentialité et données",
           onPress: () => navigate("/privacy-data"),
         },
         {
           icon: "info.circle.fill" as const,
-          label: "A propos",
+          label: "À propos",
           onPress: () => navigate("/about"),
         },
       ],
@@ -132,7 +158,16 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
   // Admin/Organisateur modules have been moved to TicketByLamako Backend app
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View
+      accessibilityViewIsModal
+      style={[
+        styles.container,
+        {
+          backgroundColor: colors.background,
+          width: Math.min(width * 0.86, 360),
+        },
+      ]}
+    >
       {/* Header with gradient */}
       <LinearGradient
         colors={["#663d17", "#8B5E34"]}
@@ -143,6 +178,8 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
         {/* Close button */}
         <TouchableOpacity
           onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Fermer le menu"
           style={styles.closeButton}
           activeOpacity={0.7}
         >
@@ -166,7 +203,7 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
             </View>
             <View style={styles.userInfo}>
               <Text style={styles.userName} numberOfLines={1}>
-                {user.firstName} {user.lastName}
+                {userDisplayName}
               </Text>
               <Text style={styles.userEmail} numberOfLines={1}>
                 {user.email}
@@ -184,6 +221,8 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
             }}
             style={styles.loginButton}
             activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Se connecter à TicketByLamako"
           >
             <IconSymbol name="person.fill" size={18} color="#663d17" />
             <Text style={styles.loginText}>Se connecter</Text>
@@ -197,50 +236,59 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
       >
-        {menuSections.map((section) => (
-          <View key={section.title} style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.muted }]}>
-              {section.title}
-            </Text>
-            {section.items.map((item) => (
-              <TouchableOpacity
-                key={item.label}
-                onPress={item.onPress}
-                style={[styles.menuItem, { borderBottomColor: colors.border }]}
-                activeOpacity={0.6}
-              >
-                <View
+        {menuSections
+          .filter((section) => section.items.length > 0)
+          .map((section) => (
+            <View key={section.title} style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.muted }]}>
+                {section.title}
+              </Text>
+              {section.items.map((item) => (
+                <TouchableOpacity
+                  key={item.label}
+                  onPress={item.onPress}
+                  accessibilityRole="button"
+                  accessibilityLabel={item.label}
                   style={[
-                    styles.menuIconBg,
-                    { backgroundColor: colors.primary + "12" },
+                    styles.menuItem,
+                    { borderBottomColor: colors.border },
                   ]}
+                  activeOpacity={0.6}
                 >
+                  <View
+                    style={[
+                      styles.menuIconBg,
+                      { backgroundColor: colors.primary + "12" },
+                    ]}
+                  >
+                    <IconSymbol
+                      name={item.icon}
+                      size={18}
+                      color={colors.primary}
+                    />
+                  </View>
+                  <Text
+                    style={[styles.menuLabel, { color: colors.foreground }]}
+                    numberOfLines={2}
+                  >
+                    {item.label}
+                  </Text>
                   <IconSymbol
-                    name={item.icon}
-                    size={18}
-                    color={colors.primary}
+                    name="chevron.right"
+                    size={14}
+                    color={colors.muted}
                   />
-                </View>
-                <Text
-                  style={[styles.menuLabel, { color: colors.foreground }]}
-                  numberOfLines={1}
-                >
-                  {item.label}
-                </Text>
-                <IconSymbol
-                  name="chevron.right"
-                  size={14}
-                  color={colors.muted}
-                />
-              </TouchableOpacity>
-            ))}
-          </View>
-        ))}
+                </TouchableOpacity>
+              ))}
+            </View>
+          ))}
 
         {/* Logout */}
         {isAuthenticated && (
           <TouchableOpacity
             onPress={handleLogout}
+            accessibilityRole="button"
+            accessibilityLabel="Se déconnecter"
             style={[
               styles.logoutButton,
               {
@@ -259,7 +307,7 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
 
         {/* Version */}
         <Text style={[styles.version, { color: colors.muted }]}>
-          TicketByLamako v2.5.0
+          {getAppVersionLabel()}
         </Text>
       </ScrollView>
     </View>
@@ -272,23 +320,23 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 20,
-    paddingBottom: 24,
+    paddingBottom: 18,
   },
   closeButton: {
     alignSelf: "flex-end",
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: "rgba(255,255,255,0.15)",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
+    marginBottom: 8,
   },
   drawerLogo: {
-    width: 240,
-    height: 70,
+    width: 168,
+    height: 48,
     alignSelf: "center",
-    marginBottom: 20,
+    marginBottom: 14,
   },
   userSection: {
     flexDirection: "row",
@@ -382,6 +430,7 @@ const styles = StyleSheet.create({
   menuLabel: {
     fontSize: 14,
     fontWeight: "500",
+    lineHeight: 20,
     marginLeft: 12,
     flex: 1,
   },

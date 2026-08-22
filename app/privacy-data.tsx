@@ -1,5 +1,14 @@
 import { useState } from "react";
-import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Linking,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -7,7 +16,9 @@ import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/lib/auth-provider";
 import { requestAccountDeletion } from "@/lib/api/auth";
 
-const WEB_BASE_URL = (process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com").replace(/\/$/, "");
+const WEB_BASE_URL = (
+  process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com"
+).replace(/\/$/, "");
 const PRIVACY_EMAIL = "info@lamakoevents.mg";
 
 export default function PrivacyDataScreen() {
@@ -18,7 +29,10 @@ export default function PrivacyDataScreen() {
 
   const openExternal = (url: string) => {
     Linking.openURL(url).catch(() => {
-      Alert.alert("Lien indisponible", "Impossible d'ouvrir ce lien pour le moment.");
+      Alert.alert(
+        "Lien indisponible",
+        "Impossible d'ouvrir ce lien pour le moment.",
+      );
     });
   };
 
@@ -40,9 +54,15 @@ export default function PrivacyDataScreen() {
             setDeletionLoading(true);
             try {
               const requestId = await requestAccountDeletion();
-              Alert.alert("Demande reçue", `Votre demande #${requestId} a été enregistrée. Aucune autre action n’est nécessaire pour l’initier.`);
+              Alert.alert(
+                "Demande reçue",
+                `Votre demande #${requestId} a été enregistrée. Aucune autre action n’est nécessaire pour l’initier.`,
+              );
             } catch (error: any) {
-              Alert.alert("Demande non envoyée", error?.message || "Veuillez réessayer plus tard.");
+              Alert.alert(
+                "Demande non envoyée",
+                error?.message || "Veuillez réessayer plus tard.",
+              );
             } finally {
               setDeletionLoading(false);
             }
@@ -53,49 +73,129 @@ export default function PrivacyDataScreen() {
   };
 
   const actions = [
-    { icon: "hand.raised.fill" as const, label: "Politique de confidentialité", onPress: () => router.push("/privacy" as any) },
-    { icon: "clipboard.fill" as const, label: "Conditions générales d’utilisation", onPress: () => openExternal(`${WEB_BASE_URL}/conditions-generales-utilisation/`) },
-    { icon: "cart.fill" as const, label: "Conditions générales de vente", onPress: () => router.push("/terms" as any) },
-    { icon: "gearshape.fill" as const, label: "Politique cookies", onPress: () => openExternal(`${WEB_BASE_URL}/politique-cookies/`) },
-    { icon: "shield.fill" as const, label: "Gérer mes cookies", onPress: () => openExternal(`${WEB_BASE_URL}/politique-cookies/#gerer-mes-cookies`) },
-    { icon: "trash.fill" as const, label: "Supprimer mon compte", onPress: handleAccountDeletion, danger: true, loading: deletionLoading },
-    { icon: "envelope.fill" as const, label: "Contacter le support privacy", onPress: () => openExternal(`mailto:${PRIVACY_EMAIL}`) },
+    {
+      icon: "hand.raised.fill" as const,
+      label: "Politique de confidentialité",
+      onPress: () => router.push("/privacy" as any),
+    },
+    {
+      icon: "clipboard.fill" as const,
+      label: "Conditions générales d’utilisation",
+      onPress: () =>
+        openExternal(`${WEB_BASE_URL}/conditions-generales-utilisation/`),
+    },
+    {
+      icon: "cart.fill" as const,
+      label: "Conditions générales de vente",
+      onPress: () => router.push("/terms" as any),
+    },
+    {
+      icon: "gearshape.fill" as const,
+      label: "Politique cookies",
+      onPress: () => openExternal(`${WEB_BASE_URL}/politique-cookies/`),
+    },
+    {
+      icon: "shield.fill" as const,
+      label: "Gérer mes cookies",
+      onPress: () =>
+        openExternal(`${WEB_BASE_URL}/politique-cookies/#gerer-mes-cookies`),
+    },
+    {
+      icon: "trash.fill" as const,
+      label: "Supprimer mon compte",
+      onPress: handleAccountDeletion,
+      danger: true,
+      loading: deletionLoading,
+    },
+    {
+      icon: "envelope.fill" as const,
+      label: "Contacter le support privacy",
+      onPress: () => openExternal(`mailto:${PRIVACY_EMAIL}`),
+    },
   ];
 
   return (
     <ScreenContainer>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.surface }]}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Revenir à l'écran précédent"
+          style={[styles.backButton, { backgroundColor: colors.surface }]}
+        >
           <IconSymbol name="chevron.left" size={20} color={colors.foreground} />
-          <Text style={{ color: colors.foreground, fontSize: 14, marginLeft: 4 }}>Retour</Text>
+          <Text
+            style={{ color: colors.foreground, fontSize: 14, marginLeft: 4 }}
+          >
+            Retour
+          </Text>
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.foreground }]} numberOfLines={1}>
-          Confidentialite et donnees
+        <Text
+          style={[styles.headerTitle, { color: colors.foreground }]}
+          numberOfLines={1}
+        >
+          Confidentialité et données
         </Text>
         <View style={{ width: 80 }} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-        <View style={[styles.panel, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.content}
+      >
+        <View
+          style={[
+            styles.panel,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
+        >
           {actions.map((item, index) => (
             <TouchableOpacity
               key={item.label}
               onPress={item.onPress}
               disabled={item.loading}
+              accessibilityRole="button"
+              accessibilityLabel={item.label}
+              accessibilityState={{
+                disabled: Boolean(item.loading),
+                busy: Boolean(item.loading),
+              }}
               style={[
                 styles.row,
-                { borderBottomColor: colors.border, borderBottomWidth: index < actions.length - 1 ? 1 : 0 },
+                {
+                  borderBottomColor: colors.border,
+                  borderBottomWidth: index < actions.length - 1 ? 1 : 0,
+                },
               ]}
               activeOpacity={0.7}
             >
-              <View style={[styles.iconBox, { backgroundColor: item.danger ? colors.error + "12" : colors.primary + "12" }]}>
+              <View
+                style={[
+                  styles.iconBox,
+                  {
+                    backgroundColor: item.danger
+                      ? colors.error + "12"
+                      : colors.primary + "12",
+                  },
+                ]}
+              >
                 {item.loading ? (
                   <ActivityIndicator size="small" color={colors.error} />
                 ) : (
-                  <IconSymbol name={item.icon} size={18} color={item.danger ? colors.error : colors.primary} />
+                  <IconSymbol
+                    name={item.icon}
+                    size={18}
+                    color={item.danger ? colors.error : colors.primary}
+                  />
                 )}
               </View>
-              <Text style={[styles.rowLabel, { color: item.danger ? colors.error : colors.foreground }]} numberOfLines={2}>
+              <Text
+                style={[
+                  styles.rowLabel,
+                  { color: item.danger ? colors.error : colors.foreground },
+                ]}
+                numberOfLines={2}
+              >
                 {item.label}
               </Text>
               <IconSymbol name="chevron.right" size={16} color={colors.muted} />

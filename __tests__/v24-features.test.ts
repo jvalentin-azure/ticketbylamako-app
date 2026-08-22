@@ -131,7 +131,7 @@ describe("V2.4 - Event Filters, Favorites, Sharing, Push Notifications", () => {
     const drawerContent = readFileSync(join(ROOT, "components/drawer-content.tsx"), "utf-8");
 
     it("drawer has Mes Favoris link", () => {
-      expect(drawerContent).toContain("Mes Favoris");
+      expect(drawerContent).toContain("Mes favoris");
       expect(drawerContent).toContain("/favorites");
     });
   });

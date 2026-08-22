@@ -17,6 +17,7 @@ import type {
   WCCategory,
   WCProduct,
 } from "@/lib/types/commerce";
+import { normalizeRewardsEnabled } from "@/lib/rewards-eligibility";
 
 export { SITE_URL };
 
@@ -66,7 +67,7 @@ function normalizeTicket(raw: any, eventId: number | string): TicketType {
     eventId: String(raw?.eventId || eventId),
     hasCheckoutFields: Boolean(raw?.hasCheckoutFields),
     requiresCheckoutFields: Boolean(raw?.requiresCheckoutFields),
-    lamakoRewardsEnabled: raw?.lamakoRewardsEnabled === true,
+    lamakoRewardsEnabled: normalizeRewardsEnabled(raw, false),
     purchasable: raw?.purchasable !== false && raw?.salesClosed !== true,
     salesClosed: Boolean(raw?.salesClosed),
     ticketingStatus: raw?.ticketingStatus || "available",
@@ -95,7 +96,7 @@ function normalizeEvent(raw: any): TCEvent {
     minPrice: raw?.minPrice ?? undefined,
     maxPrice: raw?.maxPrice ?? undefined,
     hasSeatingChart: Boolean(raw?.hasSeatingChart),
-    lamakoRewardsEnabled: raw?.lamakoRewardsEnabled === true,
+    lamakoRewardsEnabled: normalizeRewardsEnabled(raw, false),
     isPastEvent: Boolean(raw?.isPastEvent),
     salesClosed: Boolean(raw?.salesClosed),
     ticketingStatus: raw?.ticketingStatus || "available",
@@ -151,7 +152,7 @@ function normalizeProduct(raw: any): WCProduct {
     type: raw?.type || "simple",
     meta_data: [],
     date_created: raw?.date_created || "",
-    lamakoRewardsEnabled: raw?.lamakoRewardsEnabled !== false,
+    lamakoRewardsEnabled: normalizeRewardsEnabled(raw, true),
     ...(raw?.lamako_mobile ? { lamako_mobile: raw.lamako_mobile } : {}),
   } as WCProduct;
 }

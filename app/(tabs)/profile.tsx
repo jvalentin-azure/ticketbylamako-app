@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useThemeContext } from "@/lib/theme-provider";
 import { useRewards } from "@/lib/rewards-provider";
+import { getAppVersionLabel } from "@/lib/app-version";
 
 export default function ProfileScreen() {
   const colors = useColors();
@@ -30,35 +31,45 @@ export default function ProfileScreen() {
           },
           {
             icon: "clipboard.fill" as const,
-            label: "Mes Commandes",
+            label: "Mes commandes",
             onPress: () => router.push("/orders" as any),
           },
           {
             icon: "ticket.fill" as const,
-            label: "Mes Billets",
+            label: "Mes billets",
             onPress: () => router.push("/(tabs)/tickets" as any),
+          },
+          {
+            icon: "heart.fill" as const,
+            label: "Mes favoris",
+            onPress: () => router.push("/favorites" as any),
           },
         ]
       : []),
     {
       icon:
         scheme === "dark" ? ("sun.max.fill" as const) : ("moon.fill" as const),
-      label: scheme === "dark" ? "Mode Clair" : "Mode Sombre",
+      label: scheme === "dark" ? "Mode clair" : "Mode sombre",
       onPress: () => setScheme(scheme === "dark" ? "light" : "dark"),
     },
     {
       icon: "bell.fill" as const,
       label: "Notifications",
+      onPress: () => router.push("/notifications" as any),
+    },
+    {
+      icon: "gearshape.fill" as const,
+      label: "Préférences de notifications",
       onPress: () => router.push("/notification-settings" as any),
     },
     {
       icon: "hand.raised.fill" as const,
-      label: "Confidentialite et donnees",
+      label: "Confidentialité et données",
       onPress: () => router.push("/privacy-data" as any),
     },
     {
       icon: "info.circle.fill" as const,
-      label: "A propos",
+      label: "À propos",
       onPress: () => router.push("/about" as any),
     },
   ];
@@ -125,7 +136,9 @@ export default function ProfileScreen() {
                     fontWeight: "700",
                   }}
                 >
-                  {user.firstName} {user.lastName}
+                  {[user.firstName, user.lastName].filter(Boolean).join(" ") ||
+                    user.displayName ||
+                    "Client TicketByLamako"}
                 </Text>
                 <Text
                   style={{ color: colors.muted, fontSize: 13, marginTop: 2 }}
@@ -175,6 +188,8 @@ export default function ProfileScreen() {
               </Text>
               <TouchableOpacity
                 onPress={() => router.push("/(auth)/login" as any)}
+                accessibilityRole="button"
+                accessibilityLabel="Se connecter à TicketByLamako"
                 style={{
                   backgroundColor: colors.primary,
                   borderRadius: 12,
@@ -197,6 +212,8 @@ export default function ProfileScreen() {
         {isAuthenticated && (
           <TouchableOpacity
             onPress={() => router.push("/rewards" as any)}
+            accessibilityRole="button"
+            accessibilityLabel="Voir mon compte LamakoRewards"
             style={{
               marginHorizontal: 16,
               marginBottom: 20,
@@ -311,6 +328,18 @@ export default function ProfileScreen() {
         )}
 
         {/* Menu Items */}
+        <Text
+          style={{
+            color: colors.muted,
+            fontSize: 12,
+            fontWeight: "700",
+            textTransform: "uppercase",
+            marginHorizontal: 20,
+            marginBottom: 8,
+          }}
+        >
+          Compte et préférences
+        </Text>
         <View
           style={{
             marginHorizontal: 16,
@@ -325,6 +354,8 @@ export default function ProfileScreen() {
             <TouchableOpacity
               key={item.label}
               onPress={item.onPress}
+              accessibilityRole="button"
+              accessibilityLabel={item.label}
               style={{
                 flexDirection: "row",
                 alignItems: "center",
@@ -366,6 +397,8 @@ export default function ProfileScreen() {
         {isAuthenticated && (
           <TouchableOpacity
             onPress={handleLogout}
+            accessibilityRole="button"
+            accessibilityLabel="Se déconnecter"
             style={{
               marginHorizontal: 16,
               marginTop: 20,
@@ -395,7 +428,7 @@ export default function ProfileScreen() {
             marginBottom: 40,
           }}
         >
-          TicketByLamako v2.0.0
+          {getAppVersionLabel()}
         </Text>
       </ScrollView>
     </ScreenContainer>

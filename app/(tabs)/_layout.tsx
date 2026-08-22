@@ -1,5 +1,5 @@
 import { useRef, useCallback, useState } from "react";
-import { View, StyleSheet, Platform, Dimensions, Animated, TouchableOpacity, Text } from "react-native";
+import { View, StyleSheet, Platform, Animated, TouchableOpacity, Text, useWindowDimensions } from "react-native";
 import { Tabs } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { HapticTab } from "@/components/haptic-tab";
@@ -9,12 +9,12 @@ import { useCart } from "@/lib/cart-provider";
 import { AppHeader } from "@/components/app-header";
 import { DrawerContent } from "@/components/drawer-content";
 
-const DRAWER_WIDTH = Math.min(Dimensions.get("window").width * 0.82, 320);
-
 export default function TabLayout() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { itemCount } = useCart();
+  const { width } = useWindowDimensions();
+  const drawerWidth = Math.min(width * 0.86, 360);
   const bottomPadding = Platform.OS === "web" ? 12 : Math.max(insets.bottom, 8);
   const tabBarHeight = 60 + bottomPadding;
 
@@ -43,7 +43,7 @@ export default function TabLayout() {
 
   const drawerTranslateX = drawerAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [-DRAWER_WIDTH, 0],
+    outputRange: [-drawerWidth, 0],
   });
 
   const overlayOpacity = drawerAnim.interpolate({
@@ -160,7 +160,7 @@ export default function TabLayout() {
             style={[
               styles.drawer,
               {
-                width: DRAWER_WIDTH,
+                width: drawerWidth,
                 transform: [{ translateX: drawerTranslateX }],
               },
             ]}

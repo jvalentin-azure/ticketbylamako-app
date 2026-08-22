@@ -28,6 +28,7 @@ export default function EditProfileScreen() {
   const colors = useColors();
   const router = useRouter();
   const { user, updateCurrentUser } = useAuth();
+  const userId = user?.id;
 
   const [firstName, setFirstName] = useState(user?.firstName || "");
   const [lastName, setLastName] = useState(user?.lastName || "");
@@ -40,6 +41,10 @@ export default function EditProfileScreen() {
 
   // Load the server profile first; local billing data is only a fallback.
   useEffect(() => {
+    if (!userId) {
+      setLoadingProfile(false);
+      return;
+    }
     const activeRequest = ++profileRequestId.current;
     (async () => {
       try {
@@ -71,7 +76,7 @@ export default function EditProfileScreen() {
     return () => {
       profileRequestId.current += 1;
     };
-  }, []);
+  }, [userId]);
   const [saving, setSaving] = useState(false);
 
   // Password section
@@ -172,6 +177,30 @@ export default function EditProfileScreen() {
     }
   };
 
+  if (!user) {
+    return (
+      <ScreenContainer edges={["top", "left", "right", "bottom"]}>
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <IconSymbol name="person.fill" size={44} color={colors.muted} />
+          <Text style={{ color: colors.foreground, fontSize: 20, fontWeight: "700", marginTop: 16 }}>
+            Connexion requise
+          </Text>
+          <Text style={{ color: colors.muted, fontSize: 14, lineHeight: 20, textAlign: "center", marginTop: 8 }}>
+            Connectez-vous pour consulter et modifier vos informations personnelles.
+          </Text>
+          <TouchableOpacity
+            onPress={() => router.replace("/(auth)/login" as any)}
+            accessibilityRole="button"
+            accessibilityLabel="Se connecter"
+            style={{ backgroundColor: colors.primary, borderRadius: 12, minHeight: 48, paddingHorizontal: 28, alignItems: "center", justifyContent: "center", marginTop: 20 }}
+          >
+            <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>Se connecter</Text>
+          </TouchableOpacity>
+        </View>
+      </ScreenContainer>
+    );
+  }
+
   return (
     <ScreenContainer edges={["top", "left", "right"]}>
       <ScrollView
@@ -190,6 +219,8 @@ export default function EditProfileScreen() {
           <TouchableOpacity
             onPress={() => router.back()}
             style={{ marginRight: 12 }}
+            accessibilityRole="button"
+            accessibilityLabel="Retour"
           >
             <IconSymbol
               name="chevron.left"
@@ -251,6 +282,8 @@ export default function EditProfileScreen() {
                   borderColor: colors.border,
                 }}
                 placeholderTextColor={colors.muted}
+                accessibilityLabel="Prénom"
+                autoComplete="given-name"
               />
             </View>
             <View>
@@ -273,6 +306,8 @@ export default function EditProfileScreen() {
                   borderColor: colors.border,
                 }}
                 placeholderTextColor={colors.muted}
+                accessibilityLabel="Nom"
+                autoComplete="family-name"
               />
             </View>
             <View>
@@ -297,6 +332,8 @@ export default function EditProfileScreen() {
                   borderColor: colors.border,
                 }}
                 placeholderTextColor={colors.muted}
+                accessibilityLabel="Adresse e-mail"
+                autoComplete="email"
               />
             </View>
             <View>
@@ -321,31 +358,10 @@ export default function EditProfileScreen() {
                   borderColor: colors.border,
                 }}
                 placeholderTextColor={colors.muted}
+                accessibilityLabel="Numéro de téléphone"
+                autoComplete="tel"
               />
             </View>
-
-            <TouchableOpacity
-              onPress={handleSaveProfile}
-              disabled={saving || loadingProfile}
-              style={{
-                backgroundColor: colors.primary,
-                borderRadius: 12,
-                paddingVertical: 14,
-                alignItems: "center",
-                marginTop: 4,
-                opacity: saving || loadingProfile ? 0.6 : 1,
-              }}
-            >
-              {saving || loadingProfile ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text
-                  style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}
-                >
-                  Enregistrer
-                </Text>
-              )}
-            </TouchableOpacity>
           </View>
         </View>
 
@@ -359,7 +375,7 @@ export default function EditProfileScreen() {
               marginBottom: 12,
             }}
           >
-            Adresse de livraison
+            Adresse de facturation
           </Text>
 
           <View
@@ -393,6 +409,8 @@ export default function EditProfileScreen() {
                   borderColor: colors.border,
                 }}
                 placeholderTextColor={colors.muted}
+                accessibilityLabel="Adresse de facturation"
+                autoComplete="street-address"
               />
             </View>
             <View>
@@ -416,8 +434,35 @@ export default function EditProfileScreen() {
                   borderColor: colors.border,
                 }}
                 placeholderTextColor={colors.muted}
+                accessibilityLabel="Ville"
+                autoComplete="postal-address-locality"
               />
             </View>
+
+            <TouchableOpacity
+              onPress={handleSaveProfile}
+              disabled={saving || loadingProfile}
+              accessibilityRole="button"
+              accessibilityLabel="Enregistrer mes informations"
+              accessibilityState={{ disabled: saving || loadingProfile, busy: saving }}
+              style={{
+                backgroundColor: colors.primary,
+                borderRadius: 12,
+                minHeight: 48,
+                alignItems: "center",
+                justifyContent: "center",
+                marginTop: 4,
+                opacity: saving || loadingProfile ? 0.6 : 1,
+              }}
+            >
+              {saving || loadingProfile ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>
+                  Enregistrer mes informations
+                </Text>
+              )}
+            </TouchableOpacity>
           </View>
         </View>
 

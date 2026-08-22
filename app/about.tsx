@@ -5,6 +5,7 @@ import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { LAMAKO_PHONE_DISPLAY, LAMAKO_PHONE_NUMBER, LAMAKO_WHATSAPP_DISPLAY, buildLamakoWhatsAppUrl } from "@/lib/contact";
+import { getAppVersionLabel } from "@/lib/app-version";
 
 const SOCIAL_LINKS = [
   { name: "Facebook", icon: "facebook" as const, url: "https://www.facebook.com/Ticketbylamako", color: "#1877F2" },
@@ -250,7 +251,7 @@ export default function AboutScreen() {
 
         {/* Version */}
         <Text style={[styles.versionText, { color: colors.muted }]}>
-          TicketByLamako v1.0.0{"\n"}© 2025 Lamako Events. Tous droits réservés.
+          {getAppVersionLabel()}{"\n"}© {new Date().getFullYear()} Lamako Events. Tous droits réservés.
         </Text>
 
         <View style={{ height: 40 }} />
