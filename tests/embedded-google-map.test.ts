@@ -15,6 +15,10 @@ describe("embedded event map", () => {
     expect(mapSource).toContain("maps.google.com/maps?q=");
     expect(mapSource).not.toContain("EXPO_PUBLIC_GOOGLE_MAPS_API_KEY");
     expect(mapSource).toContain("output=embed");
+    expect(mapSource).toContain("<iframe");
+    expect(mapSource).toContain("source={{ html: mapHtml");
+    expect(mapSource).not.toContain("source={{ uri: embedUrl }}");
+    expect(mapSource).toContain("map-loaded");
     expect(mapSource).toContain('current === "public" ? "public-alternate"');
     expect(mapSource).toContain("Itinéraire vers le lieu");
   });

@@ -35,6 +35,33 @@ function isGoogleMapsNavigation(rawUrl: string): boolean {
   }
 }
 
+function buildMapHtml(embedUrl: string): string {
+  const safeEmbedUrl = embedUrl.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+
+  return `<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; frame-src https://www.google.com https://maps.google.com; style-src 'unsafe-inline'; script-src 'unsafe-inline';" />
+    <style>
+      html, body, iframe { width: 100%; height: 100%; margin: 0; padding: 0; border: 0; overflow: hidden; background: #f5f3f0; }
+    </style>
+  </head>
+  <body>
+    <iframe
+      title="Carte Google Maps"
+      src="${safeEmbedUrl}"
+      loading="eager"
+      referrerpolicy="no-referrer-when-downgrade"
+      allowfullscreen
+      onload="window.ReactNativeWebView && window.ReactNativeWebView.postMessage('map-loaded')"
+      onerror="window.ReactNativeWebView && window.ReactNativeWebView.postMessage('map-error')"
+    ></iframe>
+  </body>
+</html>`;
+}
+
 export function EmbeddedGoogleMap({
   location,
   height = 210,
@@ -64,6 +91,10 @@ export function EmbeddedGoogleMap({
       : sourceMode === "public-alternate"
         ? alternateEmbedUrl
         : "";
+  const mapHtml = useMemo(
+    () => (embedUrl ? buildMapHtml(embedUrl) : ""),
+    [embedUrl],
+  );
   const directionsUrl = useMemo(
     () =>
       `https://www.google.com/maps/dir/?api=1&destination=${encodedLocation}`,
@@ -99,9 +130,9 @@ export function EmbeddedGoogleMap({
           },
         ]}
       >
-        {WebViewComponent && embedUrl ? (
+        {WebViewComponent && mapHtml ? (
           <WebViewComponent
-            source={{ uri: embedUrl }}
+            source={{ html: mapHtml, baseUrl: "https://www.google.com" }}
             style={styles.webView}
             originWhitelist={["https://*"]}
             javaScriptEnabled
@@ -109,9 +140,15 @@ export function EmbeddedGoogleMap({
             scrollEnabled={false}
             setSupportMultipleWindows={false}
             onLoadStart={() => setLoaded(false)}
-            onLoadEnd={() => setLoaded(true)}
             onError={handleMapFailure}
             onHttpError={handleMapFailure}
+            onMessage={(event: { nativeEvent: { data: string } }) => {
+              if (event.nativeEvent.data === "map-loaded") {
+                setLoaded(true);
+              } else if (event.nativeEvent.data === "map-error") {
+                handleMapFailure();
+              }
+            }}
             onShouldStartLoadWithRequest={(request: { url: string }) =>
               isGoogleMapsNavigation(request.url)
             }
@@ -127,7 +164,7 @@ export function EmbeddedGoogleMap({
             </Text>
           </View>
         )}
-        {WebViewComponent && embedUrl && !loaded ? (
+        {WebViewComponent && mapHtml && !loaded ? (
           <View style={[styles.loading, { backgroundColor: colors.surface }]}>
             <ActivityIndicator color={colors.primary} />
             <Text style={[styles.loadingText, { color: colors.muted }]}>
