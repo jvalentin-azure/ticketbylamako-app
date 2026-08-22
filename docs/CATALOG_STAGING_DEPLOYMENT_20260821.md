@@ -104,6 +104,27 @@ cp -p /home/master/tbl-compliance-backups/wvvtwdcenn-20260821T114634Z-pre-mobile
 php -l /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
 ```
 
+## Builds QA wallet et carte - 22 août 2026
+
+Les deux candidats ont été construits depuis le commit
+`0bfbcc8af5e8925f9c547f028968c184bd0a1c4e`. Ils ciblent le staging et
+n'incluent aucun déploiement de production.
+
+- Android staging APK, versionCode `53` :
+  - build EAS : `ea11b263-b324-4cf6-827a-7335d3337c4a` ;
+  - artefact :
+    `https://expo.dev/artifacts/eas/BAQvc-7CE2IZ5auj90bupJG-wYQ14kzanaV0mMY8Xmg.apk` ;
+  - statut : terminé.
+- iOS staging/TestFlight, buildNumber `39` :
+  - build EAS : `ef238319-0a8a-48d2-8b7b-7a2fb49f8a00` ;
+  - soumission App Store Connect :
+    `8e54a44d-39c1-4641-9967-7e58dbbaaf84` ;
+  - statut : binaire envoyé, traitement TestFlight Apple en cours.
+
+QA physique requise : affiches du wallet, commande multi-billets, QR plein
+écran et hors ligne, carte Google Maps intégrée, itinéraire, puis régression
+seating chart, panier, coupons et paiements.
+
 Après rollback, retester les cinq endpoints catalogue ci-dessus et vérifier que
 `GET /lamako-mobile/v2/profile` redevient indisponible comme avant ce déploiement.
 
