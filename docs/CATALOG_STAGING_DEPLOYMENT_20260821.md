@@ -462,7 +462,7 @@ effectué.
 - iOS staging/TestFlight, buildNumber `38` :
   - build EAS : `bcd22973-8603-4ba3-87ea-c94126e9e6b7` ;
   - statut build : terminé ;
-  - soumission TestFlight planifiée :
+  - soumission TestFlight terminée :
     `ba8d5a29-0a52-4515-bc49-52aca706cec4`.
 
 QA physique requise avant toute promotion : authentification, catalogue et
