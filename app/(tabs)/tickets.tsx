@@ -83,6 +83,7 @@ export default function TicketsScreen() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuth();
   const requestId = useRef(0);
+  const walletUserId = useRef<number | null>(null);
   const [tickets, setTickets] = useState<TicketItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -180,14 +181,17 @@ export default function TicketsScreen() {
     const activeRequest = ++requestId.current;
 
     if (!isAuthenticated || !userId) {
+      walletUserId.current = null;
       setTickets([]);
       setLoading(false);
       setErrorMessage(null);
       return undefined;
     }
 
-    setTickets([]);
-    setLoading(true);
+    const accountChanged = walletUserId.current !== userId;
+    walletUserId.current = userId;
+    if (accountChanged) setTickets([]);
+    setLoading(accountChanged);
     setErrorMessage(null);
 
     void (async () => {

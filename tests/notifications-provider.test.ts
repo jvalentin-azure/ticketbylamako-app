@@ -138,6 +138,12 @@ describe("notification account security", () => {
     expect(provider).not.toContain('AsyncStorage.setItem("tbl_notifications"');
   });
 
+  it("exposes storage hydration so the inbox does not flash a false empty state", () => {
+    expect(provider).toContain("isHydrated");
+    expect(provider).toContain("setIsHydrated(false)");
+    expect(provider).toContain("setIsHydrated(true)");
+  });
+
   it("revokes the device token on logout with a bounded wait", () => {
     expect(auth).toContain("unregisterPushTokenWithBackend");
     expect(auth).toContain("Promise.race");

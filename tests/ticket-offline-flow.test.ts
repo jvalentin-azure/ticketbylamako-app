@@ -22,6 +22,12 @@ describe("offline ticket lifecycle", () => {
     expect(walletSource).toContain("order.ticketsReady && orderTickets.length > 0");
   });
 
+  it("keeps the in-memory wallet visible when returning to the same account", () => {
+    expect(walletSource).toContain("const walletUserId = useRef<number | null>(null)");
+    expect(walletSource).toContain("const accountChanged = walletUserId.current !== userId");
+    expect(walletSource).toContain("if (accountChanged) setTickets([])");
+  });
+
   it("uses the local copy only for network failures", () => {
     expect(detailSource).toContain("getCachedTicketDetail(user.id, orderId)");
     expect(detailSource).toContain("error.status === 401");

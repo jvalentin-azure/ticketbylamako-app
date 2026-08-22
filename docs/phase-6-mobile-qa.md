@@ -98,3 +98,24 @@ Verify gateway return URLs resolve to the plugin-rendered mobile return pages fo
 - Seated checkout preserves the same WebView/WooCommerce session from seat selection through payment.
 - Failed, cancelled, pending, and success payment states are displayed distinctly.
 - Orders, tickets, rewards, and referral state match between mobile and WordPress account pages.
+
+## Wallet And Notification Regression QA
+
+The staging wallet API optimization is server-side and does not require a new
+EAS build. The following client changes should ship with the next planned
+mobile build rather than triggering a standalone build:
+
+- Returning to `Mes billets` with the same account keeps the in-memory wallet
+  visible while the background refresh runs.
+- Switching account or signing out clears the previous account wallet before
+  another cache is loaded.
+- Opening a previously loaded ticket without network displays the encrypted
+  offline copy and its QR code with the offline warning.
+- The notification center displays a loading state until its account-scoped
+  AsyncStorage history is hydrated; it must not flash `Aucune notification`.
+- Notifications remain isolated by user ID and private notification links
+  still require authentication.
+
+Rollback is a normal revert of the dedicated client commit. The previously
+deployed staging API can be restored independently from the backup recorded in
+`docs/CATALOG_STAGING_DEPLOYMENT_20260821.md`; no production file is involved.

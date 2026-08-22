@@ -24,6 +24,7 @@ const LEGACY_NOTIFICATION_STORAGE_KEY = "tbl_notifications";
 interface NotificationsContextType {
   notifications: AppNotification[];
   unreadCount: number;
+  isHydrated: boolean;
   markAsRead: (id: string) => void;
   markAllAsRead: () => void;
   clearAll: () => void;
@@ -32,6 +33,7 @@ interface NotificationsContextType {
 const NotificationsContext = createContext<NotificationsContextType>({
   notifications: [],
   unreadCount: 0,
+  isHydrated: false,
   markAsRead: () => {},
   markAllAsRead: () => {},
   clearAll: () => {},
@@ -48,6 +50,7 @@ export function NotificationsProvider({
 }) {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [isHydrated, setIsHydrated] = useState(false);
   const storageKey = useMemo(
     () => notificationStorageKey(user?.id),
     [user?.id],
@@ -57,19 +60,21 @@ export function NotificationsProvider({
   useEffect(() => {
     let mounted = true;
     setNotifications([]);
-    void AsyncStorage.getItem(storageKey).then((data) => {
-      if (!mounted || !data) return;
-      let stored: AppNotification[] = [];
+    setIsHydrated(false);
+    void (async () => {
       try {
-        stored = normalizeStoredNotifications(JSON.parse(data));
+        const data = await AsyncStorage.getItem(storageKey);
+        if (!mounted || !data) return;
+        const stored = normalizeStoredNotifications(JSON.parse(data));
+        setNotifications((current) =>
+          normalizeStoredNotifications([...current, ...stored]),
+        );
       } catch {
-        void AsyncStorage.removeItem(storageKey);
-        return;
+        await AsyncStorage.removeItem(storageKey).catch(() => undefined);
+      } finally {
+        if (mounted) setIsHydrated(true);
       }
-      setNotifications((current) =>
-        normalizeStoredNotifications([...current, ...stored]),
-      );
-    });
+    })();
     void AsyncStorage.removeItem(LEGACY_NOTIFICATION_STORAGE_KEY);
     return () => {
       mounted = false;
@@ -169,6 +174,7 @@ export function NotificationsProvider({
       value={{
         notifications,
         unreadCount,
+        isHydrated,
         markAsRead,
         markAllAsRead,
         clearAll,

@@ -4,6 +4,7 @@ import {
   TouchableOpacity,
   SectionList,
   StyleSheet,
+  ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
@@ -26,19 +27,22 @@ export default function NotificationsScreen() {
   const colors = useColors();
   const router = useRouter();
   const { isAuthenticated } = useAuth();
-  const { notifications, unreadCount, markAsRead, markAllAsRead } =
+  const { notifications, unreadCount, isHydrated, markAsRead, markAllAsRead } =
     useNotifications();
   const sections = useMemo(() => {
-    const labels = ["Aujourd'hui", "Cette semaine", "Plus tôt"] as const;
-    return labels
-      .map((title) => ({
-        title,
-        data: notifications.filter(
-          (notification) =>
-            notificationSectionLabel(notification.receivedAt) === title,
-        ),
-      }))
-      .filter((section) => section.data.length > 0);
+    const grouped = new Map<string, AppNotification[]>([
+      ["Aujourd'hui", []],
+      ["Cette semaine", []],
+      ["Plus tôt", []],
+    ]);
+    notifications.forEach((notification) => {
+      grouped
+        .get(notificationSectionLabel(notification.receivedAt))
+        ?.push(notification);
+    });
+    return [...grouped.entries()]
+      .filter(([, data]) => data.length > 0)
+      .map(([title, data]) => ({ title, data }));
   }, [notifications]);
 
   const formatTime = (dateStr: string) => {
@@ -187,7 +191,17 @@ export default function NotificationsScreen() {
         </View>
       </View>
 
-      {notifications.length === 0 ? (
+      {!isHydrated ? (
+        <View
+          accessibilityLabel="Chargement des notifications"
+          style={styles.loadingContainer}
+        >
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.muted }]}>
+            Chargement de vos notifications...
+          </Text>
+        </View>
+      ) : notifications.length === 0 ? (
         <View style={styles.emptyContainer}>
           <View style={[styles.emptyIcon, { backgroundColor: colors.surface }]}>
             <IconSymbol name="bell.fill" size={40} color={colors.muted} />
@@ -278,6 +292,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 32,
   },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 32,
+  },
+  loadingText: { fontSize: 13, marginTop: 12 },
   emptyIcon: {
     width: 80,
     height: 80,
