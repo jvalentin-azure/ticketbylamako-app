@@ -13,6 +13,8 @@ describe("embedded event map", () => {
   it("loads Google Maps inside the page and keeps directions secondary", () => {
     expect(mapSource).toContain("www.google.com/maps/embed/v1/place");
     expect(mapSource).toContain("EXPO_PUBLIC_GOOGLE_MAPS_API_KEY");
+    expect(mapSource).toContain("output=embed");
+    expect(mapSource).toContain('current === "keyed" ? "public" : "failed"');
     expect(mapSource).toContain("Itinéraire vers le lieu");
   });
 

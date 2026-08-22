@@ -3,7 +3,7 @@ import type {
   MobileOrderTicketsResponse,
 } from "@/lib/api/mobile";
 
-export const TICKET_DETAIL_CACHE_VERSION = 1;
+export const TICKET_DETAIL_CACHE_VERSION = 2;
 const CACHEABLE_ORDER_STATUSES = new Set([
   "completed",
   "processing",

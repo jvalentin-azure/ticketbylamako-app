@@ -36,4 +36,13 @@ describe("premium ticket experience", () => {
     expect(adapter).toContain("appleWalletUrl");
     expect(adapter).toContain("googleWalletUrl");
   });
+
+  it("distinguishes an active ticket from an already scanned ticket", () => {
+    const source = read("app/ticket/[id].tsx");
+
+    expect(source).toContain("Billet actif");
+    expect(source).toContain("Billet déjà scanné");
+    expect(source).toContain("ticket.checked_in === true");
+    expect(source).toContain("QR conservé comme justificatif");
+  });
 });

@@ -58,5 +58,8 @@ export function mobileTicketToTicketInstance(
     event_image: ticket.eventImage || "",
     apple_wallet_url: ticket.appleWalletUrl || "",
     google_wallet_url: ticket.googleWalletUrl || "",
+    checked_in: ticket.checkedIn === true,
+    checked_in_at: ticket.checkedInAt || "",
+    checkin_count: ticket.checkinCount || 0,
   };
 }

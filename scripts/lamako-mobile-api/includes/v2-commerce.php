@@ -509,6 +509,48 @@ function lamako_mobile_v2_image_url_from_value( $value, $size = 'large' ) {
     return '';
 }
 
+function lamako_mobile_v2_ticket_event_image( $event_id, $product_id ) {
+    $event_id   = absint( $event_id );
+    $product_id = absint( $product_id );
+
+    if ( $event_id > 0 ) {
+        $featured = get_the_post_thumbnail_url( $event_id, 'medium_large' );
+        if ( is_string( $featured ) && $featured !== '' ) {
+            return esc_url_raw( $featured );
+        }
+
+        $event_gallery = lamako_mobile_v2_public_gallery( $event_id, [
+            'lamako_mobile_gallery',
+            '_lamako_mobile_gallery',
+            'mobile_gallery',
+            '_mobile_gallery',
+            '_tbl_event_gallery_image_ids',
+        ] );
+        if ( ! empty( $event_gallery[0] ) ) {
+            return esc_url_raw( $event_gallery[0] );
+        }
+    }
+
+    if ( $product_id > 0 ) {
+        $product_featured = get_the_post_thumbnail_url( $product_id, 'medium_large' );
+        if ( is_string( $product_featured ) && $product_featured !== '' ) {
+            return esc_url_raw( $product_featured );
+        }
+
+        $product_gallery = lamako_mobile_v2_public_gallery( $product_id, [
+            'lamako_mobile_gallery',
+            '_lamako_mobile_gallery',
+            'mobile_gallery',
+            '_mobile_gallery',
+        ] );
+        if ( ! empty( $product_gallery[0] ) ) {
+            return esc_url_raw( $product_gallery[0] );
+        }
+    }
+
+    return '';
+}
+
 function lamako_mobile_v2_public_gallery( $post_id, array $keys ) {
     $raw = lamako_mobile_v2_meta_first( $post_id, $keys, [] );
     if ( is_string( $raw ) ) {
@@ -4973,7 +5015,7 @@ function lamako_mobile_v2_ticket_item_context( WC_Order $order, $item ) {
     $event_date = $event_id ? lamako_mobile_v2_meta_first( $event_id, [ 'event_date_time', '_event_date_time', 'event_start_date', '_event_start_date' ], '' ) : '';
     $event_end_date = $event_id ? lamako_mobile_v2_meta_first( $event_id, [ 'event_end_date_time', '_event_end_date_time', 'event_end_date', '_event_end_date' ], '' ) : '';
     $event_location = $event_id ? ( get_post_meta( $event_id, 'event_location', true ) ?: get_post_meta( $event_id, '_event_location', true ) ) : '';
-    $event_image = $event_id ? get_the_post_thumbnail_url( $event_id, 'medium_large' ) : '';
+    $event_image = lamako_mobile_v2_ticket_event_image( $event_id, $product_id );
     $quantity = max( 1, (int) $item->get_quantity() );
 
     return [
@@ -4991,8 +5033,49 @@ function lamako_mobile_v2_ticket_item_context( WC_Order $order, $item ) {
     ];
 }
 
+function lamako_mobile_v2_ticket_checkin_state( $instance_id ) {
+    $checkins = get_post_meta( absint( $instance_id ), 'tc_checkins', true );
+    if ( ! is_array( $checkins ) || empty( $checkins ) ) {
+        return [
+            'checkedIn'    => false,
+            'checkedInAt'  => '',
+            'checkinCount' => 0,
+        ];
+    }
+
+    $checked_in    = false;
+    $checked_in_at = 0;
+    $checkin_count = 0;
+
+    foreach ( $checkins as $checkin ) {
+        if ( ! is_array( $checkin ) ) {
+            continue;
+        }
+
+        $status    = sanitize_key( $checkin['status'] ?? 'checked_in' );
+        $timestamp = absint( $checkin['date_checked'] ?? $checkin['date'] ?? 0 );
+
+        if ( in_array( $status, [ 'checked_in', 'pass' ], true ) ) {
+            $checked_in = true;
+            $checkin_count++;
+            if ( $timestamp > 0 ) {
+                $checked_in_at = $timestamp;
+            }
+        } elseif ( $status === 'checked_out' ) {
+            $checked_in    = false;
+            $checked_in_at = 0;
+        }
+    }
+
+    return [
+        'checkedIn'    => $checked_in,
+        'checkedInAt'  => $checked_in && $checked_in_at > 0 ? gmdate( 'c', $checked_in_at ) : '',
+        'checkinCount' => $checkin_count,
+    ];
+}
+
 function lamako_mobile_v2_ticket_instance_data( array $context, $instance_id ) {
-    return array_merge( $context, [
+    return array_merge( $context, lamako_mobile_v2_ticket_checkin_state( $instance_id ), [
         'instanceId' => (int) $instance_id,
         'ticketCode' => get_post_meta( $instance_id, 'ticket_code', true ),
         'seatLabel'  => get_post_meta( $instance_id, 'seat_label', true ),

@@ -43,8 +43,11 @@ describe("ticket wallet API performance", () => {
 
   it("includes the event poster in each ticket context without another mobile request", () => {
     expect(source).toContain(
-      "get_the_post_thumbnail_url( $event_id, 'medium_large' )",
+      "lamako_mobile_v2_ticket_event_image( $event_id, $product_id )",
     );
     expect(source).toContain("'eventImage'");
+    expect(source).toContain("'_tbl_event_gallery_image_ids'");
+    expect(source).toContain("'tc_checkins'");
+    expect(source).toContain("'checkedIn'");
   });
 });

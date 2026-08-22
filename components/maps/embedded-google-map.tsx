@@ -46,17 +46,29 @@ export function EmbeddedGoogleMap({
   height?: number;
 }) {
   const colors = useColors();
-  const [failed, setFailed] = useState(false);
+  const [sourceMode, setSourceMode] = useState<"keyed" | "public" | "failed">(
+    GOOGLE_MAPS_API_KEY ? "keyed" : "public",
+  );
   const [loaded, setLoaded] = useState(false);
   const normalizedLocation = location.trim();
   const encodedLocation = encodeURIComponent(normalizedLocation);
-  const embedUrl = useMemo(
+  const keyedEmbedUrl = useMemo(
     () =>
       GOOGLE_MAPS_API_KEY
         ? `https://www.google.com/maps/embed/v1/place?key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}&q=${encodedLocation}&zoom=15`
         : "",
     [encodedLocation],
   );
+  const publicEmbedUrl = useMemo(
+    () => `https://www.google.com/maps?q=${encodedLocation}&output=embed`,
+    [encodedLocation],
+  );
+  const embedUrl =
+    sourceMode === "keyed"
+      ? keyedEmbedUrl
+      : sourceMode === "public"
+        ? publicEmbedUrl
+        : "";
   const directionsUrl = useMemo(
     () =>
       `https://www.google.com/maps/dir/?api=1&destination=${encodedLocation}`,
@@ -64,9 +76,14 @@ export function EmbeddedGoogleMap({
   );
 
   useEffect(() => {
-    setFailed(false);
+    setSourceMode(GOOGLE_MAPS_API_KEY ? "keyed" : "public");
     setLoaded(false);
-  }, [embedUrl]);
+  }, [normalizedLocation]);
+
+  const handleMapFailure = () => {
+    setLoaded(false);
+    setSourceMode((current) => (current === "keyed" ? "public" : "failed"));
+  };
 
   const openDirections = () => {
     void Linking.openURL(directionsUrl);
@@ -85,7 +102,7 @@ export function EmbeddedGoogleMap({
           },
         ]}
       >
-        {WebViewComponent && embedUrl && !failed ? (
+        {WebViewComponent && embedUrl ? (
           <WebViewComponent
             source={{ uri: embedUrl }}
             style={styles.webView}
@@ -94,9 +111,10 @@ export function EmbeddedGoogleMap({
             domStorageEnabled
             scrollEnabled={false}
             setSupportMultipleWindows={false}
+            onLoadStart={() => setLoaded(false)}
             onLoadEnd={() => setLoaded(true)}
-            onError={() => setFailed(true)}
-            onHttpError={() => setFailed(true)}
+            onError={handleMapFailure}
+            onHttpError={handleMapFailure}
             onShouldStartLoadWithRequest={(request: { url: string }) =>
               isGoogleMapsNavigation(request.url)
             }
@@ -112,7 +130,7 @@ export function EmbeddedGoogleMap({
             </Text>
           </View>
         )}
-        {WebViewComponent && embedUrl && !failed && !loaded ? (
+        {WebViewComponent && embedUrl && !loaded ? (
           <View style={[styles.loading, { backgroundColor: colors.surface }]}>
             <ActivityIndicator color={colors.primary} />
             <Text style={[styles.loadingText, { color: colors.muted }]}>

@@ -15,7 +15,7 @@ describe("ticket detail resilience", () => {
   });
 
   it("accepts the CyberSource completed status", () => {
-    expect(screen).toContain('"cs-complete": { label: "Validé"');
+    expect(screen).toContain('"cs-complete": { label: "Billet actif"');
     expect(screen).toContain("ticketVisibleStatuses.has(order.status)");
   });
 

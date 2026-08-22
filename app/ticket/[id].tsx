@@ -48,8 +48,8 @@ import { addTicketEventToCalendar } from "@/lib/event-calendar";
 const { width: SCREEN_W } = Dimensions.get("window");
 
 const statusMap: Record<string, { label: string; color: string }> = {
-  completed: { label: "Validé", color: "#22C55E" },
-  "cs-complete": { label: "Validé", color: "#22C55E" },
+  completed: { label: "Billet actif", color: "#22C55E" },
+  "cs-complete": { label: "Billet actif", color: "#22C55E" },
   processing: { label: "Actif", color: "#F59E0B" },
   "on-hold": { label: "En attente", color: "#6366F1" },
   pending: { label: "En attente", color: "#6366F1" },
@@ -171,6 +171,7 @@ function TicketCard({
     color: colors.muted,
   };
   const isValid = ticketVisibleStatuses.has(order.status);
+  const isCheckedIn = ticket.checked_in === true;
   const qrValue = ticket.ticket_code;
   const [calendarBusy, setCalendarBusy] = useState(false);
   const walletUrl =
@@ -268,7 +269,41 @@ function TicketCard({
       <View style={[styles.qrSection, { backgroundColor: colors.background }]}>
         {isValid ? (
           <>
-            <View style={styles.qrContainer}>
+            {isCheckedIn ? (
+              <View
+                accessibilityRole="alert"
+                style={[
+                  styles.checkedInBanner,
+                  { borderColor: colors.success },
+                ]}
+              >
+                <IconSymbol
+                  name="checkmark.circle.fill"
+                  size={22}
+                  color={colors.success}
+                />
+                <View style={styles.checkedInCopy}>
+                  <Text
+                    style={[
+                      styles.checkedInTitle,
+                      { color: colors.foreground },
+                    ]}
+                  >
+                    Billet déjà scanné
+                  </Text>
+                  <Text
+                    style={[styles.checkedInDetail, { color: colors.muted }]}
+                  >
+                    {ticket.checked_in_at
+                      ? `Contrôlé le ${new Date(ticket.checked_in_at).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" })}`
+                      : "Ce billet a déjà été utilisé au contrôle d'entrée."}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+            <View
+              style={[styles.qrContainer, isCheckedIn && styles.checkedInQr]}
+            >
               <QRCode
                 value={qrValue}
                 size={180}
@@ -277,24 +312,28 @@ function TicketCard({
               />
             </View>
             <Text style={[styles.qrHint, { color: colors.muted }]}>
-              Présentez ce QR code à l'entrée
+              {isCheckedIn
+                ? "QR conservé comme justificatif"
+                : "Présentez ce QR code à l'entrée"}
             </Text>
             <Text style={[styles.ticketReference, { color: colors.muted }]}>
               Réf. {qrValue.slice(-8).toUpperCase()}
             </Text>
             <View style={styles.ticketActions}>
-              <TouchableOpacity
-                accessibilityRole="button"
-                accessibilityLabel="Afficher le QR code en plein écran"
-                onPress={onOpenEntry}
-                style={[
-                  styles.entryButton,
-                  { backgroundColor: colors.primary },
-                ]}
-              >
-                <IconSymbol name="qrcode" size={19} color="#fff" />
-                <Text style={styles.entryButtonText}>Mode entrée</Text>
-              </TouchableOpacity>
+              {!isCheckedIn ? (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Afficher le QR code en plein écran"
+                  onPress={onOpenEntry}
+                  style={[
+                    styles.entryButton,
+                    { backgroundColor: colors.primary },
+                  ]}
+                >
+                  <IconSymbol name="qrcode" size={19} color="#fff" />
+                  <Text style={styles.entryButtonText}>Mode entrée</Text>
+                </TouchableOpacity>
+              ) : null}
               {ticket.event_date ? (
                 <TouchableOpacity
                   accessibilityRole="button"
@@ -1021,6 +1060,20 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
+  checkedInQr: { opacity: 0.3 },
+  checkedInBanner: {
+    width: "100%",
+    borderWidth: 1,
+    borderRadius: 8,
+    marginBottom: 18,
+    padding: 13,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  checkedInCopy: { flex: 1 },
+  checkedInTitle: { fontSize: 14, fontWeight: "800" },
+  checkedInDetail: { fontSize: 11, lineHeight: 16, marginTop: 2 },
   qrHint: { fontSize: 12, marginTop: 10 },
   ticketReference: { fontSize: 10, marginTop: 4, fontWeight: "600" },
   ticketActions: {

@@ -43,6 +43,8 @@ interface TicketItem {
   seatLabel?: string;
   eventLocation?: string;
   eventImage?: string;
+  checkedIn: boolean;
+  checkedInAt?: string;
 }
 
 const ticketVisibleStatuses = new Set([
@@ -52,7 +54,7 @@ const ticketVisibleStatuses = new Set([
 ]);
 
 function cacheKey(userId: number) {
-  return `ticket-wallet-v2-${userId}`;
+  return `ticket-wallet-v3-${userId}`;
 }
 
 function ticketErrorMessage(error: unknown) {
@@ -139,6 +141,8 @@ export default function TicketsScreen() {
               seatLabel: ticket.seatLabel || undefined,
               eventLocation: ticket.eventLocation || undefined,
               eventImage: ticket.eventImage || undefined,
+              checkedIn: ticket.checkedIn === true,
+              checkedInAt: ticket.checkedInAt || undefined,
             }));
           } catch {
             return [];
@@ -165,6 +169,7 @@ export default function TicketsScreen() {
                 date: "",
                 endDate: undefined,
                 status: order.status,
+                checkedIn: false,
               });
             });
           });
@@ -303,9 +308,9 @@ export default function TicketsScreen() {
   };
 
   const statusLabel = (s: string) => {
-    if (s === "completed") return "Validé";
+    if (s === "completed") return "Billet actif";
     if (s === "processing") return "Actif";
-    if (s === "cs-complete") return "Validé";
+    if (s === "cs-complete") return "Billet actif";
     if (s === "pending") return "En attente";
     if (s === "on-hold") return "En attente";
     if (s === "cancelled") return "Annulé";
@@ -462,103 +467,129 @@ export default function TicketsScreen() {
               ) : null}
             </>
           }
-          renderItem={({ item: group }) => (
-            <TouchableOpacity
-              accessibilityRole="button"
-              accessibilityLabel={`Ouvrir ${group.tickets.length} billet${group.tickets.length > 1 ? "s" : ""} pour ${group.eventName}`}
-              activeOpacity={0.8}
-              onPress={() => openGroup(group)}
-              style={[
-                styles.ticketCard,
-                { backgroundColor: colors.surface, borderColor: colors.border },
-              ]}
-            >
-              {group.eventImage ? (
-                <Image
-                  accessibilityLabel={`Affiche de ${group.eventName}`}
-                  source={{ uri: group.eventImage }}
-                  contentFit="cover"
-                  transition={150}
-                  style={styles.ticketPoster}
-                />
-              ) : (
-                <View
-                  style={[
-                    styles.ticketIcon,
-                    { backgroundColor: colors.primary + "15" },
-                  ]}
-                >
-                  <IconSymbol
-                    name="ticket.fill"
-                    size={24}
-                    color={colors.primary}
+          renderItem={({ item: group }) => {
+            const checkedInCount = group.tickets.filter(
+              (ticket) => ticket.checkedIn,
+            ).length;
+            const allCheckedIn = checkedInCount === group.tickets.length;
+            const badgeLabel = allCheckedIn
+              ? "Déjà scanné"
+              : checkedInCount > 0
+                ? `${checkedInCount}/${group.tickets.length} scannés`
+                : statusLabel(group.tickets[0].status);
+            const badgeColor =
+              checkedInCount > 0
+                ? colors.muted
+                : statusColor(group.tickets[0].status);
+
+            return (
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={`Ouvrir ${group.tickets.length} billet${group.tickets.length > 1 ? "s" : ""} pour ${group.eventName}`}
+                activeOpacity={0.8}
+                onPress={() => openGroup(group)}
+                style={[
+                  styles.ticketCard,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                {group.eventImage ? (
+                  <Image
+                    accessibilityLabel={`Affiche de ${group.eventName}`}
+                    source={{ uri: group.eventImage }}
+                    contentFit="cover"
+                    transition={150}
+                    style={styles.ticketPoster}
                   />
-                </View>
-              )}
-              <View style={styles.ticketInfo}>
-                <Text
-                  style={[styles.ticketName, { color: colors.foreground }]}
-                  numberOfLines={2}
-                >
-                  {group.eventName}
-                </Text>
-                <Text
-                  style={[styles.ticketMeta, { color: colors.muted }]}
-                  numberOfLines={1}
-                >
-                  {group.date
-                    ? formatDateShort(group.date)
-                    : "Date à confirmer"}
-                </Text>
-                <Text style={[styles.bundleText, { color: colors.foreground }]}>
-                  {group.tickets.length} billet
-                  {group.tickets.length > 1 ? "s" : ""}
-                  {group.ticketTypes.length
-                    ? ` · ${group.ticketTypes.join(", ")}`
-                    : ""}
-                </Text>
-                {group.seatLabels.length > 0 ? (
-                  <Text style={[styles.seatText, { color: colors.primary }]}>
-                    {group.seatLabels.length > 1 ? "Places" : "Place"}{" "}
-                    {group.seatLabels.join(", ")}
-                  </Text>
-                ) : null}
-                {group.eventLocation ? (
-                  <Text
-                    style={[styles.locationText, { color: colors.muted }]}
-                    numberOfLines={1}
-                  >
-                    {group.eventLocation}
-                  </Text>
-                ) : null}
-              </View>
-              <View style={styles.ticketRight}>
-                <View
-                  style={[
-                    styles.statusBadge,
-                    {
-                      backgroundColor:
-                        statusColor(group.tickets[0].status) + "20",
-                    },
-                  ]}
-                >
-                  <Text
+                ) : (
+                  <View
                     style={[
-                      styles.statusText,
-                      { color: statusColor(group.tickets[0].status) },
+                      styles.ticketIcon,
+                      { backgroundColor: colors.primary + "15" },
                     ]}
                   >
-                    {statusLabel(group.tickets[0].status)}
+                    <IconSymbol
+                      name="ticket.fill"
+                      size={24}
+                      color={colors.primary}
+                    />
+                  </View>
+                )}
+                <View style={styles.ticketInfo}>
+                  <Text
+                    style={[styles.ticketName, { color: colors.foreground }]}
+                    numberOfLines={2}
+                  >
+                    {group.eventName}
                   </Text>
+                  <Text
+                    style={[styles.ticketMeta, { color: colors.muted }]}
+                    numberOfLines={1}
+                  >
+                    {group.date
+                      ? formatDateShort(group.date)
+                      : "Date à confirmer"}
+                  </Text>
+                  <Text
+                    style={[styles.bundleText, { color: colors.foreground }]}
+                  >
+                    {group.tickets.length} billet
+                    {group.tickets.length > 1 ? "s" : ""}
+                    {group.ticketTypes.length
+                      ? ` · ${group.ticketTypes.join(", ")}`
+                      : ""}
+                  </Text>
+                  {group.seatLabels.length > 0 ? (
+                    <Text style={[styles.seatText, { color: colors.primary }]}>
+                      {group.seatLabels.length > 1 ? "Places" : "Place"}{" "}
+                      {group.seatLabels.join(", ")}
+                    </Text>
+                  ) : null}
+                  {group.eventLocation ? (
+                    <Text
+                      style={[styles.locationText, { color: colors.muted }]}
+                      numberOfLines={1}
+                    >
+                      {group.eventLocation}
+                    </Text>
+                  ) : null}
                 </View>
-                <View
-                  style={[styles.qrAction, { backgroundColor: colors.primary }]}
-                >
-                  <IconSymbol name="qrcode" size={17} color="#fff" />
+                <View style={styles.ticketRight}>
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      {
+                        backgroundColor: badgeColor + "20",
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.statusText, { color: badgeColor }]}>
+                      {badgeLabel}
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.qrAction,
+                      {
+                        backgroundColor: allCheckedIn
+                          ? colors.muted
+                          : colors.primary,
+                      },
+                    ]}
+                  >
+                    <IconSymbol
+                      name={allCheckedIn ? "checkmark.circle.fill" : "qrcode"}
+                      size={17}
+                      color="#fff"
+                    />
+                  </View>
                 </View>
-              </View>
-            </TouchableOpacity>
-          )}
+              </TouchableOpacity>
+            );
+          }}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <View

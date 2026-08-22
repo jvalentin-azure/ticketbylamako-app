@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { parseCachedTicketDetail } from "../lib/ticket-detail-cache-parser";
+import {
+  parseCachedTicketDetail,
+  TICKET_DETAIL_CACHE_VERSION,
+} from "../lib/ticket-detail-cache-parser";
 
 const validPayload = {
-  version: 1,
+  version: TICKET_DETAIL_CACHE_VERSION,
   cachedAt: 1_723_000_000_000,
   order: {
     id: 42,
@@ -56,6 +59,15 @@ describe("ticket detail cache validation", () => {
           ...validPayload,
           order: { ...validPayload.order, status: "refunded" },
         }),
+        42,
+      ),
+    ).toBeNull();
+  });
+
+  it("rejects the previous cache shape so images and scan state refresh", () => {
+    expect(
+      parseCachedTicketDetail(
+        JSON.stringify({ ...validPayload, version: 1 }),
         42,
       ),
     ).toBeNull();
