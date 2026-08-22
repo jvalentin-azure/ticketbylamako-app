@@ -1,10 +1,30 @@
 import { describe, expect, it } from "vitest";
-import { filterWalletTickets, sortWalletTickets } from "../lib/ticket-wallet";
+import {
+  filterWalletTickets,
+  groupWalletTickets,
+  sortWalletTickets,
+} from "../lib/ticket-wallet";
+
+const baseTicket = {
+  orderId: 10,
+  eventId: 20,
+  ticketType: "Standard",
+};
 
 const tickets = [
-  { key: "future", eventName: "Futur", date: "2026-08-22T10:00:00Z" },
-  { key: "past", eventName: "Passé", date: "2026-08-18T10:00:00Z" },
-  { key: "today", eventName: "Aujourd'hui", date: "2026-08-21" },
+  {
+    ...baseTicket,
+    key: "future",
+    eventName: "Futur",
+    date: "2026-08-22T10:00:00Z",
+  },
+  {
+    ...baseTicket,
+    key: "past",
+    eventName: "Passé",
+    date: "2026-08-18T10:00:00Z",
+  },
+  { ...baseTicket, key: "today", eventName: "Aujourd'hui", date: "2026-08-21" },
 ];
 
 describe("ticket wallet filters", () => {
@@ -35,6 +55,7 @@ describe("ticket wallet filters", () => {
 
   it("keeps an in-progress event in the active wallet until its end", () => {
     const inProgress = {
+      ...baseTicket,
       key: "live",
       eventName: "En cours",
       date: "2026-08-21T10:00:00Z",
@@ -47,10 +68,49 @@ describe("ticket wallet filters", () => {
 
   it("keeps timed legacy events available for a bounded grace period", () => {
     const legacy = {
+      ...baseTicket,
       key: "legacy-live",
       eventName: "Événement sans date de fin",
       date: "2026-08-21T10:00:00Z",
     };
     expect(filterWalletTickets([legacy], "upcoming", now)).toEqual([legacy]);
+  });
+
+  it("groups seats from the same event and order into one wallet card", () => {
+    const grouped = groupWalletTickets([
+      {
+        ...baseTicket,
+        key: "c15",
+        eventName: "Concert",
+        date: "2026-08-22",
+        seatLabel: "C15",
+      },
+      {
+        ...baseTicket,
+        key: "c16",
+        eventName: "Concert",
+        date: "2026-08-22",
+        seatLabel: "C16",
+      },
+    ]);
+
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0]?.tickets).toHaveLength(2);
+    expect(grouped[0]?.seatLabels).toEqual(["C15", "C16"]);
+  });
+
+  it("keeps different orders in separate wallet cards", () => {
+    const grouped = groupWalletTickets([
+      { ...baseTicket, key: "first", eventName: "Concert", date: "2026-08-22" },
+      {
+        ...baseTicket,
+        orderId: 11,
+        key: "second",
+        eventName: "Concert",
+        date: "2026-08-22",
+      },
+    ]);
+
+    expect(grouped).toHaveLength(2);
   });
 });

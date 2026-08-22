@@ -24,4 +24,12 @@ describe("ticket detail resilience", () => {
     expect(screen).toContain("Billet indisponible");
     expect(screen).toContain("Réessayer");
   });
+
+  it("provides a focused offline entry mode without sharing the raw code", () => {
+    expect(screen).toContain('useKeepAwake("ticket-entry-mode")');
+    expect(screen).toContain("Mode entrée");
+    expect(screen).toContain("disponible hors ligne");
+    expect(screen).not.toContain("Share.share");
+    expect(screen).not.toContain("Partager ce billet");
+  });
 });

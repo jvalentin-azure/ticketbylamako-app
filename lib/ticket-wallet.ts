@@ -2,9 +2,27 @@ export type TicketWalletFilter = "upcoming" | "past" | "all";
 
 export interface WalletTicketLike {
   key: string;
+  orderId: number;
+  eventId: number;
+  eventName: string;
+  ticketType: string;
+  date: string;
+  endDate?: string;
+  seatLabel?: string;
+  eventLocation?: string;
+}
+
+export interface WalletTicketGroup<T extends WalletTicketLike> {
+  key: string;
+  orderId: number;
+  eventId: number;
   eventName: string;
   date: string;
   endDate?: string;
+  eventLocation?: string;
+  tickets: T[];
+  ticketTypes: string[];
+  seatLabels: string[];
 }
 
 const EVENT_START_GRACE_MS = 24 * 60 * 60 * 1000;
@@ -66,4 +84,48 @@ export function sortWalletTickets<T extends WalletTicketLike>(
       filter === "all" ? Math.abs(rightTime - now) : rightTime;
     return (leftDistance - rightDistance) * direction;
   });
+}
+
+export function groupWalletTickets<T extends WalletTicketLike>(
+  tickets: T[],
+): WalletTicketGroup<T>[] {
+  const groups = new Map<string, WalletTicketGroup<T>>();
+
+  for (const ticket of tickets) {
+    const eventIdentity =
+      ticket.eventId > 0
+        ? String(ticket.eventId)
+        : ticket.eventName.trim().toLocaleLowerCase("fr");
+    const key = `${ticket.orderId}:${eventIdentity}`;
+    const existing = groups.get(key);
+
+    if (existing) {
+      existing.tickets.push(ticket);
+      if (
+        ticket.ticketType &&
+        !existing.ticketTypes.includes(ticket.ticketType)
+      ) {
+        existing.ticketTypes.push(ticket.ticketType);
+      }
+      if (ticket.seatLabel && !existing.seatLabels.includes(ticket.seatLabel)) {
+        existing.seatLabels.push(ticket.seatLabel);
+      }
+      continue;
+    }
+
+    groups.set(key, {
+      key,
+      orderId: ticket.orderId,
+      eventId: ticket.eventId,
+      eventName: ticket.eventName,
+      date: ticket.date,
+      endDate: ticket.endDate,
+      eventLocation: ticket.eventLocation,
+      tickets: [ticket],
+      ticketTypes: ticket.ticketType ? [ticket.ticketType] : [],
+      seatLabels: ticket.seatLabel ? [ticket.seatLabel] : [],
+    });
+  }
+
+  return [...groups.values()];
 }

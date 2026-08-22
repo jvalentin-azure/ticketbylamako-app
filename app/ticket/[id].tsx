@@ -7,9 +7,10 @@ import {
   ActivityIndicator,
   StyleSheet,
   Dimensions,
-  Share,
-  Alert,
+  Modal,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useKeepAwake } from "expo-keep-awake";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
@@ -56,18 +57,101 @@ const ticketVisibleStatuses = new Set([
   "cs-complete",
 ]);
 
+function EntryMode({
+  ticket,
+  order,
+  index,
+  total,
+  onClose,
+}: {
+  ticket: TicketInstance;
+  order: WCOrder;
+  index: number;
+  total: number;
+  onClose: () => void;
+}) {
+  useKeepAwake("ticket-entry-mode");
+
+  return (
+    <Modal
+      animationType="fade"
+      onRequestClose={onClose}
+      presentationStyle="fullScreen"
+      statusBarTranslucent
+      visible
+    >
+      <SafeAreaView style={styles.entryScreen}>
+        <View style={styles.entryHeader}>
+          <View>
+            <Text style={styles.entryEyebrow}>MODE ENTRÉE</Text>
+            <Text style={styles.entryCounter}>
+              Billet {index + 1} sur {total}
+            </Text>
+          </View>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Fermer le mode entrée"
+            onPress={onClose}
+            style={styles.entryClose}
+          >
+            <IconSymbol name="xmark" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.entryContent}>
+          <Text style={styles.entryEvent} numberOfLines={3}>
+            {decodeHtmlEntities(ticket.event_name || ticket.product_name)}
+          </Text>
+          <Text style={styles.entryType} numberOfLines={2}>
+            {decodeHtmlEntities(ticket.product_name)}
+          </Text>
+          {ticket.seat_label ? (
+            <View style={styles.entrySeat}>
+              <Text style={styles.entrySeatLabel}>PLACE</Text>
+              <Text style={styles.entrySeatValue}>{ticket.seat_label}</Text>
+            </View>
+          ) : null}
+          <View style={styles.entryQr}>
+            <QRCode
+              value={ticket.ticket_code}
+              size={Math.min(SCREEN_W - 96, 280)}
+              backgroundColor="#fff"
+              color="#000"
+            />
+          </View>
+          <View style={styles.entryReady}>
+            <IconSymbol
+              name="checkmark.circle.fill"
+              size={20}
+              color="#59D98E"
+            />
+            <Text style={styles.entryReadyText}>
+              Prêt à être scanné · disponible hors ligne
+            </Text>
+          </View>
+          <Text style={styles.entryOrder}>
+            Commande #{order.number || order.id}
+          </Text>
+        </View>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
 function TicketCard({
   ticket,
   order,
   index,
   total,
   colors,
+  onOpenEntry,
 }: {
   ticket: TicketInstance;
   order: WCOrder;
   index: number;
   total: number;
   colors: any;
+  onOpenEntry: () => void;
 }) {
   const st = statusMap[order.status] || {
     label: order.status,
@@ -75,26 +159,6 @@ function TicketCard({
   };
   const isValid = ticketVisibleStatuses.has(order.status);
   const qrValue = ticket.ticket_code;
-
-  const handleShare = async () => {
-    Alert.alert(
-      "Partager ce billet ?",
-      "Le QR code donne accès à l'événement. Partagez-le uniquement avec une personne de confiance.",
-      [
-        { text: "Annuler", style: "cancel" },
-        {
-          text: "Partager",
-          onPress: async () => {
-            try {
-              await Share.share({
-                message: `Billet ${decodeHtmlEntities(ticket.product_name)}${ticket.seat_label ? ` - Siège ${ticket.seat_label}` : ""}\nCode: ${ticket.ticket_code}\nCommande #${order.id}`,
-              });
-            } catch {}
-          },
-        },
-      ],
-    );
-  };
 
   return (
     <View
@@ -141,12 +205,18 @@ function TicketCard({
                 color="#000"
               />
             </View>
-            <Text style={[styles.ticketCode, { color: colors.foreground }]}>
-              {ticket.ticket_code}
-            </Text>
             <Text style={[styles.qrHint, { color: colors.muted }]}>
               Présentez ce QR code à l'entrée
             </Text>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Afficher le QR code en plein écran"
+              onPress={onOpenEntry}
+              style={[styles.entryButton, { backgroundColor: colors.primary }]}
+            >
+              <IconSymbol name="qrcode" size={19} color="#fff" />
+              <Text style={styles.entryButtonText}>Mode entrée</Text>
+            </TouchableOpacity>
           </>
         ) : (
           <View style={styles.invalidQr}>
@@ -251,24 +321,6 @@ function TicketCard({
           </Text>
         </View>
       </View>
-
-      {/* Share button */}
-      <TouchableOpacity
-        accessibilityRole="button"
-        accessibilityLabel="Partager ce billet"
-        onPress={handleShare}
-        style={[styles.shareBtn, { borderTopColor: colors.border }]}
-        activeOpacity={0.7}
-      >
-        <IconSymbol
-          name="square.and.arrow.up"
-          size={16}
-          color={colors.primary}
-        />
-        <Text style={[styles.shareBtnText, { color: colors.primary }]}>
-          Partager ce billet
-        </Text>
-      </TouchableOpacity>
     </View>
   );
 }
@@ -288,6 +340,7 @@ export default function TicketDetailScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showingOfflineCopy, setShowingOfflineCopy] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [entryIndex, setEntryIndex] = useState<number | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const requestId = useRef(0);
 
@@ -527,9 +580,23 @@ export default function TicketDetailScreen() {
 
   return (
     <ScreenContainer edges={["top", "left", "right"]}>
+      {entryIndex !== null && tickets[entryIndex] ? (
+        <EntryMode
+          ticket={tickets[entryIndex]}
+          order={order}
+          index={entryIndex}
+          total={tickets.length}
+          onClose={() => setEntryIndex(null)}
+        />
+      ) : null}
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Retour à mes billets" onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Retour à mes billets"
+          onPress={() => router.back()}
+          style={styles.backBtn}
+        >
           <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>
@@ -559,22 +626,49 @@ export default function TicketDetailScreen() {
         </View>
       ) : null}
 
-      {/* Ticket pagination dots */}
+      {/* Explicit ticket selector */}
       {tickets.length > 1 && (
-        <View style={styles.dotsRow}>
-          {tickets.map((_, i) => (
-            <View
-              key={i}
-              style={[
-                styles.dot,
-                {
-                  backgroundColor:
-                    i === activeIndex ? colors.primary : colors.border,
-                },
-              ]}
-            />
-          ))}
-        </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.ticketSelector}
+        >
+          {tickets.map((ticket, i) => {
+            const selected = i === activeIndex;
+            return (
+              <TouchableOpacity
+                key={ticket.instance_id || i}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                accessibilityLabel={`Afficher le billet ${i + 1}${ticket.seat_label ? `, place ${ticket.seat_label}` : ""}`}
+                onPress={() => {
+                  setActiveIndex(i);
+                  scrollRef.current?.scrollTo({
+                    x: i * (SCREEN_W - 32),
+                    animated: true,
+                  });
+                }}
+                style={[
+                  styles.ticketSelectorItem,
+                  {
+                    backgroundColor: selected ? colors.primary : colors.surface,
+                    borderColor: selected ? colors.primary : colors.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.ticketSelectorText,
+                    { color: selected ? "#fff" : colors.foreground },
+                  ]}
+                >
+                  Billet {i + 1}
+                  {ticket.seat_label ? ` · ${ticket.seat_label}` : ""}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       )}
 
       {/* Tickets horizontal scroll */}
@@ -589,6 +683,7 @@ export default function TicketDetailScreen() {
             index={0}
             total={1}
             colors={colors}
+            onOpenEntry={() => setEntryIndex(0)}
           />
         </ScrollView>
       ) : (
@@ -618,6 +713,7 @@ export default function TicketDetailScreen() {
                 index={i}
                 total={tickets.length}
                 colors={colors}
+                onOpenEntry={() => setEntryIndex(i)}
               />
             </ScrollView>
           ))}
@@ -713,14 +809,16 @@ const styles = StyleSheet.create({
   },
   retryText: { color: "#fff", fontSize: 14, fontWeight: "700" },
   backLink: { minHeight: 44, justifyContent: "center", marginTop: 4 },
-  dotsRow: {
-    flexDirection: "row",
-    justifyContent: "center",
+  ticketSelector: { paddingHorizontal: 16, paddingTop: 12, gap: 8 },
+  ticketSelectorItem: {
+    minHeight: 40,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    borderWidth: 1,
     alignItems: "center",
-    gap: 6,
-    paddingVertical: 10,
+    justifyContent: "center",
   },
-  dot: { width: 8, height: 8, borderRadius: 4 },
+  ticketSelectorText: { fontSize: 13, fontWeight: "700" },
   ticketCard: { borderRadius: 20, borderWidth: 1, overflow: "hidden" },
   ticketHeader: {
     padding: 20,
@@ -762,13 +860,18 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
-  ticketCode: {
-    fontSize: 16,
-    fontWeight: "700",
-    marginTop: 14,
-    letterSpacing: 1.5,
-  },
   qrHint: { fontSize: 12, marginTop: 6 },
+  entryButton: {
+    minHeight: 46,
+    borderRadius: 8,
+    marginTop: 18,
+    paddingHorizontal: 22,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 9,
+  },
+  entryButtonText: { color: "#fff", fontSize: 14, fontWeight: "800" },
   invalidQr: { alignItems: "center", paddingVertical: 20 },
   invalidText: { fontSize: 16, fontWeight: "600", marginTop: 12 },
   invalidSub: { fontSize: 13, marginTop: 4 },
@@ -811,13 +914,65 @@ const styles = StyleSheet.create({
   },
   attendeeName: { fontSize: 14, fontWeight: "600" },
   attendeeEmail: { fontSize: 12 },
-  shareBtn: {
+  entryScreen: { flex: 1, backgroundColor: "#090A0D" },
+  entryHeader: {
+    minHeight: 72,
+    paddingHorizontal: 20,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 14,
-    borderTopWidth: 1,
+    justifyContent: "space-between",
   },
-  shareBtnText: { fontSize: 14, fontWeight: "600" },
+  entryEyebrow: { color: "#59D98E", fontSize: 11, fontWeight: "900" },
+  entryCounter: { color: "#fff", fontSize: 13, marginTop: 3 },
+  entryClose: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#22242A",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  entryContent: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  entryEvent: {
+    color: "#fff",
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  entryType: {
+    color: "#B8BBC5",
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: "center",
+    marginTop: 7,
+  },
+  entrySeat: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 8,
+    marginTop: 16,
+  },
+  entrySeatLabel: { color: "#8F94A3", fontSize: 11, fontWeight: "800" },
+  entrySeatValue: { color: "#F3B93F", fontSize: 25, fontWeight: "900" },
+  entryQr: {
+    padding: 16,
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    marginTop: 20,
+  },
+  entryReady: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 18,
+  },
+  entryReadyText: { color: "#D6D8DE", fontSize: 12, fontWeight: "600" },
+  entryOrder: { color: "#7F8492", fontSize: 11, marginTop: 10 },
 });

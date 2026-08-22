@@ -20,7 +20,13 @@ import {
 } from "@/lib/api/mobile";
 import { CACHE_DURATIONS, getCachedValue, setCache } from "@/lib/api/cache";
 import { formatDateShort, decodeHtmlEntities } from "@/lib/format";
-import { filterWalletTickets, sortWalletTickets, type TicketWalletFilter } from "@/lib/ticket-wallet";
+import {
+  filterWalletTickets,
+  groupWalletTickets,
+  sortWalletTickets,
+  type TicketWalletFilter,
+  type WalletTicketGroup,
+} from "@/lib/ticket-wallet";
 import { setCachedTicketDetail } from "@/lib/ticket-detail-cache";
 
 interface TicketItem {
@@ -176,41 +182,43 @@ export default function TicketsScreen() {
     }
   }, []);
 
-  useFocusEffect(useCallback(() => {
-    const userId = user?.id;
-    const activeRequest = ++requestId.current;
+  useFocusEffect(
+    useCallback(() => {
+      const userId = user?.id;
+      const activeRequest = ++requestId.current;
 
-    if (!isAuthenticated || !userId) {
-      walletUserId.current = null;
-      setTickets([]);
-      setLoading(false);
-      setErrorMessage(null);
-      return undefined;
-    }
-
-    const accountChanged = walletUserId.current !== userId;
-    walletUserId.current = userId;
-    if (accountChanged) setTickets([]);
-    setLoading(accountChanged);
-    setErrorMessage(null);
-
-    void (async () => {
-      const cached = await getCachedValue<TicketItem[]>(
-        cacheKey(userId),
-        CACHE_DURATIONS.TICKETS,
-      );
-      if (requestId.current !== activeRequest) return;
-      if (cached) {
-        setTickets(cached.data);
+      if (!isAuthenticated || !userId) {
+        walletUserId.current = null;
+        setTickets([]);
         setLoading(false);
+        setErrorMessage(null);
+        return undefined;
       }
-      await load(userId, activeRequest);
-    })();
 
-    return () => {
-      if (requestId.current === activeRequest) requestId.current += 1;
-    };
-  }, [isAuthenticated, load, user?.id]));
+      const accountChanged = walletUserId.current !== userId;
+      walletUserId.current = userId;
+      if (accountChanged) setTickets([]);
+      setLoading(accountChanged);
+      setErrorMessage(null);
+
+      void (async () => {
+        const cached = await getCachedValue<TicketItem[]>(
+          cacheKey(userId),
+          CACHE_DURATIONS.TICKETS,
+        );
+        if (requestId.current !== activeRequest) return;
+        if (cached) {
+          setTickets(cached.data);
+          setLoading(false);
+        }
+        await load(userId, activeRequest);
+      })();
+
+      return () => {
+        if (requestId.current === activeRequest) requestId.current += 1;
+      };
+    }, [isAuthenticated, load, user?.id]),
+  );
 
   const refresh = useCallback(() => {
     if (!user?.id) return;
@@ -221,19 +229,45 @@ export default function TicketsScreen() {
   }, [load, user?.id]);
 
   const visibleTickets = useMemo(
-    () => sortWalletTickets(filterWalletTickets(tickets, filter), filter) as TicketItem[],
+    () =>
+      sortWalletTickets(
+        filterWalletTickets(tickets, filter),
+        filter,
+      ) as TicketItem[],
     [filter, tickets],
   );
-  const nextTicket = useMemo(
-    () => sortWalletTickets(filterWalletTickets(tickets, "upcoming"), "upcoming")[0] as TicketItem | undefined,
+  const visibleGroups = useMemo(
+    () => groupWalletTickets(visibleTickets),
+    [visibleTickets],
+  );
+  const nextGroup = useMemo(
+    () =>
+      groupWalletTickets(
+        sortWalletTickets(
+          filterWalletTickets(tickets, "upcoming"),
+          "upcoming",
+        ) as TicketItem[],
+      )[0],
     [tickets],
   );
-  const openTicket = useCallback((ticket: TicketItem) => {
-    router.push({
-      pathname: "/ticket/[id]",
-      params: { id: String(ticket.orderId), ...(ticket.instanceId ? { ticketId: ticket.instanceId } : {}) },
-    } as any);
-  }, [router]);
+  const openTicket = useCallback(
+    (ticket: TicketItem) => {
+      router.push({
+        pathname: "/ticket/[id]",
+        params: {
+          id: String(ticket.orderId),
+          ...(ticket.instanceId ? { ticketId: ticket.instanceId } : {}),
+        },
+      } as any);
+    },
+    [router],
+  );
+  const openGroup = useCallback(
+    (group: WalletTicketGroup<TicketItem>) => {
+      openTicket(group.tickets[0]);
+    },
+    [openTicket],
+  );
 
   if (!isAuthenticated) {
     return (
@@ -287,7 +321,7 @@ export default function TicketsScreen() {
             Vos accès et QR codes, réunis au même endroit.
           </Text>
         </View>
-        {!loading && visibleTickets.length > 0 ? (
+        {!loading && visibleGroups.length > 0 ? (
           <View
             style={[
               styles.countBadge,
@@ -300,12 +334,37 @@ export default function TicketsScreen() {
           </View>
         ) : null}
       </View>
-      <View accessibilityRole="tablist" style={[styles.filterBar, { borderColor: colors.border }]}>
-        {([["upcoming", "À venir"], ["past", "Passés"], ["all", "Tous"]] as const).map(([value, label]) => {
+      <View
+        accessibilityRole="tablist"
+        style={[styles.filterBar, { borderColor: colors.border }]}
+      >
+        {(
+          [
+            ["upcoming", "À venir"],
+            ["past", "Passés"],
+            ["all", "Tous"],
+          ] as const
+        ).map(([value, label]) => {
           const selected = filter === value;
           return (
-            <TouchableOpacity key={value} accessibilityRole="tab" accessibilityState={{ selected }} onPress={() => setFilter(value)} style={[styles.filterOption, selected && { backgroundColor: colors.primary }]}>
-              <Text style={[styles.filterText, { color: selected ? "#fff" : colors.muted }]}>{label}</Text>
+            <TouchableOpacity
+              key={value}
+              accessibilityRole="tab"
+              accessibilityState={{ selected }}
+              onPress={() => setFilter(value)}
+              style={[
+                styles.filterOption,
+                selected && { backgroundColor: colors.primary },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.filterText,
+                  { color: selected ? "#fff" : colors.muted },
+                ]}
+              >
+                {label}
+              </Text>
             </TouchableOpacity>
           );
         })}
@@ -314,7 +373,7 @@ export default function TicketsScreen() {
         <TicketListSkeleton color={colors.border} />
       ) : (
         <FlatList
-          data={visibleTickets}
+          data={visibleGroups}
           keyExtractor={(item) => item.key}
           contentContainerStyle={styles.listContent}
           refreshControl={
@@ -326,58 +385,86 @@ export default function TicketsScreen() {
           }
           ListHeaderComponent={
             <>
-            {filter === "upcoming" && nextTicket ? (
-              <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Afficher le prochain billet pour ${nextTicket.eventName}`} onPress={() => openTicket(nextTicket)} style={[styles.nextEvent, { backgroundColor: colors.primary, borderColor: colors.primary }]}>
-                <View style={styles.nextEventTop}>
-                  <Text style={styles.nextEventEyebrow}>PROCHAIN ÉVÉNEMENT</Text>
-                  <IconSymbol name="qrcode" size={22} color="#fff" />
-                </View>
-                <Text style={styles.nextEventTitle} numberOfLines={2}>{nextTicket.eventName}</Text>
-                <Text style={styles.nextEventMeta}>{nextTicket.date ? formatDateShort(nextTicket.date) : "Date à confirmer"}{nextTicket.seatLabel ? ` · Place ${nextTicket.seatLabel}` : ""}</Text>
-                <Text style={styles.nextEventAction}>Afficher mon QR code</Text>
-              </TouchableOpacity>
-            ) : null}
-            {errorMessage && visibleTickets.length > 0 ? (
-              <View
-                style={[
-                  styles.inlineError,
-                  {
-                    backgroundColor: colors.warning + "12",
-                    borderColor: colors.warning + "40",
-                  },
-                ]}
-              >
-                <IconSymbol
-                  name="exclamationmark.triangle.fill"
-                  size={18}
-                  color={colors.warning}
-                />
-                <Text
-                  style={[styles.inlineErrorText, { color: colors.foreground }]}
-                >
-                  {errorMessage}
-                </Text>
+              {filter === "upcoming" && nextGroup ? (
                 <TouchableOpacity
                   accessibilityRole="button"
-                  onPress={refresh}
-                  hitSlop={8}
+                  accessibilityLabel={`Afficher les billets pour ${nextGroup.eventName}`}
+                  onPress={() => openGroup(nextGroup)}
+                  style={[
+                    styles.nextEvent,
+                    {
+                      backgroundColor: colors.primary,
+                      borderColor: colors.primary,
+                    },
+                  ]}
+                >
+                  <View style={styles.nextEventTop}>
+                    <Text style={styles.nextEventEyebrow}>
+                      PROCHAIN ÉVÉNEMENT
+                    </Text>
+                    <IconSymbol name="qrcode" size={22} color="#fff" />
+                  </View>
+                  <Text style={styles.nextEventTitle} numberOfLines={2}>
+                    {nextGroup.eventName}
+                  </Text>
+                  <Text style={styles.nextEventMeta}>
+                    {nextGroup.date
+                      ? formatDateShort(nextGroup.date)
+                      : "Date à confirmer"}
+                    {` · ${nextGroup.tickets.length} billet${nextGroup.tickets.length > 1 ? "s" : ""}`}
+                  </Text>
+                  <Text style={styles.nextEventAction}>
+                    Afficher{" "}
+                    {nextGroup.tickets.length > 1
+                      ? "mes QR codes"
+                      : "mon QR code"}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+              {errorMessage && visibleTickets.length > 0 ? (
+                <View
+                  style={[
+                    styles.inlineError,
+                    {
+                      backgroundColor: colors.warning + "12",
+                      borderColor: colors.warning + "40",
+                    },
+                  ]}
                 >
                   <IconSymbol
-                    name="arrow.clockwise"
-                    size={20}
-                    color={colors.primary}
+                    name="exclamationmark.triangle.fill"
+                    size={18}
+                    color={colors.warning}
                   />
-                </TouchableOpacity>
-              </View>
-            ) : null}
+                  <Text
+                    style={[
+                      styles.inlineErrorText,
+                      { color: colors.foreground },
+                    ]}
+                  >
+                    {errorMessage}
+                  </Text>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    onPress={refresh}
+                    hitSlop={8}
+                  >
+                    <IconSymbol
+                      name="arrow.clockwise"
+                      size={20}
+                      color={colors.primary}
+                    />
+                  </TouchableOpacity>
+                </View>
+              ) : null}
             </>
           }
-          renderItem={({ item }) => (
+          renderItem={({ item: group }) => (
             <TouchableOpacity
               accessibilityRole="button"
-              accessibilityLabel={`Ouvrir le billet ${item.ticketType} pour ${item.eventName}`}
+              accessibilityLabel={`Ouvrir ${group.tickets.length} billet${group.tickets.length > 1 ? "s" : ""} pour ${group.eventName}`}
               activeOpacity={0.8}
-              onPress={() => openTicket(item)}
+              onPress={() => openGroup(group)}
               style={[
                 styles.ticketCard,
                 { backgroundColor: colors.surface, borderColor: colors.border },
@@ -400,25 +487,35 @@ export default function TicketsScreen() {
                   style={[styles.ticketName, { color: colors.foreground }]}
                   numberOfLines={2}
                 >
-                  {item.eventName}
+                  {group.eventName}
                 </Text>
                 <Text
                   style={[styles.ticketMeta, { color: colors.muted }]}
                   numberOfLines={1}
                 >
-                  {item.ticketType}{item.date ? ` · ${formatDateShort(item.date)}` : ""}
+                  {group.date
+                    ? formatDateShort(group.date)
+                    : "Date à confirmer"}
                 </Text>
-                {item.seatLabel ? (
+                <Text style={[styles.bundleText, { color: colors.foreground }]}>
+                  {group.tickets.length} billet
+                  {group.tickets.length > 1 ? "s" : ""}
+                  {group.ticketTypes.length
+                    ? ` · ${group.ticketTypes.join(", ")}`
+                    : ""}
+                </Text>
+                {group.seatLabels.length > 0 ? (
                   <Text style={[styles.seatText, { color: colors.primary }]}>
-                    Place {item.seatLabel}
+                    {group.seatLabels.length > 1 ? "Places" : "Place"}{" "}
+                    {group.seatLabels.join(", ")}
                   </Text>
                 ) : null}
-                {item.eventLocation ? (
+                {group.eventLocation ? (
                   <Text
                     style={[styles.locationText, { color: colors.muted }]}
                     numberOfLines={1}
                   >
-                    {item.eventLocation}
+                    {group.eventLocation}
                   </Text>
                 ) : null}
               </View>
@@ -426,24 +523,26 @@ export default function TicketsScreen() {
                 <View
                   style={[
                     styles.statusBadge,
-                    { backgroundColor: statusColor(item.status) + "20" },
+                    {
+                      backgroundColor:
+                        statusColor(group.tickets[0].status) + "20",
+                    },
                   ]}
                 >
                   <Text
                     style={[
                       styles.statusText,
-                      { color: statusColor(item.status) },
+                      { color: statusColor(group.tickets[0].status) },
                     ]}
                   >
-                    {statusLabel(item.status)}
+                    {statusLabel(group.tickets[0].status)}
                   </Text>
                 </View>
-                <IconSymbol
-                  name="chevron.right"
-                  size={16}
-                  color={colors.muted}
-                  style={{ marginTop: 6 }}
-                />
+                <View
+                  style={[styles.qrAction, { backgroundColor: colors.primary }]}
+                >
+                  <IconSymbol name="qrcode" size={17} color="#fff" />
+                </View>
               </View>
             </TouchableOpacity>
           )}
@@ -507,8 +606,21 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 22, fontWeight: "700" },
   headerSubtitle: { fontSize: 13, marginTop: 4 },
-  filterBar: { marginHorizontal: 16, marginBottom: 14, padding: 3, borderWidth: 1, borderRadius: 8, flexDirection: "row" },
-  filterOption: { flex: 1, minHeight: 40, borderRadius: 6, alignItems: "center", justifyContent: "center" },
+  filterBar: {
+    marginHorizontal: 16,
+    marginBottom: 14,
+    padding: 3,
+    borderWidth: 1,
+    borderRadius: 8,
+    flexDirection: "row",
+  },
+  filterOption: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 6,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   filterText: { fontSize: 13, fontWeight: "700" },
   countBadge: {
     minWidth: 32,
@@ -520,11 +632,26 @@ const styles = StyleSheet.create({
   countText: { fontSize: 14, fontWeight: "700" },
   listContent: { paddingHorizontal: 16, paddingBottom: 28, flexGrow: 1 },
   nextEvent: { borderRadius: 8, padding: 18, marginBottom: 14, borderWidth: 1 },
-  nextEventTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  nextEventTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
   nextEventEyebrow: { color: "#fff", fontSize: 11, fontWeight: "800" },
-  nextEventTitle: { color: "#fff", fontSize: 20, lineHeight: 25, fontWeight: "800", marginTop: 14 },
+  nextEventTitle: {
+    color: "#fff",
+    fontSize: 20,
+    lineHeight: 25,
+    fontWeight: "800",
+    marginTop: 14,
+  },
   nextEventMeta: { color: "#fff", opacity: 0.82, fontSize: 13, marginTop: 7 },
-  nextEventAction: { color: "#fff", fontSize: 13, fontWeight: "800", marginTop: 18 },
+  nextEventAction: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "800",
+    marginTop: 18,
+  },
   ticketCard: {
     borderRadius: 8,
     padding: 14,
@@ -543,9 +670,18 @@ const styles = StyleSheet.create({
   ticketInfo: { flex: 1, marginLeft: 12 },
   ticketName: { fontSize: 15, fontWeight: "700", lineHeight: 20 },
   ticketMeta: { fontSize: 12, marginTop: 2 },
+  bundleText: { fontSize: 13, fontWeight: "700", marginTop: 6 },
   seatText: { fontSize: 12, fontWeight: "700", marginTop: 5 },
   locationText: { fontSize: 11, marginTop: 3 },
-  ticketRight: { alignItems: "flex-end" },
+  ticketRight: { alignItems: "flex-end", marginLeft: 8 },
+  qrAction: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    marginTop: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   statusText: { fontSize: 11, fontWeight: "600" },
   inlineError: {
