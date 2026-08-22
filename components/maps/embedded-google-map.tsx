@@ -11,9 +11,6 @@ import {
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 
-const GOOGLE_MAPS_API_KEY =
-  process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY?.trim() || "";
-
 let WebViewComponent: any = null;
 if (Platform.OS !== "web") {
   try {
@@ -46,28 +43,26 @@ export function EmbeddedGoogleMap({
   height?: number;
 }) {
   const colors = useColors();
-  const [sourceMode, setSourceMode] = useState<"keyed" | "public" | "failed">(
-    GOOGLE_MAPS_API_KEY ? "keyed" : "public",
-  );
+  const [sourceMode, setSourceMode] = useState<
+    "public" | "public-alternate" | "failed"
+  >("public");
   const [loaded, setLoaded] = useState(false);
   const normalizedLocation = location.trim();
   const encodedLocation = encodeURIComponent(normalizedLocation);
-  const keyedEmbedUrl = useMemo(
-    () =>
-      GOOGLE_MAPS_API_KEY
-        ? `https://www.google.com/maps/embed/v1/place?key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}&q=${encodedLocation}&zoom=15`
-        : "",
-    [encodedLocation],
-  );
   const publicEmbedUrl = useMemo(
     () => `https://www.google.com/maps?q=${encodedLocation}&output=embed`,
     [encodedLocation],
   );
+  const alternateEmbedUrl = useMemo(
+    () =>
+      `https://maps.google.com/maps?q=${encodedLocation}&z=15&output=embed`,
+    [encodedLocation],
+  );
   const embedUrl =
-    sourceMode === "keyed"
-      ? keyedEmbedUrl
-      : sourceMode === "public"
-        ? publicEmbedUrl
+    sourceMode === "public"
+      ? publicEmbedUrl
+      : sourceMode === "public-alternate"
+        ? alternateEmbedUrl
         : "";
   const directionsUrl = useMemo(
     () =>
@@ -76,13 +71,15 @@ export function EmbeddedGoogleMap({
   );
 
   useEffect(() => {
-    setSourceMode(GOOGLE_MAPS_API_KEY ? "keyed" : "public");
+    setSourceMode("public");
     setLoaded(false);
   }, [normalizedLocation]);
 
   const handleMapFailure = () => {
     setLoaded(false);
-    setSourceMode((current) => (current === "keyed" ? "public" : "failed"));
+    setSourceMode((current) =>
+      current === "public" ? "public-alternate" : "failed",
+    );
   };
 
   const openDirections = () => {
