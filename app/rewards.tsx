@@ -5,8 +5,10 @@ import {
   ScrollView,
   StyleSheet,
   Image,
+  RefreshControl,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback } from "react";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -35,6 +37,12 @@ export default function RewardsScreen() {
     syncRewards,
     isSyncing,
   } = useRewards();
+
+  useFocusEffect(
+    useCallback(() => {
+      void syncRewards();
+    }, [syncRewards]),
+  );
 
   const formatDate = (iso: string) => {
     const d = new Date(iso);
@@ -78,6 +86,14 @@ export default function RewardsScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={isSyncing}
+            onRefresh={syncRewards}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
       >
         {/* LamakoRewards Logo */}
         <View style={styles.logoContainer}>
@@ -120,7 +136,12 @@ export default function RewardsScreen() {
                 marginTop: 4,
               }}
             >
-              <Text style={{ fontSize: 16, marginRight: 6 }}>🔒</Text>
+              <IconSymbol
+                name="lock.fill"
+                size={16}
+                color="rgba(255,255,255,0.9)"
+                style={{ marginRight: 6 }}
+              />
               <Text
                 style={[styles.pointsSub, { color: "rgba(255,255,255,0.9)" }]}
               >
@@ -137,7 +158,7 @@ export default function RewardsScreen() {
                 marginTop: 4,
               }}
             >
-              Dernière sync:{" "}
+              Mis à jour :{" "}
               {new Date(state.lastSynced).toLocaleString("fr-FR")}
             </Text>
           )}
@@ -172,17 +193,107 @@ export default function RewardsScreen() {
               <Text style={styles.statValue}>
                 {state.history.filter((h) => h.type === "redeem").length}
               </Text>
-              <Text style={styles.statLabel}>Échanges</Text>
+              <Text style={styles.statLabel}>Débits récents</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
               <Text style={styles.statValue}>
                 {state.history.filter((h) => h.type === "earn").length}
               </Text>
-              <Text style={styles.statLabel}>Transactions</Text>
+              <Text style={styles.statLabel}>Gains récents</Text>
             </View>
           </View>
         </LinearGradient>
+
+        {/* Recent activity stays close to the balance it explains. */}
+        <View style={styles.historySection}>
+          <Text
+            style={[
+              styles.sectionTitle,
+              { color: colors.foreground, marginBottom: 4 },
+            ]}
+          >
+            Activité récente
+          </Text>
+          <Text style={[styles.historyIntro, { color: colors.muted }]}>
+            Connexions, achats et utilisations de points enregistrés sur votre compte.
+          </Text>
+          {state.history.length === 0 ? (
+            <View
+              style={[
+                styles.emptyHistory,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+            >
+              <IconSymbol name="clock.fill" size={32} color={colors.muted} />
+              <Text style={[styles.emptyText, { color: colors.muted }]}>
+                Aucun mouvement pour le moment
+              </Text>
+              <Text style={[styles.emptySubText, { color: colors.muted }]}>
+                Les bonus de connexion et vos achats apparaîtront ici.
+              </Text>
+            </View>
+          ) : (
+            <View
+              style={[
+                styles.historyCard,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+            >
+              {state.history.slice(0, 30).map((tx) => (
+                <View
+                  key={tx.id}
+                  style={[styles.txRow, { borderBottomColor: colors.border }]}
+                >
+                  <View
+                    style={[
+                      styles.txIcon,
+                      {
+                        backgroundColor:
+                          tx.type === "earn"
+                            ? colors.success + "15"
+                            : colors.error + "15",
+                      },
+                    ]}
+                  >
+                    <IconSymbol
+                      name={
+                        tx.type === "earn"
+                          ? "plus.circle.fill"
+                          : "minus.circle.fill"
+                      }
+                      size={18}
+                      color={tx.type === "earn" ? colors.success : colors.error}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[styles.txDesc, { color: colors.foreground }]}
+                      numberOfLines={2}
+                    >
+                      {tx.description}
+                    </Text>
+                    <Text style={[styles.txDate, { color: colors.muted }]}>
+                      {formatDate(tx.date)}
+                      {tx.reference ? ` · ${tx.reference}` : ""}
+                    </Text>
+                  </View>
+                  <Text
+                    style={[
+                      styles.txAmount,
+                      {
+                        color: tx.type === "earn" ? colors.success : colors.error,
+                      },
+                    ]}
+                  >
+                    {tx.type === "earn" ? "+" : "-"}
+                    {tx.amount} pts
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
 
         {/* How it works */}
         <View
@@ -340,85 +451,6 @@ export default function RewardsScreen() {
           </View>
         )}
 
-        {/* Transaction History */}
-        <View style={styles.historySection}>
-          <Text
-            style={[
-              styles.sectionTitle,
-              { color: colors.foreground, marginBottom: 12 },
-            ]}
-          >
-            Historique
-          </Text>
-          {state.history.length === 0 ? (
-            <View
-              style={[
-                styles.emptyHistory,
-                { backgroundColor: colors.surface, borderColor: colors.border },
-              ]}
-            >
-              <IconSymbol name="clock.fill" size={32} color={colors.muted} />
-              <Text style={[styles.emptyText, { color: colors.muted }]}>
-                Aucune transaction pour le moment
-              </Text>
-              <Text style={[styles.emptySubText, { color: colors.muted }]}>
-                Vos points apparaîtront ici après votre premier achat
-              </Text>
-            </View>
-          ) : (
-            state.history.slice(0, 20).map((tx) => (
-              <View
-                key={tx.id}
-                style={[styles.txRow, { borderBottomColor: colors.border }]}
-              >
-                <View
-                  style={[
-                    styles.txIcon,
-                    {
-                      backgroundColor:
-                        tx.type === "earn"
-                          ? colors.success + "15"
-                          : colors.error + "15",
-                    },
-                  ]}
-                >
-                  <IconSymbol
-                    name={
-                      tx.type === "earn"
-                        ? "plus.circle.fill"
-                        : "minus.circle.fill"
-                    }
-                    size={18}
-                    color={tx.type === "earn" ? colors.success : colors.error}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={[styles.txDesc, { color: colors.foreground }]}
-                    numberOfLines={2}
-                  >
-                    {tx.description}
-                  </Text>
-                  <Text style={[styles.txDate, { color: colors.muted }]}>
-                    {formatDate(tx.date)}
-                    {tx.reference ? ` · ${tx.reference}` : ""}
-                  </Text>
-                </View>
-                <Text
-                  style={[
-                    styles.txAmount,
-                    {
-                      color: tx.type === "earn" ? colors.success : colors.error,
-                    },
-                  ]}
-                >
-                  {tx.type === "earn" ? "+" : "-"}
-                  {tx.amount} pts
-                </Text>
-              </View>
-            ))
-          )}
-        </View>
       </ScrollView>
     </ScreenContainer>
   );
@@ -539,6 +571,13 @@ const styles = StyleSheet.create({
 
   // History
   historySection: { marginBottom: 20 },
+  historyIntro: { fontSize: 12, lineHeight: 18, marginBottom: 12 },
+  historyCard: {
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
   emptyHistory: {
     alignItems: "center",
     padding: 24,

@@ -18,6 +18,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { LinearGradient } from "expo-linear-gradient";
 import { buildLamakoWhatsAppUrl } from "@/lib/contact";
 import { getAppVersionLabel } from "@/lib/app-version";
+import { useRewards } from "@/lib/rewards-provider";
 
 interface DrawerContentProps {
   onClose?: () => void;
@@ -30,6 +31,7 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
   const { width } = useWindowDimensions();
   const { isAuthenticated, user, logout } = useAuth();
   const { colorScheme, setColorScheme } = useThemeContext();
+  const { state: rewards } = useRewards();
   const userDisplayName = user
     ? [user.firstName, user.lastName].filter(Boolean).join(" ") ||
       user.displayName ||
@@ -39,7 +41,7 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
   const navigate = (path: string) => {
     onClose?.();
     setTimeout(() => {
-      router.push(path as any);
+      router.navigate(path as any);
     }, 200);
   };
 
@@ -71,7 +73,7 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
 
   const menuSections = [
     {
-      title: "Mon compte",
+      title: "Mon espace",
       items: isAuthenticated
         ? [
             {
@@ -80,24 +82,24 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
               onPress: () => navigate("/(tabs)/profile"),
             },
             {
-              icon: "ticket.fill" as const,
-              label: "Mes billets",
-              onPress: () => navigate("/(tabs)/tickets"),
-            },
-            {
               icon: "clipboard.fill" as const,
               label: "Mes commandes",
               onPress: () => navigate("/orders"),
             },
             {
               icon: "star.fill" as const,
-              label: "LamakoRewards",
+              label: `LamakoRewards · ${rewards.availablePoints.toLocaleString("fr-FR")} pts`,
               onPress: () => navigate("/rewards"),
             },
             {
               icon: "heart.fill" as const,
               label: "Mes favoris",
               onPress: () => navigate("/favorites"),
+            },
+            {
+              icon: "bell.fill" as const,
+              label: "Notifications",
+              onPress: () => navigate("/notifications"),
             },
           ]
         : [],
@@ -110,11 +112,6 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
           label: colorScheme === "dark" ? "Mode clair" : "Mode sombre",
           onPress: () =>
             setColorScheme(colorScheme === "dark" ? "light" : "dark"),
-        },
-        {
-          icon: "bell.fill" as const,
-          label: "Notifications",
-          onPress: () => navigate("/notifications"),
         },
         {
           icon: "gearshape.fill" as const,

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "@/lib/auth-provider";
 import {
@@ -331,7 +331,7 @@ function normalizeRewardDescription(item: {
   return item.type === "earn" ? "Points gagnés" : "Points échangés";
 }
 
-async function fetchHistory(wpUserId: number, limit = 20): Promise<RewardTransaction[]> {
+async function fetchHistory(wpUserId: number, limit = 50): Promise<RewardTransaction[]> {
   try {
     const history = await getMobileRewardsHistory(limit);
     return history.map(item => ({
@@ -354,6 +354,12 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<RewardsState>(DEFAULT_STATE);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const stateRef = useRef(state);
+  const syncingRef = useRef(false);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   // Load cached state from storage
   useEffect(() => {
@@ -380,13 +386,6 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
     loadState();
   }, [user?.id]);
 
-  // Auto-sync when user is authenticated
-  useEffect(() => {
-    if (isAuthenticated && user?.id && !isLoading) {
-      syncRewards();
-    }
-  }, [isAuthenticated, user?.id, isLoading]);
-
   // Save state to storage
   const saveState = useCallback(async (newState: RewardsState) => {
     try {
@@ -399,27 +398,27 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
 
   // Sync with server API
   const syncRewards = useCallback(async () => {
-    if (!user?.id || isSyncing) return;
+    if (!user?.id || syncingRef.current) return;
+    syncingRef.current = true;
     setIsSyncing(true);
 
     try {
       const wpUserId = user.id;
 
-      // Fetch balance from server
-      const balanceData = await fetchBalance(wpUserId);
+      const [balanceData, history, referral] = await Promise.all([
+        fetchBalance(wpUserId),
+        fetchHistory(wpUserId),
+        fetchReferralCode(wpUserId),
+      ]);
       if (!balanceData) {
-        setIsSyncing(false);
         return;
       }
 
-      // Fetch history
-      const history = await fetchHistory(wpUserId);
-      const referral = await fetchReferralCode(wpUserId);
-
       // Update state with server data
       const tier = getTierForPoints(balanceData.total_earned);
+      const currentState = stateRef.current;
       const newState: RewardsState = {
-        ...state,
+        ...currentState,
         wpUserId,
         totalPoints: balanceData.balance,
         availablePoints: balanceData.balance,
@@ -427,9 +426,9 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
         tier,
         nextTier: balanceData.next_tier,
         pointsToNextTier: balanceData.points_to_next_tier,
-        history: history.length > 0 ? history : state.history,
+        history,
         lastSynced: new Date().toISOString(),
-        referralCode: referral?.code || state.referralCode || generateReferralCode(user?.id?.toString()),
+        referralCode: referral?.code || currentState.referralCode || generateReferralCode(user?.id?.toString()),
       };
 
       setState(newState);
@@ -437,9 +436,17 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       console.warn("Failed to sync rewards:", e);
     } finally {
+      syncingRef.current = false;
       setIsSyncing(false);
     }
-  }, [user?.id, state, isSyncing, saveState]);
+  }, [user?.id, saveState]);
+
+  // Refresh the account ledger after the cached state has been restored.
+  useEffect(() => {
+    if (isAuthenticated && user?.id && !isLoading) {
+      void syncRewards();
+    }
+  }, [isAuthenticated, user?.id, isLoading, syncRewards]);
 
   // Check if user can redeem (must have 750+ lifetime pts = 750 000 Ar spent)
   const canRedeem = state.lifetimePoints >= REDEMPTION_MIN_POINTS_LIFETIME;

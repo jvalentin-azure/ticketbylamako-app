@@ -5471,16 +5471,16 @@ function lamako_mobile_v2_rewards_history_description( $row ) {
     if ( $points < 0 ) {
         if ( strpos( $ref, 'redeem' ) !== false || strpos( $ref, 'redemption' ) !== false || strpos( $ref, 'coupon' ) !== false || strpos( $ref, 'reward' ) !== false ) {
             if ( preg_match( '/(\d+)\s*pts?/i', $raw, $matches ) ) {
-                return sprintf( 'R??duction LamakoRewards: %s points utilis??s', number_format_i18n( (int) $matches[1] ) );
+                return sprintf( 'Réduction LamakoRewards : %s points utilisés', number_format_i18n( (int) $matches[1] ) );
             }
-            return $order_reference ? 'Points utilis??s - ' . $order_reference : 'Points utilis??s pour une r??duction';
+            return $order_reference ? 'Points utilisés - ' . $order_reference : 'Points utilisés pour une réduction';
         }
-        return $order_reference ? 'Points d??bit??s - ' . $order_reference : 'Points d??bit??s';
+        return $order_reference ? 'Points débités - ' . $order_reference : 'Points débités';
     }
 
     if ( lamako_mobile_v2_rewards_is_order_ref( $ref, $raw ) ) {
         $parts   = [];
-        $parts[] = $order_reference ? 'Achat ' . $order_reference : 'Achat valid??';
+        $parts[] = $order_reference ? 'Achat ' . $order_reference : 'Achat validé';
         if ( preg_match( '/\(([0-9\s,.]+)\s*Ar\)/i', $raw, $matches ) ) {
             $parts[] = trim( $matches[1] ) . ' Ar';
         }
@@ -5500,7 +5500,7 @@ function lamako_mobile_v2_rewards_history_description( $row ) {
         return 'Bonus de connexion';
     }
     if ( strpos( $ref, 'attendance' ) !== false || strpos( $ref, 'scan' ) !== false ) {
-        return 'Bonus pr??sence ??v??nement';
+        return 'Bonus présence événement';
     }
     if ( strpos( $ref, 'review' ) !== false || strpos( $ref, 'avis' ) !== false ) {
         return 'Bonus avis';
@@ -5512,7 +5512,7 @@ function lamako_mobile_v2_rewards_history_description( $row ) {
     if ( $raw ) {
         $translated = str_ireplace(
             [ 'Points for order', 'Product Purchase', 'Purchase', 'Order', 'Manual adjustment', 'Point payout', 'points', 'redemption', 'redeem' ],
-            [ 'Points pour commande', 'Achat produit', 'Achat', 'Commande', 'Ajustement manuel', 'Attribution de points', 'points', 'r??duction', '??change' ],
+            [ 'Points pour commande', 'Achat produit', 'Achat', 'Commande', 'Ajustement manuel', 'Attribution de points', 'points', 'réduction', 'échange' ],
             $raw
         );
         return $translated;
@@ -5528,7 +5528,7 @@ function lamako_mobile_v2_rewards_history( WP_REST_Request $request ) {
     $table   = $wpdb->prefix . 'myCRED_log';
 
     $results = $wpdb->get_results( $wpdb->prepare(
-        "SELECT id, ref AS type, ref_id, creds AS points, entry AS description, time FROM {$table} WHERE user_id = %d ORDER BY time DESC LIMIT %d",
+        "SELECT id, ref AS type, ref_id, creds AS points, entry AS description, time FROM {$table} WHERE user_id = %d ORDER BY time DESC, id DESC LIMIT %d",
         $user_id,
         $limit
     ) );
@@ -5543,7 +5543,7 @@ function lamako_mobile_v2_rewards_history( WP_REST_Request $request ) {
             'orderId'     => $order_id,
             'amount'      => abs( (float) $row->points ),
             'description' => lamako_mobile_v2_rewards_history_description( $row ),
-            'date'        => date( 'c', (int) $row->time ),
+            'date'        => wp_date( 'c', (int) $row->time ),
         ];
     }
 

@@ -29,21 +29,6 @@ export default function ProfileScreen() {
             label: "Modifier le profil",
             onPress: () => router.push("/edit-profile" as any),
           },
-          {
-            icon: "clipboard.fill" as const,
-            label: "Mes commandes",
-            onPress: () => router.push("/orders" as any),
-          },
-          {
-            icon: "ticket.fill" as const,
-            label: "Mes billets",
-            onPress: () => router.push("/(tabs)/tickets" as any),
-          },
-          {
-            icon: "heart.fill" as const,
-            label: "Mes favoris",
-            onPress: () => router.push("/favorites" as any),
-          },
         ]
       : []),
     {
@@ -51,11 +36,6 @@ export default function ProfileScreen() {
         scheme === "dark" ? ("sun.max.fill" as const) : ("moon.fill" as const),
       label: scheme === "dark" ? "Mode clair" : "Mode sombre",
       onPress: () => setScheme(scheme === "dark" ? "light" : "dark"),
-    },
-    {
-      icon: "bell.fill" as const,
-      label: "Notifications",
-      onPress: () => router.push("/notifications" as any),
     },
     {
       icon: "gearshape.fill" as const,
@@ -66,11 +46,6 @@ export default function ProfileScreen() {
       icon: "hand.raised.fill" as const,
       label: "Confidentialité et données",
       onPress: () => router.push("/privacy-data" as any),
-    },
-    {
-      icon: "info.circle.fill" as const,
-      label: "À propos",
-      onPress: () => router.push("/about" as any),
     },
   ];
 
@@ -338,7 +313,7 @@ export default function ProfileScreen() {
             marginBottom: 8,
           }}
         >
-          Compte et préférences
+          Informations et préférences
         </Text>
         <View
           style={{

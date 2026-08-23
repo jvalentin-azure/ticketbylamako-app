@@ -20,6 +20,15 @@ const themeProvider = fs.readFileSync(
   path.join(root, "lib", "theme-provider.tsx"),
   "utf8",
 );
+const tabs = fs.readFileSync(
+  path.join(root, "app", "(tabs)", "_layout.tsx"),
+  "utf8",
+);
+const rewards = fs.readFileSync(path.join(root, "app", "rewards.tsx"), "utf8");
+const rewardsProvider = fs.readFileSync(
+  path.join(root, "lib", "rewards-provider.tsx"),
+  "utf8",
+);
 
 describe("account navigation and profile experience", () => {
   it("keeps notification inbox and preferences as distinct destinations", () => {
@@ -29,13 +38,25 @@ describe("account navigation and profile experience", () => {
     expect(drawer).toContain('navigate("/notification-settings")');
   });
 
-  it("exposes all authenticated account destinations from the drawer", () => {
+  it("keeps primary tickets in the tab bar and secondary account destinations in the drawer", () => {
     expect(drawer).toContain('label: "Mon profil"');
     expect(drawer).toContain('navigate("/(tabs)/profile")');
-    expect(drawer).toContain('navigate("/(tabs)/tickets")');
+    expect(drawer).not.toContain('navigate("/(tabs)/tickets")');
     expect(drawer).toContain('navigate("/orders")');
     expect(drawer).toContain('navigate("/rewards")');
     expect(drawer).toContain('navigate("/favorites")');
+    expect(drawer).toContain("rewards.availablePoints");
+    expect(profile).not.toContain('label: "Mes billets"');
+    expect(profile).not.toContain('label: "Mes commandes"');
+    expect(tabs).toContain('title: "Mes billets"');
+    expect(tabs).toContain('title: "Événements"');
+  });
+
+  it("refreshes the Rewards ledger on focus and by pull-to-refresh", () => {
+    expect(rewards).toContain("useFocusEffect");
+    expect(rewards).toContain("<RefreshControl");
+    expect(rewardsProvider).toContain("Promise.all");
+    expect(rewardsProvider).toContain("history,");
   });
 
   it("uses the configured app version rather than stale screen constants", () => {
