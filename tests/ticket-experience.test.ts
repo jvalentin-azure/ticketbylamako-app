@@ -26,15 +26,20 @@ describe("premium ticket experience", () => {
     expect(config).toContain('"expo-calendar"');
   });
 
-  it("shows wallet actions only when a signed pass URL is supplied", () => {
+  it("shows wallet actions only when a signed provider is available", () => {
     const source = read("app/ticket/[id].tsx");
     const adapter = read("lib/order-adapters.ts");
 
     expect(source).toContain("ticket.apple_wallet_url");
     expect(source).toContain("ticket.google_wallet_url");
-    expect(source).toContain("{walletUrl ? (");
+    expect(source).toContain("ticket.apple_wallet_available === true");
+    expect(source).toContain("ticket.google_wallet_available === true");
+    expect(source).toContain("{walletAvailable ? (");
+    expect(source).toContain("getMobileTicketWalletLink");
     expect(adapter).toContain("appleWalletUrl");
     expect(adapter).toContain("googleWalletUrl");
+    expect(adapter).toContain("appleWalletAvailable");
+    expect(adapter).toContain("googleWalletAvailable");
   });
 
   it("distinguishes an active ticket from an already scanned ticket", () => {

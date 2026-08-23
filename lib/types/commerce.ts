@@ -14,6 +14,8 @@ export interface TicketInstance {
   event_image?: string;
   apple_wallet_url?: string;
   google_wallet_url?: string;
+  apple_wallet_available?: boolean;
+  google_wallet_available?: boolean;
   checked_in?: boolean;
   checked_in_at?: string;
   checkin_count?: number;

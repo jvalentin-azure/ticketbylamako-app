@@ -23,6 +23,11 @@ if ( file_exists( $lamako_mobile_v2_file ) ) {
     require_once $lamako_mobile_v2_file;
 }
 
+$lamako_mobile_wallet_file = __DIR__ . '/includes/v2-wallet.php';
+if ( file_exists( $lamako_mobile_wallet_file ) ) {
+    require_once $lamako_mobile_wallet_file;
+}
+
 // ============================================================
 // 0. ALLOW PAY-FOR-ORDER WITHOUT LOGIN (for mobile app checkout)
 // ============================================================

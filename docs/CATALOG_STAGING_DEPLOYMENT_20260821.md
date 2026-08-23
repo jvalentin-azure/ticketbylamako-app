@@ -604,3 +604,45 @@ Rollback staging :
 cp -p /home/master/tbl-compliance-backups/event-map-20260822T152715Z/v2-commerce.php /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
 php -l /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
 ```
+
+## Signature Apple et Google Wallet - 23 août 2026
+
+La signature Wallet est active uniquement sur le staging. Les clés privées sont
+stockées hors du webroot et hors Git. L'API mobile expose des liens Wallet
+signés uniquement pour les billets appartenant à une commande payée et au
+client authentifié.
+
+- disponibilité serveur vérifiée : Apple `true`, Google `true` ;
+- Pass Type ID Apple : `pass.com.ticketbylamako.eventticket` ;
+- Google Wallet issuer : `3388000000023176380` ;
+- projet Google Cloud dédié : `ticketbylamako-wallet-stg` ;
+- compte de service Google enregistré comme développeur Wallet, sans rôle Cloud
+  global ;
+- compte Google de QA ajouté aux testeurs du mode démo ;
+- billet payé staging `14115`, commande `14114` : lien signé Google généré,
+  classe `event_13839` créée et active, pass ajouté au Wallet avec événement,
+  dates, lieu, titulaire, numéro et QR code ;
+- aucune modification de production.
+
+Backup `wp-config.php` avant activation Google :
+
+```text
+/home/master/tbl-compliance-backups/wallet-google-20260823-193757/wp-config.php
+```
+
+Rollback Google staging : restaurer ce `wp-config.php`, purger le cache, puis
+vérifier que `lamako_mobile_v2_wallet_availability()` retourne Google `false`.
+En cas de suspicion sur la clé, la révoquer dans Google Cloud avant d'en créer
+une nouvelle. Le JSON de compte de service ne doit jamais être copié dans le
+dépôt, un log ou une réponse API.
+
+La fiche d'établissement Google est désormais complète et liée au profil de
+paiement validé `LAMAKO EVENTS` (Organisation, Madagascar). Elle contient la
+catégorie `Theatrical Ticket Agencies (7922)`, le site et les coordonnées de
+support TicketByLamako. Google l'a placée en vérification.
+
+La demande d'accès en publication Google Wallet a été soumise le 23 août 2026.
+La checklist Console affiche `3/3`, `100 %` et une réponse annoncée sous deux à
+trois jours ouvrés. Le mode démo et le testeur autorisé restent utilisables
+pendant l'examen. Après approbation, les classes actives seront publiées
+automatiquement ; aucun fichier de production n'a été modifié dans cette étape.

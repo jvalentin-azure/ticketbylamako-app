@@ -21,6 +21,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import {
   getMobileOrder,
   getMobileOrderTickets,
+  getMobileTicketWalletLink,
   MobileApiError,
 } from "@/lib/api/mobile";
 import {
@@ -174,8 +175,13 @@ function TicketCard({
   const isCheckedIn = ticket.checked_in === true;
   const qrValue = ticket.ticket_code;
   const [calendarBusy, setCalendarBusy] = useState(false);
-  const walletUrl =
+  const [walletBusy, setWalletBusy] = useState(false);
+  const legacyWalletUrl =
     Platform.OS === "ios" ? ticket.apple_wallet_url : ticket.google_wallet_url;
+  const walletAvailable =
+    Platform.OS === "ios"
+      ? ticket.apple_wallet_available === true || Boolean(legacyWalletUrl)
+      : ticket.google_wallet_available === true || Boolean(legacyWalletUrl);
 
   const handleAddToCalendar = async () => {
     if (calendarBusy) return;
@@ -207,14 +213,25 @@ function TicketCard({
   };
 
   const handleAddToWallet = async () => {
-    if (!walletUrl) return;
+    if (!walletAvailable || walletBusy) return;
+    setWalletBusy(true);
     try {
-      await Linking.openURL(walletUrl);
+      const platform = Platform.OS === "ios" ? "apple" : "google";
+      const response = legacyWalletUrl
+        ? { url: legacyWalletUrl }
+        : await getMobileTicketWalletLink(
+            order.id,
+            ticket.instance_id,
+            platform,
+          );
+      await Linking.openURL(response.url);
     } catch {
       Alert.alert(
         "Wallet indisponible",
         "Le pass n'a pas pu être ouvert. Réessayez dans quelques instants.",
       );
+    } finally {
+      setWalletBusy(false);
     }
   };
 
@@ -365,7 +382,7 @@ function TicketCard({
                 </TouchableOpacity>
               ) : null}
             </View>
-            {walletUrl ? (
+            {walletAvailable ? (
               <TouchableOpacity
                 accessibilityRole="button"
                 accessibilityLabel={
@@ -374,9 +391,14 @@ function TicketCard({
                     : "Ajouter à Google Wallet"
                 }
                 onPress={handleAddToWallet}
+                disabled={walletBusy}
                 style={styles.walletButton}
               >
-                <IconSymbol name="wallet.fill" size={19} color="#fff" />
+                {walletBusy ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <IconSymbol name="wallet.fill" size={19} color="#fff" />
+                )}
                 <Text style={styles.walletButtonText}>
                   {Platform.OS === "ios"
                     ? "Ajouter à Apple Wallet"

@@ -383,12 +383,20 @@ export interface MobileTicket {
   eventImage?: string;
   appleWalletUrl?: string;
   googleWalletUrl?: string;
+  appleWalletAvailable?: boolean;
+  googleWalletAvailable?: boolean;
   checkedIn?: boolean;
   checkedInAt?: string;
   checkinCount?: number;
   seatLabel: string;
   seatId: string;
   status: string;
+}
+
+export interface MobileTicketWalletLink {
+  platform: "apple" | "google";
+  url: string;
+  expiresAt: string | null;
 }
 
 export interface MobileOrderTicketsResponse {
@@ -698,6 +706,16 @@ export async function getMobileOrderTickets(
   orderId: number,
 ): Promise<MobileOrderTicketsResponse> {
   return mobileV2Fetch<MobileOrderTicketsResponse>(`orders/${orderId}/tickets`);
+}
+
+export async function getMobileTicketWalletLink(
+  orderId: number,
+  ticketId: number,
+  platform: "apple" | "google",
+): Promise<MobileTicketWalletLink> {
+  return mobileV2Fetch<MobileTicketWalletLink>(
+    `orders/${orderId}/tickets/${ticketId}/wallet/${platform}`,
+  );
 }
 
 export async function registerMobilePushToken(

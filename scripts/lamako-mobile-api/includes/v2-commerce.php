@@ -5075,12 +5075,17 @@ function lamako_mobile_v2_ticket_checkin_state( $instance_id ) {
 }
 
 function lamako_mobile_v2_ticket_instance_data( array $context, $instance_id ) {
+    $wallet = function_exists( 'lamako_mobile_v2_wallet_availability' )
+        ? lamako_mobile_v2_wallet_availability()
+        : [ 'apple' => false, 'google' => false ];
     return array_merge( $context, lamako_mobile_v2_ticket_checkin_state( $instance_id ), [
         'instanceId' => (int) $instance_id,
         'ticketCode' => get_post_meta( $instance_id, 'ticket_code', true ),
         'seatLabel'  => get_post_meta( $instance_id, 'seat_label', true ),
         'seatId'     => get_post_meta( $instance_id, 'seat_id', true ),
         'status'     => get_post_status( $instance_id ),
+        'appleWalletAvailable' => ! empty( $wallet['apple'] ),
+        'googleWalletAvailable'=> ! empty( $wallet['google'] ),
     ] );
 }
 
