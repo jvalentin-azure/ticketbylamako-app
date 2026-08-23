@@ -104,6 +104,60 @@ cp -p /home/master/tbl-compliance-backups/wvvtwdcenn-20260821T114634Z-pre-mobile
 php -l /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
 ```
 
+## Navigation compte et activité LamakoRewards - 23 août 2026
+
+La navigation client ne duplique plus `Mes billets` entre le tiroir, le profil
+et la barre principale. `Mes billets` reste une destination primaire de la barre
+d'onglets. Le tiroir regroupe les destinations secondaires et affiche le solde
+LamakoRewards. Le profil est recentré sur l'identité et les préférences.
+
+La page LamakoRewards recharge désormais le journal à chaque ouverture, accepte
+le rafraîchissement par glissement et présente les connexions, achats et débits
+près du solde. Le serveur trie les mouvements par date puis identifiant afin de
+préserver un ordre stable quand plusieurs écritures partagent le même timestamp.
+
+Validation locale :
+
+- commit applicatif : `dcc79df20e9bdd4d98dd8a72637ebd3407f4f907` ;
+- TypeScript et ESLint : OK ;
+- PHP local : aucune erreur de syntaxe ;
+- Vitest : 232 tests réussis, 4 ignorés ;
+- `git diff --check` : OK.
+
+Déploiement staging ciblé :
+
+- fichier PHP uniquement : `lamako-mobile-api/includes/v2-commerce.php` ;
+- empreinte finale :
+  `46e15d27add784482bc9a0722f8fc5c317b6326f15fbc24035d5b6b905bc008c` ;
+- backup avant déploiement :
+  `/home/master/tbl-compliance-backups/rewards-menu-20260823T123232Z/v2-commerce.php` ;
+- plugin `lamako-mobile-api` actif, version `2.0.4` ;
+- route publique catalogue : HTTP 200 ;
+- route Rewards sans JWT : HTTP 401 attendu ;
+- aucun fatal Rewards/PHP détecté dans la fin du journal staging ;
+- les références `daily_login`, `woocommerce_each_order` et `purchase` sont
+  présentes dans le journal myCred staging ;
+- aucun fichier de production modifié.
+
+OTA staging :
+
+- canal et branche : `staging` ;
+- runtime : `1.0.0` ;
+- groupe : `8e9b7fce-74ac-4f8c-b4cf-0dd9ca475de4` ;
+- Android : `01a02ea1-5540-7232-a979-ec8bf55e3f17` ;
+- iOS : `01a02ea1-5540-7332-a1a2-fdaee03b86c9`.
+
+Rollback serveur staging :
+
+```bash
+cp -p /home/master/tbl-compliance-backups/rewards-menu-20260823T123232Z/v2-commerce.php /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
+php -l /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
+```
+
+L'OTA peut être remplacée par une nouvelle publication sur la branche staging
+ou annulée depuis le groupe d'updates Expo. Une QA physique reste requise pour
+le tiroir, Profil, Mes billets et l'activité Rewards authentifiée.
+
 ## Builds QA wallet et carte - 22 août 2026
 
 Les deux candidats ont été construits depuis le commit
