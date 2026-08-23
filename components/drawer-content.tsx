@@ -134,13 +134,8 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
           onPress: () => navigate("/help"),
         },
         {
-          icon: "hand.raised.fill" as const,
-          label: "Politique de confidentialité",
-          onPress: () => navigate("/privacy"),
-        },
-        {
           icon: "shield.fill" as const,
-          label: "Confidentialité et données",
+          label: "Centre légal et données",
           onPress: () => navigate("/privacy-data"),
         },
         {

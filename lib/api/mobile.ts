@@ -429,6 +429,28 @@ export interface MobileRewardsBalance {
   canRedeem: boolean;
 }
 
+export interface MobileRewardsConfig {
+  version: number;
+  platform: string;
+  program: {
+    enabled: boolean;
+    signup_bonus_points: number;
+    earn_rate: {
+      points: number;
+      amount_ariary: number;
+    };
+    minimum_redeem_points: number;
+    redemption_options: Array<{
+      points: number;
+      amount_ariary: number;
+    }>;
+    referral: {
+      referrer_points: number;
+      referred_points: number;
+    };
+  };
+}
+
 export interface MobileRewardTransaction {
   id: string;
   type: "earn" | "redeem";
@@ -738,6 +760,12 @@ export async function unregisterMobilePushToken(
 
 export async function getMobileRewardsBalance(): Promise<MobileRewardsBalance> {
   return mobileV2Fetch<MobileRewardsBalance>("rewards/balance");
+}
+
+export async function getMobileRewardsConfig(): Promise<MobileRewardsConfig> {
+  return mobileV2Fetch<MobileRewardsConfig>("rewards/config", {
+    requireAuth: false,
+  });
 }
 
 export async function getMobileRewardsHistory(

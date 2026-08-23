@@ -29,6 +29,11 @@ const rewardsProvider = fs.readFileSync(
   path.join(root, "lib", "rewards-provider.tsx"),
   "utf8",
 );
+const about = fs.readFileSync(path.join(root, "app", "about.tsx"), "utf8");
+const privacyData = fs.readFileSync(
+  path.join(root, "app", "privacy-data.tsx"),
+  "utf8",
+);
 
 describe("account navigation and profile experience", () => {
   it("keeps notification inbox and preferences as distinct destinations", () => {
@@ -52,11 +57,23 @@ describe("account navigation and profile experience", () => {
     expect(tabs).toContain('title: "Événements"');
   });
 
+  it("centralizes legal documents and personal-data actions", () => {
+    expect(drawer).toContain('label: "Centre légal et données"');
+    expect(profile).toContain('label: "Centre légal et données"');
+    expect(drawer).not.toContain('label: "Politique de confidentialité"');
+    expect(privacyData).toContain('title: "Documents"');
+    expect(privacyData).toContain('title: "Vos données"');
+    expect(privacyData).toContain('label: "Mentions légales"');
+    expect(about).not.toContain("Informations légales");
+  });
+
   it("refreshes the Rewards ledger on focus and by pull-to-refresh", () => {
     expect(rewards).toContain("useFocusEffect");
     expect(rewards).toContain("<RefreshControl");
     expect(rewardsProvider).toContain("Promise.all");
     expect(rewardsProvider).toContain("history,");
+    expect(rewardsProvider).toContain("getMobileRewardsConfig");
+    expect(rewardsProvider).toContain("programConfig.redemptionTiers");
   });
 
   it("uses the configured app version rather than stale screen constants", () => {

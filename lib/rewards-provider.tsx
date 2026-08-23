@@ -1,9 +1,18 @@
-import { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+  type ReactNode,
+} from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "@/lib/auth-provider";
 import {
   getMobileReferralCode,
   getMobileRewardsBalance,
+  getMobileRewardsConfig,
   getMobileRewardsHistory,
   redeemMobileRewards,
   registerMobileReferral,
@@ -131,17 +140,28 @@ export const EARN_RULES = {
 };
 
 // ===== REDEMPTION RULES =====
-// Fixed rate: 500 pts = 10,000 Ar (20 Ar/pt = 2% cashback equivalent)
-// This is conservative and industry-standard (AMC = 2%, airlines = 1-2%)
-// IMPORTANT: Redemption is available after 750 000 Ar spent (= 750 lifetime pts)
-// This is independent of tier level - users accumulate points but can only redeem after reaching 750 pts
+// Offline fallback only. The server endpoint /rewards/config is authoritative.
 export const REDEMPTION_MIN_POINTS_LIFETIME = 750; // 750 pts = 750 000 Ar spent
 export const REDEMPTION_TIERS = [
-  { points: 500, value: 10000, label: "500 pts = 10 000 Ar" },
   { points: 1000, value: 20000, label: "1 000 pts = 20 000 Ar" },
   { points: 2000, value: 40000, label: "2 000 pts = 40 000 Ar" },
-  { points: 5000, value: 100000, label: "5 000 pts = 100 000 Ar" },
 ];
+
+export interface RewardsProgramConfig {
+  enabled: boolean;
+  minimumRedeemPoints: number;
+  earnPoints: number;
+  earnAmountAriary: number;
+  redemptionTiers: Array<{ points: number; value: number; label: string }>;
+}
+
+export const DEFAULT_REWARDS_PROGRAM_CONFIG: RewardsProgramConfig = {
+  enabled: true,
+  minimumRedeemPoints: REDEMPTION_MIN_POINTS_LIFETIME,
+  earnPoints: EARN_RULES.purchaseRate,
+  earnAmountAriary: EARN_RULES.purchaseUnit,
+  redemptionTiers: REDEMPTION_TIERS,
+};
 
 // ===== HISTORY =====
 export interface RewardTransaction {
@@ -184,15 +204,18 @@ const DEFAULT_STATE: RewardsState = {
 // ===== CONTEXT =====
 interface RewardsContextType {
   state: RewardsState;
+  programConfig: RewardsProgramConfig;
   currentTier: TierInfo;
   nextTier: TierInfo | null;
   progressToNextTier: number; // 0-1
   pointsToNextTier: number;
-  canRedeem: boolean; // true only if lifetimePoints >= 750 (= 750 000 Ar spent)
-  pointsUntilRedemption: number; // 0 if can redeem, otherwise pts needed to reach 750
+  canRedeem: boolean;
+  pointsUntilRedemption: number;
   syncRewards: () => Promise<void>;
   getDiscountValue: (points: number) => number;
-  getBestRedemption: (points: number) => { points: number; value: number } | null;
+  getBestRedemption: (
+    points: number,
+  ) => { points: number; value: number } | null;
   redeemPoints: (points: number, wpUserId: number) => Promise<RedeemResult>;
   isLoading: boolean;
   isSyncing: boolean;
@@ -226,7 +249,9 @@ function generateReferralCode(userId?: string): string {
 }
 
 // ===== REFERRAL API FUNCTIONS =====
-export async function validateReferralCode(code: string): Promise<{ valid: boolean; referrer_name?: string; bonus?: number }> {
+export async function validateReferralCode(
+  code: string,
+): Promise<{ valid: boolean; referrer_name?: string; bonus?: number }> {
   try {
     const result = await validateMobileReferralCode(code);
     return {
@@ -240,7 +265,10 @@ export async function validateReferralCode(code: string): Promise<{ valid: boole
   }
 }
 
-export async function registerReferral(refereeUserId: number, referrerCode: string): Promise<{ success: boolean; error?: string }> {
+export async function registerReferral(
+  refereeUserId: number,
+  referrerCode: string,
+): Promise<{ success: boolean; error?: string }> {
   try {
     const result = await registerMobileReferral(referrerCode);
     return { success: result.success, error: result.error };
@@ -254,7 +282,10 @@ export async function registerReferral(refereeUserId: number, referrerCode: stri
  * Redeem points for a WooCommerce coupon code.
  * Calls the /redeem endpoint which deducts points and creates a one-time coupon.
  */
-export async function redeemPointsApi(points: number, wpUserId: number): Promise<RedeemResult> {
+export async function redeemPointsApi(
+  points: number,
+  wpUserId: number,
+): Promise<RedeemResult> {
   try {
     const data = await redeemMobileRewards(points);
     return {
@@ -270,7 +301,9 @@ export async function redeemPointsApi(points: number, wpUserId: number): Promise
   }
 }
 
-export async function fetchReferralCode(wpUserId: number): Promise<{ code: string; referral_count: number } | null> {
+export async function fetchReferralCode(
+  wpUserId: number,
+): Promise<{ code: string; referral_count: number } | null> {
   try {
     const result = await getMobileReferralCode();
     return { code: result.code, referral_count: result.referralCount };
@@ -312,9 +345,16 @@ function normalizeRewardDescription(item: {
 }): string {
   const raw = (item.description || "").replace(/%[a-zA-Z_]+%/g, "").trim();
   const ref = item.reference || "";
-  const orderLabel = item.orderId ? `commande #${item.orderId}` : ref.toLowerCase().includes("commande") ? ref.toLowerCase() : "";
+  const orderLabel = item.orderId
+    ? `commande #${item.orderId}`
+    : ref.toLowerCase().includes("commande")
+      ? ref.toLowerCase()
+      : "";
 
-  if (/lamako mobile v2 redemption|redemption|redeem/i.test(raw) || /redemption|redeem/i.test(ref)) {
+  if (
+    /lamako mobile v2 redemption|redemption|redeem/i.test(raw) ||
+    /redemption|redeem/i.test(ref)
+  ) {
     const match = raw.match(/(\d+)\s*pts?/i);
     return match
       ? `Réduction LamakoRewards: ${Number(match[1]).toLocaleString("fr-FR")} points utilisés`
@@ -331,10 +371,13 @@ function normalizeRewardDescription(item: {
   return item.type === "earn" ? "Points gagnés" : "Points échangés";
 }
 
-async function fetchHistory(wpUserId: number, limit = 50): Promise<RewardTransaction[]> {
+async function fetchHistory(
+  wpUserId: number,
+  limit = 50,
+): Promise<RewardTransaction[]> {
   try {
     const history = await getMobileRewardsHistory(limit);
-    return history.map(item => ({
+    return history.map((item) => ({
       id: item.id.toString(),
       type: item.type,
       amount: Math.abs(item.amount),
@@ -352,6 +395,9 @@ async function fetchHistory(wpUserId: number, limit = 50): Promise<RewardTransac
 export function RewardsProvider({ children }: { children: ReactNode }) {
   const { user, isAuthenticated } = useAuth();
   const [state, setState] = useState<RewardsState>(DEFAULT_STATE);
+  const [programConfig, setProgramConfig] = useState<RewardsProgramConfig>(
+    DEFAULT_REWARDS_PROGRAM_CONFIG,
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const stateRef = useRef(state);
@@ -360,6 +406,44 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  useEffect(() => {
+    let active = true;
+    getMobileRewardsConfig()
+      .then((config) => {
+        const options = config.program.redemption_options
+          .filter((option) => option.points > 0 && option.amount_ariary > 0)
+          .sort((a, b) => a.points - b.points)
+          .map((option) => ({
+            points: option.points,
+            value: option.amount_ariary,
+            label: `${option.points.toLocaleString("fr-FR")} pts = ${option.amount_ariary.toLocaleString("fr-FR")} Ar`,
+          }));
+        if (!active) return;
+        setProgramConfig({
+          enabled: config.program.enabled,
+          minimumRedeemPoints:
+            config.program.minimum_redeem_points ||
+            DEFAULT_REWARDS_PROGRAM_CONFIG.minimumRedeemPoints,
+          earnPoints:
+            config.program.earn_rate.points ||
+            DEFAULT_REWARDS_PROGRAM_CONFIG.earnPoints,
+          earnAmountAriary:
+            config.program.earn_rate.amount_ariary ||
+            DEFAULT_REWARDS_PROGRAM_CONFIG.earnAmountAriary,
+          redemptionTiers:
+            options.length > 0
+              ? options
+              : DEFAULT_REWARDS_PROGRAM_CONFIG.redemptionTiers,
+        });
+      })
+      .catch((error) => {
+        console.warn("Failed to fetch rewards program config:", error);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Load cached state from storage
   useEffect(() => {
@@ -387,14 +471,17 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
   }, [user?.id]);
 
   // Save state to storage
-  const saveState = useCallback(async (newState: RewardsState) => {
-    try {
-      const key = `${STORAGE_KEY}_${user?.id || "guest"}`;
-      await AsyncStorage.setItem(key, JSON.stringify(newState));
-    } catch (e) {
-      console.warn("Failed to save rewards state:", e);
-    }
-  }, [user?.id]);
+  const saveState = useCallback(
+    async (newState: RewardsState) => {
+      try {
+        const key = `${STORAGE_KEY}_${user?.id || "guest"}`;
+        await AsyncStorage.setItem(key, JSON.stringify(newState));
+      } catch (e) {
+        console.warn("Failed to save rewards state:", e);
+      }
+    },
+    [user?.id],
+  );
 
   // Sync with server API
   const syncRewards = useCallback(async () => {
@@ -428,7 +515,10 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
         pointsToNextTier: balanceData.points_to_next_tier,
         history,
         lastSynced: new Date().toISOString(),
-        referralCode: referral?.code || currentState.referralCode || generateReferralCode(user?.id?.toString()),
+        referralCode:
+          referral?.code ||
+          currentState.referralCode ||
+          generateReferralCode(user?.id?.toString()),
       };
 
       setState(newState);
@@ -448,70 +538,95 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
     }
   }, [isAuthenticated, user?.id, isLoading, syncRewards]);
 
-  // Check if user can redeem (must have 750+ lifetime pts = 750 000 Ar spent)
-  const canRedeem = state.lifetimePoints >= REDEMPTION_MIN_POINTS_LIFETIME;
-  const pointsUntilRedemption = canRedeem ? 0 : REDEMPTION_MIN_POINTS_LIFETIME - state.lifetimePoints;
+  // The server program configuration controls redemption eligibility.
+  const canRedeem =
+    programConfig.enabled &&
+    state.lifetimePoints >= programConfig.minimumRedeemPoints;
+  const pointsUntilRedemption = canRedeem
+    ? 0
+    : Math.max(0, programConfig.minimumRedeemPoints - state.lifetimePoints);
 
   // Get the best redemption tier for a given number of points
-  const getBestRedemption = useCallback((points: number): { points: number; value: number } | null => {
-    // Block redemption if user hasn't reached 750 lifetime pts (750 000 Ar spent)
-    if (state.lifetimePoints < REDEMPTION_MIN_POINTS_LIFETIME) return null;
-    // Find the highest redemption tier the user can afford
-    const affordable = REDEMPTION_TIERS.filter(t => t.points <= points);
-    if (affordable.length === 0) return null;
-    return affordable[affordable.length - 1];
-  }, [state.lifetimePoints]);
+  const getBestRedemption = useCallback(
+    (points: number): { points: number; value: number } | null => {
+      if (
+        !programConfig.enabled ||
+        state.lifetimePoints < programConfig.minimumRedeemPoints
+      ) {
+        return null;
+      }
+      // Find the highest redemption tier the user can afford
+      const affordable = programConfig.redemptionTiers.filter(
+        (tier) => tier.points <= points,
+      );
+      if (affordable.length === 0) return null;
+      return affordable[affordable.length - 1];
+    },
+    [programConfig, state.lifetimePoints],
+  );
 
   // Legacy discount calculation (backward compat)
-  const getDiscountValue = useCallback((points: number): number => {
-    const best = getBestRedemption(points);
-    return best ? best.value : 0;
-  }, [getBestRedemption]);
+  const getDiscountValue = useCallback(
+    (points: number): number => {
+      const best = getBestRedemption(points);
+      return best ? best.value : 0;
+    },
+    [getBestRedemption],
+  );
 
   // Computed values
-  const currentTier = TIERS.find(t => t.id === state.tier) || TIERS[0];
-  const currentTierIndex = TIERS.findIndex(t => t.id === state.tier);
-  const nextTierInfo = currentTierIndex < TIERS.length - 1 ? TIERS[currentTierIndex + 1] : null;
-  
+  const currentTier = TIERS.find((t) => t.id === state.tier) || TIERS[0];
+  const currentTierIndex = TIERS.findIndex((t) => t.id === state.tier);
+  const nextTierInfo =
+    currentTierIndex < TIERS.length - 1 ? TIERS[currentTierIndex + 1] : null;
+
   const progressToNextTier = nextTierInfo
-    ? Math.min(1, (state.lifetimePoints - currentTier.minPoints) / (nextTierInfo.minPoints - currentTier.minPoints))
+    ? Math.min(
+        1,
+        (state.lifetimePoints - currentTier.minPoints) /
+          (nextTierInfo.minPoints - currentTier.minPoints),
+      )
     : 1;
-  
+
   const pointsToNextTier = nextTierInfo
     ? Math.max(0, nextTierInfo.minPoints - state.lifetimePoints)
     : 0;
 
   // Redeem points - calls API and updates local state
-  const redeemPoints = useCallback(async (points: number, wpUserId: number): Promise<RedeemResult> => {
-    const result = await redeemPointsApi(points, wpUserId);
-    if (result.success && result.new_balance !== undefined) {
-      // Update local state with new balance
-      const newState: RewardsState = {
-        ...state,
-        totalPoints: result.new_balance,
-        availablePoints: result.new_balance,
-        history: [
-          {
-            id: Date.now().toString(),
-            type: "redeem",
-            amount: result.points_deducted || points,
-            reference: "redemption",
-            description: `Échange ${points} pts → ${result.coupon_code}`,
-            date: new Date().toISOString(),
-          },
-          ...state.history,
-        ],
-      };
-      setState(newState);
-      await saveState(newState);
-    }
-    return result;
-  }, [state, saveState]);
+  const redeemPoints = useCallback(
+    async (points: number, wpUserId: number): Promise<RedeemResult> => {
+      const result = await redeemPointsApi(points, wpUserId);
+      if (result.success && result.new_balance !== undefined) {
+        // Update local state with new balance
+        const newState: RewardsState = {
+          ...state,
+          totalPoints: result.new_balance,
+          availablePoints: result.new_balance,
+          history: [
+            {
+              id: Date.now().toString(),
+              type: "redeem",
+              amount: result.points_deducted || points,
+              reference: "redemption",
+              description: `Échange ${points} pts → ${result.coupon_code}`,
+              date: new Date().toISOString(),
+            },
+            ...state.history,
+          ],
+        };
+        setState(newState);
+        await saveState(newState);
+      }
+      return result;
+    },
+    [state, saveState],
+  );
 
   return (
     <RewardsContext.Provider
       value={{
         state,
+        programConfig,
         currentTier,
         nextTier: nextTierInfo,
         progressToNextTier,
@@ -542,7 +657,21 @@ export function useRewards() {
  * Uses the user's current tier multiplier if available.
  * Can be used outside of RewardsProvider (returns base points only).
  */
-export function estimatePointsForPrice(priceAr: number, multiplier: number = 1): number {
-  const base = Math.floor(priceAr / EARN_RULES.purchaseUnit);
-  return Math.floor(base * multiplier);
+export function estimatePointsForPrice(
+  priceAr: number,
+  multiplier: number = 1,
+  config: Pick<
+    RewardsProgramConfig,
+    "enabled" | "earnPoints" | "earnAmountAriary"
+  > = DEFAULT_REWARDS_PROGRAM_CONFIG,
+): number {
+  if (
+    !config.enabled ||
+    config.earnAmountAriary <= 0 ||
+    config.earnPoints <= 0
+  ) {
+    return 0;
+  }
+  const baseUnits = Math.floor(priceAr / config.earnAmountAriary);
+  return Math.floor(baseUnits * config.earnPoints * multiplier);
 }

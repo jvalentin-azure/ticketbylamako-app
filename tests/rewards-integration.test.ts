@@ -20,10 +20,8 @@ const EARN_RULES = {
 
 const REDEMPTION_MIN_POINTS_LIFETIME = 750;
 const REDEMPTION_TIERS = [
-  { points: 500, value: 10000, label: "500 pts = 10 000 Ar" },
   { points: 1000, value: 20000, label: "1 000 pts = 20 000 Ar" },
   { points: 2000, value: 40000, label: "2 000 pts = 40 000 Ar" },
-  { points: 5000, value: 100000, label: "5 000 pts = 100 000 Ar" },
 ];
 
 const TIERS = [
@@ -35,15 +33,33 @@ const TIERS = [
 ];
 
 // Exact copy of the function from rewards-provider.tsx
-function estimatePointsForPrice(priceAr: number, multiplier: number = 1): number {
-  const base = Math.floor(priceAr / EARN_RULES.purchaseUnit);
-  return Math.floor(base * multiplier);
+function estimatePointsForPrice(
+  priceAr: number,
+  multiplier: number = 1,
+  config = {
+    enabled: true,
+    earnPoints: EARN_RULES.purchaseRate,
+    earnAmountAriary: EARN_RULES.purchaseUnit,
+  },
+): number {
+  if (
+    !config.enabled ||
+    config.earnAmountAriary <= 0 ||
+    config.earnPoints <= 0
+  ) {
+    return 0;
+  }
+  const baseUnits = Math.floor(priceAr / config.earnAmountAriary);
+  return Math.floor(baseUnits * config.earnPoints * multiplier);
 }
 
 // Replicate getBestRedemption logic
-function getBestRedemption(points: number, lifetimePoints: number): { points: number; value: number } | null {
+function getBestRedemption(
+  points: number,
+  lifetimePoints: number,
+): { points: number; value: number } | null {
   if (lifetimePoints < REDEMPTION_MIN_POINTS_LIFETIME) return null;
-  const affordable = REDEMPTION_TIERS.filter(t => t.points <= points);
+  const affordable = REDEMPTION_TIERS.filter((t) => t.points <= points);
   if (affordable.length === 0) return null;
   return affordable[affordable.length - 1];
 }
@@ -97,13 +113,33 @@ describe("LamakoRewards - estimatePointsForPrice", () => {
     // 2999 Ar = 2.999 -> floor = 2
     expect(estimatePointsForPrice(2999)).toBe(2);
   });
+
+  it("uses the server-configured earn rate", () => {
+    expect(
+      estimatePointsForPrice(10000, 1, {
+        enabled: true,
+        earnPoints: 2,
+        earnAmountAriary: 2500,
+      }),
+    ).toBe(8);
+  });
+
+  it("returns no points when the server disables the program", () => {
+    expect(
+      estimatePointsForPrice(10000, 1, {
+        enabled: false,
+        earnPoints: 1,
+        earnAmountAriary: 1000,
+      }),
+    ).toBe(0);
+  });
 });
 
 describe("LamakoRewards - Cart total points calculation", () => {
   it("calculates total points for multiple cart items", () => {
     const cartItems = [
-      { price: 50000, quantity: 2 },  // 100,000 Ar = 100 pts
-      { price: 30000, quantity: 1 },  // 30,000 Ar = 30 pts
+      { price: 50000, quantity: 2 }, // 100,000 Ar = 100 pts
+      { price: 30000, quantity: 1 }, // 30,000 Ar = 30 pts
       { price: 120000, quantity: 1 }, // 120,000 Ar = 120 pts
     ];
 
@@ -116,13 +152,15 @@ describe("LamakoRewards - Cart total points calculation", () => {
 
   it("calculates total points with Gold multiplier", () => {
     const cartItems = [
-      { price: 100000, quantity: 1 },  // 100,000 Ar * 1.25 = 125 pts
-      { price: 50000, quantity: 2 },   // 100,000 Ar * 1.25 = 125 pts
+      { price: 100000, quantity: 1 }, // 100,000 Ar * 1.25 = 125 pts
+      { price: 50000, quantity: 2 }, // 100,000 Ar * 1.25 = 125 pts
     ];
 
     const goldMultiplier = 1.25;
     const totalPoints = cartItems.reduce((sum, item) => {
-      return sum + estimatePointsForPrice(item.price * item.quantity, goldMultiplier);
+      return (
+        sum + estimatePointsForPrice(item.price * item.quantity, goldMultiplier)
+      );
     }, 0);
 
     expect(totalPoints).toBe(250);
@@ -135,7 +173,10 @@ describe("LamakoRewards - Cart total points calculation", () => {
     ];
 
     const totalPoints = cartItems.reduce((sum, item) => {
-      const priceNum = typeof item.price === "string" ? parseFloat(item.price) || 0 : item.price;
+      const priceNum =
+        typeof item.price === "string"
+          ? parseFloat(item.price) || 0
+          : item.price;
       return sum + estimatePointsForPrice(priceNum * item.quantity, 1);
     }, 0);
 
@@ -150,7 +191,10 @@ describe("LamakoRewards - Cart total points calculation", () => {
     ];
 
     const totalPoints = cartItems.reduce((sum, item) => {
-      const priceNum = typeof item.price === "string" ? parseFloat(item.price) || 0 : item.price;
+      const priceNum =
+        typeof item.price === "string"
+          ? parseFloat(item.price) || 0
+          : item.price;
       return sum + estimatePointsForPrice(priceNum * item.quantity, 1);
     }, 0);
 
@@ -173,17 +217,17 @@ describe("LamakoRewards - Redemption logic", () => {
   it("returns highest affordable tier", () => {
     // Has 5000 available points
     const result = getBestRedemption(5000, 5000);
-    expect(result).toMatchObject({ points: 5000, value: 100000 });
+    expect(result).toMatchObject({ points: 2000, value: 40000 });
   });
 
   it("returns null if not enough points for any tier", () => {
-    const result = getBestRedemption(300, 800); // eligible but only 300 pts (min is 500)
+    const result = getBestRedemption(300, 800); // eligible but below the first configured option
     expect(result).toBeNull();
   });
 
   it("getDiscountValue returns correct Ariary value", () => {
     expect(getDiscountValue(1200, 750)).toBe(20000); // 1000 pts tier = 20,000 Ar
-    expect(getDiscountValue(5000, 5000)).toBe(100000); // 5000 pts tier = 100,000 Ar
+    expect(getDiscountValue(5000, 5000)).toBe(40000); // highest server option is 2,000 pts
     expect(getDiscountValue(300, 800)).toBe(0); // not enough for any tier
     expect(getDiscountValue(1000, 500)).toBe(0); // lifetime too low
   });
@@ -204,14 +248,14 @@ describe("LamakoRewards - TIERS configuration", () => {
   });
 
   it("Gold tier has x1.25 multiplier at 2000 pts", () => {
-    const gold = TIERS.find(t => t.id === "gold");
+    const gold = TIERS.find((t) => t.id === "gold");
     expect(gold).toBeDefined();
     expect(gold!.multiplier).toBe(1.25);
     expect(gold!.minPoints).toBe(2000);
   });
 
   it("Diamond tier has x2 multiplier at 10000 pts", () => {
-    const diamond = TIERS.find(t => t.id === "diamond");
+    const diamond = TIERS.find((t) => t.id === "diamond");
     expect(diamond).toBeDefined();
     expect(diamond!.multiplier).toBe(2);
     expect(diamond!.minPoints).toBe(10000);
@@ -226,8 +270,8 @@ describe("LamakoRewards - REDEMPTION_TIERS value consistency", () => {
     }
   });
 
-  it("minimum redemption is 500 pts = 10,000 Ar", () => {
-    expect(REDEMPTION_TIERS[0].points).toBe(500);
-    expect(REDEMPTION_TIERS[0].value).toBe(10000);
+  it("matches the server fallback: minimum option is 1,000 pts", () => {
+    expect(REDEMPTION_TIERS[0].points).toBe(1000);
+    expect(REDEMPTION_TIERS[0].value).toBe(20000);
   });
 });

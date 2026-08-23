@@ -1,6 +1,6 @@
 import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
 import { formatAriary } from "@/lib/format";
-import { REDEMPTION_TIERS } from "@/lib/rewards-provider";
+import { useRewards } from "@/lib/rewards-provider";
 
 interface CheckoutRewardsPanelProps {
   pointsToEarn: number;
@@ -31,8 +31,13 @@ export function CheckoutRewardsPanel({
   onRedeem,
   onRemoveCoupon,
 }: CheckoutRewardsPanelProps) {
+  const { programConfig } = useRewards();
   const showRedeem =
-    allItemsEligible && canRedeem && availablePoints >= 500 && !appliedCoupon;
+    programConfig.enabled &&
+    allItemsEligible &&
+    canRedeem &&
+    availablePoints >= (programConfig.redemptionTiers[0]?.points ?? Infinity) &&
+    !appliedCoupon;
 
   return (
     <View
@@ -99,33 +104,33 @@ export function CheckoutRewardsPanel({
             Utiliser mes points ({availablePoints} pts)
           </Text>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-            {REDEMPTION_TIERS.filter(
-              (tier) => tier.points <= availablePoints,
-            ).map((tier) => (
-              <TouchableOpacity
-                key={tier.points}
-                onPress={() => onRedeem(tier.points)}
-                disabled={isRedeeming}
-                accessibilityRole="button"
-                accessibilityLabel={`Utiliser ${tier.points} points pour une réduction de ${formatAriary(tier.value)}`}
-                style={{
-                  backgroundColor: "#b45309",
-                  borderRadius: 8,
-                  paddingHorizontal: 12,
-                  paddingVertical: 8,
-                  opacity: isRedeeming ? 0.5 : 1,
-                }}
-              >
-                <Text
-                  style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}
+            {programConfig.redemptionTiers
+              .filter((tier) => tier.points <= availablePoints)
+              .map((tier) => (
+                <TouchableOpacity
+                  key={tier.points}
+                  onPress={() => onRedeem(tier.points)}
+                  disabled={isRedeeming}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Utiliser ${tier.points} points pour une réduction de ${formatAriary(tier.value)}`}
+                  style={{
+                    backgroundColor: "#b45309",
+                    borderRadius: 8,
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    opacity: isRedeeming ? 0.5 : 1,
+                  }}
                 >
-                  -{formatAriary(tier.value)}
-                </Text>
-                <Text style={{ color: "#fde68a", fontSize: 10 }}>
-                  {tier.points} pts
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  <Text
+                    style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}
+                  >
+                    -{formatAriary(tier.value)}
+                  </Text>
+                  <Text style={{ color: "#fde68a", fontSize: 10 }}>
+                    {tier.points} pts
+                  </Text>
+                </TouchableOpacity>
+              ))}
           </View>
           {isRedeeming ? (
             <View

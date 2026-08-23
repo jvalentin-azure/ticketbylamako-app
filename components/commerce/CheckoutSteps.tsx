@@ -19,6 +19,7 @@ import { useColors } from "@/hooks/use-colors";
 import type { CartItem } from "@/lib/cart-provider";
 import type { MobileCheckoutFieldsResponse } from "@/lib/api/mobile";
 import { formatAriary } from "@/lib/format";
+import { useRewards } from "@/lib/rewards-provider";
 
 export function CheckoutHeader({
   title,
@@ -124,11 +125,15 @@ interface RewardsProps {
 }
 
 function RewardsPanel(props: RewardsProps) {
+  const { programConfig } = useRewards();
+  const firstRedemptionTier =
+    programConfig.redemptionTiers[0]?.points ?? Infinity;
   const visible =
-    props.pointsToEarn > 0 ||
-    !props.allItemsEligible ||
-    props.availablePoints >= 500 ||
-    Boolean(props.appliedCoupon);
+    programConfig.enabled &&
+    (props.pointsToEarn > 0 ||
+      !props.allItemsEligible ||
+      props.availablePoints >= firstRedemptionTier ||
+      Boolean(props.appliedCoupon));
   return visible ? <CheckoutRewardsPanel {...props} /> : null;
 }
 

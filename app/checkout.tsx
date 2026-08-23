@@ -44,6 +44,7 @@ export default function CheckoutScreen() {
   const {
     currentTier,
     canRedeem,
+    programConfig,
     redeemPoints,
     state: rewardsState,
   } = useRewards();
@@ -62,9 +63,11 @@ export default function CheckoutScreen() {
   );
   const canShowRedeem =
     isAuthenticated &&
+    programConfig.enabled &&
     allItemsRewardEligible &&
     canRedeem &&
-    rewardsState.availablePoints >= 500;
+    rewardsState.availablePoints >=
+      (programConfig.redemptionTiers[0]?.points ?? Infinity);
   const totalPointsToEarn = rewardEligibleItems.reduce((sum, item) => {
     const price =
       typeof item.price === "string"
@@ -72,7 +75,11 @@ export default function CheckoutScreen() {
         : item.price;
     return (
       sum +
-      estimatePointsForPrice(price * item.quantity, currentTier.multiplier)
+      estimatePointsForPrice(
+        price * item.quantity,
+        currentTier.multiplier,
+        programConfig,
+      )
     );
   }, 0);
 

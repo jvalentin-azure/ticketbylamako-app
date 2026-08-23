@@ -44,7 +44,7 @@ export default function ProfileScreen() {
     },
     {
       icon: "hand.raised.fill" as const,
-      label: "Confidentialité et données",
+      label: "Centre légal et données",
       onPress: () => router.push("/privacy-data" as any),
     },
   ];

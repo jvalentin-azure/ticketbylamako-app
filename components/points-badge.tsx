@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet } from "react-native";
-import { estimatePointsForPrice } from "@/lib/rewards-provider";
+import { estimatePointsForPrice, useRewards } from "@/lib/rewards-provider";
 
 interface PointsBadgeProps {
   /** Price in Ariary (number or string) */
@@ -28,8 +28,9 @@ export function PointsBadge({
   multiplier = 1,
   tierName,
 }: PointsBadgeProps) {
+  const { programConfig } = useRewards();
   const priceNum = typeof price === "string" ? parseFloat(price) || 0 : price;
-  const points = estimatePointsForPrice(priceNum, multiplier);
+  const points = estimatePointsForPrice(priceNum, multiplier, programConfig);
 
   if (points <= 0) return null;
 

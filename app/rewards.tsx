@@ -27,6 +27,7 @@ export default function RewardsScreen() {
   const { isAuthenticated } = useAuth();
   const {
     state,
+    programConfig,
     currentTier,
     nextTier,
     progressToNextTier,
@@ -158,8 +159,7 @@ export default function RewardsScreen() {
                 marginTop: 4,
               }}
             >
-              Mis à jour :{" "}
-              {new Date(state.lastSynced).toLocaleString("fr-FR")}
+              Mis à jour : {new Date(state.lastSynced).toLocaleString("fr-FR")}
             </Text>
           )}
 
@@ -216,7 +216,8 @@ export default function RewardsScreen() {
             Activité récente
           </Text>
           <Text style={[styles.historyIntro, { color: colors.muted }]}>
-            Connexions, achats et utilisations de points enregistrés sur votre compte.
+            Connexions, achats et utilisations de points enregistrés sur votre
+            compte.
           </Text>
           {state.history.length === 0 ? (
             <View
@@ -282,7 +283,8 @@ export default function RewardsScreen() {
                     style={[
                       styles.txAmount,
                       {
-                        color: tx.type === "earn" ? colors.success : colors.error,
+                        color:
+                          tx.type === "earn" ? colors.success : colors.error,
                       },
                     ]}
                   >
@@ -319,7 +321,8 @@ export default function RewardsScreen() {
                 Achetez
               </Text>
               <Text style={[styles.howDesc, { color: colors.muted }]}>
-                1 pt / 1000 Ar
+                {programConfig.earnPoints} pt /{" "}
+                {programConfig.earnAmountAriary.toLocaleString("fr-FR")} Ar
               </Text>
             </View>
             <View style={styles.howItem}>
@@ -348,7 +351,11 @@ export default function RewardsScreen() {
                 Échangez
               </Text>
               <Text style={[styles.howDesc, { color: colors.muted }]}>
-                Dès 750 000 Ar dépensés{"\n"}500 pts = 10 000 Ar
+                Dès {programConfig.minimumRedeemPoints.toLocaleString("fr-FR")}{" "}
+                points
+                {programConfig.redemptionTiers[0]
+                  ? `\n${programConfig.redemptionTiers[0].label}`
+                  : ""}
               </Text>
             </View>
           </View>
@@ -450,7 +457,6 @@ export default function RewardsScreen() {
             </View>
           </View>
         )}
-
       </ScrollView>
     </ScreenContainer>
   );

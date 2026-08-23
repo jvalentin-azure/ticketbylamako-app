@@ -30,6 +30,7 @@ export default function CartScreen() {
     currentTier,
     canRedeem,
     getDiscountValue,
+    programConfig,
   } = useRewards();
   const { isAuthenticated } = useAuth();
   const rewardEligibleItems = items.filter(
@@ -50,7 +51,11 @@ export default function CartScreen() {
       typeof item.price === "string" ? parseFloat(item.price) || 0 : item.price;
     return (
       sum +
-      estimatePointsForPrice(price * item.quantity, currentTier.multiplier)
+      estimatePointsForPrice(
+        price * item.quantity,
+        currentTier.multiplier,
+        programConfig,
+      )
     );
   }, 0);
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ComponentProps } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -20,6 +20,19 @@ const WEB_BASE_URL = (
   process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com"
 ).replace(/\/$/, "");
 const PRIVACY_EMAIL = "info@lamakoevents.mg";
+
+type LegalAction = {
+  icon: ComponentProps<typeof IconSymbol>["name"];
+  label: string;
+  onPress: () => void;
+  danger?: boolean;
+  loading?: boolean;
+};
+
+type LegalSection = {
+  title: string;
+  items: LegalAction[];
+};
 
 export default function PrivacyDataScreen() {
   const colors = useColors();
@@ -72,45 +85,54 @@ export default function PrivacyDataScreen() {
     );
   };
 
-  const actions = [
+  const sections: LegalSection[] = [
     {
-      icon: "hand.raised.fill" as const,
-      label: "Politique de confidentialité",
-      onPress: () => router.push("/privacy" as any),
+      title: "Documents",
+      items: [
+        {
+          icon: "hand.raised.fill" as const,
+          label: "Politique de confidentialité",
+          onPress: () => router.push("/privacy" as any),
+        },
+        {
+          icon: "clipboard.fill" as const,
+          label: "Conditions générales d’utilisation",
+          onPress: () =>
+            openExternal(`${WEB_BASE_URL}/conditions-generales-utilisation/`),
+        },
+        {
+          icon: "cart.fill" as const,
+          label: "Conditions générales de vente",
+          onPress: () => router.push("/terms" as any),
+        },
+        {
+          icon: "doc.text.fill" as const,
+          label: "Mentions légales",
+          onPress: () => router.push("/legal-notice" as any),
+        },
+        {
+          icon: "gearshape.fill" as const,
+          label: "Politique et gestion des cookies",
+          onPress: () => openExternal(`${WEB_BASE_URL}/politique-cookies/`),
+        },
+      ],
     },
     {
-      icon: "clipboard.fill" as const,
-      label: "Conditions générales d’utilisation",
-      onPress: () =>
-        openExternal(`${WEB_BASE_URL}/conditions-generales-utilisation/`),
-    },
-    {
-      icon: "cart.fill" as const,
-      label: "Conditions générales de vente",
-      onPress: () => router.push("/terms" as any),
-    },
-    {
-      icon: "gearshape.fill" as const,
-      label: "Politique cookies",
-      onPress: () => openExternal(`${WEB_BASE_URL}/politique-cookies/`),
-    },
-    {
-      icon: "shield.fill" as const,
-      label: "Gérer mes cookies",
-      onPress: () =>
-        openExternal(`${WEB_BASE_URL}/politique-cookies/#gerer-mes-cookies`),
-    },
-    {
-      icon: "trash.fill" as const,
-      label: "Supprimer mon compte",
-      onPress: handleAccountDeletion,
-      danger: true,
-      loading: deletionLoading,
-    },
-    {
-      icon: "envelope.fill" as const,
-      label: "Contacter le support privacy",
-      onPress: () => openExternal(`mailto:${PRIVACY_EMAIL}`),
+      title: "Vos données",
+      items: [
+        {
+          icon: "trash.fill" as const,
+          label: "Supprimer mon compte",
+          onPress: handleAccountDeletion,
+          danger: true,
+          loading: deletionLoading,
+        },
+        {
+          icon: "envelope.fill" as const,
+          label: "Contacter le support confidentialité",
+          onPress: () => openExternal(`mailto:${PRIVACY_EMAIL}`),
+        },
+      ],
     },
   ];
 
@@ -134,7 +156,7 @@ export default function PrivacyDataScreen() {
           style={[styles.headerTitle, { color: colors.foreground }]}
           numberOfLines={1}
         >
-          Confidentialité et données
+          Centre légal et données
         </Text>
         <View style={{ width: 80 }} />
       </View>
@@ -143,65 +165,81 @@ export default function PrivacyDataScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
       >
-        <View
-          style={[
-            styles.panel,
-            { backgroundColor: colors.surface, borderColor: colors.border },
-          ]}
-        >
-          {actions.map((item, index) => (
-            <TouchableOpacity
-              key={item.label}
-              onPress={item.onPress}
-              disabled={item.loading}
-              accessibilityRole="button"
-              accessibilityLabel={item.label}
-              accessibilityState={{
-                disabled: Boolean(item.loading),
-                busy: Boolean(item.loading),
-              }}
+        <Text style={[styles.intro, { color: colors.muted }]}>
+          Retrouvez les documents TicketByLamako et gérez vos données depuis un
+          seul endroit.
+        </Text>
+        {sections.map((section) => (
+          <View key={section.title} style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+              {section.title}
+            </Text>
+            <View
               style={[
-                styles.row,
-                {
-                  borderBottomColor: colors.border,
-                  borderBottomWidth: index < actions.length - 1 ? 1 : 0,
-                },
+                styles.panel,
+                { backgroundColor: colors.surface, borderColor: colors.border },
               ]}
-              activeOpacity={0.7}
             >
-              <View
-                style={[
-                  styles.iconBox,
-                  {
-                    backgroundColor: item.danger
-                      ? colors.error + "12"
-                      : colors.primary + "12",
-                  },
-                ]}
-              >
-                {item.loading ? (
-                  <ActivityIndicator size="small" color={colors.error} />
-                ) : (
+              {section.items.map((item, index) => (
+                <TouchableOpacity
+                  key={item.label}
+                  onPress={item.onPress}
+                  disabled={item.loading}
+                  accessibilityRole="button"
+                  accessibilityLabel={item.label}
+                  accessibilityState={{
+                    disabled: Boolean(item.loading),
+                    busy: Boolean(item.loading),
+                  }}
+                  style={[
+                    styles.row,
+                    {
+                      borderBottomColor: colors.border,
+                      borderBottomWidth:
+                        index < section.items.length - 1 ? 1 : 0,
+                    },
+                  ]}
+                  activeOpacity={0.7}
+                >
+                  <View
+                    style={[
+                      styles.iconBox,
+                      {
+                        backgroundColor: item.danger
+                          ? colors.error + "12"
+                          : colors.primary + "12",
+                      },
+                    ]}
+                  >
+                    {item.loading ? (
+                      <ActivityIndicator size="small" color={colors.error} />
+                    ) : (
+                      <IconSymbol
+                        name={item.icon}
+                        size={18}
+                        color={item.danger ? colors.error : colors.primary}
+                      />
+                    )}
+                  </View>
+                  <Text
+                    style={[
+                      styles.rowLabel,
+                      { color: item.danger ? colors.error : colors.foreground },
+                    ]}
+                    numberOfLines={2}
+                  >
+                    {item.label}
+                  </Text>
                   <IconSymbol
-                    name={item.icon}
-                    size={18}
-                    color={item.danger ? colors.error : colors.primary}
+                    name="chevron.right"
+                    size={16}
+                    color={colors.muted}
                   />
-                )}
-              </View>
-              <Text
-                style={[
-                  styles.rowLabel,
-                  { color: item.danger ? colors.error : colors.foreground },
-                ]}
-                numberOfLines={2}
-              >
-                {item.label}
-              </Text>
-              <IconSymbol name="chevron.right" size={16} color={colors.muted} />
-            </TouchableOpacity>
-          ))}
-        </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        ))}
       </ScrollView>
     </ScreenContainer>
   );
@@ -233,6 +271,19 @@ const styles = StyleSheet.create({
   content: {
     padding: 16,
     paddingBottom: 40,
+  },
+  intro: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  section: {
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    marginBottom: 8,
   },
   panel: {
     borderRadius: 16,
