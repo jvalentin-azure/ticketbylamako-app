@@ -14,8 +14,10 @@ import type {
 import { useCart } from "@/lib/cart-provider";
 import {
   createMobileCheckout,
+  getMobileProfile,
   getMobileCheckoutFields,
   type MobileCheckoutFieldsResponse,
+  updateMobileProfile,
 } from "@/lib/api/mobile";
 import {
   buildCheckoutItemInputs,
@@ -25,7 +27,7 @@ import {
 import { estimatePointsForPrice, useRewards } from "@/lib/rewards-provider";
 import { useAuth } from "@/lib/auth-provider";
 import { formatAriary } from "@/lib/format";
-import { getBillingInfo } from "@/lib/billing-store";
+import { getBillingInfo, saveBillingInfo } from "@/lib/billing-store";
 
 type CheckoutPhase =
   | "address"
@@ -55,7 +57,8 @@ export default function CheckoutScreen() {
   const hasTicketCheckoutFields = items.some(
     (item) =>
       item.isEvent &&
-      (item.hasCheckoutFields !== false || item.requiresCheckoutFields !== false),
+      (item.hasCheckoutFields !== false ||
+        item.requiresCheckoutFields !== false),
   );
   const canShowRedeem =
     isAuthenticated &&
@@ -96,6 +99,7 @@ export default function CheckoutScreen() {
   const [shippingAddress, setShippingAddress] = useState("");
   const [shippingCity, setShippingCity] = useState("");
   const [shippingPhone, setShippingPhone] = useState("");
+  const [billingSaving, setBillingSaving] = useState(false);
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
   const [appliedDiscount, setAppliedDiscount] = useState(0);
   const [isRedeeming, setIsRedeeming] = useState(false);
@@ -123,18 +127,31 @@ export default function CheckoutScreen() {
 
   useEffect(() => {
     let active = true;
-    getBillingInfo()
-      .then((billing) => {
-        if (!active || !billing) return;
-        setShippingPhone((current) => current || billing.phone || "");
-        setShippingAddress((current) => current || billing.address || "");
-        setShippingCity((current) => current || billing.city || "");
+    Promise.all([
+      getBillingInfo().catch(() => null),
+      isAuthenticated
+        ? getMobileProfile().catch(() => null)
+        : Promise.resolve(null),
+    ])
+      .then(([storedBilling, profile]) => {
+        if (!active) return;
+        const billing = {
+          phone: storedBilling?.phone || profile?.billing.phone || "",
+          address: storedBilling?.address || profile?.billing.address_1 || "",
+          city: storedBilling?.city || profile?.billing.city || "",
+        };
+        setShippingPhone((current) => current || billing.phone);
+        setShippingAddress((current) => current || billing.address);
+        setShippingCity((current) => current || billing.city);
+        if (billing.phone || billing.address || billing.city) {
+          void saveBillingInfo(billing).catch(() => undefined);
+        }
       })
       .catch(() => {});
     return () => {
       active = false;
     };
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     let active = true;
@@ -360,8 +377,32 @@ export default function CheckoutScreen() {
     startOrderCreation,
   ]);
 
-  const continueAfterPreCheckout = () => {
+  const continueAfterPreCheckout = async () => {
     if (checkoutFieldsLoading) return;
+    if (hasPhysicalProducts) {
+      const billing = {
+        phone: shippingPhone.trim(),
+        address: shippingAddress.trim(),
+        city: shippingCity.trim(),
+      };
+      setBillingSaving(true);
+      await saveBillingInfo(billing).catch(() => undefined);
+      setBillingSaving(false);
+
+      if (user) {
+        void updateMobileProfile({
+          firstName: user.firstName || "",
+          lastName: user.lastName || "",
+          email: user.email,
+          billing: {
+            phone: billing.phone,
+            address_1: billing.address,
+            city: billing.city,
+            country: "MG",
+          },
+        }).catch(() => undefined);
+      }
+    }
     if (checkoutFields?.hasFields) setPhase("ticket_fields");
     else void startOrderCreation();
   };
@@ -393,7 +434,7 @@ export default function CheckoutScreen() {
         phone={shippingPhone}
         address={shippingAddress}
         city={shippingCity}
-        loading={checkoutFieldsLoading}
+        loading={checkoutFieldsLoading || billingSaving}
         onPhoneChange={setShippingPhone}
         onAddressChange={setShippingAddress}
         onCityChange={setShippingCity}

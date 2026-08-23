@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { ScreenContainer } from "@/components/screen-container";
@@ -24,6 +25,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { useMobilePayment } from "@/hooks/use-mobile-payment";
 import { type MobilePaymentKind } from "@/lib/api/mobile";
+import { getPaymentMethodPresentation } from "@/lib/payment-method-presentation";
 
 function firstParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] || "" : value || "";
@@ -36,6 +38,7 @@ export default function PaymentScreen() {
   const token = firstParam(params.token);
   const kind: MobilePaymentKind =
     firstParam(params.kind) === "seating" ? "seating" : "checkout";
+  const [couponExpanded, setCouponExpanded] = useState(false);
 
   const payment = useMobilePayment({ token, kind });
   const {
@@ -57,7 +60,6 @@ export default function PaymentScreen() {
     phone,
     remainingSeconds,
     reservationExpired,
-    selected,
     selectedMethod,
     setCoupon,
     setMessage,
@@ -89,100 +91,111 @@ export default function PaymentScreen() {
           {phase === "loading" ? (
             <View style={styles.loading}>
               <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={[styles.muted, { color: colors.muted }]}>Préparation du paiement...</Text>
+              <Text style={[styles.muted, { color: colors.muted }]}>
+                Préparation du paiement...
+              </Text>
             </View>
           ) : order ? (
             <>
               <OrderSummary order={order} colors={colors} />
 
-              <View style={styles.section}>
-                <View style={styles.sectionTitleRow}>
-                  <IconSymbol name="tag.fill" size={20} color={colors.primary} />
-                  <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Code promo</Text>
-                </View>
-                {order.couponCodes?.length ? (
-                  <View style={[styles.appliedCoupon, { backgroundColor: colors.success + "18" }]}>
-                    <Text style={[styles.appliedCouponText, { color: colors.success }]}>
-                      {order.couponCodes.join(", ")} appliqué
-                    </Text>
-                    <TouchableOpacity onPress={() => void applyCoupon("remove")} disabled={couponBusy}>
-                      <Text style={[styles.removeText, { color: colors.primary }]}>Retirer</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <View style={styles.couponRow}>
-                    <TextInput
-                      value={coupon}
-                      onChangeText={setCoupon}
-                      autoCapitalize="characters"
-                      placeholder="Votre code"
-                      placeholderTextColor={colors.muted}
-                      style={[
-                        styles.input,
-                        styles.couponInput,
-                        { color: colors.foreground, borderColor: colors.border },
-                      ]}
-                    />
-                    <TouchableOpacity
-                      onPress={() => void applyCoupon("apply")}
-                      disabled={couponBusy || !coupon.trim()}
-                      style={[
-                        styles.smallButton,
-                        { backgroundColor: colors.primary, opacity: coupon.trim() ? 1 : 0.45 },
-                      ]}
-                    >
-                      {couponBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.smallButtonText}>Appliquer</Text>}
-                    </TouchableOpacity>
-                  </View>
-                )}
-                {couponMessage ? (
-                  <View
-                    style={[
-                      styles.inlineMessage,
-                      { borderColor: colors.border },
-                    ]}
-                  >
-                    <IconSymbol
-                      name="info.circle.fill"
-                      size={18}
-                      color={colors.warning}
-                    />
-                    <Text
-                      style={[
-                        styles.inlineMessageText,
-                        { color: colors.foreground },
-                      ]}
-                    >
-                      {couponMessage}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-
               {!isZeroTotal ? (
-                <View style={styles.section}>
-                  <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Moyen de paiement</Text>
-                  <Text style={[styles.helper, { color: colors.muted }]}>Choisissez puis confirmez. Vous restez dans l'application sauf autorisation externe obligatoire.</Text>
+                <View
+                  style={[
+                    styles.section,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[styles.sectionTitle, { color: colors.foreground }]}
+                  >
+                    Moyen de paiement
+                  </Text>
+                  <Text style={[styles.helper, { color: colors.muted }]}>
+                    Choisissez votre moyen de paiement. Les informations
+                    demandées apparaîtront juste au bon endroit.
+                  </Text>
                   <View style={styles.methodList}>
-                    {methods.map((method) => (
-                      <PaymentMethodRow
-                        key={method.id}
-                        method={method}
-                        selected={
-                          (paymentInProgress
-                            ? order?.paymentMethod
-                            : selectedMethod) === method.id
-                        }
-                        disabled={paymentInProgress}
-                        onPress={() => {
-                          if (paymentInProgress) return;
-                          setSelectedMethod(method.id);
-                          setMessage("");
-                          setPhase("ready");
-                        }}
-                        colors={colors}
-                      />
-                    ))}
+                    {methods.map((method) => {
+                      const isCurrent =
+                        (paymentInProgress
+                          ? order?.paymentMethod
+                          : selectedMethod) === method.id;
+                      const presentation = getPaymentMethodPresentation(method);
+                      return (
+                        <PaymentMethodRow
+                          key={method.id}
+                          method={method}
+                          selected={isCurrent}
+                          disabled={paymentInProgress}
+                          onPress={() => {
+                            if (paymentInProgress) return;
+                            setSelectedMethod(method.id);
+                            setMessage("");
+                            setPhase("ready");
+                          }}
+                          colors={colors}
+                        >
+                          {presentation.isMobileMoney ? (
+                            <View style={styles.phoneBlock}>
+                              <Text
+                                style={[
+                                  styles.label,
+                                  { color: colors.foreground },
+                                ]}
+                              >
+                                {presentation.phoneLabel}
+                              </Text>
+                              <TextInput
+                                value={phone}
+                                onChangeText={setPhone}
+                                keyboardType="phone-pad"
+                                autoComplete="tel"
+                                placeholder={presentation.phonePlaceholder}
+                                placeholderTextColor={colors.muted}
+                                accessibilityLabel={presentation.phoneLabel}
+                                style={[
+                                  styles.input,
+                                  {
+                                    color: colors.foreground,
+                                    borderColor: presentation.accent,
+                                  },
+                                ]}
+                              />
+                              <Text
+                                style={[
+                                  styles.phoneHelper,
+                                  { color: colors.muted },
+                                ]}
+                              >
+                                Ce numéro sert uniquement à initier la demande
+                                auprès de l’opérateur.
+                              </Text>
+                            </View>
+                          ) : method.flow === "redirect" ? (
+                            <View style={styles.providerHint}>
+                              <IconSymbol
+                                name="shield.fill"
+                                size={17}
+                                color={presentation.accent}
+                              />
+                              <Text
+                                style={[
+                                  styles.phoneHelper,
+                                  { color: colors.muted },
+                                ]}
+                              >
+                                La page sécurisée du prestataire s’ouvrira pour
+                                finaliser le paiement.
+                              </Text>
+                            </View>
+                          ) : null}
+                        </PaymentMethodRow>
+                      );
+                    })}
                   </View>
                   {paymentInProgress && activePaymentMethod ? (
                     <View
@@ -206,17 +219,17 @@ export default function PaymentScreen() {
                       </Text>
                     </View>
                   ) : null}
-                  {selected?.flow === "redirect" ? (
+                  {phase === "error" && message ? (
                     <View
                       style={[
                         styles.inlineMessage,
-                        { borderColor: colors.border },
+                        { borderColor: colors.error },
                       ]}
                     >
                       <IconSymbol
-                        name="arrow.up.right.square.fill"
+                        name="exclamationmark.triangle.fill"
                         size={18}
-                        color={colors.primary}
+                        color={colors.error}
                       />
                       <Text
                         style={[
@@ -224,40 +237,174 @@ export default function PaymentScreen() {
                           { color: colors.foreground },
                         ]}
                       >
-                        {selected.id === "papi_paiement"
-                          ? "Orange Money demandera l'autorisation sur sa page sécurisée, puis vous ramènera automatiquement dans l'application."
-                          : "La banque ouvrira sa page sécurisée, puis vous ramènera automatiquement dans l'application."}
+                        {message}
                       </Text>
-                    </View>
-                  ) : null}
-                  {selected?.requiresPhone ? (
-                    <View style={styles.phoneBlock}>
-                      <Text style={[styles.label, { color: colors.foreground }]}>Numéro de paiement</Text>
-                      <TextInput
-                        value={phone}
-                        onChangeText={setPhone}
-                        keyboardType="phone-pad"
-                        autoComplete="tel"
-                        placeholder="034 00 000 00"
-                        placeholderTextColor={colors.muted}
-                        style={[styles.input, { color: colors.foreground, borderColor: colors.border }]}
-                      />
                     </View>
                   ) : null}
                 </View>
               ) : (
-                <View style={[styles.zeroTotal, { backgroundColor: colors.success + "14" }]}>
-                  <IconSymbol name="checkmark.circle.fill" size={22} color={colors.success} />
-                  <Text style={[styles.zeroTotalText, { color: colors.foreground }]}>Aucun paiement requis après remise.</Text>
+                <View
+                  style={[
+                    styles.zeroTotal,
+                    { backgroundColor: colors.success + "14" },
+                  ]}
+                >
+                  <IconSymbol
+                    name="checkmark.circle.fill"
+                    size={22}
+                    color={colors.success}
+                  />
+                  <Text
+                    style={[styles.zeroTotalText, { color: colors.foreground }]}
+                  >
+                    Aucun paiement requis après remise.
+                  </Text>
                 </View>
               )}
 
+              <View
+                style={[
+                  styles.section,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <TouchableOpacity
+                  onPress={() => setCouponExpanded((current) => !current)}
+                  style={styles.couponToggle}
+                  accessibilityRole="button"
+                  accessibilityState={{
+                    expanded: couponExpanded || !!order.couponCodes?.length,
+                  }}
+                >
+                  <IconSymbol
+                    name="tag.fill"
+                    size={19}
+                    color={colors.primary}
+                  />
+                  <Text
+                    style={[
+                      styles.couponToggleText,
+                      { color: colors.foreground },
+                    ]}
+                  >
+                    {order.couponCodes?.length
+                      ? "Code promo appliqué"
+                      : "Ajouter un code promo"}
+                  </Text>
+                  <IconSymbol
+                    name={couponExpanded ? "chevron.up" : "chevron.down"}
+                    size={18}
+                    color={colors.muted}
+                  />
+                </TouchableOpacity>
+                {couponExpanded || order.couponCodes?.length ? (
+                  order.couponCodes?.length ? (
+                    <View
+                      style={[
+                        styles.appliedCoupon,
+                        { backgroundColor: colors.success + "18" },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.appliedCouponText,
+                          { color: colors.success },
+                        ]}
+                      >
+                        {order.couponCodes.join(", ")} appliqué
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => void applyCoupon("remove")}
+                        disabled={couponBusy}
+                      >
+                        <Text
+                          style={[styles.removeText, { color: colors.primary }]}
+                        >
+                          Retirer
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View style={styles.couponRow}>
+                      <TextInput
+                        value={coupon}
+                        onChangeText={setCoupon}
+                        autoCapitalize="characters"
+                        placeholder="Votre code"
+                        placeholderTextColor={colors.muted}
+                        style={[
+                          styles.input,
+                          styles.couponInput,
+                          {
+                            color: colors.foreground,
+                            borderColor: colors.border,
+                          },
+                        ]}
+                      />
+                      <TouchableOpacity
+                        onPress={() => void applyCoupon("apply")}
+                        disabled={couponBusy || !coupon.trim()}
+                        style={[
+                          styles.smallButton,
+                          {
+                            backgroundColor: colors.primary,
+                            opacity: coupon.trim() ? 1 : 0.45,
+                          },
+                        ]}
+                      >
+                        {couponBusy ? (
+                          <ActivityIndicator color="#fff" />
+                        ) : (
+                          <Text style={styles.smallButtonText}>Appliquer</Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  )
+                ) : null}
+                {couponMessage ? (
+                  <View
+                    style={[
+                      styles.inlineMessage,
+                      { borderColor: colors.border },
+                    ]}
+                  >
+                    <IconSymbol
+                      name="info.circle.fill"
+                      size={18}
+                      color={colors.warning}
+                    />
+                    <Text
+                      style={[
+                        styles.inlineMessageText,
+                        { color: colors.foreground },
+                      ]}
+                    >
+                      {couponMessage}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
             </>
           ) : (
             <View style={styles.loading}>
-              <IconSymbol name="exclamationmark.triangle.fill" size={42} color={colors.warning} />
-              <Text style={[styles.errorText, { color: colors.foreground }]}>{message}</Text>
-              <TouchableOpacity onPress={() => void load()} style={[styles.smallButton, { backgroundColor: colors.primary }]}>
+              <IconSymbol
+                name="exclamationmark.triangle.fill"
+                size={42}
+                color={colors.warning}
+              />
+              <Text style={[styles.errorText, { color: colors.foreground }]}>
+                {message}
+              </Text>
+              <TouchableOpacity
+                onPress={() => void load()}
+                style={[
+                  styles.smallButton,
+                  { backgroundColor: colors.primary },
+                ]}
+              >
                 <Text style={styles.smallButtonText}>Réessayer</Text>
               </TouchableOpacity>
             </View>
@@ -267,10 +414,13 @@ export default function PaymentScreen() {
           <View
             style={[
               styles.footer,
-              { borderTopColor: colors.border, backgroundColor: colors.background },
+              {
+                borderTopColor: colors.border,
+                backgroundColor: colors.background,
+              },
             ]}
           >
-            {message ? (
+            {message && phase !== "error" ? (
               <View
                 style={[
                   styles.message,
@@ -344,7 +494,8 @@ export default function PaymentScreen() {
             {phase === "pending" || phase === "review" ? (
               <>
                 <Text style={[styles.statusHint, { color: colors.muted }]}>
-                  La confirmation est automatique. Ne relancez pas un second paiement.
+                  La confirmation est automatique. Ne relancez pas un second
+                  paiement.
                 </Text>
                 <TouchableOpacity
                   onPress={() =>
@@ -353,13 +504,19 @@ export default function PaymentScreen() {
                       "La réservation et la commande seront annulées. Aucun nouveau paiement ne sera lancé.",
                       [
                         { text: "Garder la commande", style: "cancel" },
-                        { text: "Annuler la commande", style: "destructive", onPress: () => void cancelPayment() },
+                        {
+                          text: "Annuler la commande",
+                          style: "destructive",
+                          onPress: () => void cancelPayment(),
+                        },
                       ],
                     )
                   }
                   style={styles.checkButton}
                 >
-                  <Text style={[styles.checkButtonText, { color: colors.warning }]}>
+                  <Text
+                    style={[styles.checkButtonText, { color: colors.warning }]}
+                  >
                     Annuler la commande
                   </Text>
                 </TouchableOpacity>

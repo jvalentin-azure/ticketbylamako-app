@@ -22,6 +22,7 @@ import {
   claimTerminalPaymentToken,
   hasTerminalPaymentToken,
 } from "@/lib/payment-flow-state";
+import { paymentMethodRequiresPhone } from "@/lib/payment-method-presentation";
 
 export type PaymentScreenPhase =
   | "loading"
@@ -150,7 +151,7 @@ export function useMobilePayment({ token, kind }: UseMobilePaymentOptions) {
         ) {
           return response.order.paymentMethod;
         }
-        return response.methods[0]?.id || "";
+        return "";
       });
       setPhone(response.order.billing?.phone || "");
       setPollAfterMs(response.pollAfterMs || 2500);
@@ -309,7 +310,7 @@ export function useMobilePayment({ token, kind }: UseMobilePaymentOptions) {
       setMessage("Sélectionnez un moyen de paiement.");
       return;
     }
-    if (selected?.requiresPhone && !phone.trim()) {
+    if (paymentMethodRequiresPhone(selected) && !phone.trim()) {
       setMessage("Saisissez le numéro utilisé pour le paiement.");
       return;
     }
