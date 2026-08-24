@@ -15,6 +15,11 @@ const ticketScreen = fs.readFileSync(
   path.join(root, "app/ticket/[id].tsx"),
   "utf8",
 );
+const nativeWallet = fs.readFileSync(
+  path.join(root, "lib/native-wallet.ts"),
+  "utf8",
+);
+const appConfig = fs.readFileSync(path.join(root, "app.config.ts"), "utf8");
 
 describe("server-signed ticket wallet passes", () => {
   it("requires authentication, order ownership and a paid ticket", () => {
@@ -59,5 +64,27 @@ describe("server-signed ticket wallet passes", () => {
     expect(commerce).toContain("'googleWalletAvailable'");
     expect(ticketScreen).toContain("getMobileTicketWalletLink");
     expect(ticketScreen).toContain("walletAvailable");
+  });
+
+  it("returns to the app through the native Wallet controllers", () => {
+    expect(ticketScreen).toContain("addTicketToNativeWallet");
+    expect(ticketScreen).not.toContain("Linking.openURL(response.url)");
+    expect(ticketScreen).not.toContain("legacyWalletUrl");
+    expect(nativeWallet).toContain("WalletKitModule.canAddPasses()");
+    expect(nativeWallet).toContain("WalletKitModule.addPass(passData)");
+    expect(nativeWallet).toContain("application/vnd.apple.pkpass");
+    expect(nativeWallet).toContain("/gp/v/save/");
+    expect(appConfig).toContain("./plugins/with-wallet-kit");
+  });
+
+  it("uses only local WordPress media for the premium Apple strip", () => {
+    expect(wallet).toContain("get_post_thumbnail_id");
+    expect(wallet).toContain("attachment_url_to_postid");
+    expect(wallet).toContain("wp_get_upload_dir");
+    expect(wallet).toContain("wp_get_image_editor");
+    expect(wallet).toContain("strip@2x.png");
+    expect(wallet).toContain("suppressStripShine");
+    expect(wallet).toContain("'ticketId'");
+    expect(wallet).toContain("'ticketbylamako://ticket/' . $order->get_id()");
   });
 });

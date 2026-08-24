@@ -254,6 +254,43 @@ function lamako_mobile_v2_wallet_holder_name( WC_Order $order ) {
     return $name !== '' ? $name : $order->get_billing_email();
 }
 
+function lamako_mobile_v2_wallet_local_attachment_path( $url, $event_id = 0 ) {
+    $attachment_id = get_post_thumbnail_id( absint( $event_id ) );
+    if ( $attachment_id <= 0 ) {
+        $attachment_id = attachment_url_to_postid( esc_url_raw( (string) $url ) );
+    }
+    if ( $attachment_id <= 0 ) {
+        return '';
+    }
+
+    $path = get_attached_file( $attachment_id );
+    $real = $path ? realpath( $path ) : false;
+    $uploads = wp_get_upload_dir();
+    $uploads_root = ! empty( $uploads['basedir'] ) ? realpath( $uploads['basedir'] ) : false;
+    if ( ! $real || ! $uploads_root || ! is_readable( $real ) ) {
+        return '';
+    }
+
+    $normalized_real = wp_normalize_path( $real );
+    $normalized_root = trailingslashit( wp_normalize_path( $uploads_root ) );
+    return strpos( $normalized_real, $normalized_root ) === 0 ? $real : '';
+}
+
+function lamako_mobile_v2_wallet_create_strip( $source, $destination, $width, $height ) {
+    $editor = wp_get_image_editor( $source );
+    if ( is_wp_error( $editor ) ) {
+        return false;
+    }
+
+    $resized = $editor->resize( absint( $width ), absint( $height ), true );
+    if ( is_wp_error( $resized ) ) {
+        return false;
+    }
+    $editor->set_quality( 88 );
+    $saved = $editor->save( $destination, 'image/png' );
+    return ! is_wp_error( $saved ) && is_file( $destination );
+}
+
 function lamako_mobile_v2_apple_pass_payload( WC_Order $order, array $ticket ) {
     $event_name = wp_strip_all_tags( (string) ( $ticket['eventName'] ?? $ticket['productName'] ?? 'Événement' ) );
     $event_date = lamako_mobile_v2_wallet_iso_date( $ticket['eventDate'] ?? '' );
@@ -285,9 +322,21 @@ function lamako_mobile_v2_apple_pass_payload( WC_Order $order, array $ticket ) {
         'organizationName'    => 'TicketByLamako',
         'description'         => 'Billet ' . $event_name,
         'logoText'            => 'TicketByLamako',
+        'groupingIdentifier'  => 'event-' . absint( $ticket['eventId'] ?? 0 ),
+        'suppressStripShine'  => true,
         'foregroundColor'     => 'rgb(255, 255, 255)',
-        'backgroundColor'     => 'rgb(20, 16, 31)',
-        'labelColor'          => 'rgb(255, 187, 0)',
+        'backgroundColor'     => 'rgb(12, 12, 20)',
+        'labelColor'          => 'rgb(247, 184, 45)',
+        'associatedStoreIdentifiers' => [ 6793957219 ],
+        'appLaunchURL'        => add_query_arg(
+            'ticketId',
+            absint( $ticket['instanceId'] ?? 0 ),
+            'ticketbylamako://ticket/' . $order->get_id()
+        ),
+        'userInfo'            => [
+            'orderId'  => $order->get_id(),
+            'ticketId' => absint( $ticket['instanceId'] ?? 0 ),
+        ],
         'voided'              => ! empty( $checkin['checkedIn'] ),
         'barcodes'            => [ [
             'format'          => 'PKBarcodeFormatQR',
@@ -360,6 +409,23 @@ function lamako_mobile_v2_build_apple_wallet_pass( WC_Order $order, array $ticke
         }
     }
 
+    $event_image = lamako_mobile_v2_wallet_local_attachment_path(
+        $ticket['eventImage'] ?? '',
+        absint( $ticket['eventId'] ?? 0 )
+    );
+    if ( $event_image !== '' ) {
+        $strip_sizes = [
+            'strip.png'    => [ 375, 123 ],
+            'strip@2x.png' => [ 750, 246 ],
+            'strip@3x.png' => [ 1125, 369 ],
+        ];
+        foreach ( $strip_sizes as $filename => $size ) {
+            if ( ! lamako_mobile_v2_wallet_create_strip( $event_image, $base . '/' . $filename, $size[0], $size[1] ) ) {
+                @unlink( $base . '/' . $filename );
+            }
+        }
+    }
+
     $manifest = [];
     foreach ( glob( $base . '/*' ) ?: [] as $file ) {
         if ( is_file( $file ) ) {
@@ -422,7 +488,7 @@ function lamako_mobile_v2_build_apple_wallet_pass( WC_Order $order, array $ticke
         $cleanup();
         return new WP_Error( 'lamako_wallet_zip_failed', 'Unable to package the Apple Wallet pass.' );
     }
-    foreach ( [ 'pass.json', 'icon.png', 'icon@2x.png', 'icon@3x.png', 'logo.png', 'manifest.json', 'signature' ] as $filename ) {
+    foreach ( [ 'pass.json', 'icon.png', 'icon@2x.png', 'icon@3x.png', 'logo.png', 'strip.png', 'strip@2x.png', 'strip@3x.png', 'manifest.json', 'signature' ] as $filename ) {
         if ( is_file( $base . '/' . $filename ) ) {
             $zip->addFile( $base . '/' . $filename, $filename );
         }

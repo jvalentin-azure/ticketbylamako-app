@@ -35,7 +35,10 @@ add_action( 'lamako_mobile_v2_cleanup_seating_flow', 'lamako_mobile_v2_cleanup_s
 add_action( 'lamako_mobile_v2_process_async_payment', 'lamako_mobile_v2_process_async_payment', 10, 3 );
 add_action( 'lamako_mobile_v2_poll_provider_payment', 'lamako_mobile_v2_poll_provider_payment', 10, 3 );
 add_action( 'lamako_mobile_v2_reconcile_pending_payments', 'lamako_mobile_v2_reconcile_pending_payments' );
+add_action( 'lamako_mobile_v2_expire_stale_orders', 'lamako_mobile_v2_expire_stale_orders' );
 add_action( 'init', 'lamako_mobile_v2_ensure_payment_reconciliation_schedule' );
+add_action( 'woocommerce_order_status_changed', 'lamako_mobile_v2_issue_tickets_after_payment', 50, 4 );
+add_action( 'woocommerce_payment_complete', 'lamako_mobile_v2_issue_tickets_after_payment', 50, 1 );
 add_action( 'save_post_tc_events', 'lamako_mobile_v2_invalidate_catalog_cache' );
 add_action( 'save_post_product', 'lamako_mobile_v2_invalidate_catalog_cache' );
 add_action( 'before_delete_post', 'lamako_mobile_v2_invalidate_catalog_cache_for_deleted_post' );
@@ -413,6 +416,9 @@ function lamako_mobile_v2_payment_cron_schedules( $schedules ) {
 function lamako_mobile_v2_ensure_payment_reconciliation_schedule() {
     if ( ! wp_next_scheduled( 'lamako_mobile_v2_reconcile_pending_payments' ) ) {
         wp_schedule_event( time() + MINUTE_IN_SECONDS, 'lamako_mobile_minute', 'lamako_mobile_v2_reconcile_pending_payments' );
+    }
+    if ( ! wp_next_scheduled( 'lamako_mobile_v2_expire_stale_orders' ) ) {
+        wp_schedule_event( time() + MINUTE_IN_SECONDS, 'lamako_mobile_minute', 'lamako_mobile_v2_expire_stale_orders' );
     }
 }
 
@@ -2180,7 +2186,7 @@ function lamako_mobile_v2_update_payment_coupon( WP_REST_Request $request ) {
         return $context;
     }
     list( $token, $kind, $order ) = $context;
-    if ( $order->is_paid() ) {
+    if ( lamako_mobile_v2_payment_is_confirmed( $order ) ) {
         return new WP_Error( 'lamako_v2_order_already_paid', 'This order is already paid.', [ 'status' => 409 ] );
     }
 
@@ -2623,7 +2629,7 @@ function lamako_mobile_v2_provider_failure( WC_Order $order, $message ) {
 }
 
 function lamako_mobile_v2_cancel_unpaid_payment( WC_Order $order, $reason = 'Customer cancelled the payment.' ) {
-    if ( $order->is_paid() ) {
+    if ( lamako_mobile_v2_payment_is_confirmed( $order ) ) {
         return false;
     }
 
@@ -2651,7 +2657,7 @@ function lamako_mobile_v2_payment_review_attempt_statuses() {
 }
 
 function lamako_mobile_v2_order_has_protected_payment_attempt( $order ) {
-    if ( ! $order instanceof WC_Order || $order->is_paid() ) {
+    if ( ! $order instanceof WC_Order || lamako_mobile_v2_payment_is_confirmed( $order ) ) {
         return false;
     }
 
@@ -2876,7 +2882,7 @@ function lamako_mobile_v2_poll_provider_payment( $order_id, $gateway_id, $attemp
 
 function lamako_mobile_v2_poll_provider_payment_unlocked( $order_id, $gateway_id, $attempt_id ) {
     $order = wc_get_order( absint( $order_id ) );
-    if ( ! $order || $order->is_paid() || (string) $order->get_meta( '_lamako_v2_payment_attempt_id' ) !== (string) $attempt_id ) {
+    if ( ! $order || lamako_mobile_v2_payment_is_confirmed( $order ) || (string) $order->get_meta( '_lamako_v2_payment_attempt_id' ) !== (string) $attempt_id ) {
         return;
     }
 
@@ -3025,7 +3031,7 @@ function lamako_mobile_v2_mvola_callback( WP_REST_Request $request ) {
     $hint      = sanitize_key( $body['transactionStatus'] ?? '' );
     $order     = lamako_mobile_v2_find_order_by_provider_reference( $reference );
 
-    if ( $order instanceof WC_Order && ! $order->is_paid() ) {
+    if ( $order instanceof WC_Order && ! lamako_mobile_v2_payment_is_confirmed( $order ) ) {
         $throttle = 'lamako_mvola_callback_' . hash( 'sha256', $reference );
         if ( get_transient( $throttle ) ) {
             return new WP_REST_Response( [ 'received' => true ], 202 );
@@ -3107,7 +3113,7 @@ function lamako_mobile_v2_orange_callback( WP_REST_Request $request ) {
         return new WP_REST_Response( [ 'received' => false ], 404 );
     }
 
-    if ( $order->is_paid() ) {
+    if ( lamako_mobile_v2_payment_is_confirmed( $order ) ) {
         return new WP_REST_Response( [ 'received' => true ], 200 );
     }
 
@@ -3203,7 +3209,7 @@ function lamako_mobile_v2_reconcile_pending_payments() {
 
 function lamako_mobile_v2_process_async_payment( $order_id, $gateway_id, $attempt_id ) {
     $order = wc_get_order( absint( $order_id ) );
-    if ( ! $order || $order->is_paid() ) {
+    if ( ! $order || lamako_mobile_v2_payment_is_confirmed( $order ) ) {
         return;
     }
     $result = lamako_mobile_v2_initiate_async_payment( $order, sanitize_key( $gateway_id ), sanitize_text_field( $attempt_id ) );
@@ -3243,7 +3249,7 @@ function lamako_mobile_v2_start_payment( WP_REST_Request $request ) {
         return $context;
     }
     list( $token, $kind, $order ) = $context;
-    if ( $order->is_paid() ) {
+    if ( lamako_mobile_v2_payment_is_confirmed( $order ) ) {
         return rest_ensure_response( [
             'flow'          => 'success',
             'paymentStatus' => 'success',
@@ -3382,7 +3388,7 @@ function lamako_mobile_v2_verify_payment( WP_REST_Request $request ) {
     }
 
     list( $token, $kind, $order ) = $context;
-    if ( ! $order->is_paid() && lamako_mobile_v2_order_has_protected_payment_attempt( $order ) ) {
+    if ( ! lamako_mobile_v2_payment_is_confirmed( $order ) && lamako_mobile_v2_order_has_protected_payment_attempt( $order ) ) {
         $gateway_id = sanitize_key( $order->get_payment_method() );
         $attempt_id = sanitize_text_field( $order->get_meta( '_lamako_v2_payment_attempt_id' ) );
 
@@ -3418,7 +3424,7 @@ function lamako_mobile_v2_cancel_payment( WP_REST_Request $request ) {
     }
 
     list( $token, $kind, $order ) = $context;
-    if ( $order->is_paid() ) {
+    if ( lamako_mobile_v2_payment_is_confirmed( $order ) ) {
         return new WP_Error(
             'lamako_v2_payment_already_confirmed',
             'This payment is already confirmed and cannot be cancelled.',
@@ -3555,7 +3561,7 @@ function lamako_mobile_v2_maybe_serve_cybersource() {
         nocache_headers();
         wp_die( esc_html__( 'Payment session not found.', 'lamako-mobile-api' ), esc_html__( 'Payment unavailable', 'lamako-mobile-api' ), [ 'response' => 404 ] );
     }
-    if ( $order->is_paid() ) {
+    if ( lamako_mobile_v2_payment_is_confirmed( $order ) ) {
         wp_safe_redirect( lamako_mobile_v2_payment_page_url( $token, $kind ) );
         exit;
     }
@@ -3640,7 +3646,7 @@ function lamako_mobile_v2_seating_cart_url( $url ) {
 }
 
 function lamako_mobile_v2_maybe_apply_payment_return_hint( $order, $status_hint ) {
-    if ( $order instanceof WC_Order && 'cancelled' === $status_hint && ! $order->is_paid() ) {
+    if ( $order instanceof WC_Order && 'cancelled' === $status_hint && ! lamako_mobile_v2_payment_is_confirmed( $order ) ) {
         lamako_mobile_v2_cancel_unpaid_payment( $order, 'Customer returned through the payment provider cancellation URL.' );
         return wc_get_order( $order->get_id() );
     }
@@ -4185,6 +4191,70 @@ function lamako_mobile_v2_create_ticket_instance_for_item( WC_Order $order, $ite
     return (int) $ticket_id;
 }
 
+function lamako_mobile_v2_get_item_seat_assignments( $item, $quantity ) {
+    if ( ! is_object( $item ) || ! method_exists( $item, 'get_meta' ) ) {
+        return [];
+    }
+
+    $labels_raw = (string) $item->get_meta( '_lamako_seat_labels', true );
+    if ( $labels_raw === '' ) {
+        $labels_raw = (string) $item->get_meta( 'Place', true );
+    }
+    $ids_raw    = (string) $item->get_meta( '_lamako_seat_ids', true );
+    $charts_raw = (string) $item->get_meta( '_lamako_chart_ids', true );
+    $labels     = array_values( array_filter( array_map( 'trim', explode( ',', $labels_raw ) ) ) );
+    $ids        = array_values( array_filter( array_map( 'trim', explode( ',', $ids_raw ) ) ) );
+    $charts     = array_values( array_filter( array_map( 'absint', explode( ',', $charts_raw ) ) ) );
+    $seats      = [];
+
+    for ( $index = 0; $index < max( 1, absint( $quantity ) ); $index++ ) {
+        if ( empty( $labels[ $index ] ) || empty( $ids[ $index ] ) || empty( $charts[ $index ] ) ) {
+            continue;
+        }
+        $seats[] = [
+            'seat_id'    => sanitize_text_field( $ids[ $index ] ),
+            'seat_label' => sanitize_text_field( $labels[ $index ] ),
+            'chart_id'   => absint( $charts[ $index ] ),
+        ];
+    }
+
+    return $seats;
+}
+
+function lamako_mobile_v2_issue_tickets_after_payment( $order_id, $from_status = '', $to_status = '', $order = null ) {
+    $order = $order instanceof WC_Order ? $order : wc_get_order( absint( $order_id ) );
+    if ( ! $order instanceof WC_Order
+        || 'yes' !== $order->get_meta( '_lamako_mobile_v2' )
+        || ! lamako_mobile_v2_order_allows_ticket_display( $order ) ) {
+        return;
+    }
+
+    $result = lamako_mobile_v2_ensure_ticket_instances_for_order( $order );
+    if ( is_wp_error( $result ) ) {
+        $order->update_meta_data( '_lamako_v2_ticket_issue_status', 'failed' );
+        $order->update_meta_data( '_lamako_v2_ticket_issue_error', sanitize_text_field( $result->get_error_message() ) );
+        if ( 'yes' !== $order->get_meta( '_lamako_v2_ticket_issue_error_noted' ) ) {
+            $order->add_order_note( 'Lamako Mobile ticket issuance failed after payment: ' . $result->get_error_message() );
+            $order->update_meta_data( '_lamako_v2_ticket_issue_error_noted', 'yes' );
+        }
+        $order->save();
+        return;
+    }
+
+    $order->update_meta_data( '_lamako_v2_ticket_issue_status', 'issued' );
+    $order->delete_meta_data( '_lamako_v2_ticket_issue_error' );
+    $order->save();
+}
+
+function lamako_mobile_v2_payment_is_confirmed( WC_Order $order ) {
+    if ( $order->is_paid() ) {
+        return true;
+    }
+
+    return 'cybersource' === $order->get_payment_method()
+        && 'cs-complete' === $order->get_status();
+}
+
 function lamako_mobile_v2_ensure_ticket_instances_for_order( WC_Order $order, array $seat_cookie = [], array $flow = [] ) {
     $cart_contents    = [];
     $ticket_type_meta = [];
@@ -4215,6 +4285,10 @@ function lamako_mobile_v2_ensure_ticket_instances_for_order( WC_Order $order, ar
         $is_seating_ticket = get_post_meta( $ticket_type_id, '_tc_used_for_seatings', true ) === 'yes'
             || get_post_meta( $product_id, '_tc_used_for_seatings', true ) === 'yes';
 
+        if ( empty( $seats ) && $is_seating_ticket ) {
+            $seats = lamako_mobile_v2_get_item_seat_assignments( $item, $quantity );
+        }
+
         $assigned_seats = array_slice( $seats, 0, $quantity );
         if ( $is_seating_ticket ) {
             foreach ( $assigned_seats as $seat ) {
@@ -4243,29 +4317,34 @@ function lamako_mobile_v2_ensure_ticket_instances_for_order( WC_Order $order, ar
             $ticket_type_meta[ $ticket_type_key ][] = $ticket_type_key;
         }
 
-        $instances = lamako_mobile_v2_get_ticket_instances_for_item( $order->get_id(), $item_id, $ticket_type_id );
+        $instances = [];
+        if ( lamako_mobile_v2_order_allows_ticket_display( $order ) ) {
+            $instances = lamako_mobile_v2_get_ticket_instances_for_item( $order->get_id(), $item_id, $ticket_type_id );
 
-        while ( count( $instances ) < $quantity ) {
-            $next_index = count( $instances );
-            $created    = lamako_mobile_v2_create_ticket_instance_for_item( $order, $item_id, $item, $ticket_type_id, $assigned_seats[ $next_index ] ?? null, $flow );
-            if ( is_wp_error( $created ) ) {
-                return $created;
+            while ( count( $instances ) < $quantity ) {
+                $next_index = count( $instances );
+                $created    = lamako_mobile_v2_create_ticket_instance_for_item( $order, $item_id, $item, $ticket_type_id, $assigned_seats[ $next_index ] ?? null, $flow );
+                if ( is_wp_error( $created ) ) {
+                    return $created;
+                }
+                $instances[] = (int) $created;
             }
-            $instances[] = (int) $created;
         }
 
         $seat_labels = [];
         $seat_ids    = [];
         $chart_ids   = [];
         for ( $i = 0; $i < $quantity; $i++ ) {
-            if ( empty( $instances[ $i ] ) || empty( $assigned_seats[ $i ] ) ) {
+            if ( empty( $assigned_seats[ $i ] ) ) {
                 continue;
             }
 
             $seat = $assigned_seats[ $i ];
-            update_post_meta( $instances[ $i ], 'chart_id', absint( $seat['chart_id'] ?? 0 ) );
-            update_post_meta( $instances[ $i ], 'seat_id', sanitize_text_field( (string) ( $seat['seat_id'] ?? '' ) ) );
-            update_post_meta( $instances[ $i ], 'seat_label', sanitize_text_field( (string) ( $seat['seat_label'] ?? '' ) ) );
+            if ( ! empty( $instances[ $i ] ) ) {
+                update_post_meta( $instances[ $i ], 'chart_id', absint( $seat['chart_id'] ?? 0 ) );
+                update_post_meta( $instances[ $i ], 'seat_id', sanitize_text_field( (string) ( $seat['seat_id'] ?? '' ) ) );
+                update_post_meta( $instances[ $i ], 'seat_label', sanitize_text_field( (string) ( $seat['seat_label'] ?? '' ) ) );
+            }
 
             if ( ! empty( $seat['seat_label'] ) ) {
                 $seat_labels[] = sanitize_text_field( (string) $seat['seat_label'] );
@@ -4284,6 +4363,9 @@ function lamako_mobile_v2_ensure_ticket_instances_for_order( WC_Order $order, ar
             $seat_label_meta[ $ticket_type_key ] = array_map( 'strval', array_column( $assigned_seats, 'seat_label' ) );
         }
 
+        // Persist the assignment before payment so the status-change hook can
+        // recreate the exact Tickera instances without relying on WebView
+        // cookies that no longer exist when the provider callback arrives.
         if ( ! empty( $seat_labels ) ) {
             $item->update_meta_data( '_lamako_seat_labels', implode( ', ', array_unique( $seat_labels ) ) );
             $item->update_meta_data( '_lamako_seat_ids', implode( ',', array_unique( $seat_ids ) ) );
@@ -4536,6 +4618,7 @@ body.lamako-mobile-seat-flow { overflow-x: hidden !important; }
   var reportTimer = null;
   var orderCreating = false;
   var seatingOpened = false;
+  var seatDialogOpen = false;
   var seatingLaunchAttempts = 0;
   function post(type, payload) {
     if (!window.ReactNativeWebView) return;
@@ -4558,6 +4641,34 @@ body.lamako-mobile-seat-flow { overflow-x: hidden !important; }
     noticeTimer = setTimeout(function() {
       notice.className = "lamako-seat-notice";
     }, 3600);
+  }
+  function visibleSeatDialog() {
+    var dialogs = document.querySelectorAll(".tc-seat-dialog.ui-dialog");
+    for (var index = 0; index < dialogs.length; index += 1) {
+      var rect = dialogs[index].getBoundingClientRect();
+      var style = window.getComputedStyle(dialogs[index]);
+      if (rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden") return true;
+    }
+    return false;
+  }
+  function reportSeatDialog() {
+    var isOpen = visibleSeatDialog();
+    if (isOpen === seatDialogOpen) return;
+    seatDialogOpen = isOpen;
+    post("SEATING_MODAL_STATE", { dialogOpen: isOpen });
+  }
+  function closeCompletedSeatDialog() {
+    document.querySelectorAll(".tc-seat-dialog.ui-dialog").forEach(function(dialog) {
+      dialog.style.setProperty("display", "none", "important");
+      dialog.setAttribute("aria-hidden", "true");
+    });
+    document.querySelectorAll(".ui-widget-overlay").forEach(function(overlay) {
+      overlay.style.setProperty("display", "none", "important");
+      overlay.setAttribute("aria-hidden", "true");
+    });
+    document.body.classList.remove("tcsc-disabled");
+    seatDialogOpen = false;
+    post("SEATING_MODAL_STATE", { dialogOpen: false });
   }
   function seatingChartVisible() {
     var candidates = document.querySelectorAll(
@@ -4643,19 +4754,46 @@ body.lamako-mobile-seat-flow { overflow-x: hidden !important; }
     });
     return seats;
   }
+  function pendingSeats() {
+    var selectors = [
+      ".tc_seat_unit.ui-selected:not(.tc_seat_in_cart)",
+      ".tc_seat_unit.tc-selected:not(.tc_seat_in_cart)",
+      ".tc_seat_unit.selected:not(.tc_seat_in_cart)"
+    ];
+    var seen = {};
+    var seats = [];
+    selectors.forEach(function(selector) {
+      document.querySelectorAll(selector).forEach(function(el) {
+        var id = el.id || el.getAttribute("data-seat-id") || seatLabel(el);
+        if (!id || seen[id]) return;
+        seen[id] = true;
+        seats.push({ id: id, label: seatLabel(el) });
+      });
+    });
+    return seats;
+  }
   function reportSeats() {
     var seats = selectedSeats();
+    var pending = pendingSeats();
     var cartCount = inCartCount();
-    var key = JSON.stringify({ seats: seats, cartCount: cartCount });
+    var key = JSON.stringify({ seats: seats, pending: pending, cartCount: cartCount });
     if (key === lastSeatKey) return;
     lastSeatKey = key;
-    post("SEAT_SELECTION_CHANGED", { seats: seats, count: cartCount, selectedCount: seats.length, inCartCount: cartCount });
+    post("SEAT_SELECTION_CHANGED", {
+      seats: seats,
+      seatLabels: seats.map(function(seat) { return seat.label || seat.id || ""; }).filter(Boolean),
+      count: cartCount,
+      selectedCount: seats.length,
+      inCartCount: cartCount,
+      pendingCount: pending.length
+    });
   }
   function scheduleReport(delay) {
     if (reportTimer) clearTimeout(reportTimer);
     reportTimer = setTimeout(function() {
       reportTimer = null;
       reportSeats();
+      reportSeatDialog();
       reportLocation();
     }, typeof delay === "number" ? delay : 120);
   }
@@ -4670,7 +4808,7 @@ body.lamako-mobile-seat-flow { overflow-x: hidden !important; }
     }
   }
   function setCheckoutButtonsBusy(busy) {
-    document.querySelectorAll(".tc-checkout-button, .tc_cart_button").forEach(function(el) {
+    document.querySelectorAll(".tc-checkout-button").forEach(function(el) {
       if (!el.dataset.lamakoOriginalText) el.dataset.lamakoOriginalText = el.textContent || "Continuer";
       el.classList.toggle("is-lamako-loading", busy);
       el.textContent = busy ? "Preparation de la commande..." : el.dataset.lamakoOriginalText;
@@ -4683,13 +4821,15 @@ body.lamako-mobile-seat-flow { overflow-x: hidden !important; }
   function goToCheckout(source) {
     reportSeats();
     if (inCartCount() <= 0) {
-      showNotice("Choisissez un siège, puis confirmez-le dans la fenêtre du plan de salle.");
+      var cartMessage = "Ajoutez d'abord chaque siège au panier dans la fenêtre du plan de salle.";
+      showNotice(cartMessage);
+      post("SEATING_CART_REQUIRED", { message: cartMessage });
       return false;
     }
     if (orderCreating) return false;
     orderCreating = true;
     setCheckoutButtonsBusy(true);
-    post("CHECKOUT_READY", { requested: true, source: source || "seat_flow" });
+    post("SEATING_ORDER_CREATING", { requested: true, source: source || "seat_flow" });
     fetch(seatingOrderUrl, {
       method: "POST",
       credentials: "same-origin",
@@ -4707,16 +4847,23 @@ body.lamako-mobile-seat-flow { overflow-x: hidden !important; }
         });
       })
       .then(function(payload) {
+        var order = payload && payload.order ? payload.order : null;
+        var orderId = order ? parseInt(order.id || order.orderId || "0", 10) : 0;
+        if (!orderId) {
+          var invalidOrder = new Error("La commande des sièges n'a pas été confirmée par le serveur.");
+          invalidOrder.code = "seating_order_not_confirmed";
+          throw invalidOrder;
+        }
         post("SEATING_ORDER_CREATED", {
           token: <?php echo wp_json_encode( $token ); ?>,
-          order: payload && payload.order ? payload.order : null
+          order: order
         });
       })
       .catch(function(error) {
         orderCreating = false;
         setCheckoutButtonsBusy(false);
         showNotice(error && error.message ? error.message : "Impossible de preparer la commande.");
-        post("ERROR", {
+        post("SEATING_ORDER_ERROR", {
           code: error && error.code ? error.code : "seating_order_failed",
           message: error && error.message ? error.message : "Impossible de preparer la commande."
         });
@@ -4726,6 +4873,58 @@ body.lamako-mobile-seat-flow { overflow-x: hidden !important; }
   window.lamakoGoToCheckoutFromApp = function() {
     return goToCheckout("native_badge");
   };
+  window.lamakoPrimarySeatActionFromApp = function() {
+    if (visibleSeatDialog() || pendingSeats().length > 0) return false;
+    return goToCheckout("native_primary_action");
+  };
+  function seatingAjaxAction(settings) {
+    var data = settings && settings.data ? settings.data : null;
+    if (typeof data === "string") {
+      var match = data.match(/(?:^|&)action=([^&]+)/);
+      return match ? decodeURIComponent(match[1].replace(/\+/g, " ")) : "";
+    }
+    if (window.FormData && data instanceof window.FormData && data.get) {
+      return data.get("action") || "";
+    }
+    return data && typeof data === "object" && data.action ? String(data.action) : "";
+  }
+  function seatingAjaxParam(settings, name) {
+    var data = settings && settings.data ? settings.data : null;
+    if (typeof data === "string") {
+      var pairs = data.split("&");
+      for (var index = 0; index < pairs.length; index += 1) {
+        var separator = pairs[index].indexOf("=");
+        var rawKey = separator >= 0 ? pairs[index].slice(0, separator) : pairs[index];
+        if (decodeURIComponent(rawKey.replace(/\+/g, " ")) !== name) continue;
+        var rawValue = separator >= 0 ? pairs[index].slice(separator + 1) : "";
+        return decodeURIComponent(rawValue.replace(/\+/g, " "));
+      }
+      return "";
+    }
+    if (window.FormData && data instanceof window.FormData && data.get) {
+      return data.get(name) || "";
+    }
+    return data && typeof data === "object" && data[name] ? String(data[name]) : "";
+  }
+  function isSeatingCartRemoval(settings) {
+    return seatingAjaxAction(settings) === "tc_remove_seat_from_cart_ajax";
+  }
+  function isSeatingCartRequest(settings) {
+    var action = seatingAjaxAction(settings);
+    return action === "tc_woo_update_cart_seats" ||
+      action === "tc_update_cart_seats" ||
+      action === "tc_remove_seat_from_cart_ajax";
+  }
+  function reconcileRemovedSeat(settings) {
+    var cartSeat = seatingAjaxParam(settings, "tcsc_seat");
+    var parts = String(cartSeat || "").split("-");
+    var seatId = parts.length >= 3 ? parts.slice(1, -1).join("-") : "";
+    var seat = seatId ? document.getElementById(seatId) : null;
+    if (!seat) return;
+    ["tc_seat_in_cart", "in_cart", "tc_in_cart", "ui-selected", "tc-selected", "selected"].forEach(function(className) {
+      seat.classList.remove(className);
+    });
+  }
   document.addEventListener("click", function(event) {
     var target = event.target;
     var checkoutLink = target && target.closest ? target.closest(".tc-checkout-button") : null;
@@ -4736,10 +4935,76 @@ body.lamako-mobile-seat-flow { overflow-x: hidden !important; }
       return;
     }
     scheduleReport(150);
-  }, true);
-  document.addEventListener("touchend", function() { scheduleReport(220); }, true);
-  document.addEventListener("change", function() { scheduleReport(80); }, true);
+    setTimeout(function() { scheduleReport(0); }, 500);
+    setTimeout(function() { scheduleReport(0); }, 1100);
+  }, false);
+  document.addEventListener("touchend", function() { scheduleReport(220); }, false);
+  document.addEventListener("pointerup", function() { scheduleReport(180); }, false);
+  document.addEventListener("change", function() { scheduleReport(80); }, false);
   post("FLOW_READY", { eventId: <?php echo (int) $event_id; ?>, chartId: <?php echo (int) $chart_id; ?>, wooCheckoutUrl: checkoutUrl });
+  function attachTickeraNativeHooks(attempt) {
+    if (!window.jQuery || !document.body) {
+      if (attempt < 100) window.setTimeout(function() { attachTickeraNativeHooks(attempt + 1); }, 100);
+      return;
+    }
+    var jq = window.jQuery;
+    jq(document).off("ajaxSend.lamakoTickeraBridge").on("ajaxSend.lamakoTickeraBridge", function(event, xhr, settings) {
+      if (isSeatingCartRequest(settings)) {
+        post(isSeatingCartRemoval(settings) ? "SEATING_CART_REMOVING" : "SEATING_CART_ADDING", { requested: true });
+      }
+    });
+    jq(document).off("ajaxComplete.lamakoTickeraBridge").on("ajaxComplete.lamakoTickeraBridge", function(event, xhr, settings) {
+      if (!isSeatingCartRequest(settings)) return;
+      var response = xhr && xhr.responseJSON ? xhr.responseJSON : null;
+      if (!response && xhr && xhr.responseText) {
+        try { response = JSON.parse(xhr.responseText); } catch (error) { response = null; }
+      }
+      var removing = isSeatingCartRemoval(settings);
+      var completedAction = response && response.action ? String(response.action) : "";
+      if (removing && completedAction === "" && response && typeof response.in_cart_count !== "undefined") {
+        completedAction = "removed";
+      }
+      var succeeded = !!(
+        xhr && xhr.status >= 200 && xhr.status < 300 && response && !response.error &&
+        ["added", "updated", "removed"].indexOf(completedAction) !== -1
+      );
+      window.setTimeout(function() {
+        if (succeeded && removing) reconcileRemovedSeat(settings);
+        reportSeats();
+        if (succeeded) {
+          closeCompletedSeatDialog();
+          post("SEATING_CART_UPDATED", {
+            action: completedAction,
+            inCartCount: inCartCount(),
+            seatLabels: selectedSeats().map(function(seat) { return seat.label || seat.id || ""; }).filter(Boolean)
+          });
+          return;
+        }
+        var errorMessage = response && response.error_message
+          ? String(response.error_message)
+          : removing
+            ? "Ce siège n'a pas pu être retiré. Réessayez depuis le plan."
+            : "Ce siège n'a pas pu être ajouté. Sélectionnez-le à nouveau.";
+        showNotice(errorMessage);
+        post("SEATING_CART_ADD_ERROR", {
+          errorAction: removing ? "remove" : "add",
+          message: errorMessage
+        });
+      }, 180);
+    });
+  }
+  attachTickeraNativeHooks(0);
+  if (window.MutationObserver && document.body) {
+    var seatingStateObserver = new MutationObserver(function() {
+      scheduleReport(100);
+    });
+    seatingStateObserver.observe(document.body, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["class", "style", "aria-hidden"]
+    });
+  }
   setTimeout(openSeatingChart, 80);
   scheduleReport(0);
   setTimeout(function() { scheduleReport(0); }, 600);
@@ -4839,12 +5104,119 @@ function lamako_mobile_v2_normalize_payment_status( WC_Order $order ) {
     return 'unknown';
 }
 
+function lamako_mobile_v2_order_reservation_deadline( WC_Order $order ) {
+    foreach ( [ '_lamako_v2_reservation_expires_at', '_lamako_v2_checkout_expires_at' ] as $meta_key ) {
+        $raw       = (string) $order->get_meta( $meta_key );
+        $timestamp = $raw !== '' ? strtotime( $raw ) : false;
+        if ( $timestamp ) {
+            return (int) $timestamp;
+        }
+    }
+
+    $created = $order->get_date_created();
+    return $created ? $created->getTimestamp() + LAMAKO_MOBILE_V2_CHECKOUT_TTL : 0;
+}
+
+function lamako_mobile_v2_void_unpaid_ticket_instances( WC_Order $order ) {
+    if ( lamako_mobile_v2_payment_is_confirmed( $order ) ) {
+        return 0;
+    }
+
+    $instance_ids = get_posts( [
+        'post_type'      => 'tc_tickets_instances',
+        'post_status'    => [ 'publish', 'draft' ],
+        'post_parent'    => $order->get_id(),
+        'fields'         => 'ids',
+        'posts_per_page' => -1,
+        'no_found_rows'  => true,
+    ] );
+
+    foreach ( $instance_ids as $instance_id ) {
+        wp_trash_post( absint( $instance_id ) );
+    }
+
+    return count( $instance_ids );
+}
+
+function lamako_mobile_v2_release_expired_order_seats( WC_Order $order ) {
+    foreach ( $order->get_items() as $item ) {
+        $seat_ids  = array_values( array_filter( array_map( 'trim', explode( ',', (string) $item->get_meta( '_lamako_seat_ids', true ) ) ) ) );
+        $chart_ids = array_values( array_filter( array_map( 'absint', explode( ',', (string) $item->get_meta( '_lamako_chart_ids', true ) ) ) ) );
+        foreach ( $seat_ids as $index => $seat_id ) {
+            $chart_id = absint( $chart_ids[ $index ] ?? 0 );
+            if ( $chart_id <= 0 ) {
+                continue;
+            }
+            if ( function_exists( 'tc_remove_seat_from_firebase' ) ) {
+                tc_remove_seat_from_firebase( $seat_id, $chart_id );
+            }
+            delete_transient( 'tc_seat_' . $chart_id . '_' . $seat_id );
+            delete_transient( 'tc_cart_seat_' . $seat_id );
+        }
+    }
+
+    if ( function_exists( 'lamako_cleanup_firebase_seats_for_order' ) ) {
+        lamako_cleanup_firebase_seats_for_order( $order );
+    }
+}
+
+function lamako_mobile_v2_expire_stale_orders() {
+    if ( ! function_exists( 'wc_get_orders' ) ) {
+        return;
+    }
+
+    $orders = wc_get_orders( [
+        'status'       => [ 'pending', 'checkout-draft', 'on-hold' ],
+        'date_created' => '<' . ( time() - LAMAKO_MOBILE_V2_CHECKOUT_TTL ),
+        'limit'        => 100,
+        'orderby'      => 'date',
+        'order'        => 'ASC',
+        'return'       => 'objects',
+    ] );
+
+    foreach ( $orders as $order ) {
+        if ( ! $order instanceof WC_Order
+            || 'yes' !== $order->get_meta( '_lamako_mobile_v2' )
+            || lamako_mobile_v2_payment_is_confirmed( $order ) ) {
+            continue;
+        }
+
+        $deadline = lamako_mobile_v2_order_reservation_deadline( $order );
+        if ( $deadline <= 0 || $deadline > time() ) {
+            continue;
+        }
+
+        if ( lamako_mobile_v2_order_has_protected_payment_attempt( $order ) ) {
+            if ( lamako_mobile_v2_payment_verification_deadline( $order ) <= time() ) {
+                lamako_mobile_v2_mark_payment_for_review( $order, 'Reservation expired while provider confirmation still requires reconciliation.' );
+            }
+            continue;
+        }
+
+        $fresh_order = wc_get_order( $order->get_id() );
+        if ( ! $fresh_order instanceof WC_Order
+            || lamako_mobile_v2_payment_is_confirmed( $fresh_order )
+            || ! $fresh_order->has_status( [ 'pending', 'checkout-draft', 'on-hold' ] )
+            || lamako_mobile_v2_order_has_protected_payment_attempt( $fresh_order ) ) {
+            continue;
+        }
+
+        $voided = lamako_mobile_v2_void_unpaid_ticket_instances( $fresh_order );
+        lamako_mobile_v2_release_expired_order_seats( $fresh_order );
+        $fresh_order->update_status( 'cancelled', 'Lamako Mobile reservation expired before payment confirmation.' );
+        if ( $voided > 0 ) {
+            $fresh_order->add_order_note( sprintf( '%d prematurely issued ticket instance(s) were voided.', $voided ) );
+        }
+        $fresh_order->save();
+    }
+}
+
 function lamako_mobile_v2_order_allows_ticket_display( WC_Order $order ) {
     if ( in_array( $order->get_status(), [ 'cancelled', 'failed', 'refunded', 'pending', 'on-hold' ], true ) ) {
         return false;
     }
 
-    return $order->is_paid();
+    return lamako_mobile_v2_payment_is_confirmed( $order );
 }
 
 function lamako_mobile_v2_order_summary( WC_Order $order, $include_items = false, $include_tickets = false, $preloaded_tickets = null ) {
@@ -4856,11 +5228,11 @@ function lamako_mobile_v2_order_summary( WC_Order $order, $include_items = false
     }
     $payment_status = lamako_mobile_v2_normalize_payment_status( $order );
     $attempt_status = sanitize_key( $order->get_meta( '_lamako_v2_payment_attempt_status' ) );
-    if ( ! $order->is_paid() && $attempt_status === 'failed' ) {
+    if ( ! lamako_mobile_v2_payment_is_confirmed( $order ) && $attempt_status === 'failed' ) {
         $payment_status = 'failed';
-    } elseif ( ! $order->is_paid() && in_array( $attempt_status, lamako_mobile_v2_payment_review_attempt_statuses(), true ) ) {
+    } elseif ( ! lamako_mobile_v2_payment_is_confirmed( $order ) && in_array( $attempt_status, lamako_mobile_v2_payment_review_attempt_statuses(), true ) ) {
         $payment_status = 'review';
-    } elseif ( ! $order->is_paid() && in_array( $attempt_status, lamako_mobile_v2_payment_active_attempt_statuses(), true ) ) {
+    } elseif ( ! lamako_mobile_v2_payment_is_confirmed( $order ) && in_array( $attempt_status, lamako_mobile_v2_payment_active_attempt_statuses(), true ) ) {
         $payment_status = 'pending';
     }
     $reservation_expires_at = (string) $order->get_meta( '_lamako_v2_reservation_expires_at' );
@@ -5575,7 +5947,7 @@ function lamako_mobile_v2_rewards_history( WP_REST_Request $request ) {
             'return'      => 'objects',
         ] );
         foreach ( $orders as $order ) {
-            if ( ! $order instanceof WC_Order || ! $order->is_paid() || isset( $seen_order_ids[ $order->get_id() ] ) ) {
+            if ( ! $order instanceof WC_Order || ! lamako_mobile_v2_payment_is_confirmed( $order ) || isset( $seen_order_ids[ $order->get_id() ] ) ) {
                 continue;
             }
             $points = max( 0, (float) $order->get_meta( '_lamako_points_awarded', true ) );

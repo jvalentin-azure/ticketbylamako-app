@@ -6,8 +6,8 @@ import {
   StyleSheet,
   Linking,
   Alert,
-  Image,
 } from "react-native";
+import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
@@ -98,18 +98,11 @@ export default function AboutScreen() {
         <View
           style={[styles.brandSection, { backgroundColor: colors.primary }]}
         >
-          <View
-            style={[
-              styles.logoContainer,
-              { backgroundColor: "#fff", borderColor: "rgba(255,255,255,0.4)" },
-            ]}
-          >
-            <Image
-              source={require("@/assets/images/icon.png")}
-              style={styles.logo}
-              resizeMode="contain"
-            />
-          </View>
+          <Image
+            source={require("@/assets/images/logo-white.png")}
+            style={styles.logo}
+            contentFit="contain"
+          />
           <Text style={[styles.brandName, { color: "#fff" }]}>
             Ticket by Lamako
           </Text>
@@ -424,17 +417,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 22,
   },
-  logoContainer: {
-    width: 88,
-    height: 88,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    marginBottom: 14,
-    overflow: "hidden",
-  },
-  logo: { width: 72, height: 72 },
+  logo: { width: 190, height: 72, marginBottom: 8 },
   brandName: { fontSize: 22, fontWeight: "800" },
   brandTagline: {
     fontSize: 14,
@@ -461,7 +444,7 @@ const styles = StyleSheet.create({
   },
 
   // Cards
-  card: { borderRadius: 16, padding: 18, marginBottom: 14, borderWidth: 1 },
+  card: { borderRadius: 8, padding: 18, marginBottom: 14, borderWidth: 1 },
   cardTitle: { fontSize: 16, fontWeight: "700", marginBottom: 8 },
   cardText: { fontSize: 13, lineHeight: 21 },
 

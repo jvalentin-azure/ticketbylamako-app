@@ -83,6 +83,10 @@ export default function PaymentScreen() {
           />
         ) : null}
         <ScrollView
+          automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+          keyboardDismissMode={
+            Platform.OS === "ios" ? "interactive" : "on-drag"
+          }
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.content}
         >

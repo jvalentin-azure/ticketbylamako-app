@@ -81,6 +81,7 @@ const MAPPING = {
   photo: "image",
   qrcode: "qr-code-2",
   "wallet.fill": "account-balance-wallet",
+  "chair.fill": "event-seat",
 } as IconMapping;
 
 /**

@@ -10,8 +10,8 @@ const cartProvider = fs.readFileSync(
   path.resolve(__dirname, "..", "lib", "cart-provider.tsx"),
   "utf8",
 );
-const globalBanner = fs.readFileSync(
-  path.resolve(__dirname, "..", "components", "global-cart-hold-banner.tsx"),
+const appHeader = fs.readFileSync(
+  path.resolve(__dirname, "..", "components", "app-header.tsx"),
   "utf8",
 );
 const rootLayout = fs.readFileSync(
@@ -37,9 +37,12 @@ describe("cart hold experience", () => {
   });
 
   it("keeps a compact reservation reminder available across app routes", () => {
-    expect(rootLayout).toContain("<GlobalCartHoldBanner />");
-    expect(globalBanner).toContain("remaining <= 5 * 60 * 1000");
-    expect(globalBanner).toContain("remaining <= 2 * 60 * 1000");
-    expect(globalBanner).toContain('router.push("/(tabs)/cart"');
+    expect(rootLayout).not.toContain("<GlobalCartHoldBanner />");
+    expect(appHeader).toContain("usesOwnReservationTimer");
+    expect(appHeader).toContain('["/cart", "/checkout", "/payment"]');
+    expect(appHeader).toContain("remaining <= 2 * 60 * 1000");
+    expect(appHeader).toContain('router.push("/(tabs)/cart"');
+    expect(appHeader).toContain("styles.holdBar");
+    expect(appHeader).toContain('alignSelf: "center"');
   });
 });

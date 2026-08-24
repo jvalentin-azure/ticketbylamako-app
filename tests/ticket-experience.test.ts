@@ -30,12 +30,13 @@ describe("premium ticket experience", () => {
     const source = read("app/ticket/[id].tsx");
     const adapter = read("lib/order-adapters.ts");
 
-    expect(source).toContain("ticket.apple_wallet_url");
-    expect(source).toContain("ticket.google_wallet_url");
     expect(source).toContain("ticket.apple_wallet_available === true");
     expect(source).toContain("ticket.google_wallet_available === true");
     expect(source).toContain("{walletAvailable ? (");
     expect(source).toContain("getMobileTicketWalletLink");
+    expect(source).toContain("addTicketToNativeWallet(response.url)");
+    expect(source).not.toContain("ticket.apple_wallet_url");
+    expect(source).not.toContain("ticket.google_wallet_url");
     expect(adapter).toContain("appleWalletUrl");
     expect(adapter).toContain("googleWalletUrl");
     expect(adapter).toContain("appleWalletAvailable");

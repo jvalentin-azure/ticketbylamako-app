@@ -44,6 +44,11 @@ function tbl_mobile_order_expiry_timestamp( WC_Order $order ) {
 }
 
 function tbl_mobile_expire_unpaid_orders() {
+    if ( function_exists( 'lamako_mobile_v2_expire_stale_orders' ) ) {
+        lamako_mobile_v2_expire_stale_orders();
+        return;
+    }
+
     if ( ! function_exists( 'wc_get_orders' ) ) {
         return;
     }

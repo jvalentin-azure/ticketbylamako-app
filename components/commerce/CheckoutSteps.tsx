@@ -1,6 +1,7 @@
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   ScrollView,
   Text,
   TextInput,
@@ -179,7 +180,9 @@ export function ShippingStep(props: ShippingStepProps) {
     <ScreenContainer edges={["top", "bottom", "left", "right"]}>
       <CheckoutHeader title="Adresse de livraison" onBack={props.onBack} />
       <ScrollView
-        contentContainerStyle={{ padding: 20, gap: 16 }}
+        automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+        contentContainerStyle={{ padding: 20, paddingBottom: 48, gap: 16 }}
+        keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
         keyboardShouldPersistTaps="handled"
       >
         <Text style={{ color: colors.muted, fontSize: 14 }}>
@@ -199,6 +202,7 @@ export function ShippingStep(props: ShippingStepProps) {
             value={props.phone}
             onChangeText={props.onPhoneChange}
             keyboardType="phone-pad"
+            returnKeyType="next"
             placeholder="034 XX XXX XX"
             style={inputStyle}
             placeholderTextColor={colors.muted}
@@ -218,6 +222,7 @@ export function ShippingStep(props: ShippingStepProps) {
             value={props.address}
             onChangeText={props.onAddressChange}
             placeholder="Rue, numéro, quartier..."
+            returnKeyType="next"
             style={inputStyle}
             placeholderTextColor={colors.muted}
           />
@@ -236,6 +241,7 @@ export function ShippingStep(props: ShippingStepProps) {
             value={props.city}
             onChangeText={props.onCityChange}
             placeholder="Antananarivo"
+            returnKeyType="done"
             style={inputStyle}
             placeholderTextColor={colors.muted}
           />
@@ -280,7 +286,9 @@ export function ConfirmStep(props: ConfirmStepProps) {
   return (
     <ScreenContainer edges={["top", "bottom", "left", "right"]}>
       <CheckoutHeader title="Confirmation" onBack={props.onBack} />
-      <ScrollView contentContainerStyle={{ padding: 20, gap: 16 }}>
+      <ScrollView
+        contentContainerStyle={{ padding: 20, paddingBottom: 40, gap: 16 }}
+      >
         <SummaryCard
           itemCount={props.itemCount}
           total={props.total}
@@ -348,7 +356,9 @@ export function TicketFieldsStep(props: TicketFieldsStepProps) {
     <ScreenContainer edges={["top", "bottom", "left", "right"]}>
       <CheckoutHeader title="Participants" onBack={props.onBack} />
       <ScrollView
-        contentContainerStyle={{ padding: 20, gap: 16 }}
+        automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+        contentContainerStyle={{ padding: 20, paddingBottom: 64, gap: 16 }}
+        keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
         keyboardShouldPersistTaps="handled"
       >
         <SummaryCard itemCount={props.items.length} total={props.total} />

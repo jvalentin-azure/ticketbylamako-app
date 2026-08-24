@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@azizuysal/wallet-kit':
+        specifier: 2.0.0
+        version: 2.0.0(react-native@0.81.5(@babel/core@7.28.5)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
       '@expo-google-fonts/raleway':
         specifier: ^0.4.2
         version: 0.4.2
@@ -44,6 +47,9 @@ importers:
       axios:
         specifier: ^1.13.2
         version: 1.13.2
+      base64-js:
+        specifier: 1.5.1
+        version: 1.5.1
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -251,6 +257,12 @@ packages:
   '@alloc/quick-lru@5.2.0':
     resolution: {integrity: sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw==}
     engines: {node: '>=10'}
+
+  '@azizuysal/wallet-kit@2.0.0':
+    resolution: {integrity: sha512-TDTeo8vpaCvCHuntIleZCSBXZtinlgBuMVEx0Y4hr7WWHR6dz5Ig1kR7oSRIdyHAG3XGKZkHhKE6BJTyUdgR+Q==}
+    peerDependencies:
+      react: '>=18.2.0'
+      react-native: '>=0.76.0'
 
   '@babel/code-frame@7.10.4':
     resolution: {integrity: sha512-vG6SvB6oYEhvgisZNFRmRCUkLz11c7rp+tbNTynGqc6mS1d5ATd/sGyV6W0KZZnXRKMTzZDRgQT3Ou9jhpAfUg==}
@@ -6246,6 +6258,11 @@ snapshots:
   '@0no-co/graphql.web@1.2.0': {}
 
   '@alloc/quick-lru@5.2.0': {}
+
+  '@azizuysal/wallet-kit@2.0.0(react-native@0.81.5(@babel/core@7.28.5)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)':
+    dependencies:
+      react: 19.1.0
+      react-native: 0.81.5(@babel/core@7.28.5)(@types/react@19.1.17)(react@19.1.0)
 
   '@babel/code-frame@7.10.4':
     dependencies:

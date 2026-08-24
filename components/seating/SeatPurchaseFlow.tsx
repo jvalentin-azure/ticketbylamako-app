@@ -10,7 +10,10 @@ import {
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { Confetti } from "@/components/confetti";
-import { SeatFlowHeader, SeatSummaryModal } from "@/components/seating/SeatFlowChrome";
+import {
+  SeatFlowHeader,
+  SeatSummaryModal,
+} from "@/components/seating/SeatFlowChrome";
 import { seatPurchaseFlowStyles as styles } from "@/components/seating/seat-purchase-flow.styles";
 import { SeatingChartSkeleton } from "@/components/skeleton-loader";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -25,6 +28,11 @@ import {
   parseSeatingWebMessage,
   type SelectedSeat,
 } from "@/lib/seating-webview";
+import {
+  normalizeSeatLabels,
+  seatingOrderId,
+  seatingSelectionSnapshot,
+} from "@/lib/seating-bridge";
 import {
   createMobileSeatingSession,
   getMobileSeatingSessionStatus,
@@ -69,6 +77,12 @@ export function SeatPurchaseFlow({
   const [phase, setPhase] = useState<FlowPhase>("loading");
   const [error, setError] = useState("");
   const [selectedCount, setSelectedCount] = useState(0);
+  const [inCartCount, setInCartCount] = useState(0);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [seatDialogOpen, setSeatDialogOpen] = useState(false);
+  const [bridgeReady, setBridgeReady] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [status, setStatus] = useState("Sélectionnez une ou plusieurs places");
   const [selectedSeats, setSelectedSeats] = useState<SelectedSeat[]>([]);
   const [showSeatSummary, setShowSeatSummary] = useState(false);
   const [orderId, setOrderId] = useState<number | null>(null);
@@ -103,6 +117,12 @@ export function SeatPurchaseFlow({
     if (resetRecovery) sessionRecoveryRef.current = 0;
     setSession(null);
     setSelectedCount(0);
+    setInCartCount(0);
+    setPendingCount(0);
+    setSeatDialogOpen(false);
+    setBridgeReady(false);
+    setChecking(false);
+    setStatus("Sélectionnez une ou plusieurs places");
     setSelectedSeats([]);
     setError("");
     setPhase("loading");
@@ -155,18 +175,65 @@ export function SeatPurchaseFlow({
     try {
       switch (message.type) {
         case "FLOW_READY":
+          setBridgeReady(true);
+          setStatus("Sélectionnez une ou plusieurs places");
           setPhase("seating");
           break;
         case "SEATING_CHART_OPENED":
           setPhase("seating");
           break;
         case "SEAT_SELECTION_CHANGED":
-          setSelectedCount(Number(message.payload?.count || 0));
-          setSelectedSeats(
-            Array.isArray(message.payload?.seats)
+          {
+            const selection = seatingSelectionSnapshot(message.payload);
+            setSelectedCount(selection.selectedCount);
+            setInCartCount(selection.inCartCount);
+            setPendingCount(selection.pendingCount);
+            const seats = Array.isArray(message.payload?.seats)
               ? (message.payload.seats as SelectedSeat[])
-              : [],
+              : selection.seatLabels.map((label) => ({ label }));
+            setSelectedSeats(seats);
+            setStatus(
+              selection.pendingCount
+                ? "Ajoutez la place sélectionnée au panier"
+                : selection.inCartCount
+                  ? "Sélection prête à confirmer"
+                  : "Sélectionnez une ou plusieurs places",
+            );
+          }
+          break;
+        case "SEATING_MODAL_STATE":
+          setSeatDialogOpen(Boolean(message.payload?.dialogOpen));
+          if (message.payload?.dialogOpen) {
+            setChecking(false);
+            setStatus("Validez l'ajout dans la fenêtre du siège");
+          }
+          break;
+        case "SEATING_CART_ADDING":
+          setChecking(true);
+          setStatus("Ajout de la place au panier...");
+          break;
+        case "SEATING_CART_REMOVING":
+          setChecking(true);
+          setStatus("Retrait de la place du panier...");
+          break;
+        case "SEATING_CART_UPDATED":
+          setChecking(false);
+          setStatus(
+            message.payload?.action === "removed"
+              ? "Place retirée. Vous pouvez poursuivre la sélection."
+              : "Place ajoutée. Ajoutez-en une autre ou confirmez.",
           );
+          {
+            const labels = normalizeSeatLabels(message.payload?.seatLabels);
+            if (labels.length)
+              setSelectedSeats(labels.map((label) => ({ label })));
+            const cartCount = Number(message.payload?.inCartCount || 0);
+            if (cartCount >= 0) setInCartCount(cartCount);
+          }
+          break;
+        case "SEATING_ORDER_CREATING":
+          setChecking(true);
+          setStatus("Préparation de la commande...");
           break;
         case "CHECKOUT_READY":
           setPhase("checkout");
@@ -176,17 +243,16 @@ export function SeatPurchaseFlow({
             message.payload?.token || session?.flowToken || "",
           );
           const orderPayload = message.payload?.order;
-          const createdOrderId = Number(
-            orderPayload && typeof orderPayload === "object" && "id" in orderPayload
-              ? orderPayload.id
-              : 0,
-          );
+          const createdOrderId = seatingOrderId(orderPayload);
           if (!flowToken) {
-            setError("La commande a été créée sans session de paiement valide.");
+            setError(
+              "La commande a été créée sans session de paiement valide.",
+            );
             setPhase("error");
             break;
           }
           if (createdOrderId) setOrderId(createdOrderId);
+          setChecking(false);
           setPhase("checkout");
           onClose();
           setTimeout(() => {
@@ -209,10 +275,24 @@ export function SeatPurchaseFlow({
           setPhase("error");
           break;
         case "ERROR":
+        case "SEATING_ORDER_ERROR":
+        case "SEATING_CART_ADD_ERROR":
+          setChecking(false);
           setError(
             String(message.payload?.message || "Une erreur est survenue."),
           );
           setPhase("error");
+          break;
+        case "SEATING_CART_REQUIRED":
+          setChecking(false);
+          setStatus("Ajoutez chaque place au panier dans le plan");
+          Alert.alert(
+            "Place non confirmée",
+            String(
+              message.payload?.message ||
+                "Ajoutez d'abord la place au panier dans la fenêtre du siège.",
+            ),
+          );
           break;
         case "CANCEL_REQUESTED":
           closingCheckoutRef.current = false;
@@ -258,12 +338,42 @@ export function SeatPurchaseFlow({
       : phase === "success"
         ? "Confirmation"
         : "Plan de salle";
-  const visibleSelectedCount = phase === "seating" ? selectedCount : 0;
+  const visibleSelectedCount = phase === "seating" ? inCartCount : 0;
 
   const continueToCheckoutFromSummary = () => {
     setShowSeatSummary(false);
     webviewRef.current?.injectJavaScript(`
-      if (window.lamakoGoToCheckoutFromApp) {
+      if (window.lamakoPrimarySeatActionFromApp) {
+        window.lamakoPrimarySeatActionFromApp();
+      } else if (window.lamakoGoToCheckoutFromApp) {
+        window.lamakoGoToCheckoutFromApp();
+      }
+      true;
+    `);
+  };
+
+  const continueToCheckout = () => {
+    if (seatDialogOpen || pendingCount > 0) {
+      Alert.alert(
+        "Validez la place",
+        "Utilisez d'abord le bouton Ajouter au panier dans la fenêtre du siège.",
+      );
+      return;
+    }
+    if (!inCartCount) {
+      Alert.alert(
+        "Aucune place confirmée",
+        "Sélectionnez une place puis ajoutez-la au panier dans le plan.",
+      );
+      return;
+    }
+    if (!bridgeReady || checking) return;
+    setChecking(true);
+    setStatus("Confirmation des places...");
+    webviewRef.current?.injectJavaScript(`
+      if (window.lamakoPrimarySeatActionFromApp) {
+        window.lamakoPrimarySeatActionFromApp();
+      } else if (window.lamakoGoToCheckoutFromApp) {
         window.lamakoGoToCheckoutFromApp();
       }
       true;
@@ -325,7 +435,11 @@ export function SeatPurchaseFlow({
             <Text style={styles.primaryButtonText}>Réessayer</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={onClose} style={styles.secondaryButton}>
-            <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>Retour à l'événement</Text>
+            <Text
+              style={[styles.secondaryButtonText, { color: colors.primary }]}
+            >
+              Retour à l'événement
+            </Text>
           </TouchableOpacity>
         </View>
       </ScreenContainer>
@@ -335,10 +449,7 @@ export function SeatPurchaseFlow({
   if (phase === "pending") {
     return (
       <ScreenContainer edges={["top", "left", "right", "bottom"]}>
-        <SeatFlowHeader
-          title="Paiement en attente"
-          onClose={handleClose}
-        />
+        <SeatFlowHeader title="Paiement en attente" onClose={handleClose} />
         {seatSummaryModal}
         <View style={styles.center}>
           <IconSymbol name="clock.fill" size={48} color={colors.warning} />
@@ -428,63 +539,122 @@ export function SeatPurchaseFlow({
         onSeatSummary={() => setShowSeatSummary(true)}
       />
       {seatSummaryModal}
-      <WebViewComponent
-        ref={webviewRef}
-        source={{ uri: session!.seatUrl }}
-        style={{ flex: 1 }}
-        javaScriptEnabled
-        domStorageEnabled
-        mixedContentMode="never"
-        sharedCookiesEnabled
-        thirdPartyCookiesEnabled
-        startInLoadingState
-        setSupportMultipleWindows={false}
-        injectedJavaScript={injectedJavaScript}
-        onMessage={handleMessage}
-        onNavigationStateChange={handleNavChange}
-        renderLoading={() => (
-          <View style={styles.loader}>
-            <SeatingChartSkeleton />
-          </View>
-        )}
-        onShouldStartLoadWithRequest={(request: any) => {
-          const url = request.url || "";
-          if (url.startsWith("ticketbylamako://")) return false;
-          if (request.isTopFrame === false) {
-            return url === "about:blank" || url.startsWith("https://");
-          }
-          return isAllowedWebViewUrl(url, "first-party");
-        }}
-        onHttpError={(event: any) => {
-          const statusCode = Number(event?.nativeEvent?.statusCode || 0);
-          const failedUrl = String(event?.nativeEvent?.url || "");
-          const isSeatingSessionPage = isSeatingSessionUrl(failedUrl);
-          if (
-            statusCode === 404 &&
-            phase === "seating" &&
-            isSeatingSessionPage &&
-            sessionRecoveryRef.current < 1
-          ) {
-            sessionRecoveryRef.current += 1;
-            restartSeatingSession();
-          }
-        }}
-        onError={(event: any) => {
-          const description =
-            event?.nativeEvent?.description || "Erreur WebView";
-          Alert.alert("Erreur", description);
-        }}
-        bounces={false}
-        overScrollMode="never"
-        contentInsetAdjustmentBehavior="never"
-        automaticallyAdjustContentInsets={false}
-        onLoadEnd={() => {
-          webviewRef.current?.injectJavaScript(
-            "window.lamakoOpenSeatingChart && window.lamakoOpenSeatingChart(); true;",
-          );
-        }}
-        onContentProcessDidTerminate={() => webviewRef.current?.reload()}
-      />
+      <View style={styles.webViewFrame}>
+        <WebViewComponent
+          ref={webviewRef}
+          source={{ uri: session!.seatUrl }}
+          style={{ flex: 1 }}
+          javaScriptEnabled
+          domStorageEnabled
+          mixedContentMode="never"
+          sharedCookiesEnabled
+          thirdPartyCookiesEnabled
+          startInLoadingState
+          setSupportMultipleWindows={false}
+          injectedJavaScript={injectedJavaScript}
+          onMessage={handleMessage}
+          onNavigationStateChange={handleNavChange}
+          renderLoading={() => (
+            <View style={styles.loader}>
+              <SeatingChartSkeleton />
+            </View>
+          )}
+          onShouldStartLoadWithRequest={(request: any) => {
+            const url = request.url || "";
+            if (url.startsWith("ticketbylamako://")) return false;
+            if (request.isTopFrame === false) {
+              return url === "about:blank" || url.startsWith("https://");
+            }
+            return isAllowedWebViewUrl(url, "first-party");
+          }}
+          onHttpError={(event: any) => {
+            const statusCode = Number(event?.nativeEvent?.statusCode || 0);
+            const failedUrl = String(event?.nativeEvent?.url || "");
+            const isSeatingSessionPage = isSeatingSessionUrl(failedUrl);
+            if (
+              statusCode === 404 &&
+              phase === "seating" &&
+              isSeatingSessionPage &&
+              sessionRecoveryRef.current < 1
+            ) {
+              sessionRecoveryRef.current += 1;
+              restartSeatingSession();
+            }
+          }}
+          onError={(event: any) => {
+            const description =
+              event?.nativeEvent?.description || "Erreur WebView";
+            Alert.alert("Erreur", description);
+          }}
+          bounces={false}
+          overScrollMode="never"
+          contentInsetAdjustmentBehavior="never"
+          automaticallyAdjustContentInsets={false}
+          onLoadEnd={() => {
+            webviewRef.current?.injectJavaScript(
+              "window.lamakoOpenSeatingChart && window.lamakoOpenSeatingChart(); true;",
+            );
+          }}
+          onContentProcessDidTerminate={() => webviewRef.current?.reload()}
+        />
+      </View>
+      {!seatDialogOpen ? (
+        <View
+          style={[
+            styles.seatingFooter,
+            {
+              backgroundColor: colors.background,
+              borderTopColor: colors.border,
+            },
+          ]}
+        >
+          <Text
+            style={[styles.seatingStatus, { color: colors.muted }]}
+            accessibilityLiveRegion="polite"
+            numberOfLines={2}
+          >
+            {pendingCount
+              ? `${pendingCount} place(s) à ajouter au panier`
+              : inCartCount
+                ? `${inCartCount} place(s) prête(s) à confirmer`
+                : status}
+          </Text>
+          <TouchableOpacity
+            onPress={continueToCheckout}
+            disabled={
+              !inCartCount || !bridgeReady || checking || pendingCount > 0
+            }
+            accessibilityRole="button"
+            accessibilityState={{
+              disabled:
+                !inCartCount || !bridgeReady || checking || pendingCount > 0,
+              busy: checking,
+            }}
+            style={[
+              styles.confirmSeatsButton,
+              {
+                backgroundColor: colors.primary,
+                opacity:
+                  inCartCount && bridgeReady && !checking && !pendingCount
+                    ? 1
+                    : 0.45,
+              },
+            ]}
+          >
+            {checking ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.confirmSeatsText}>
+                {pendingCount
+                  ? "Validez la place dans sa fenêtre"
+                  : inCartCount
+                    ? `Confirmer ${inCartCount} place(s)`
+                    : "Sélectionnez une place"}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      ) : null}
     </ScreenContainer>
   );
 }

@@ -184,6 +184,18 @@ export function OrderSummary({
             <Text style={[styles.itemQty, { color: colors.muted }]}>
               {item.quantity} billet{item.quantity > 1 ? "s" : ""}
             </Text>
+            {item.seatLabels?.length ? (
+              <View style={styles.seatRow}>
+                <IconSymbol
+                  name="chair.fill"
+                  size={14}
+                  color={colors.primary}
+                />
+                <Text style={[styles.seatText, { color: colors.primary }]}>
+                  {item.seatLabels.join(", ")}
+                </Text>
+              </View>
+            ) : null}
           </View>
           <Text style={[styles.itemPrice, { color: colors.foreground }]}>
             {formatAriary(Number(item.total || 0))}

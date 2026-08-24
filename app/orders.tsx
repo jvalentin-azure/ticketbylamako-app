@@ -243,6 +243,9 @@ export default function OrdersScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<
+    "all" | "success" | "pending" | "failed"
+  >("all");
 
   const load = useCallback(async (userId: number, activeRequest: number) => {
     try {
@@ -329,8 +332,26 @@ export default function OrdersScreen() {
     (order) => order.paymentStatus === "success",
   ).length;
   const pendingCount = orders.filter(
-    (order) => order.paymentStatus === "pending" || order.requiresManualReview,
+    (order) =>
+      order.paymentStatus === "pending" ||
+      order.paymentStatus === "review" ||
+      order.requiresManualReview,
   ).length;
+  const failedCount = orders.filter((order) =>
+    ["failed", "cancelled", "expired"].includes(order.paymentStatus),
+  ).length;
+  const filteredOrders = orders.filter((order) => {
+    if (activeFilter === "all") return true;
+    if (activeFilter === "success") return order.paymentStatus === "success";
+    if (activeFilter === "failed") {
+      return ["failed", "cancelled", "expired"].includes(order.paymentStatus);
+    }
+    return (
+      order.paymentStatus === "pending" ||
+      order.paymentStatus === "review" ||
+      order.requiresManualReview
+    );
+  });
 
   return (
     <ScreenContainer>
@@ -350,44 +371,79 @@ export default function OrdersScreen() {
       </View>
 
       {!loading && orders.length > 0 ? (
-        <View
-          style={[
-            styles.summaryBar,
-            {
-              backgroundColor: colors.surface,
-              borderBottomColor: colors.border,
-            },
-          ]}
-        >
-          <View style={styles.summaryItem}>
-            <Text style={[styles.summaryNumber, { color: colors.foreground }]}>
-              {orders.length}
-            </Text>
-            <Text style={[styles.summaryLabel, { color: colors.muted }]}>
-              Commandes
-            </Text>
+        <View style={styles.overview}>
+          <Text style={[styles.overviewTitle, { color: colors.foreground }]}>
+            Votre activité
+          </Text>
+          <Text style={[styles.overviewCopy, { color: colors.muted }]}>
+            Suivez clairement les paiements confirmés, en vérification ou non
+            aboutis.
+          </Text>
+          <View style={styles.summaryBar}>
+            {[
+              {
+                label: "Toutes",
+                value: orders.length,
+                tone: colors.foreground,
+              },
+              { label: "Payées", value: completedCount, tone: "#15803D" },
+              { label: "En attente", value: pendingCount, tone: "#B45309" },
+              { label: "Échouées", value: failedCount, tone: "#DC2626" },
+            ].map((item) => (
+              <View
+                key={item.label}
+                style={[
+                  styles.summaryItem,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <Text style={[styles.summaryNumber, { color: item.tone }]}>
+                  {item.value}
+                </Text>
+                <Text style={[styles.summaryLabel, { color: colors.muted }]}>
+                  {item.label}
+                </Text>
+              </View>
+            ))}
           </View>
-          <View
-            style={[styles.summaryDivider, { backgroundColor: colors.border }]}
-          />
-          <View style={styles.summaryItem}>
-            <Text style={[styles.summaryNumber, { color: "#22C55E" }]}>
-              {completedCount}
-            </Text>
-            <Text style={[styles.summaryLabel, { color: colors.muted }]}>
-              Payées
-            </Text>
-          </View>
-          <View
-            style={[styles.summaryDivider, { backgroundColor: colors.border }]}
-          />
-          <View style={styles.summaryItem}>
-            <Text style={[styles.summaryNumber, { color: "#F59E0B" }]}>
-              {pendingCount}
-            </Text>
-            <Text style={[styles.summaryLabel, { color: colors.muted }]}>
-              À finaliser
-            </Text>
+          <View style={styles.filters}>
+            {[
+              ["all", "Toutes"],
+              ["success", "Payées"],
+              ["pending", "En attente"],
+              ["failed", "Échouées"],
+            ].map(([key, label]) => {
+              const selected = activeFilter === key;
+              return (
+                <TouchableOpacity
+                  key={key}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  onPress={() => setActiveFilter(key as typeof activeFilter)}
+                  style={[
+                    styles.filterChip,
+                    {
+                      backgroundColor: selected
+                        ? colors.primary
+                        : colors.surface,
+                      borderColor: selected ? colors.primary : colors.border,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.filterText,
+                      { color: selected ? "#fff" : colors.foreground },
+                    ]}
+                  >
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
       ) : null}
@@ -396,7 +452,7 @@ export default function OrdersScreen() {
         <OrderListSkeleton color={colors.border} />
       ) : (
         <FlatList
-          data={orders}
+          data={filteredOrders}
           keyExtractor={(order) => String(order.id)}
           contentContainerStyle={styles.listContent}
           refreshControl={
@@ -467,7 +523,11 @@ export default function OrdersScreen() {
                 />
               </View>
               <Text style={[styles.stateTitle, { color: colors.foreground }]}>
-                {errorMessage ? "Commandes indisponibles" : "Aucune commande"}
+                {errorMessage
+                  ? "Commandes indisponibles"
+                  : activeFilter === "all"
+                    ? "Aucune commande"
+                    : "Aucune commande dans ce statut"}
               </Text>
               <Text style={[styles.stateCopy, { color: colors.muted }]}>
                 {errorMessage ||
@@ -512,14 +572,32 @@ const styles = StyleSheet.create({
   headerSpacer: { width: 44 },
   summaryBar: {
     flexDirection: "row",
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
+    gap: 8,
+    marginTop: 14,
   },
-  summaryItem: { flex: 1, alignItems: "center" },
+  overview: { paddingHorizontal: 16, paddingBottom: 14 },
+  overviewTitle: { fontSize: 18, fontWeight: "800" },
+  overviewCopy: { fontSize: 12, lineHeight: 17, marginTop: 3 },
+  summaryItem: {
+    flex: 1,
+    minHeight: 66,
+    borderWidth: 1,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   summaryNumber: { fontSize: 20, fontWeight: "800" },
   summaryLabel: { fontSize: 11, marginTop: 2 },
-  summaryDivider: { width: 1, marginVertical: 4 },
+  filters: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
+  filterChip: {
+    minHeight: 36,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 13,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  filterText: { fontSize: 12, fontWeight: "700" },
   listContent: { padding: 16, paddingBottom: 28, flexGrow: 1 },
   orderCard: {
     borderRadius: 8,

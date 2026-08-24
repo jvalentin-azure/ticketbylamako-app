@@ -9,7 +9,6 @@ import {
   Dimensions,
   Modal,
   Alert,
-  Linking,
   Platform,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
@@ -46,6 +45,7 @@ import { EmbeddedGoogleMap } from "@/components/maps/embedded-google-map";
 import { CatalogImage } from "@/components/catalog-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { addTicketEventToCalendar } from "@/lib/event-calendar";
+import { addTicketToNativeWallet } from "@/lib/native-wallet";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 
@@ -172,12 +172,10 @@ function TicketCard({
   const qrValue = ticket.ticket_code;
   const [calendarBusy, setCalendarBusy] = useState(false);
   const [walletBusy, setWalletBusy] = useState(false);
-  const legacyWalletUrl =
-    Platform.OS === "ios" ? ticket.apple_wallet_url : ticket.google_wallet_url;
   const walletAvailable =
     Platform.OS === "ios"
-      ? ticket.apple_wallet_available === true || Boolean(legacyWalletUrl)
-      : ticket.google_wallet_available === true || Boolean(legacyWalletUrl);
+      ? ticket.apple_wallet_available === true
+      : ticket.google_wallet_available === true;
 
   const handleAddToCalendar = async () => {
     if (calendarBusy) return;
@@ -213,18 +211,29 @@ function TicketCard({
     setWalletBusy(true);
     try {
       const platform = Platform.OS === "ios" ? "apple" : "google";
-      const response = legacyWalletUrl
-        ? { url: legacyWalletUrl }
-        : await getMobileTicketWalletLink(
-            order.id,
-            ticket.instance_id,
-            platform,
-          );
-      await Linking.openURL(response.url);
-    } catch {
+      const response = await getMobileTicketWalletLink(
+        order.id,
+        ticket.instance_id,
+        platform,
+      );
+      const result = await addTicketToNativeWallet(response.url);
+      if (result === "added") {
+        Alert.alert(
+          "Billet ajouté",
+          `Votre billet est maintenant disponible dans ${Platform.OS === "ios" ? "Apple Wallet" : "Google Wallet"}.`,
+        );
+      } else {
+        Alert.alert(
+          "Ajout interrompu",
+          "Le billet n'a pas été ajouté. Il est peut-être déjà présent dans votre Wallet.",
+        );
+      }
+    } catch (error) {
       Alert.alert(
         "Wallet indisponible",
-        "Le pass n'a pas pu être ouvert. Réessayez dans quelques instants.",
+        error instanceof Error
+          ? error.message
+          : "Le billet n'a pas pu être ajouté. Réessayez dans quelques instants.",
       );
     } finally {
       setWalletBusy(false);

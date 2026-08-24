@@ -1,9 +1,17 @@
-import { Text, View, TouchableOpacity, ScrollView, Alert } from "react-native";
+import {
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
+import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/lib/auth-provider";
-import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useThemeContext } from "@/lib/theme-provider";
 import { useRewards } from "@/lib/rewards-provider";
 import { getAppVersionLabel } from "@/lib/app-version";
@@ -12,7 +20,7 @@ export default function ProfileScreen() {
   const colors = useColors();
   const router = useRouter();
   const { isAuthenticated, user, logout } = useAuth();
-  const { colorScheme: scheme, setColorScheme: setScheme } = useThemeContext();
+  const { colorScheme, setColorScheme } = useThemeContext();
   const {
     state: rewards,
     currentTier,
@@ -20,392 +28,352 @@ export default function ProfileScreen() {
     pointsToNextTier,
     nextTier,
   } = useRewards();
+  const displayName =
+    [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+    user?.displayName ||
+    "Client TicketByLamako";
 
-  const menuItems = [
-    ...(isAuthenticated
-      ? [
-          {
-            icon: "person.fill" as const,
-            label: "Modifier le profil",
-            onPress: () => router.push("/edit-profile" as any),
-          },
-        ]
-      : []),
+  const accountItems = [
     {
-      icon:
-        scheme === "dark" ? ("sun.max.fill" as const) : ("moon.fill" as const),
-      label: scheme === "dark" ? "Mode clair" : "Mode sombre",
-      onPress: () => setScheme(scheme === "dark" ? "light" : "dark"),
+      icon: "person.fill" as const,
+      label: "Informations personnelles",
+      detail: "Coordonnées et facturation",
+      onPress: () => router.push("/edit-profile" as any),
     },
     {
       icon: "gearshape.fill" as const,
-      label: "Préférences de notifications",
+      label: "Notifications",
+      detail: "Alertes importantes et préférences",
       onPress: () => router.push("/notification-settings" as any),
     },
     {
       icon: "hand.raised.fill" as const,
       label: "Centre légal et données",
+      detail: "Confidentialité, documents et droits",
       onPress: () => router.push("/privacy-data" as any),
+    },
+    {
+      icon:
+        colorScheme === "dark"
+          ? ("sun.max.fill" as const)
+          : ("moon.fill" as const),
+      label:
+        colorScheme === "dark"
+          ? "Passer en mode clair"
+          : "Passer en mode sombre",
+      detail: "Adapter l'application à votre confort",
+      onPress: () => setColorScheme(colorScheme === "dark" ? "light" : "dark"),
     },
   ];
 
   const handleLogout = () => {
-    Alert.alert("Déconnexion", "Êtes-vous sûr de vouloir vous déconnecter ?", [
+    Alert.alert("Déconnexion", "Voulez-vous vraiment vous déconnecter ?", [
       { text: "Annuler", style: "cancel" },
-      { text: "Déconnexion", style: "destructive", onPress: logout },
+      { text: "Se déconnecter", style: "destructive", onPress: logout },
     ]);
   };
 
   return (
     <ScreenContainer edges={["left", "right"]}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <View
-          style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 }}
-        >
-          <Text
-            style={{
-              color: colors.foreground,
-              fontSize: 22,
-              fontWeight: "700",
-            }}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.content}
+      >
+        <Text style={[styles.pageTitle, { color: colors.foreground }]}>
+          Mon espace
+        </Text>
+        {isAuthenticated && user ? (
+          <LinearGradient
+            colors={["#171323", "#704016"]}
+            style={styles.identityHero}
           >
-            Profil
-          </Text>
-        </View>
-
-        {/* User Card */}
-        <View
-          style={{
-            marginHorizontal: 16,
-            padding: 20,
-            borderRadius: 16,
-            backgroundColor: colors.surface,
-            borderWidth: 1,
-            borderColor: colors.border,
-            marginBottom: 20,
-          }}
-        >
-          {isAuthenticated && user ? (
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <View
-                style={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: 28,
-                  backgroundColor: colors.primary,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Text
-                  style={{ color: "#fff", fontSize: 22, fontWeight: "700" }}
-                >
-                  {(user.firstName || user.displayName || "U")[0].toUpperCase()}
-                </Text>
-              </View>
-              <View style={{ marginLeft: 14, flex: 1 }}>
-                <Text
-                  style={{
-                    color: colors.foreground,
-                    fontSize: 18,
-                    fontWeight: "700",
-                  }}
-                >
-                  {[user.firstName, user.lastName].filter(Boolean).join(" ") ||
-                    user.displayName ||
-                    "Client TicketByLamako"}
-                </Text>
-                <Text
-                  style={{ color: colors.muted, fontSize: 13, marginTop: 2 }}
-                >
-                  {user.email}
-                </Text>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    marginTop: 4,
-                  }}
-                >
-                  <View
-                    style={{
-                      backgroundColor: colors.primary + "20",
-                      paddingHorizontal: 8,
-                      paddingVertical: 2,
-                      borderRadius: 6,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        color: colors.primary,
-                        fontSize: 11,
-                        fontWeight: "600",
-                      }}
-                    >
-                      Client
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            </View>
-          ) : (
-            <View style={{ alignItems: "center", paddingVertical: 10 }}>
-              <IconSymbol name="person.fill" size={48} color={colors.muted} />
-              <Text
-                style={{
-                  color: colors.foreground,
-                  fontSize: 16,
-                  fontWeight: "600",
-                  marginTop: 10,
-                }}
-              >
-                Non connecté
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>
+                {displayName[0]?.toUpperCase()}
               </Text>
-              <TouchableOpacity
-                onPress={() => router.push("/(auth)/login" as any)}
-                accessibilityRole="button"
-                accessibilityLabel="Se connecter à TicketByLamako"
-                style={{
-                  backgroundColor: colors.primary,
-                  borderRadius: 12,
-                  paddingVertical: 10,
-                  paddingHorizontal: 28,
-                  marginTop: 14,
-                }}
-              >
-                <Text
-                  style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}
-                >
-                  Se connecter
-                </Text>
-              </TouchableOpacity>
             </View>
-          )}
-        </View>
-
-        {/* LamakoRewards Card */}
-        {isAuthenticated && (
-          <TouchableOpacity
-            onPress={() => router.push("/rewards" as any)}
-            accessibilityRole="button"
-            accessibilityLabel="Voir mon compte LamakoRewards"
-            style={{
-              marginHorizontal: 16,
-              marginBottom: 20,
-              padding: 16,
-              borderRadius: 16,
-              backgroundColor: colors.surface,
-              borderWidth: 1,
-              borderColor: currentTier.color + "60",
-              overflow: "hidden",
-            }}
-          >
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-              }}
+            <View style={styles.identityCopy}>
+              <Text style={styles.name}>{displayName}</Text>
+              <Text style={styles.email} numberOfLines={1}>
+                {user.email}
+              </Text>
+              <Text style={styles.memberLabel}>Compte client vérifié</Text>
+            </View>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Modifier le profil"
+              onPress={() => router.push("/edit-profile" as any)}
+              style={styles.editButton}
             >
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <Text style={{ fontSize: 24 }}>{currentTier.icon}</Text>
-                <View style={{ marginLeft: 10 }}>
-                  <Text
-                    style={{
-                      color: colors.foreground,
-                      fontSize: 14,
-                      fontWeight: "700",
-                    }}
-                  >
-                    LamakoRewards
-                  </Text>
-                  <Text
-                    style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}
-                  >
-                    Niveau {currentTier.name}
-                  </Text>
-                </View>
-              </View>
-              <View style={{ alignItems: "flex-end" }}>
-                <Text
-                  style={{
-                    color: colors.foreground,
-                    fontSize: 18,
-                    fontWeight: "700",
-                  }}
-                >
-                  {rewards.availablePoints}
-                </Text>
-                <Text style={{ color: colors.muted, fontSize: 11 }}>
-                  points
-                </Text>
-              </View>
-            </View>
-            {nextTier && (
-              <View style={{ marginTop: 12 }}>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    marginBottom: 4,
-                  }}
-                >
-                  <Text style={{ color: colors.muted, fontSize: 11 }}>
-                    {pointsToNextTier} pts pour {nextTier.name}
-                  </Text>
-                  <Text style={{ color: colors.muted, fontSize: 11 }}>
-                    {Math.round(progressToNextTier * 100)}%
-                  </Text>
-                </View>
-                <View
-                  style={{
-                    height: 4,
-                    backgroundColor: colors.border,
-                    borderRadius: 2,
-                    overflow: "hidden",
-                  }}
-                >
-                  <View
-                    style={{
-                      height: 4,
-                      backgroundColor: currentTier.color,
-                      borderRadius: 2,
-                      width: `${progressToNextTier * 100}%`,
-                    }}
-                  />
-                </View>
-              </View>
-            )}
-            {rewards.referralCode ? (
-              <View
-                style={{
-                  marginTop: 10,
-                  flexDirection: "row",
-                  alignItems: "center",
-                }}
-              >
-                <Text style={{ color: colors.muted, fontSize: 11 }}>
-                  Code parrainage :{" "}
-                </Text>
-                <Text
-                  style={{
-                    color: colors.primary,
-                    fontSize: 12,
-                    fontWeight: "700",
-                    letterSpacing: 1,
-                  }}
-                >
-                  {rewards.referralCode}
-                </Text>
-              </View>
-            ) : null}
-          </TouchableOpacity>
+              <IconSymbol name="pencil" size={17} color="#fff" />
+            </TouchableOpacity>
+          </LinearGradient>
+        ) : (
+          <View style={[styles.signedOut, { borderColor: colors.border }]}>
+            <IconSymbol name="person.fill" size={36} color={colors.muted} />
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+              Retrouvez vos billets et avantages
+            </Text>
+            <TouchableOpacity
+              onPress={() => router.push("/(auth)/login" as any)}
+              style={[
+                styles.primaryButton,
+                { backgroundColor: colors.primary },
+              ]}
+            >
+              <Text style={styles.primaryButtonText}>Se connecter</Text>
+            </TouchableOpacity>
+          </View>
         )}
 
-        {/* Menu Items */}
-        <Text
-          style={{
-            color: colors.muted,
-            fontSize: 12,
-            fontWeight: "700",
-            textTransform: "uppercase",
-            marginHorizontal: 20,
-            marginBottom: 8,
-          }}
-        >
-          Informations et préférences
+        {isAuthenticated ? (
+          <TouchableOpacity
+            onPress={() => router.push("/rewards" as any)}
+            activeOpacity={0.82}
+            style={[
+              styles.rewardsPanel,
+              {
+                borderColor: currentTier.color + "70",
+                backgroundColor: colors.surface,
+              },
+            ]}
+          >
+            <View style={styles.rewardsHeader}>
+              <View>
+                <Text style={[styles.eyebrow, { color: currentTier.color }]}>
+                  LAMAKOREWARDS · {currentTier.name.toUpperCase()}
+                </Text>
+                <Text style={[styles.points, { color: colors.foreground }]}>
+                  {rewards.availablePoints.toLocaleString("fr-FR")} pts
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.tierMark,
+                  { backgroundColor: currentTier.color + "20" },
+                ]}
+              >
+                <Text style={styles.tierIcon}>{currentTier.icon}</Text>
+              </View>
+            </View>
+            {nextTier ? (
+              <>
+                <View
+                  style={[
+                    styles.progressTrack,
+                    { backgroundColor: colors.border },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.progressFill,
+                      {
+                        width: `${Math.min(progressToNextTier * 100, 100)}%`,
+                        backgroundColor: currentTier.color,
+                      },
+                    ]}
+                  />
+                </View>
+                <Text style={[styles.progressText, { color: colors.muted }]}>
+                  {pointsToNextTier.toLocaleString("fr-FR")} points avant{" "}
+                  {nextTier.name}
+                </Text>
+              </>
+            ) : null}
+            <View style={styles.rewardsLink}>
+              <Text style={[styles.rewardsLinkText, { color: colors.primary }]}>
+                Voir mon activité Rewards
+              </Text>
+              <IconSymbol
+                name="chevron.right"
+                size={15}
+                color={colors.primary}
+              />
+            </View>
+          </TouchableOpacity>
+        ) : null}
+
+        <Text style={[styles.sectionHeading, { color: colors.foreground }]}>
+          Compte et préférences
         </Text>
         <View
-          style={{
-            marginHorizontal: 16,
-            borderRadius: 16,
-            backgroundColor: colors.surface,
-            borderWidth: 1,
-            borderColor: colors.border,
-            overflow: "hidden",
-          }}
+          style={[
+            styles.settingsList,
+            { borderColor: colors.border, backgroundColor: colors.surface },
+          ]}
         >
-          {menuItems.map((item, i) => (
+          {accountItems.map((item, index) => (
             <TouchableOpacity
               key={item.label}
               onPress={item.onPress}
-              accessibilityRole="button"
-              accessibilityLabel={item.label}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                paddingVertical: 16,
-                paddingHorizontal: 16,
-                borderBottomWidth: i < menuItems.length - 1 ? 1 : 0,
-                borderBottomColor: colors.border,
-              }}
+              style={[
+                styles.settingRow,
+                index > 0 && {
+                  borderTopWidth: 1,
+                  borderTopColor: colors.border,
+                },
+              ]}
             >
               <View
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 10,
-                  backgroundColor: colors.primary + "12",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
+                style={[
+                  styles.settingIcon,
+                  { backgroundColor: colors.primary + "12" },
+                ]}
               >
                 <IconSymbol name={item.icon} size={18} color={colors.primary} />
               </View>
-              <Text
-                style={{
-                  color: colors.foreground,
-                  fontSize: 15,
-                  fontWeight: "500",
-                  marginLeft: 12,
-                  flex: 1,
-                }}
-              >
-                {item.label}
-              </Text>
+              <View style={styles.settingCopy}>
+                <Text
+                  style={[styles.settingLabel, { color: colors.foreground }]}
+                >
+                  {item.label}
+                </Text>
+                <Text style={[styles.settingDetail, { color: colors.muted }]}>
+                  {item.detail}
+                </Text>
+              </View>
               <IconSymbol name="chevron.right" size={16} color={colors.muted} />
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* Logout */}
-        {isAuthenticated && (
+        {isAuthenticated ? (
           <TouchableOpacity
             onPress={handleLogout}
-            accessibilityRole="button"
-            accessibilityLabel="Se déconnecter"
-            style={{
-              marginHorizontal: 16,
-              marginTop: 20,
-              padding: 16,
-              borderRadius: 14,
-              backgroundColor: colors.error + "10",
-              borderWidth: 1,
-              borderColor: colors.error + "30",
-              alignItems: "center",
-            }}
+            style={[styles.logout, { borderColor: colors.error + "50" }]}
           >
-            <Text
-              style={{ color: colors.error, fontSize: 15, fontWeight: "600" }}
-            >
+            <IconSymbol name="power" size={18} color={colors.error} />
+            <Text style={[styles.logoutText, { color: colors.error }]}>
               Se déconnecter
             </Text>
           </TouchableOpacity>
-        )}
-
-        {/* Version */}
-        <Text
-          style={{
-            color: colors.muted,
-            fontSize: 12,
-            textAlign: "center",
-            marginTop: 24,
-            marginBottom: 40,
-          }}
-        >
+        ) : null}
+        <Text style={[styles.version, { color: colors.muted }]}>
           {getAppVersionLabel()}
         </Text>
       </ScrollView>
     </ScreenContainer>
   );
 }
+
+const styles = StyleSheet.create({
+  content: { padding: 16, paddingBottom: 36 },
+  pageTitle: { fontSize: 24, fontWeight: "800", marginBottom: 14 },
+  identityHero: {
+    minHeight: 112,
+    borderRadius: 8,
+    padding: 18,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  avatar: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.35)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarText: { color: "#fff", fontSize: 24, fontWeight: "800" },
+  identityCopy: { flex: 1, marginLeft: 13 },
+  name: { color: "#fff", fontSize: 19, fontWeight: "800" },
+  email: { color: "rgba(255,255,255,0.72)", fontSize: 12, marginTop: 3 },
+  memberLabel: {
+    color: "#F6C85F",
+    fontSize: 11,
+    fontWeight: "700",
+    marginTop: 7,
+  },
+  editButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 8,
+    backgroundColor: "rgba(255,255,255,0.14)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  signedOut: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 24,
+    alignItems: "center",
+  },
+  sectionTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    textAlign: "center",
+    marginTop: 10,
+  },
+  primaryButton: {
+    minHeight: 46,
+    borderRadius: 8,
+    paddingHorizontal: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 14,
+  },
+  primaryButtonText: { color: "#fff", fontSize: 14, fontWeight: "800" },
+  rewardsPanel: { marginTop: 14, borderWidth: 1, borderRadius: 8, padding: 16 },
+  rewardsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  eyebrow: { fontSize: 10, fontWeight: "800" },
+  points: { fontSize: 25, fontWeight: "800", marginTop: 4 },
+  tierMark: {
+    width: 46,
+    height: 46,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tierIcon: { fontSize: 24 },
+  progressTrack: {
+    height: 6,
+    borderRadius: 3,
+    marginTop: 14,
+    overflow: "hidden",
+  },
+  progressFill: { height: "100%", borderRadius: 3 },
+  progressText: { fontSize: 11, marginTop: 6 },
+  rewardsLink: { flexDirection: "row", alignItems: "center", marginTop: 13 },
+  rewardsLinkText: { fontSize: 12, fontWeight: "700", flex: 1 },
+  sectionHeading: {
+    fontSize: 16,
+    fontWeight: "800",
+    marginTop: 22,
+    marginBottom: 10,
+  },
+  settingsList: { borderWidth: 1, borderRadius: 8, overflow: "hidden" },
+  settingRow: {
+    minHeight: 70,
+    paddingHorizontal: 13,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  settingIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  settingCopy: { flex: 1, marginHorizontal: 11 },
+  settingLabel: { fontSize: 14, fontWeight: "700" },
+  settingDetail: { fontSize: 11, marginTop: 2 },
+  logout: {
+    minHeight: 50,
+    borderWidth: 1,
+    borderRadius: 8,
+    marginTop: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  logoutText: { fontSize: 14, fontWeight: "700" },
+  version: { textAlign: "center", fontSize: 11, marginTop: 18 },
+});

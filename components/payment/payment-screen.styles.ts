@@ -38,7 +38,7 @@ export const paymentStyles = StyleSheet.create({
     fontFamily: "Raleway_800ExtraBold",
     fontVariant: ["tabular-nums"],
   },
-  content: { padding: 16, paddingBottom: 38, gap: 16 },
+  content: { padding: 16, paddingBottom: 72, gap: 16 },
   progress: {
     minHeight: 66,
     borderWidth: 1,
@@ -114,6 +114,13 @@ export const paymentStyles = StyleSheet.create({
   itemCopy: { flex: 1 },
   itemName: { fontSize: 15, lineHeight: 20, fontFamily: "Raleway_700Bold" },
   itemQty: { marginTop: 3, fontSize: 12, fontFamily: "Raleway_500Medium" },
+  seatRow: {
+    marginTop: 7,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  seatText: { fontSize: 13, fontFamily: "Raleway_800ExtraBold" },
   itemPrice: { fontSize: 14, fontFamily: "Raleway_700Bold" },
   totalBlock: { borderTopWidth: 1, paddingTop: 12, marginTop: 4, gap: 8 },
   summaryLine: {

@@ -261,6 +261,7 @@ export interface MobileOrderItem {
   subtotal?: string;
   price?: number;
   sku?: string;
+  seatLabels?: string[];
 }
 
 export interface MobileOrderSummary {

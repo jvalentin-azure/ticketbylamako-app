@@ -4,15 +4,19 @@ import {
   StyleSheet,
   Platform,
   Text,
+  useWindowDimensions,
 } from "react-native";
 import { Image } from "expo-image";
-import { useRouter } from "expo-router";
+import { usePathname, useRouter } from "expo-router";
+import { useEffect, useMemo, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/use-colors";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useAuth } from "@/lib/auth-provider";
 import { useNotifications } from "@/lib/notifications-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
+import { useCart } from "@/lib/cart-provider";
+import { cartHoldRemainingMs } from "@/lib/cart-store";
 
 interface AppHeaderProps {
   onMenuPress?: () => void;
@@ -22,9 +26,32 @@ export function AppHeader({ onMenuPress }: AppHeaderProps) {
   const colors = useColors();
   const scheme = useColorScheme();
   const router = useRouter();
+  const pathname = usePathname();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const { isAuthenticated, user } = useAuth();
   const { unreadCount } = useNotifications();
+  const { expiresAt, itemCount } = useCart();
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    if (!expiresAt || itemCount === 0) return;
+    setNow(Date.now());
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [expiresAt, itemCount]);
+
+  const remaining = useMemo(
+    () => cartHoldRemainingMs(expiresAt, now),
+    [expiresAt, now],
+  );
+  const usesOwnReservationTimer = ["/cart", "/checkout", "/payment"].some(
+    (route) => pathname === route || pathname.endsWith(route),
+  );
+  const showHold =
+    !usesOwnReservationTimer && itemCount > 0 && remaining > 0 && !!expiresAt;
+  const remainingSeconds = Math.max(0, Math.ceil(remaining / 1000));
+  const remainingLabel = `${String(Math.floor(remainingSeconds / 60)).padStart(2, "0")}:${String(remainingSeconds % 60).padStart(2, "0")}`;
 
   const topPadding = Platform.OS === "web" ? 8 : Math.max(insets.top, 8);
 
@@ -126,6 +153,38 @@ export function AppHeader({ onMenuPress }: AppHeaderProps) {
           </TouchableOpacity>
         </View>
       </View>
+      {showHold ? (
+        <TouchableOpacity
+          onPress={() => router.push("/(tabs)/cart" as any)}
+          accessibilityRole="button"
+          accessibilityLabel={`Réservation en cours, ${remainingLabel} restantes. Ouvrir le panier.`}
+          style={[
+            styles.holdBar,
+            {
+              backgroundColor:
+                remaining <= 2 * 60 * 1000 ? "#FEF2F2" : "#FFF8E8",
+              borderColor: remaining <= 2 * 60 * 1000 ? "#DC2626" : "#D99A16",
+              maxWidth: Math.min(width - 24, 520),
+            },
+          ]}
+        >
+          <IconSymbol
+            name="clock.fill"
+            size={14}
+            color={remaining <= 2 * 60 * 1000 ? "#B91C1C" : "#8A5A00"}
+          />
+          <Text
+            style={[
+              styles.holdText,
+              { color: remaining <= 2 * 60 * 1000 ? "#B91C1C" : "#6B4700" },
+            ]}
+            numberOfLines={1}
+          >
+            Réservation · {remainingLabel}
+          </Text>
+          <Text style={styles.holdAction}>Voir le panier</Text>
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 }
@@ -193,5 +252,28 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 15,
     fontWeight: "700",
+  },
+  holdBar: {
+    alignSelf: "center",
+    width: "100%",
+    minHeight: 34,
+    borderWidth: 1,
+    borderRadius: 7,
+    paddingHorizontal: 10,
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+  },
+  holdText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  holdAction: {
+    color: "#704016",
+    fontSize: 11,
+    fontWeight: "600",
+    textDecorationLine: "underline",
   },
 });

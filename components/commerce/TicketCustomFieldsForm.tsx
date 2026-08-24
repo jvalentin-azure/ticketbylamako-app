@@ -40,7 +40,10 @@ function valueAsText(value: CheckoutFieldValue | undefined) {
 function checkboxValues(value: CheckoutFieldValue | undefined) {
   if (Array.isArray(value)) return value;
   if (typeof value === "string" && value.trim()) {
-    return value.split(",").map((item) => item.trim()).filter(Boolean);
+    return value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
   }
   return [];
 }
@@ -71,7 +74,9 @@ export function TicketCustomFieldsForm({
 
     return (
       <View key={key} style={{ gap: 6 }}>
-        <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "700" }}>
+        <Text
+          style={{ color: colors.foreground, fontSize: 13, fontWeight: "700" }}
+        >
           {label}
         </Text>
         {isChoice ? (
@@ -99,7 +104,9 @@ export function TicketCustomFieldsForm({
                     borderRadius: 999,
                     borderWidth: 1,
                     borderColor: selected ? colors.primary : colors.border,
-                    backgroundColor: selected ? colors.primary + "12" : colors.surface,
+                    backgroundColor: selected
+                      ? colors.primary + "12"
+                      : colors.surface,
                     paddingHorizontal: 12,
                     paddingVertical: 9,
                   }}
@@ -131,10 +138,15 @@ export function TicketCustomFieldsForm({
                   : "default"
             }
             autoCapitalize={field.type === "email" ? "none" : "sentences"}
+            blurOnSubmit={field.type !== "textarea"}
             multiline={field.type === "textarea"}
+            returnKeyType={field.type === "textarea" ? "default" : "next"}
+            submitBehavior={
+              field.type === "textarea" ? "newline" : "blurAndSubmit"
+            }
             style={{
               minHeight: field.type === "textarea" ? 96 : 50,
-              borderRadius: 12,
+              borderRadius: 8,
               borderWidth: 1,
               borderColor: error ? colors.error : colors.border,
               backgroundColor: colors.surface,
@@ -152,7 +164,9 @@ export function TicketCustomFieldsForm({
           </Text>
         )}
         {!!error && (
-          <Text style={{ color: colors.error, fontSize: 12, fontWeight: "700" }}>
+          <Text
+            style={{ color: colors.error, fontSize: 12, fontWeight: "700" }}
+          >
             {error}
           </Text>
         )}
@@ -168,14 +182,20 @@ export function TicketCustomFieldsForm({
         <View
           style={{
             backgroundColor: colors.surface,
-            borderRadius: 12,
+            borderRadius: 8,
             borderWidth: 1,
             borderColor: colors.border,
             padding: 14,
             gap: 12,
           }}
         >
-          <Text style={{ color: colors.foreground, fontSize: 16, fontWeight: "800" }}>
+          <Text
+            style={{
+              color: colors.foreground,
+              fontSize: 16,
+              fontWeight: "800",
+            }}
+          >
             Informations acheteur
           </Text>
           {buyerFields.map((field) =>
@@ -190,14 +210,16 @@ export function TicketCustomFieldsForm({
       )}
 
       {formItems.map((fieldItem) => {
-        const cartItem = cartItems.find((item) => item.productId === fieldItem.productId);
+        const cartItem = cartItems.find(
+          (item) => item.productId === fieldItem.productId,
+        );
         const title = cartItem?.ticketType || cartItem?.name || fieldItem.name;
         return (
           <View
             key={fieldItem.productId}
             style={{
               backgroundColor: colors.surface,
-              borderRadius: 12,
+              borderRadius: 8,
               borderWidth: 1,
               borderColor: colors.border,
               padding: 14,
@@ -205,7 +227,13 @@ export function TicketCustomFieldsForm({
             }}
           >
             <View style={{ gap: 4 }}>
-              <Text style={{ color: colors.foreground, fontSize: 16, fontWeight: "800" }}>
+              <Text
+                style={{
+                  color: colors.foreground,
+                  fontSize: 16,
+                  fontWeight: "800",
+                }}
+              >
                 {title}
               </Text>
               <Text style={{ color: colors.muted, fontSize: 12 }}>
@@ -223,7 +251,13 @@ export function TicketCustomFieldsForm({
                   gap: 12,
                 }}
               >
-                <Text style={{ color: colors.primary, fontSize: 14, fontWeight: "800" }}>
+                <Text
+                  style={{
+                    color: colors.primary,
+                    fontSize: 14,
+                    fontWeight: "800",
+                  }}
+                >
                   Participant {index + 1}
                 </Text>
                 {fieldItem.ownerFields.map((field) => {
@@ -231,7 +265,8 @@ export function TicketCustomFieldsForm({
                   return renderField(
                     field,
                     values[fieldItem.productId]?.[index]?.[key],
-                    (nextValue) => onChange(fieldItem.productId, index, key, nextValue),
+                    (nextValue) =>
+                      onChange(fieldItem.productId, index, key, nextValue),
                     `${fieldItem.productId}:${index}:${key}`,
                   );
                 })}

@@ -134,6 +134,7 @@ const config: ExpoConfig = {
   plugins: [
     "expo-router",
     "expo-apple-authentication",
+    "./plugins/with-wallet-kit",
     [
       "expo-calendar",
       {

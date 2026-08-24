@@ -31,7 +31,6 @@ import {
 import { CustomSplash } from "@/components/splash-screen";
 import { LoadingScreen } from "@/components/loading-screen";
 import { RewardsPopup } from "@/components/rewards-popup";
-import { GlobalCartHoldBanner } from "@/components/global-cart-hold-banner";
 import {
   setupNotificationHandler,
   setupAndroidChannel,
@@ -308,7 +307,6 @@ export default function RootLayout() {
             <Stack.Screen name="oauth/facebook_callback" />
           </Stack>
           <StatusBar style="auto" />
-          <GlobalCartHoldBanner />
           <RewardsPopup delay={30000} />
         </QueryClientProvider>
       </trpc.Provider>

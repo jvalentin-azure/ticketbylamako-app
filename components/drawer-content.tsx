@@ -41,7 +41,12 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
   const navigate = (path: string) => {
     onClose?.();
     setTimeout(() => {
-      router.navigate(path as any);
+      // Drawer destinations must not inherit the hidden Profile tab stack.
+      // Resetting the tab first makes the native back action return Home.
+      router.replace("/(tabs)/" as any);
+      if (path !== "/(tabs)/") {
+        setTimeout(() => router.push(path as any), 0);
+      }
     }, 200);
   };
 
