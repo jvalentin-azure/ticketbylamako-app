@@ -37,7 +37,11 @@ const statusMap: Record<
     color: "#22C55E",
     icon: "checkmark.circle.fill",
   },
-  processing: { label: "En cours", color: "#F59E0B", icon: "clock.fill" },
+  processing: {
+    label: "Payée · billets disponibles",
+    color: "#16A34A",
+    icon: "checkmark.circle.fill",
+  },
   "on-hold": {
     label: "En attente",
     color: "#6366F1",
@@ -202,7 +206,9 @@ export default function OrderDetailScreen() {
     );
   }
 
-  const st = statusMap[order.status] || {
+  const effectiveStatus =
+    order.payment_status === "success" ? "processing" : order.status;
+  const st = statusMap[effectiveStatus] || {
     label: order.status,
     color: colors.muted,
     icon: "questionmark.circle",
@@ -241,6 +247,26 @@ export default function OrderDetailScreen() {
             </Text>
           </View>
         </View>
+
+        {tickets.length > 0 ? (
+          <TouchableOpacity
+            accessibilityRole="button"
+            onPress={() => router.push(`/ticket/${order.id}` as any)}
+            style={[
+              styles.ticketPrimaryAction,
+              { backgroundColor: colors.primary },
+            ]}
+          >
+            <IconSymbol name="ticket.fill" size={18} color="#fff" />
+            <Text style={styles.ticketPrimaryActionText}>
+              Voir{" "}
+              {tickets.length > 1
+                ? `mes ${tickets.length} billets`
+                : "mon billet"}
+            </Text>
+            <IconSymbol name="chevron.right" size={16} color="#fff" />
+          </TouchableOpacity>
+        ) : null}
 
         {/* Order Summary */}
         <View
@@ -629,6 +655,18 @@ const styles = StyleSheet.create({
   },
   statusTitle: { fontSize: 16, fontWeight: "700" },
   statusDate: { fontSize: 12, marginTop: 2 },
+  ticketPrimaryAction: {
+    minHeight: 50,
+    marginHorizontal: 16,
+    marginTop: 10,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 9,
+  },
+  ticketPrimaryActionText: { color: "#fff", fontSize: 14, fontWeight: "800" },
   section: {
     marginHorizontal: 16,
     marginTop: 16,

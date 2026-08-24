@@ -45,6 +45,15 @@ describe("server-signed ticket wallet passes", () => {
     expect(wallet).toContain("https://pay.google.com/gp/v/save/");
   });
 
+  it("serves a reusable byte-exact Apple pass for Wallet validation", () => {
+    expect(wallet).not.toContain("delete_transient( 'lamako_apple_wallet_'");
+    expect(wallet).toContain("'pass'      => base64_encode( $pass )");
+    expect(wallet).toContain("base64_decode( (string) ( $record['pass']");
+    expect(wallet).toContain("while ( ob_get_level() > 0 )");
+    expect(wallet).toContain("header( 'Content-Length: ' . strlen( $pass ) )");
+    expect(wallet).toContain("X-Content-Type-Options: nosniff");
+  });
+
   it("exposes provider availability without returning signing secrets", () => {
     expect(commerce).toContain("'appleWalletAvailable'");
     expect(commerce).toContain("'googleWalletAvailable'");

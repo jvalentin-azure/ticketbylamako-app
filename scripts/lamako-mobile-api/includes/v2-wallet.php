@@ -144,12 +144,18 @@ function lamako_mobile_v2_create_wallet_link_route( WP_REST_Request $request ) {
         ] );
     }
 
+    $pass = lamako_mobile_v2_build_apple_wallet_pass( $order, $ticket );
+    if ( is_wp_error( $pass ) ) {
+        return $pass;
+    }
+
     $token = wp_generate_password( 48, false, false );
     $expires_at = time() + (int) LAMAKO_MOBILE_WALLET_LINK_TTL;
     set_transient( 'lamako_apple_wallet_' . hash( 'sha256', $token ), [
         'user_id'   => get_current_user_id(),
         'order_id'  => $order->get_id(),
         'ticket_id' => absint( $ticket['instanceId'] ?? 0 ),
+        'pass'      => base64_encode( $pass ),
         'expires_at'=> $expires_at,
     ], (int) LAMAKO_MOBILE_WALLET_LINK_TTL );
 
@@ -195,19 +201,30 @@ function lamako_mobile_v2_serve_apple_wallet_pass() {
         exit;
     }
 
-    $pass = lamako_mobile_v2_build_apple_wallet_pass( $order, $ticket );
-    if ( is_wp_error( $pass ) ) {
-        error_log( '[Lamako Wallet] Apple pass generation failed: ' . sanitize_text_field( $pass->get_error_code() ) );
-        status_header( 503 );
-        exit;
+    $pass = base64_decode( (string) ( $record['pass'] ?? '' ), true );
+    if ( ! is_string( $pass ) || $pass === '' ) {
+        $pass = lamako_mobile_v2_build_apple_wallet_pass( $order, $ticket );
+        if ( is_wp_error( $pass ) ) {
+            error_log( '[Lamako Wallet] Apple pass generation failed: ' . sanitize_text_field( $pass->get_error_code() ) );
+            status_header( 503 );
+            exit;
+        }
     }
 
-    delete_transient( 'lamako_apple_wallet_' . hash( 'sha256', $token ) );
+    // Wallet may fetch the pass more than once while validating and importing it.
+    // Keep the short-lived token reusable until its normal transient expiry.
+    while ( ob_get_level() > 0 ) {
+        ob_end_clean();
+    }
 
     nocache_headers();
     header( 'Content-Type: application/vnd.apple.pkpass' );
     header( 'Content-Disposition: attachment; filename="ticketbylamako-' . absint( $ticket['instanceId'] ) . '.pkpass"' );
+    header( 'X-Content-Type-Options: nosniff' );
     header( 'Content-Length: ' . strlen( $pass ) );
+    if ( strtoupper( (string) ( $_SERVER['REQUEST_METHOD'] ?? 'GET' ) ) === 'HEAD' ) {
+        exit;
+    }
     echo $pass; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Signed binary pass.
     exit;
 }

@@ -5556,6 +5556,49 @@ function lamako_mobile_v2_rewards_history( WP_REST_Request $request ) {
         ];
     }
 
+    // myCred only records purchases that actually earned points. Merge paid
+    // WooCommerce purchases so low-value orders and historical purchases are
+    // still visible in the Rewards activity without creating fake credits.
+    if ( function_exists( 'wc_get_orders' ) ) {
+        $seen_order_ids = [];
+        foreach ( $history as $entry ) {
+            if ( ! empty( $entry['orderId'] ) ) {
+                $seen_order_ids[ absint( $entry['orderId'] ) ] = true;
+            }
+        }
+        $orders = wc_get_orders( [
+            'customer_id' => $user_id,
+            'status'      => [ 'processing', 'completed', 'cs-complete' ],
+            'limit'       => $limit,
+            'orderby'     => 'date',
+            'order'       => 'DESC',
+            'return'      => 'objects',
+        ] );
+        foreach ( $orders as $order ) {
+            if ( ! $order instanceof WC_Order || ! $order->is_paid() || isset( $seen_order_ids[ $order->get_id() ] ) ) {
+                continue;
+            }
+            $points = max( 0, (float) $order->get_meta( '_lamako_points_awarded', true ) );
+            $date   = $order->get_date_paid() ?: $order->get_date_created();
+            $total  = number_format_i18n( (float) $order->get_total(), 0 );
+            $history[] = [
+                'id'          => 'order-' . $order->get_id(),
+                'type'        => 'earn',
+                'reference'   => sprintf( 'Commande #%s', $order->get_order_number() ),
+                'orderId'     => $order->get_id(),
+                'amount'      => $points,
+                'description' => $points > 0
+                    ? sprintf( 'Achat Commande #%s - %s Ar - +%s pts', $order->get_order_number(), $total, number_format_i18n( $points ) )
+                    : sprintf( 'Achat Commande #%s - %s Ar - aucun point attribué', $order->get_order_number(), $total ),
+                'date'        => $date ? $date->date( 'c' ) : wp_date( 'c' ),
+            ];
+        }
+        usort( $history, static function ( $left, $right ) {
+            return strtotime( (string) $right['date'] ) <=> strtotime( (string) $left['date'] );
+        } );
+        $history = array_slice( $history, 0, $limit );
+    }
+
     return rest_ensure_response( [ 'history' => $history ] );
 }
 

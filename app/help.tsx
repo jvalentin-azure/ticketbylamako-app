@@ -99,24 +99,25 @@ export default function HelpScreen() {
         contentContainerStyle={styles.content}
       >
         {/* Hero */}
-        <View style={styles.heroSection}>
+        <View style={[styles.heroSection, { backgroundColor: colors.primary }]}>
           <View
             style={[
               styles.heroIcon,
-              { backgroundColor: colors.primary + "15" },
+              { backgroundColor: "rgba(255,255,255,0.14)" },
             ]}
           >
             <IconSymbol
               name="questionmark.circle.fill"
               size={48}
-              color={colors.primary}
+              color="#fff"
             />
           </View>
-          <Text style={[styles.heroTitle, { color: colors.foreground }]}>
+          <Text style={[styles.heroTitle, { color: "#fff" }]}>
             Comment pouvons-nous vous aider ?
           </Text>
-          <Text style={[styles.heroSub, { color: colors.muted }]}>
-            Notre équipe est disponible pour répondre à toutes vos questions
+          <Text style={[styles.heroSub, { color: "rgba(255,255,255,0.78)" }]}>
+            Billet, paiement, siège ou compte: choisissez votre sujet pour
+            obtenir une aide directe.
           </Text>
         </View>
 
@@ -319,14 +320,20 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 17, fontWeight: "700" },
   content: { padding: 20, paddingBottom: 120 },
-  heroSection: { alignItems: "center", marginBottom: 28 },
+  heroSection: {
+    alignItems: "center",
+    marginBottom: 28,
+    borderRadius: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 24,
+  },
   heroIcon: {
     width: 80,
     height: 80,
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
+    marginBottom: 14,
   },
   heroTitle: { fontSize: 20, fontWeight: "700", textAlign: "center" },
   heroSub: { fontSize: 14, textAlign: "center", marginTop: 6 },

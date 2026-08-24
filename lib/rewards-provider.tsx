@@ -361,6 +361,8 @@ function normalizeRewardDescription(item: {
       : "Points utilisés pour une réduction LamakoRewards";
   }
 
+  if (item.amount <= 0 && raw) return raw;
+
   if (/points for order|product purchase|purchase|order/i.test(raw)) {
     return orderLabel
       ? `Achat ${orderLabel}: +${Math.abs(item.amount).toLocaleString("fr-FR")} pts`

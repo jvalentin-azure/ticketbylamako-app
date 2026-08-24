@@ -375,7 +375,7 @@ export default function OrdersScreen() {
               {completedCount}
             </Text>
             <Text style={[styles.summaryLabel, { color: colors.muted }]}>
-              Terminées
+              Payées
             </Text>
           </View>
           <View
@@ -386,7 +386,7 @@ export default function OrdersScreen() {
               {pendingCount}
             </Text>
             <Text style={[styles.summaryLabel, { color: colors.muted }]}>
-              En cours
+              À finaliser
             </Text>
           </View>
         </View>

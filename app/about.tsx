@@ -95,11 +95,13 @@ export default function AboutScreen() {
         contentContainerStyle={styles.content}
       >
         {/* Logo & Brand */}
-        <View style={styles.brandSection}>
+        <View
+          style={[styles.brandSection, { backgroundColor: colors.primary }]}
+        >
           <View
             style={[
               styles.logoContainer,
-              { backgroundColor: colors.surface, borderColor: colors.border },
+              { backgroundColor: "#fff", borderColor: "rgba(255,255,255,0.4)" },
             ]}
           >
             <Image
@@ -108,12 +110,19 @@ export default function AboutScreen() {
               resizeMode="contain"
             />
           </View>
-          <Text style={[styles.brandName, { color: colors.foreground }]}>
+          <Text style={[styles.brandName, { color: "#fff" }]}>
             Ticket by Lamako
           </Text>
-          <Text style={[styles.brandTagline, { color: colors.muted }]}>
+          <Text
+            style={[styles.brandTagline, { color: "rgba(255,255,255,0.8)" }]}
+          >
             La plateforme 100% malagasy qui simplifie vos événements
           </Text>
+          <View style={styles.brandProofRow}>
+            <Text style={styles.brandProof}>Billets vérifiables</Text>
+            <Text style={styles.brandProof}>Paiements locaux</Text>
+            <Text style={styles.brandProof}>Support humain</Text>
+          </View>
         </View>
 
         {/* About Description */}
@@ -408,7 +417,13 @@ const styles = StyleSheet.create({
   content: { padding: 20 },
 
   // Brand
-  brandSection: { alignItems: "center", marginBottom: 24 },
+  brandSection: {
+    alignItems: "center",
+    marginBottom: 24,
+    borderRadius: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 22,
+  },
   logoContainer: {
     width: 88,
     height: 88,
@@ -427,6 +442,22 @@ const styles = StyleSheet.create({
     marginTop: 6,
     lineHeight: 20,
     paddingHorizontal: 20,
+  },
+  brandProofRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 7,
+    marginTop: 14,
+  },
+  brandProof: {
+    color: "#fff",
+    backgroundColor: "rgba(255,255,255,0.14)",
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    fontSize: 10,
+    fontWeight: "700",
   },
 
   // Cards

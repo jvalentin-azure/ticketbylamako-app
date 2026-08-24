@@ -10,11 +10,21 @@ const cartProvider = fs.readFileSync(
   path.resolve(__dirname, "..", "lib", "cart-provider.tsx"),
   "utf8",
 );
+const globalBanner = fs.readFileSync(
+  path.resolve(__dirname, "..", "components", "global-cart-hold-banner.tsx"),
+  "utf8",
+);
+const rootLayout = fs.readFileSync(
+  path.resolve(__dirname, "..", "app", "_layout.tsx"),
+  "utf8",
+);
 
 describe("cart hold experience", () => {
   it("shows the persisted countdown directly in the cart", () => {
     expect(cartScreen).toContain("<CartHoldCountdown expiresAt={expiresAt} />");
-    expect(cartProvider).toContain('const CART_EXPIRY_KEY = "cart_expires_at_v2"');
+    expect(cartProvider).toContain(
+      'const CART_EXPIRY_KEY = "cart_expires_at_v2"',
+    );
   });
 
   it("does not extend the hold for quantity or navigation changes", () => {
@@ -24,5 +34,12 @@ describe("cart hold experience", () => {
     expect(cartProvider).toContain(
       "The hold is absolute: backgrounding the app never extends it.",
     );
+  });
+
+  it("keeps a compact reservation reminder available across app routes", () => {
+    expect(rootLayout).toContain("<GlobalCartHoldBanner />");
+    expect(globalBanner).toContain("remaining <= 5 * 60 * 1000");
+    expect(globalBanner).toContain("remaining <= 2 * 60 * 1000");
+    expect(globalBanner).toContain('router.push("/(tabs)/cart"');
   });
 });
