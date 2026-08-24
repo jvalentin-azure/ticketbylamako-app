@@ -13,6 +13,7 @@ if ( ! defined( 'LAMAKO_MOBILE_WALLET_LINK_TTL' ) ) {
 }
 
 add_action( 'rest_api_init', 'lamako_mobile_v2_wallet_register_routes' );
+add_action( 'template_redirect', 'lamako_mobile_v2_maybe_serve_public_apple_wallet_pass', 0 );
 add_action( 'admin_post_lamako_mobile_apple_wallet', 'lamako_mobile_v2_serve_apple_wallet_pass' );
 add_action( 'admin_post_nopriv_lamako_mobile_apple_wallet', 'lamako_mobile_v2_serve_apple_wallet_pass' );
 
@@ -155,15 +156,22 @@ function lamako_mobile_v2_create_wallet_link_route( WP_REST_Request $request ) {
     return rest_ensure_response( [
         'platform'  => 'apple',
         'url'       => add_query_arg( [
-            'action' => 'lamako_mobile_apple_wallet',
-            'token'  => $token,
-        ], admin_url( 'admin-post.php' ) ),
+            'lamako_wallet_pass' => $token,
+        ], home_url( '/' ) ),
         'expiresAt' => gmdate( 'c', $expires_at ),
     ] );
 }
 
+function lamako_mobile_v2_maybe_serve_public_apple_wallet_pass() {
+    if ( empty( $_GET['lamako_wallet_pass'] ) ) {
+        return;
+    }
+    lamako_mobile_v2_serve_apple_wallet_pass();
+}
+
 function lamako_mobile_v2_serve_apple_wallet_pass() {
-    $token = sanitize_text_field( wp_unslash( $_GET['token'] ?? '' ) );
+    $raw_token = $_GET['lamako_wallet_pass'] ?? $_GET['token'] ?? '';
+    $token = sanitize_text_field( wp_unslash( $raw_token ) );
     if ( $token === '' || strlen( $token ) > 96 ) {
         status_header( 400 );
         exit;
@@ -193,6 +201,8 @@ function lamako_mobile_v2_serve_apple_wallet_pass() {
         status_header( 503 );
         exit;
     }
+
+    delete_transient( 'lamako_apple_wallet_' . hash( 'sha256', $token ) );
 
     nocache_headers();
     header( 'Content-Type: application/vnd.apple.pkpass' );

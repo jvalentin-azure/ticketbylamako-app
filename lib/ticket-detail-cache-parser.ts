@@ -3,11 +3,12 @@ import type {
   MobileOrderTicketsResponse,
 } from "@/lib/api/mobile";
 
-export const TICKET_DETAIL_CACHE_VERSION = 2;
-const CACHEABLE_ORDER_STATUSES = new Set([
-  "completed",
-  "processing",
-  "cs-complete",
+export const TICKET_DETAIL_CACHE_VERSION = 3;
+const BLOCKED_ORDER_STATUSES = new Set([
+  "cancelled",
+  "failed",
+  "refunded",
+  "trash",
 ]);
 
 export interface CachedTicketDetail {
@@ -34,7 +35,9 @@ export function parseCachedTicketDetail(
       typeof value.cachedAt !== "number" ||
       !value.order ||
       value.order.id !== expectedOrderId ||
-      !CACHEABLE_ORDER_STATUSES.has(value.order.status || "") ||
+      value.order.paymentStatus !== "success" ||
+      value.order.ticketsReady !== true ||
+      BLOCKED_ORDER_STATUSES.has(value.order.status || "") ||
       !value.tickets ||
       value.tickets.orderId !== expectedOrderId ||
       value.tickets.ticketsReady !== true ||

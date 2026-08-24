@@ -15,6 +15,7 @@ import { useCart } from "@/lib/cart-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { formatAriary, decodeHtmlEntities } from "@/lib/format";
 import { PointsBadge } from "@/components/points-badge";
+import { CartHoldCountdown } from "@/components/cart-hold-countdown";
 import { useRewards, estimatePointsForPrice } from "@/lib/rewards-provider";
 
 import { useAuth } from "@/lib/auth-provider";
@@ -23,8 +24,15 @@ export default function CartScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { items, removeItem, updateQuantity, clearCart, total, itemCount } =
-    useCart();
+  const {
+    items,
+    removeItem,
+    updateQuantity,
+    clearCart,
+    total,
+    itemCount,
+    expiresAt,
+  } = useCart();
   const {
     state: rewardsState,
     currentTier,
@@ -143,6 +151,8 @@ export default function CartScreen() {
           </Text>
         </TouchableOpacity>
       </View>
+
+      <CartHoldCountdown expiresAt={expiresAt} />
 
       <FlatList
         data={items}

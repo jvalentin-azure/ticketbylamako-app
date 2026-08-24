@@ -163,17 +163,17 @@ export default function AboutScreen() {
             {
               icon: "touch-app" as const,
               title: "Simplicité",
-              desc: "Configuration sans contrainte technique",
+              desc: "Trouver et réserver en quelques étapes",
             },
             {
               icon: "verified-user" as const,
               title: "Fiabilité",
-              desc: "Paiements sécurisés et anti-fraude",
+              desc: "Paiements suivis et billets vérifiables",
             },
             {
               icon: "visibility" as const,
-              title: "Vision",
-              desc: "Outils adaptés à tous les événements",
+              title: "Ancrage local",
+              desc: "Une expérience pensée pour Madagascar",
             },
           ].map((v, i) => (
             <View

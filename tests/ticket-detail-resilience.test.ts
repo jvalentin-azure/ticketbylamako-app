@@ -8,15 +8,15 @@ const screen = fs.readFileSync(
 );
 
 describe("ticket detail resilience", () => {
-  it("loads order and ticket data in parallel", () => {
-    expect(screen).toContain("await Promise.all([");
+  it("loads ticket data only after the order confirms access", () => {
     expect(screen).toContain("getMobileOrder(orderId)");
     expect(screen).toContain("getMobileOrderTickets(orderId)");
+    expect(screen).toContain("orderAllowsTicketDisplay(orderResponse)");
   });
 
   it("accepts the CyberSource completed status", () => {
     expect(screen).toContain('"cs-complete": { label: "Billet actif"');
-    expect(screen).toContain("ticketVisibleStatuses.has(order.status)");
+    expect(screen).toContain("orderAllowsTicketDisplay(orderResponse)");
   });
 
   it("offers skeleton and retry states", () => {

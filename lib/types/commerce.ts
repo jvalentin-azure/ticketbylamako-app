@@ -109,6 +109,9 @@ export interface WCOrder {
   }[];
   meta_data: { key: string; value: any }[];
   number?: string;
+  payment_status?: string;
+  tickets_ready?: boolean;
+  ticket_count?: number;
 }
 
 export interface WCCategory {

@@ -36,6 +36,9 @@ export function mobileOrderToWCOrder(order: MobileOrderSummary): WCOrder {
       meta_data: [],
     })),
     meta_data: [],
+    payment_status: order.paymentStatus,
+    tickets_ready: order.ticketsReady,
+    ticket_count: order.ticketCount,
   };
 }
 

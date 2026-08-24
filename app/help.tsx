@@ -1,13 +1,53 @@
-import { Text, View, TouchableOpacity, ScrollView, StyleSheet, Linking, Alert } from "react-native";
+import {
+  Text,
+  View,
+  TouchableOpacity,
+  ScrollView,
+  StyleSheet,
+  Linking,
+  Alert,
+} from "react-native";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { LAMAKO_EMAIL, LAMAKO_PHONE_DISPLAY, LAMAKO_PHONE_NUMBER, buildLamakoWhatsAppUrl } from "@/lib/contact";
+import {
+  LAMAKO_EMAIL,
+  LAMAKO_PHONE_DISPLAY,
+  LAMAKO_PHONE_NUMBER,
+  buildLamakoWhatsAppUrl,
+} from "@/lib/contact";
 
-const WHATSAPP_MESSAGE = "Bonjour, j'ai besoin d'aide avec l'application TicketByLamako.";
-const ORGANIZER_MESSAGE = "Bonjour, je suis organisateur et je souhaite que mon événement apparaisse sur TicketByLamako.";
+const WHATSAPP_MESSAGE =
+  "Bonjour, j'ai besoin d'aide avec l'application TicketByLamako.";
+const ORGANIZER_MESSAGE =
+  "Bonjour, je suis organisateur et je souhaite que mon événement apparaisse sur TicketByLamako.";
+const SUPPORT_TOPICS = [
+  {
+    icon: "confirmation-number",
+    label: "Billet ou QR",
+    message:
+      "Bonjour, j'ai besoin d'aide avec un billet ou un QR code. Référence de commande : ",
+  },
+  {
+    icon: "payments",
+    label: "Paiement",
+    message:
+      "Bonjour, j'ai besoin d'aide avec un paiement. Référence de commande : ",
+  },
+  {
+    icon: "event-seat",
+    label: "Choix de siège",
+    message:
+      "Bonjour, j'ai besoin d'aide avec un siège. Événement et référence de commande : ",
+  },
+  {
+    icon: "person",
+    label: "Mon compte",
+    message: "Bonjour, j'ai besoin d'aide avec mon compte TicketByLamako.",
+  },
+] as const;
 
 export default function HelpScreen() {
   const colors = useColors();
@@ -16,11 +56,14 @@ export default function HelpScreen() {
   const openWhatsApp = (message = WHATSAPP_MESSAGE) => {
     const url = buildLamakoWhatsAppUrl(message);
     Linking.canOpenURL(url)
-      .then(supported => {
+      .then((supported) => {
         if (supported) {
           Linking.openURL(url);
         } else {
-          Alert.alert("Erreur", "WhatsApp n'est pas installé sur cet appareil.");
+          Alert.alert(
+            "Erreur",
+            "WhatsApp n'est pas installé sur cet appareil.",
+          );
         }
       })
       .catch(() => Alert.alert("Erreur", "Impossible d'ouvrir WhatsApp."));
@@ -34,89 +77,220 @@ export default function HelpScreen() {
     <ScreenContainer>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.surface }]}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={[styles.backButton, { backgroundColor: colors.surface }]}
+        >
           <IconSymbol name="chevron.left" size={20} color={colors.foreground} />
-          <Text style={{ color: colors.foreground, fontSize: 14, marginLeft: 4 }}>Retour</Text>
+          <Text
+            style={{ color: colors.foreground, fontSize: 14, marginLeft: 4 }}
+          >
+            Retour
+          </Text>
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.foreground }]}>Aide & Support</Text>
+        <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+          Aide & Support
+        </Text>
         <View style={{ width: 80 }} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.content}
+      >
         {/* Hero */}
         <View style={styles.heroSection}>
-          <View style={[styles.heroIcon, { backgroundColor: colors.primary + "15" }]}>
-            <IconSymbol name="questionmark.circle.fill" size={48} color={colors.primary} />
+          <View
+            style={[
+              styles.heroIcon,
+              { backgroundColor: colors.primary + "15" },
+            ]}
+          >
+            <IconSymbol
+              name="questionmark.circle.fill"
+              size={48}
+              color={colors.primary}
+            />
           </View>
-          <Text style={[styles.heroTitle, { color: colors.foreground }]}>Comment pouvons-nous vous aider ?</Text>
-          <Text style={[styles.heroSub, { color: colors.muted }]}>Notre équipe est disponible pour répondre à toutes vos questions</Text>
+          <Text style={[styles.heroTitle, { color: colors.foreground }]}>
+            Comment pouvons-nous vous aider ?
+          </Text>
+          <Text style={[styles.heroSub, { color: colors.muted }]}>
+            Notre équipe est disponible pour répondre à toutes vos questions
+          </Text>
         </View>
 
-        {/* WhatsApp CTA */}
-        <TouchableOpacity onPress={() => openWhatsApp()} style={styles.whatsappButton} activeOpacity={0.8}>
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+          Choisissez votre sujet
+        </Text>
+        <View style={styles.topicGrid}>
+          {SUPPORT_TOPICS.map((topic) => (
+            <TouchableOpacity
+              key={topic.label}
+              accessibilityRole="button"
+              accessibilityLabel={`Obtenir de l'aide pour ${topic.label}`}
+              onPress={() => openWhatsApp(topic.message)}
+              style={[
+                styles.topicCard,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+            >
+              <MaterialIcons
+                name={topic.icon}
+                size={22}
+                color={colors.primary}
+              />
+              <Text style={[styles.topicLabel, { color: colors.foreground }]}>
+                {topic.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <TouchableOpacity
+          onPress={() => openWhatsApp()}
+          style={styles.whatsappButton}
+          activeOpacity={0.8}
+        >
           <MaterialIcons name="chat" size={24} color="#fff" />
           <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={styles.whatsappTitle}>Contactez-nous sur WhatsApp</Text>
-            <Text style={styles.whatsappSub}>Réponse rapide garantie</Text>
+            <Text style={styles.whatsappTitle}>
+              Contactez-nous sur WhatsApp
+            </Text>
+            <Text style={styles.whatsappSub}>
+              Ajoutez votre numéro de commande pour gagner du temps
+            </Text>
           </View>
           <IconSymbol name="chevron.right" size={20} color="#fff" />
         </TouchableOpacity>
 
         <TouchableOpacity
           onPress={() => openWhatsApp(ORGANIZER_MESSAGE)}
-          style={[styles.organizerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          style={[
+            styles.organizerCard,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
           activeOpacity={0.85}
         >
-          <View style={[styles.organizerIcon, { backgroundColor: colors.primary + "15" }]}>
-            <MaterialIcons name="event-available" size={24} color={colors.primary} />
+          <View
+            style={[
+              styles.organizerIcon,
+              { backgroundColor: colors.primary + "15" },
+            ]}
+          >
+            <MaterialIcons
+              name="event-available"
+              size={24}
+              color={colors.primary}
+            />
           </View>
           <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={[styles.organizerTitle, { color: colors.foreground }]}>Vous êtes organisateur ?</Text>
-            <Text style={[styles.organizerSub, { color: colors.muted }]}>Vous souhaitez que votre événement apparaisse ici ?</Text>
+            <Text style={[styles.organizerTitle, { color: colors.foreground }]}>
+              Vous êtes organisateur ?
+            </Text>
+            <Text style={[styles.organizerSub, { color: colors.muted }]}>
+              Vous souhaitez que votre événement apparaisse ici ?
+            </Text>
           </View>
           <IconSymbol name="chevron.right" size={18} color={colors.primary} />
         </TouchableOpacity>
 
         {/* FAQ Section */}
-        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Questions fréquentes</Text>
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+          Questions fréquentes
+        </Text>
 
         {[
-          { q: "Comment acheter un billet ?", a: "Parcourez les événements, sélectionnez votre billet, ajoutez-le au panier et procédez au paiement." },
-          { q: "Comment accéder à mon billet ?", a: "Après achat, vos billets sont disponibles dans l'onglet 'Mes billets'. Présentez le QR code à l'entrée." },
-          { q: "Puis-je annuler ma commande ?", a: "Les conditions d'annulation dépendent de chaque événement. Contactez-nous pour plus d'informations." },
-          { q: "Comment fonctionne le plan de salle ?", a: "Pour les événements avec plan de salle, vous pouvez choisir votre siège lors de l'achat." },
-          { q: "Comment contacter un organisateur ?", a: "Les informations de contact de l'organisateur sont disponibles sur la page de l'événement." },
+          {
+            q: "Comment acheter un billet ?",
+            a: "Parcourez les événements, sélectionnez votre billet, ajoutez-le au panier et procédez au paiement.",
+          },
+          {
+            q: "Comment accéder à mon billet ?",
+            a: "Après achat, vos billets sont disponibles dans l'onglet 'Mes billets'. Présentez le QR code à l'entrée.",
+          },
+          {
+            q: "Puis-je annuler ma commande ?",
+            a: "Les conditions d'annulation dépendent de chaque événement. Contactez-nous pour plus d'informations.",
+          },
+          {
+            q: "Comment fonctionne le plan de salle ?",
+            a: "Pour les événements avec plan de salle, vous pouvez choisir votre siège lors de l'achat.",
+          },
+          {
+            q: "Comment contacter un organisateur ?",
+            a: "Les informations de contact de l'organisateur sont disponibles sur la page de l'événement.",
+          },
         ].map((faq, i) => (
-          <View key={i} style={[styles.faqItem, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.faqQuestion, { color: colors.foreground }]}>{faq.q}</Text>
-            <Text style={[styles.faqAnswer, { color: colors.muted }]}>{faq.a}</Text>
+          <View
+            key={i}
+            style={[
+              styles.faqItem,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
+            <Text style={[styles.faqQuestion, { color: colors.foreground }]}>
+              {faq.q}
+            </Text>
+            <Text style={[styles.faqAnswer, { color: colors.muted }]}>
+              {faq.a}
+            </Text>
           </View>
         ))}
 
         {/* Other Contact Options */}
-        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Autres moyens de contact</Text>
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+          Autres moyens de contact
+        </Text>
 
-        <TouchableOpacity onPress={openEmail} style={[styles.contactOption, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={[styles.contactIcon, { backgroundColor: colors.primary + "15" }]}>
+        <TouchableOpacity
+          onPress={openEmail}
+          style={[
+            styles.contactOption,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
+        >
+          <View
+            style={[
+              styles.contactIcon,
+              { backgroundColor: colors.primary + "15" },
+            ]}
+          >
             <MaterialIcons name="email" size={22} color={colors.primary} />
           </View>
           <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={[styles.contactTitle, { color: colors.foreground }]}>Email</Text>
-            <Text style={[styles.contactSub, { color: colors.muted }]}>{LAMAKO_EMAIL}</Text>
+            <Text style={[styles.contactTitle, { color: colors.foreground }]}>
+              Email
+            </Text>
+            <Text style={[styles.contactSub, { color: colors.muted }]}>
+              {LAMAKO_EMAIL}
+            </Text>
           </View>
           <IconSymbol name="chevron.right" size={18} color={colors.muted} />
         </TouchableOpacity>
 
         <TouchableOpacity
           onPress={() => Linking.openURL(`tel:${LAMAKO_PHONE_NUMBER}`)}
-          style={[styles.contactOption, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          style={[
+            styles.contactOption,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
         >
-          <View style={[styles.contactIcon, { backgroundColor: colors.primary + "15" }]}>
+          <View
+            style={[
+              styles.contactIcon,
+              { backgroundColor: colors.primary + "15" },
+            ]}
+          >
             <MaterialIcons name="phone" size={22} color={colors.primary} />
           </View>
           <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={[styles.contactTitle, { color: colors.foreground }]}>Téléphone</Text>
-            <Text style={[styles.contactSub, { color: colors.muted }]}>{LAMAKO_PHONE_DISPLAY}</Text>
+            <Text style={[styles.contactTitle, { color: colors.foreground }]}>
+              Téléphone
+            </Text>
+            <Text style={[styles.contactSub, { color: colors.muted }]}>
+              {LAMAKO_PHONE_DISPLAY}
+            </Text>
           </View>
           <IconSymbol name="chevron.right" size={18} color={colors.muted} />
         </TouchableOpacity>
@@ -128,27 +302,95 @@ export default function HelpScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 0.5 },
-  backButton: { flexDirection: "row", alignItems: "center", paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10 },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 0.5,
+  },
+  backButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
   headerTitle: { fontSize: 17, fontWeight: "700" },
   content: { padding: 20, paddingBottom: 120 },
   heroSection: { alignItems: "center", marginBottom: 28 },
-  heroIcon: { width: 80, height: 80, borderRadius: 20, alignItems: "center", justifyContent: "center", marginBottom: 16 },
+  heroIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
   heroTitle: { fontSize: 20, fontWeight: "700", textAlign: "center" },
   heroSub: { fontSize: 14, textAlign: "center", marginTop: 6 },
-  whatsappButton: { flexDirection: "row", alignItems: "center", backgroundColor: "#25D366", borderRadius: 16, padding: 18, marginBottom: 28 },
+  whatsappButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#25D366",
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 28,
+  },
   whatsappTitle: { color: "#fff", fontSize: 16, fontWeight: "700" },
   whatsappSub: { color: "rgba(255,255,255,0.8)", fontSize: 12, marginTop: 2 },
-  organizerCard: { flexDirection: "row", alignItems: "center", borderRadius: 16, padding: 16, marginBottom: 28, borderWidth: 1 },
-  organizerIcon: { width: 46, height: 46, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  organizerCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 28,
+    borderWidth: 1,
+  },
+  organizerIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   organizerTitle: { fontSize: 15, fontWeight: "700" },
   organizerSub: { fontSize: 12, lineHeight: 17, marginTop: 2 },
   sectionTitle: { fontSize: 18, fontWeight: "700", marginBottom: 12 },
+  topicGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 18,
+  },
+  topicCard: {
+    width: "48%",
+    minHeight: 82,
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 14,
+    justifyContent: "space-between",
+  },
+  topicLabel: { fontSize: 14, fontWeight: "700" },
   faqItem: { borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1 },
   faqQuestion: { fontSize: 14, fontWeight: "600" },
   faqAnswer: { fontSize: 13, lineHeight: 20, marginTop: 6 },
-  contactOption: { flexDirection: "row", alignItems: "center", borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1 },
-  contactIcon: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  contactOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+  },
+  contactIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   contactTitle: { fontSize: 15, fontWeight: "600" },
   contactSub: { fontSize: 13, marginTop: 2 },
 });

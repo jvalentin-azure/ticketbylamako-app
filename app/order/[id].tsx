@@ -20,6 +20,7 @@ import {
   mobileTicketToTicketInstance,
 } from "@/lib/order-adapters";
 import type { WCOrder, TicketInstance } from "@/lib/types/commerce";
+import { orderAllowsTicketDisplay } from "@/lib/order-access";
 import { formatAriary, formatDate, decodeHtmlEntities } from "@/lib/format";
 
 const statusMap: Record<
@@ -55,12 +56,6 @@ const statusMap: Record<
   },
   failed: { label: "Échouée", color: "#EF4444", icon: "xmark.circle.fill" },
 };
-
-const ticketVisibleStatuses = new Set([
-  "completed",
-  "processing",
-  "cs-complete",
-]);
 
 function orderDetailErrorMessage(error: unknown) {
   if (error instanceof MobileApiError) {
@@ -112,19 +107,18 @@ export default function OrderDetailScreen() {
     setLoading(true);
     setErrorMessage(null);
     try {
-      const [mobileOrder, ticketResponse] = await Promise.all([
-        getMobileOrder(orderId),
-        getMobileOrderTickets(orderId).catch(() => null),
-      ]);
+      const mobileOrder = await getMobileOrder(orderId);
       if (requestId.current !== activeRequest) return;
 
       const nextOrder = mobileOrderToWCOrder(mobileOrder);
       setOrder(nextOrder);
-      setTickets(
-        ticketVisibleStatuses.has(nextOrder.status) && ticketResponse?.tickets
-          ? ticketResponse.tickets.map(mobileTicketToTicketInstance)
-          : [],
-      );
+      if (orderAllowsTicketDisplay(mobileOrder)) {
+        const ticketResponse = await getMobileOrderTickets(orderId);
+        if (requestId.current !== activeRequest) return;
+        setTickets(ticketResponse.tickets.map(mobileTicketToTicketInstance));
+      } else {
+        setTickets([]);
+      }
     } catch (error) {
       if (requestId.current === activeRequest) {
         setOrder(null);

@@ -334,6 +334,8 @@ function lr_credit_referrer_on_purchase( $order_id ) {
 // POINTS ON PURCHASE (with tier multiplier)
 // ============================================================
 
+add_action( 'woocommerce_payment_complete', 'lr_award_purchase_points', 10, 1 );
+add_action( 'woocommerce_order_status_processing', 'lr_award_purchase_points', 10, 1 );
 add_action( 'woocommerce_order_status_completed', 'lr_award_purchase_points', 10, 1 );
 
 function lr_rewards_enabled_for_post( $post_id, $default = true ) {
@@ -391,6 +393,10 @@ function lr_get_order_rewardable_total( WC_Order $order ) {
 function lr_award_purchase_points( $order_id ) {
     $order = wc_get_order( $order_id );
     if ( ! $order ) return;
+
+    if ( ! $order->is_paid() || in_array( $order->get_status(), array( 'cancelled', 'failed', 'refunded' ), true ) ) {
+        return;
+    }
     
     $customer_id = $order->get_customer_id();
     if ( ! $customer_id ) return;

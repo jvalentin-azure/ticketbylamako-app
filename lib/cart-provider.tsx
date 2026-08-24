@@ -9,7 +9,9 @@ import {
 import { Alert, AppState, AppStateStatus } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
-  parseCartActivityTimestamp,
+  cartHoldRemainingMs,
+  createCartExpiryTimestamp,
+  parseCartExpiryTimestamp,
   parseStoredCart,
   type CartItem,
 } from "./cart-store";
@@ -28,15 +30,17 @@ interface CartContextType {
   clearCart: () => void;
   total: number;
   itemCount: number;
+  expiresAt: number | null;
 }
 
 const CartContext = createContext<CartContextType | null>(null);
 const CART_KEY = "cart_items";
-const CART_TIMESTAMP_KEY = "cart_last_activity";
-const CART_EXPIRY_MS = 15 * 60 * 1000; // 15 minutes
+const CART_EXPIRY_KEY = "cart_expires_at_v2";
+const LEGACY_CART_ACTIVITY_KEY = "cart_last_activity";
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
+  const [expiresAt, setExpiresAt] = useState<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const appState = useRef(AppState.currentState);
 
@@ -47,32 +51,37 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       try {
         const [data, storedTimestamp] = await Promise.all([
           AsyncStorage.getItem(CART_KEY),
-          AsyncStorage.getItem(CART_TIMESTAMP_KEY),
+          AsyncStorage.getItem(CART_EXPIRY_KEY),
         ]);
         if (!mounted || !data) return;
         const parsed = parseStoredCart(data);
-        const timestamp = parseCartActivityTimestamp(storedTimestamp);
+        const storedExpiry = parseCartExpiryTimestamp(storedTimestamp);
         if (parsed.length === 0) {
           await Promise.all([
             AsyncStorage.removeItem(CART_KEY),
-            AsyncStorage.removeItem(CART_TIMESTAMP_KEY),
+            AsyncStorage.removeItem(CART_EXPIRY_KEY),
+            AsyncStorage.removeItem(LEGACY_CART_ACTIVITY_KEY),
           ]);
           return;
         }
-        if (timestamp) {
-          const elapsed = Date.now() - timestamp;
-          if (elapsed >= CART_EXPIRY_MS) {
+        if (storedExpiry) {
+          const remaining = cartHoldRemainingMs(storedExpiry);
+          if (remaining <= 0) {
             persist([]);
             Alert.alert(
               "Panier expiré",
-              "Votre panier a été vidé car il est resté inactif trop longtemps.",
+              "Votre réservation de 10 minutes a expiré. Le panier a été vidé.",
               [{ text: "OK" }],
             );
             return;
           }
-          startTimer(CART_EXPIRY_MS - Math.max(0, elapsed));
+          setExpiresAt(storedExpiry);
+          startTimer(remaining);
         } else {
-          resetTimer();
+          const nextExpiry = createCartExpiryTimestamp();
+          setExpiresAt(nextExpiry);
+          void AsyncStorage.setItem(CART_EXPIRY_KEY, String(nextExpiry));
+          startTimer(cartHoldRemainingMs(nextExpiry));
         }
         setItems(parsed);
       } catch {
@@ -96,10 +105,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       appState.current.match(/active/) &&
       nextState.match(/inactive|background/)
     ) {
-      // App going to background - record timestamp
-      void AsyncStorage.setItem(CART_TIMESTAMP_KEY, String(Date.now())).catch(
-        () => undefined,
-      );
+      // The hold is absolute: backgrounding the app never extends it.
     } else if (nextState === "active") {
       // App coming back - check if cart expired
       void checkExpiry();
@@ -110,22 +116,23 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const checkExpiry = async () => {
     try {
       const [storedTimestamp, data] = await Promise.all([
-        AsyncStorage.getItem(CART_TIMESTAMP_KEY),
+        AsyncStorage.getItem(CART_EXPIRY_KEY),
         AsyncStorage.getItem(CART_KEY),
       ]);
-      const timestamp = parseCartActivityTimestamp(storedTimestamp);
+      const storedExpiry = parseCartExpiryTimestamp(storedTimestamp);
       const parsed = parseStoredCart(data);
-      if (timestamp && parsed.length > 0) {
-        const elapsed = Date.now() - timestamp;
-        if (elapsed >= CART_EXPIRY_MS) {
+      if (storedExpiry && parsed.length > 0) {
+        const remaining = cartHoldRemainingMs(storedExpiry);
+        if (remaining <= 0) {
           persist([]);
           Alert.alert(
             "Panier expiré",
-            "Votre panier a été vidé car il est resté inactif trop longtemps.",
+            "Votre réservation de 10 minutes a expiré. Le panier a été vidé.",
             [{ text: "OK" }],
           );
         } else {
-          startTimer(CART_EXPIRY_MS - Math.max(0, elapsed));
+          setExpiresAt(storedExpiry);
+          startTimer(remaining);
         }
       } else if (data && parsed.length === 0) {
         persist([]);
@@ -135,7 +142,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const startTimer = (ms: number = CART_EXPIRY_MS) => {
+  const startTimer = (ms: number) => {
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
       setItems((prev) => {
@@ -143,12 +150,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           void AsyncStorage.setItem(CART_KEY, JSON.stringify([])).catch(
             () => undefined,
           );
-          void AsyncStorage.removeItem(CART_TIMESTAMP_KEY).catch(
-            () => undefined,
-          );
+          void AsyncStorage.removeItem(CART_EXPIRY_KEY).catch(() => undefined);
+          setExpiresAt(null);
           Alert.alert(
             "Panier expiré",
-            "Votre panier a été vidé automatiquement après 15 minutes d'inactivité.",
+            "Votre réservation de 10 minutes a expiré. Le panier a été vidé.",
             [{ text: "OK" }],
           );
           return [];
@@ -158,23 +164,22 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }, ms);
   };
 
-  const resetTimer = () => {
-    void AsyncStorage.setItem(CART_TIMESTAMP_KEY, String(Date.now())).catch(
-      () => undefined,
-    );
-    startTimer();
-  };
-
   const persist = (newItems: CartItem[]) => {
     setItems(newItems);
     void AsyncStorage.setItem(CART_KEY, JSON.stringify(newItems)).catch(
       () => undefined,
     );
     if (newItems.length > 0) {
-      resetTimer();
+      if (!expiresAt) {
+        const nextExpiry = createCartExpiryTimestamp();
+        setExpiresAt(nextExpiry);
+        void AsyncStorage.setItem(CART_EXPIRY_KEY, String(nextExpiry));
+        startTimer(cartHoldRemainingMs(nextExpiry));
+      }
     } else {
       if (timerRef.current) clearTimeout(timerRef.current);
-      void AsyncStorage.removeItem(CART_TIMESTAMP_KEY).catch(() => undefined);
+      setExpiresAt(null);
+      void AsyncStorage.removeItem(CART_EXPIRY_KEY).catch(() => undefined);
     }
   };
 
@@ -204,11 +209,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         void AsyncStorage.setItem(CART_KEY, JSON.stringify(next)).catch(
           () => undefined,
         );
-        void AsyncStorage.setItem(
-          CART_TIMESTAMP_KEY,
-          String(Date.now()),
-        ).catch(() => undefined);
-        startTimer();
+        if (prev.length === 0) {
+          const nextExpiry = createCartExpiryTimestamp();
+          setExpiresAt(nextExpiry);
+          void AsyncStorage.setItem(CART_EXPIRY_KEY, String(nextExpiry));
+          startTimer(cartHoldRemainingMs(nextExpiry));
+        }
         return next;
       });
     },
@@ -224,10 +230,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         () => undefined,
       );
       if (next.length > 0) {
-        resetTimer();
+        // Removing an item does not extend the original hold.
       } else {
         if (timerRef.current) clearTimeout(timerRef.current);
-        void AsyncStorage.removeItem(CART_TIMESTAMP_KEY).catch(() => undefined);
+        setExpiresAt(null);
+        void AsyncStorage.removeItem(CART_EXPIRY_KEY).catch(() => undefined);
       }
       return next;
     });
@@ -251,12 +258,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           () => undefined,
         );
         if (next.length > 0) {
-          resetTimer();
+          // Quantity changes do not extend the original hold.
         } else {
           if (timerRef.current) clearTimeout(timerRef.current);
-          void AsyncStorage.removeItem(CART_TIMESTAMP_KEY).catch(
-            () => undefined,
-          );
+          setExpiresAt(null);
+          void AsyncStorage.removeItem(CART_EXPIRY_KEY).catch(() => undefined);
         }
         return next;
       });
@@ -281,6 +287,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         clearCart,
         total,
         itemCount,
+        expiresAt,
       }}
     >
       {children}

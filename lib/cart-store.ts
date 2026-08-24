@@ -17,6 +17,25 @@ export interface CartItem {
   ticketingMessage?: string;
 }
 
+export const CART_HOLD_DURATION_MS = 10 * 60 * 1000;
+
+export function parseCartExpiryTimestamp(raw: string | null): number | null {
+  if (!raw) return null;
+  const timestamp = Number(raw);
+  return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : null;
+}
+
+export function createCartExpiryTimestamp(now = Date.now()): number {
+  return now + CART_HOLD_DURATION_MS;
+}
+
+export function cartHoldRemainingMs(
+  expiresAt: number | null,
+  now = Date.now(),
+): number {
+  return expiresAt ? Math.max(0, expiresAt - now) : 0;
+}
+
 function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === "string";
 }
@@ -66,8 +85,4 @@ export function parseStoredCart(raw: string | null): CartItem[] {
   }
 }
 
-export function parseCartActivityTimestamp(raw: string | null): number | null {
-  if (!raw) return null;
-  const timestamp = Number(raw);
-  return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : null;
-}
+export const parseCartActivityTimestamp = parseCartExpiryTimestamp;

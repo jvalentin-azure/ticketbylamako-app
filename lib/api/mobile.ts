@@ -759,12 +759,15 @@ export async function unregisterMobilePushToken(
 }
 
 export async function getMobileRewardsBalance(): Promise<MobileRewardsBalance> {
-  return mobileV2Fetch<MobileRewardsBalance>("rewards/balance");
+  return mobileV2Fetch<MobileRewardsBalance>("rewards/balance", {
+    params: { fresh: Date.now() },
+  });
 }
 
 export async function getMobileRewardsConfig(): Promise<MobileRewardsConfig> {
   return mobileV2Fetch<MobileRewardsConfig>("rewards/config", {
     requireAuth: false,
+    params: { fresh: Date.now() },
   });
 }
 
@@ -774,7 +777,7 @@ export async function getMobileRewardsHistory(
   const response = await mobileV2Fetch<MobileRewardsHistoryResponse>(
     "rewards/history",
     {
-      params: { limit },
+      params: { limit, fresh: Date.now() },
     },
   );
   return response.history;

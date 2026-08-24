@@ -11,7 +11,7 @@ const authSource = fs.readFileSync(
 
 describe("order history resilience", () => {
   it("uses a per-user persistent cache with refresh and retry states", () => {
-    expect(source).toContain("order-list-v2-${userId}");
+    expect(source).toContain("order-list-v3-${userId}");
     expect(source).toContain("getCachedValue<OrderListItem[]>");
     expect(source).toContain("RefreshControl");
     expect(source).toContain("Réessayer");
@@ -25,9 +25,10 @@ describe("order history resilience", () => {
     expect(source).not.toContain("transactionId");
   });
 
-  it("uses the server ticket count and recognizes CyberSource completion", () => {
+  it("shows tickets only when the server confirms they are ready", () => {
     expect(source).toContain("ticketCount: order.ticketCount || 0");
-    expect(source).toContain('"cs-complete"');
+    expect(source).toContain("order.ticketsReady && order.ticketCount > 0");
+    expect(source).toContain('order.paymentStatus === "success"');
     expect(source).not.toContain("extractTicketInfo");
   });
 

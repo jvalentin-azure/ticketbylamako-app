@@ -8,10 +8,11 @@ const source = fs.readFileSync(
 );
 
 describe("order detail resilience", () => {
-  it("loads order and ticket data concurrently", () => {
-    expect(source).toContain("await Promise.all");
+  it("loads tickets only after the server confirms payment", () => {
     expect(source).toContain("getMobileOrder(orderId)");
-    expect(source).toContain("getMobileOrderTickets(orderId).catch");
+    expect(source).toContain("orderAllowsTicketDisplay(mobileOrder)");
+    expect(source).toContain("getMobileOrderTickets(orderId)");
+    expect(source).not.toContain("getMobileOrderTickets(orderId).catch");
   });
 
   it("handles CyberSource completion and stale requests", () => {

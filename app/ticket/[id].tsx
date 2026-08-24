@@ -29,6 +29,7 @@ import {
   mobileTicketToTicketInstance,
 } from "@/lib/order-adapters";
 import type { WCOrder, TicketInstance } from "@/lib/types/commerce";
+import { orderAllowsTicketDisplay } from "@/lib/order-access";
 import { formatAriary, formatDate, decodeHtmlEntities } from "@/lib/format";
 import QRCode from "react-native-qrcode-svg";
 import { useAuth } from "@/lib/auth-provider";
@@ -58,12 +59,6 @@ const statusMap: Record<string, { label: string; color: string }> = {
   refunded: { label: "Remboursé", color: "#8B5CF6" },
   failed: { label: "Échoué", color: "#EF4444" },
 };
-
-const ticketVisibleStatuses = new Set([
-  "completed",
-  "processing",
-  "cs-complete",
-]);
 
 function EntryMode({
   ticket,
@@ -171,7 +166,8 @@ function TicketCard({
     label: order.status,
     color: colors.muted,
   };
-  const isValid = ticketVisibleStatuses.has(order.status);
+  const isValid =
+    order.payment_status === "success" && order.tickets_ready === true;
   const isCheckedIn = ticket.checked_in === true;
   const qrValue = ticket.ticket_code;
   const [calendarBusy, setCalendarBusy] = useState(false);
@@ -548,7 +544,7 @@ export default function TicketDetailScreen() {
       const orderData = mobileOrderToWCOrder(orderResponse);
       setOrder(orderData);
       setTickets(
-        ticketVisibleStatuses.has(orderData.status)
+        orderAllowsTicketDisplay(orderResponse)
           ? ticketsResponse.tickets.map(mobileTicketToTicketInstance)
           : [],
       );
@@ -581,10 +577,18 @@ export default function TicketDetailScreen() {
     }
 
     try {
-      const [orderResponse, ticketsResponse] = await Promise.all([
-        getMobileOrder(orderId),
-        getMobileOrderTickets(orderId),
-      ]);
+      const orderResponse = await getMobileOrder(orderId);
+      if (requestId.current !== activeRequest) return;
+
+      const ticketsResponse: MobileOrderTicketsResponse =
+        orderAllowsTicketDisplay(orderResponse)
+          ? await getMobileOrderTickets(orderId)
+          : {
+              orderId,
+              orderStatus: orderResponse.status,
+              ticketsReady: false,
+              tickets: [],
+            };
       if (requestId.current !== activeRequest) return;
 
       applyTicketDetail(orderResponse, ticketsResponse);
@@ -592,7 +596,7 @@ export default function TicketDetailScreen() {
       setLoading(false);
       if (user?.id) {
         if (
-          ticketVisibleStatuses.has(orderResponse.status) &&
+          orderAllowsTicketDisplay(orderResponse) &&
           ticketsResponse.ticketsReady &&
           ticketsResponse.tickets.length > 0
         ) {

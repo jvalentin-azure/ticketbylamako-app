@@ -1,7 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { parseCartActivityTimestamp, parseStoredCart } from "../lib/cart-store";
+import {
+  CART_HOLD_DURATION_MS,
+  cartHoldRemainingMs,
+  createCartExpiryTimestamp,
+  parseCartExpiryTimestamp,
+  parseStoredCart,
+} from "../lib/cart-store";
 
 const cartScreenSource = fs.readFileSync(
   path.resolve(__dirname, "..", "app", "(tabs)", "cart.tsx"),
@@ -40,14 +46,20 @@ describe("cart storage", () => {
     ).toEqual([validItem]);
   });
 
-  it("accepts only finite positive activity timestamps", () => {
-    expect(parseCartActivityTimestamp("1780000000000")).toBe(1780000000000);
-    expect(parseCartActivityTimestamp("invalid")).toBeNull();
-    expect(parseCartActivityTimestamp("-1")).toBeNull();
+  it("uses a fixed ten-minute hold that cannot become negative", () => {
+    const now = 1_780_000_000_000;
+    const expiresAt = createCartExpiryTimestamp(now);
+    expect(expiresAt).toBe(now + CART_HOLD_DURATION_MS);
+    expect(cartHoldRemainingMs(expiresAt, now + 60_000)).toBe(
+      CART_HOLD_DURATION_MS - 60_000,
+    );
+    expect(cartHoldRemainingMs(expiresAt, expiresAt + 1)).toBe(0);
+    expect(parseCartExpiryTimestamp(String(expiresAt))).toBe(expiresAt);
+    expect(parseCartExpiryTimestamp("invalid")).toBeNull();
   });
 
   it("renders cart thumbnails with the shared resilient component", () => {
-    expect(cartScreenSource).toContain('import { CatalogImage }');
+    expect(cartScreenSource).toContain("import { CatalogImage }");
     expect(cartScreenSource).toContain("<CatalogImage");
     expect(cartScreenSource).not.toContain('from "expo-image"');
   });

@@ -4840,7 +4840,11 @@ function lamako_mobile_v2_normalize_payment_status( WC_Order $order ) {
 }
 
 function lamako_mobile_v2_order_allows_ticket_display( WC_Order $order ) {
-    return in_array( $order->get_status(), [ 'completed', 'processing', 'cs-complete' ], true );
+    if ( in_array( $order->get_status(), [ 'cancelled', 'failed', 'refunded', 'pending', 'on-hold' ], true ) ) {
+        return false;
+    }
+
+    return $order->is_paid();
 }
 
 function lamako_mobile_v2_order_summary( WC_Order $order, $include_items = false, $include_tickets = false, $preloaded_tickets = null ) {

@@ -20,57 +20,24 @@ import {
 import { CACHE_DURATIONS, getCachedValue, setCache } from "@/lib/api/cache";
 import { decodeHtmlEntities, formatAriary, formatDate } from "@/lib/format";
 import type { WCOrder } from "@/lib/types/commerce";
+import { orderPaymentPresentation } from "@/lib/order-access";
 
 interface OrderListItem extends Pick<WCOrder, "id" | "status" | "total"> {
   number: string;
   dateCreated: string;
   paymentMethodTitle: string;
   ticketCount: number;
+  ticketsReady: boolean;
+  paymentStatus: MobileOrderSummary["paymentStatus"];
+  requiresManualReview: boolean;
   items: Pick<
     WCOrder["line_items"][number],
     "id" | "name" | "quantity" | "total"
   >[];
 }
 
-const statusMap: Record<
-  string,
-  { label: string; color: string; icon: string }
-> = {
-  completed: {
-    label: "Terminée",
-    color: "#22C55E",
-    icon: "checkmark.circle.fill",
-  },
-  "cs-complete": {
-    label: "Terminée",
-    color: "#22C55E",
-    icon: "checkmark.circle.fill",
-  },
-  processing: { label: "En cours", color: "#F59E0B", icon: "clock.fill" },
-  "on-hold": {
-    label: "En attente",
-    color: "#6366F1",
-    icon: "pause.circle.fill",
-  },
-  pending: {
-    label: "En attente paiement",
-    color: "#6366F1",
-    icon: "pause.circle.fill",
-  },
-  cancelled: { label: "Annulée", color: "#EF4444", icon: "xmark.circle.fill" },
-  refunded: {
-    label: "Remboursée",
-    color: "#8B5CF6",
-    icon: "arrow.uturn.left.circle.fill",
-  },
-  failed: { label: "Échouée", color: "#EF4444", icon: "xmark.circle.fill" },
-};
-
-const completedStatuses = new Set(["completed", "cs-complete"]);
-const pendingStatuses = new Set(["processing", "on-hold", "pending"]);
-
 function orderCacheKey(userId: number) {
-  return `order-list-v2-${userId}`;
+  return `order-list-v3-${userId}`;
 }
 
 function toOrderListItem(order: MobileOrderSummary): OrderListItem {
@@ -82,6 +49,9 @@ function toOrderListItem(order: MobileOrderSummary): OrderListItem {
     dateCreated: order.dateCreated || "",
     paymentMethodTitle: order.paymentMethodTitle || "Non spécifié",
     ticketCount: order.ticketCount || 0,
+    ticketsReady: order.ticketsReady === true,
+    paymentStatus: order.paymentStatus,
+    requiresManualReview: order.requiresManualReview === true,
     items: (order.items || []).map((item) => ({
       id: item.id,
       name: item.name,
@@ -129,10 +99,24 @@ function OrderCard({
   colors: ReturnType<typeof useColors>;
   onPress: () => void;
 }) {
-  const status = statusMap[order.status] || {
-    label: order.status,
-    color: colors.muted,
-    icon: "questionmark.circle",
+  const presentation = orderPaymentPresentation(order as MobileOrderSummary);
+  const toneColor =
+    presentation.tone === "success"
+      ? "#22C55E"
+      : presentation.tone === "warning"
+        ? "#F59E0B"
+        : presentation.tone === "danger"
+          ? "#EF4444"
+          : colors.muted;
+  const status = {
+    label: presentation.label,
+    color: toneColor,
+    icon:
+      presentation.tone === "success"
+        ? "checkmark.circle.fill"
+        : presentation.tone === "danger"
+          ? "xmark.circle.fill"
+          : "clock.fill",
   };
 
   return (
@@ -203,7 +187,7 @@ function OrderCard({
         </View>
       ) : null}
 
-      {order.ticketCount > 0 ? (
+      {order.ticketsReady && order.ticketCount > 0 ? (
         <View
           style={[
             styles.ticketsRow,
@@ -341,11 +325,11 @@ export default function OrdersScreen() {
     );
   }
 
-  const completedCount = orders.filter((order) =>
-    completedStatuses.has(order.status),
+  const completedCount = orders.filter(
+    (order) => order.paymentStatus === "success",
   ).length;
-  const pendingCount = orders.filter((order) =>
-    pendingStatuses.has(order.status),
+  const pendingCount = orders.filter(
+    (order) => order.paymentStatus === "pending" || order.requiresManualReview,
   ).length;
 
   return (

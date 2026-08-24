@@ -13,6 +13,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/lib/auth-provider";
+import { orderAllowsTicketDisplay } from "@/lib/order-access";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import {
   getMobileOrders,
@@ -47,14 +48,8 @@ interface TicketItem {
   checkedInAt?: string;
 }
 
-const ticketVisibleStatuses = new Set([
-  "completed",
-  "processing",
-  "cs-complete",
-]);
-
 function cacheKey(userId: number) {
-  return `ticket-wallet-v3-${userId}`;
+  return `ticket-wallet-v4-${userId}`;
 }
 
 function ticketErrorMessage(error: unknown) {
@@ -107,10 +102,8 @@ export default function TicketsScreen() {
         limit: 50,
         includeTickets: true,
       });
-      const visibleOrders = orders.filter(
-        (order) =>
-          ticketVisibleStatuses.has(order.status) &&
-          (order.ticketCount > 0 || order.ticketsReady),
+      const visibleOrders = orders.filter((order) =>
+        orderAllowsTicketDisplay(order),
       );
       const ticketGroups = await Promise.all(
         visibleOrders.map(async (order) => {
@@ -151,29 +144,6 @@ export default function TicketsScreen() {
       );
 
       const tix: TicketItem[] = ticketGroups.flat();
-      if (tix.length === 0) {
-        orders
-          .filter(
-            (order) =>
-              ticketVisibleStatuses.has(order.status) && order.ticketCount > 0,
-          )
-          .forEach((order) => {
-            (order.items || []).forEach((item, index) => {
-              tix.push({
-                key: `${order.id}-${item.id || index}`,
-                instanceId: "",
-                orderId: order.id,
-                eventId: 0,
-                eventName: decodeHtmlEntities(item.name),
-                ticketType: "Standard",
-                date: "",
-                endDate: undefined,
-                status: order.status,
-                checkedIn: false,
-              });
-            });
-          });
-      }
       if (requestId.current !== activeRequest) return;
       setTickets(tix);
       setErrorMessage(null);

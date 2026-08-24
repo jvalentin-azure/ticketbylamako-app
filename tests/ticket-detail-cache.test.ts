@@ -11,6 +11,8 @@ const validPayload = {
     id: 42,
     number: "42",
     status: "completed",
+    paymentStatus: "success",
+    ticketsReady: true,
   },
   tickets: {
     orderId: 42,
@@ -28,7 +30,9 @@ describe("ticket detail cache validation", () => {
   });
 
   it("rejects another order and malformed QR data", () => {
-    expect(parseCachedTicketDetail(JSON.stringify(validPayload), 41)).toBeNull();
+    expect(
+      parseCachedTicketDetail(JSON.stringify(validPayload), 41),
+    ).toBeNull();
     expect(
       parseCachedTicketDetail(
         JSON.stringify({
