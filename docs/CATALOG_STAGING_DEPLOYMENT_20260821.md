@@ -703,3 +703,16 @@ QA effectuée :
   401 attendu ;
 - les notices WooCommerce/Eventchamp et la dépréciation WP Mail SMTP observées
   en WP-CLI existaient avant ce lot et ne sont pas des erreurs du plugin mobile.
+
+Builds de validation issus du commit
+`c987e0f85f12f70980e9089c42cceddbba267c4e` :
+
+- Android staging, version code `62`, build EAS
+  `d6287d07-6541-4e34-b607-77c580c5ab8c` :
+  `https://expo.dev/artifacts/eas/pCfeZv2nyFRXOruczAHofT6K8K1KjU-a03yYkG5X1F4.apk` ;
+- iOS staging/TestFlight, build `49`, build EAS
+  `3fdec70f-a5ec-4185-9c8a-08349a1c6d34` ;
+- soumission App Store Connect réussie :
+  `45e66bc3-47bc-47ef-bd88-06f3b1b0d132` ;
+- Apple traite ensuite le binaire avant sa disponibilité dans TestFlight ;
+- aucun build ni déploiement de production n'a été lancé.
