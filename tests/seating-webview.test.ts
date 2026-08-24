@@ -95,4 +95,24 @@ describe("seating WebView protocol", () => {
     expect(commerce).toContain("releaseEmbeddedConsentWall");
     expect(commerce).not.toContain('content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"');
   });
+
+  it("uses the stable POS WebView contract and verifies the server order", () => {
+    const flow = fs.readFileSync(
+      path.resolve(
+        __dirname,
+        "..",
+        "components",
+        "seating",
+        "SeatPurchaseFlow.tsx",
+      ),
+      "utf8",
+    );
+
+    expect(flow).toContain("incognito");
+    expect(flow).toContain("thirdPartyCookiesEnabled");
+    expect(flow).not.toContain("sharedCookiesEnabled");
+    expect(flow).not.toContain("injectedJavaScript={");
+    expect(flow.match(/refreshSeatingOrder\(8, 600\)/g)).toHaveLength(2);
+    expect(flow).toContain("getMobileSeatingSessionStatus");
+  });
 });

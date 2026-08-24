@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -21,7 +21,6 @@ import { useColors } from "@/hooks/use-colors";
 import { useCart } from "@/lib/cart-provider";
 import { isAllowedWebViewUrl } from "@/lib/webview-policy";
 import {
-  buildSeatingInjectedJavaScript,
   isSeatingCheckoutUrl,
   isSeatingSessionUrl,
   isSeatingSuccessUrl,
@@ -72,6 +71,8 @@ export function SeatPurchaseFlow({
   const verifyingRef = useRef(false);
   const closingCheckoutRef = useRef(false);
   const sessionRecoveryRef = useRef(0);
+  const orderTransitionRef = useRef(false);
+  const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [session, setSession] =
     useState<CreateMobileSeatingSessionResponse | null>(null);
   const [phase, setPhase] = useState<FlowPhase>("loading");
@@ -113,6 +114,13 @@ export function SeatPurchaseFlow({
     };
   }, [eventId, sessionAttempt]);
 
+  useEffect(
+    () => () => {
+      if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
+    },
+    [],
+  );
+
   const restartSeatingSession = (resetRecovery = false) => {
     if (resetRecovery) sessionRecoveryRef.current = 0;
     setSession(null);
@@ -125,9 +133,71 @@ export function SeatPurchaseFlow({
     setStatus("Sélectionnez une ou plusieurs places");
     setSelectedSeats([]);
     setError("");
+    orderTransitionRef.current = false;
+    if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
+    fallbackTimerRef.current = null;
     setPhase("loading");
     setSessionAttempt((attempt) => attempt + 1);
   };
+
+  const openPaymentForOrder = useCallback(
+    (flowToken: string, createdOrderId?: number | null) => {
+      if (!flowToken || orderTransitionRef.current) return false;
+      orderTransitionRef.current = true;
+      if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
+      fallbackTimerRef.current = null;
+      if (createdOrderId) setOrderId(createdOrderId);
+      setChecking(false);
+      setPhase("checkout");
+      onClose();
+      setTimeout(() => {
+        router.push({
+          pathname: "/payment",
+          params: { kind: "seating", token: flowToken },
+        } as any);
+      }, 0);
+      return true;
+    },
+    [onClose, router],
+  );
+
+  const refreshSeatingOrder = useCallback(
+    async (attempts = 1, intervalMs = 600) => {
+      if (!session?.flowToken || orderTransitionRef.current) return false;
+      setChecking(true);
+      try {
+        for (let attempt = 0; attempt < attempts; attempt += 1) {
+          const response = await getMobileSeatingSessionStatus(
+            session.flowToken,
+          );
+          if (response.order?.id) {
+            return openPaymentForOrder(
+              session.flowToken,
+              response.order.id,
+            );
+          }
+          if (attempt < attempts - 1) {
+            await new Promise((resolve) => setTimeout(resolve, intervalMs));
+          }
+        }
+        if (attempts > 1) {
+          setStatus("Confirmation en cours. Actualisez si nécessaire.");
+        }
+      } catch (err: any) {
+        console.warn("Seating order verification failed:", err);
+        if (attempts <= 1) {
+          Alert.alert(
+            "Plan de salle",
+            err?.message || "Le statut des sièges est indisponible.",
+          );
+        }
+      } finally {
+        if (!orderTransitionRef.current) setChecking(false);
+      }
+      return false;
+    },
+    [openPaymentForOrder, session?.flowToken],
+  );
 
   const verifyPayment = async () => {
     if (!session?.flowToken || verifyingRef.current) return;
@@ -252,15 +322,11 @@ export function SeatPurchaseFlow({
             break;
           }
           if (createdOrderId) setOrderId(createdOrderId);
-          setChecking(false);
-          setPhase("checkout");
-          onClose();
-          setTimeout(() => {
-            router.push({
-              pathname: "/payment",
-              params: { kind: "seating", token: flowToken },
-            } as any);
-          }, 0);
+          setStatus("Sièges confirmés");
+          setChecking(true);
+          // The server status is the source of truth. It also protects the
+          // native flow from racing Tickera's final order persistence.
+          void refreshSeatingOrder(4, 350);
           break;
         }
         case "PAYMENT_STARTED":
@@ -310,8 +376,6 @@ export function SeatPurchaseFlow({
     if (isSeatingSuccessUrl(url)) verifyPayment();
   };
 
-  const injectedJavaScript = buildSeatingInjectedJavaScript(session?.flowId);
-
   const handleClose = () => {
     if (phase === "checkout" && !closingCheckoutRef.current) {
       closingCheckoutRef.current = true;
@@ -350,6 +414,11 @@ export function SeatPurchaseFlow({
       }
       true;
     `);
+    if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
+    fallbackTimerRef.current = setTimeout(
+      () => void refreshSeatingOrder(8, 600),
+      2000,
+    );
   };
 
   const continueToCheckout = () => {
@@ -378,6 +447,11 @@ export function SeatPurchaseFlow({
       }
       true;
     `);
+    if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
+    fallbackTimerRef.current = setTimeout(
+      () => void refreshSeatingOrder(8, 600),
+      2000,
+    );
   };
 
   const seatsForModal: SelectedSeat[] =
@@ -547,11 +621,10 @@ export function SeatPurchaseFlow({
           javaScriptEnabled
           domStorageEnabled
           mixedContentMode="never"
-          sharedCookiesEnabled
+          incognito
           thirdPartyCookiesEnabled
           startInLoadingState
           setSupportMultipleWindows={false}
-          injectedJavaScript={injectedJavaScript}
           onMessage={handleMessage}
           onNavigationStateChange={handleNavChange}
           renderLoading={() => (

@@ -365,7 +365,9 @@ function lamako_mobile_v2_wallet_create_strip( $source, $destination, $width, $h
     if ( is_wp_error( $resized ) ) {
         return false;
     }
-    $editor->set_quality( 88 );
+    // Keep the pass fast to download and present. PNG quality maps to
+    // compression in WordPress image editors; 82 preserves event artwork.
+    $editor->set_quality( 82 );
     $saved = $editor->save( $destination, 'image/png' );
     return ! is_wp_error( $saved ) && is_file( $destination );
 }
@@ -499,10 +501,11 @@ function lamako_mobile_v2_build_apple_wallet_pass( WC_Order $order, array $ticke
         absint( $ticket['eventId'] ?? 0 )
     );
     if ( $event_image !== '' ) {
+        // Apple event-ticket strips use a 375x98 point canvas. Supplying the
+        // matching 1x/2x assets avoids oversized or rejected pass packages.
         $strip_sizes = [
-            'strip.png'    => [ 375, 123 ],
-            'strip@2x.png' => [ 750, 246 ],
-            'strip@3x.png' => [ 1125, 369 ],
+            'strip.png'    => [ 375, 98 ],
+            'strip@2x.png' => [ 750, 196 ],
         ];
         foreach ( $strip_sizes as $filename => $size ) {
             if ( ! lamako_mobile_v2_wallet_create_strip( $event_image, $base . '/' . $filename, $size[0], $size[1] ) ) {
@@ -573,7 +576,7 @@ function lamako_mobile_v2_build_apple_wallet_pass( WC_Order $order, array $ticke
         $cleanup();
         return new WP_Error( 'lamako_wallet_zip_failed', 'Unable to package the Apple Wallet pass.' );
     }
-    foreach ( [ 'pass.json', 'icon.png', 'icon@2x.png', 'icon@3x.png', 'logo.png', 'logo@2x.png', 'strip.png', 'strip@2x.png', 'strip@3x.png', 'manifest.json', 'signature' ] as $filename ) {
+    foreach ( [ 'pass.json', 'icon.png', 'icon@2x.png', 'icon@3x.png', 'logo.png', 'logo@2x.png', 'strip.png', 'strip@2x.png', 'manifest.json', 'signature' ] as $filename ) {
         if ( is_file( $base . '/' . $filename ) ) {
             $zip->addFile( $base . '/' . $filename, $filename );
         }

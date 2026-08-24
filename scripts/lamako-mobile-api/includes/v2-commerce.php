@@ -1616,6 +1616,215 @@ function lamako_mobile_v2_product_base_id( WC_Product $product, $requested_produ
     return $parent_id ? (int) $parent_id : (int) $requested_product_id;
 }
 
+function lamako_mobile_v2_checkout_field_value_is_empty( $value ) {
+    if ( is_array( $value ) ) {
+        return empty( array_filter( $value, static function( $entry ) {
+            return trim( (string) $entry ) !== '';
+        } ) );
+    }
+
+    return trim( (string) $value ) === '';
+}
+
+function lamako_mobile_v2_sanitize_checkout_field_value( $value, array $field ) {
+    $type = sanitize_key( (string) ( $field['type'] ?? 'text' ) );
+
+    if ( $type === 'checkbox' ) {
+        $values = is_array( $value ) ? $value : explode( ',', (string) $value );
+        return array_values( array_filter( array_map( 'sanitize_text_field', $values ), static function( $entry ) {
+            return $entry !== '';
+        } ) );
+    }
+    if ( $type === 'email' ) {
+        return sanitize_email( (string) $value );
+    }
+    if ( $type === 'textarea' ) {
+        return sanitize_textarea_field( (string) $value );
+    }
+
+    return sanitize_text_field( (string) $value );
+}
+
+function lamako_mobile_v2_normalize_checkout_field_answers( array $schema, $submitted, $context ) {
+    $submitted = is_array( $submitted ) ? $submitted : [];
+    $answers   = [];
+
+    foreach ( $schema as $field ) {
+        if ( ! is_array( $field ) ) {
+            continue;
+        }
+
+        $storage_key = sanitize_key( (string) ( $field['storageKey'] ?? '' ) );
+        $field_key   = sanitize_key( (string) ( $field['key'] ?? '' ) );
+        if ( $storage_key === '' ) {
+            continue;
+        }
+
+        $raw_value = array_key_exists( $storage_key, $submitted )
+            ? $submitted[ $storage_key ]
+            : ( array_key_exists( $field_key, $submitted ) ? $submitted[ $field_key ] : '' );
+        $value = lamako_mobile_v2_sanitize_checkout_field_value( $raw_value, $field );
+
+        if ( ! empty( $field['required'] ) && lamako_mobile_v2_checkout_field_value_is_empty( $value ) ) {
+            return new WP_Error(
+                'lamako_v2_checkout_field_required',
+                sprintf( '%s : le champ « %s » est obligatoire.', $context, (string) ( $field['label'] ?? $storage_key ) ),
+                [ 'status' => 422, 'field' => $storage_key ]
+            );
+        }
+
+        if ( ! lamako_mobile_v2_checkout_field_value_is_empty( $value ) && ( $field['type'] ?? '' ) === 'email' && ! is_email( $value ) ) {
+            return new WP_Error(
+                'lamako_v2_checkout_field_invalid_email',
+                sprintf( '%s : le champ « %s » doit contenir une adresse e-mail valide.', $context, (string) ( $field['label'] ?? $storage_key ) ),
+                [ 'status' => 422, 'field' => $storage_key ]
+            );
+        }
+
+        if ( ! lamako_mobile_v2_checkout_field_value_is_empty( $value ) && ( $field['type'] ?? '' ) === 'number' && ! is_numeric( $value ) ) {
+            return new WP_Error(
+                'lamako_v2_checkout_field_invalid_number',
+                sprintf( '%s : le champ « %s » doit contenir un nombre valide.', $context, (string) ( $field['label'] ?? $storage_key ) ),
+                [ 'status' => 422, 'field' => $storage_key ]
+            );
+        }
+
+        $answers[ $storage_key ] = $value;
+    }
+
+    return $answers;
+}
+
+function lamako_mobile_v2_validate_checkout_attendees( array $validated_item, $raw_item, $index ) {
+    $validated_item['attendees'] = [];
+    if ( empty( $validated_item['is_ticket'] ) ) {
+        return $validated_item;
+    }
+
+    $ticket_type_id = ! empty( $validated_item['variation_id'] )
+        ? (int) $validated_item['variation_id']
+        : (int) $validated_item['base_id'];
+    $checkout_fields = lamako_mobile_v2_checkout_fields_for_ticket(
+        $ticket_type_id,
+        (int) $validated_item['event_id'],
+        (int) $validated_item['quantity']
+    );
+    $schema = ! empty( $checkout_fields['hasFields'] ) && isset( $checkout_fields['ownerFields'] )
+        ? (array) $checkout_fields['ownerFields']
+        : [];
+    if ( empty( $schema ) ) {
+        return $validated_item;
+    }
+
+    $submitted = isset( $raw_item['attendees'] ) && is_array( $raw_item['attendees'] )
+        ? array_values( $raw_item['attendees'] )
+        : [];
+    if ( count( $submitted ) !== (int) $validated_item['quantity'] ) {
+        return new WP_Error(
+            'lamako_v2_attendee_count_invalid',
+            sprintf( 'Un formulaire participant doit être rempli pour chaque billet de la ligne %d.', (int) $index + 1 ),
+            [ 'status' => 422 ]
+        );
+    }
+
+    foreach ( $submitted as $attendee_index => $attendee ) {
+        $raw_answers = is_array( $attendee ) && isset( $attendee['fields'] )
+            ? $attendee['fields']
+            : $attendee;
+        $answers = lamako_mobile_v2_normalize_checkout_field_answers(
+            $schema,
+            $raw_answers,
+            sprintf( 'Billet %d', (int) $attendee_index + 1 )
+        );
+        if ( is_wp_error( $answers ) ) {
+            return $answers;
+        }
+        $validated_item['attendees'][] = $answers;
+    }
+
+    return $validated_item;
+}
+
+function lamako_mobile_v2_persist_checkout_field_answers( WC_Order $order, array $validated_items, array $order_item_ids, array $buyer_fields ) {
+    // Tickera can write metadata outside the current WC_Order object's cache.
+    // Reload it so duplicate rows can be consolidated deterministically.
+    $order->read_meta_data( true );
+    $cart_info = [];
+    foreach ( $order->get_meta_data() as $meta ) {
+        if ( isset( $meta->key, $meta->value ) && $meta->key === 'tc_cart_info' && is_array( $meta->value ) ) {
+            $cart_info = $meta->value;
+        }
+    }
+    $buyer_data = isset( $cart_info['buyer_data'] ) && is_array( $cart_info['buyer_data'] ) ? $cart_info['buyer_data'] : [];
+    $owner_data = isset( $cart_info['owner_data'] ) && is_array( $cart_info['owner_data'] ) ? $cart_info['owner_data'] : [];
+
+    foreach ( $buyer_fields as $storage_key => $value ) {
+        $buyer_data[ sanitize_key( (string) $storage_key ) ] = $value;
+    }
+
+    foreach ( $validated_items as $index => $item ) {
+        $order_item_id = absint( $order_item_ids[ $index ] ?? 0 );
+        if ( $order_item_id <= 0 ) {
+            continue;
+        }
+
+        $order_item = $order->get_item( $order_item_id );
+        if ( ! $order_item ) {
+            continue;
+        }
+
+        if ( ! empty( $item['event_id'] ) ) {
+            $order_item->update_meta_data( '_item_event_id', (int) $item['event_id'] );
+        }
+
+        $attendees = isset( $item['attendees'] ) && is_array( $item['attendees'] ) ? $item['attendees'] : [];
+        if ( ! empty( $attendees ) ) {
+            // Keep the historical POS key for existing Tickera/report readers,
+            // and a channel-neutral key for the native customer checkout.
+            $order_item->update_meta_data( '_lamako_pos_attendees', $attendees );
+            $order_item->update_meta_data( '_lamako_mobile_attendees', $attendees );
+
+            $ticket_type_id = ! empty( $item['variation_id'] ) ? (int) $item['variation_id'] : (int) $item['base_id'];
+            foreach ( $attendees as $answers ) {
+                foreach ( (array) $answers as $storage_key => $value ) {
+                    $storage_key = sanitize_key( (string) $storage_key );
+                    if ( $storage_key === '' ) {
+                        continue;
+                    }
+                    if ( ! isset( $owner_data[ $storage_key ] ) || ! is_array( $owner_data[ $storage_key ] ) ) {
+                        $owner_data[ $storage_key ] = [];
+                    }
+                    if ( ! isset( $owner_data[ $storage_key ][ (string) $ticket_type_id ] ) || ! is_array( $owner_data[ $storage_key ][ (string) $ticket_type_id ] ) ) {
+                        $owner_data[ $storage_key ][ (string) $ticket_type_id ] = [];
+                    }
+                    $owner_data[ $storage_key ][ (string) $ticket_type_id ][] = $value;
+                }
+            }
+        }
+
+        $order_item->save();
+    }
+
+    $cart_info['buyer_data'] = $buyer_data;
+    $cart_info['owner_data'] = $owner_data;
+    // Some Tickera hooks append a second tc_cart_info row during order
+    // creation. Keep one canonical record so subsequent reads cannot return
+    // the earlier empty value.
+    $order->update_meta_data( 'tc_cart_info', $cart_info );
+    $order->save_meta_data();
+
+    // Tickera's HPOS compatibility layer can keep two tc_cart_info rows. Make
+    // every row canonical so both WooCommerce and legacy readers obtain the
+    // same attendee data regardless of which row they read first.
+    $order->read_meta_data( true );
+    foreach ( $order->get_meta_data() as $meta ) {
+        if ( isset( $meta->key, $meta->id ) && $meta->key === 'tc_cart_info' && (int) $meta->id > 0 ) {
+            $order->update_meta_data( 'tc_cart_info', $cart_info, (int) $meta->id );
+        }
+    }
+    $order->save_meta_data();
+}
+
 function lamako_mobile_v2_validate_checkout_item( $raw_item, $index ) {
     $product_id   = isset( $raw_item['product_id'] ) ? absint( $raw_item['product_id'] ) : 0;
     $variation_id = isset( $raw_item['variation_id'] ) ? absint( $raw_item['variation_id'] ) : 0;
@@ -1724,6 +1933,10 @@ function lamako_mobile_v2_create_checkout( WP_REST_Request $request ) {
         if ( is_wp_error( $validated_item ) ) {
             return $validated_item;
         }
+        $validated_item = lamako_mobile_v2_validate_checkout_attendees( $validated_item, $item, $index );
+        if ( is_wp_error( $validated_item ) ) {
+            return $validated_item;
+        }
         $validated[] = $validated_item;
     }
 
@@ -1740,6 +1953,14 @@ function lamako_mobile_v2_create_checkout( WP_REST_Request $request ) {
     $shipping   = $body['shipping'] ?? [];
     $source     = sanitize_text_field( $body['source'] ?? 'native_cart' );
     $coupon     = sanitize_text_field( $body['couponCode'] ?? $body['coupon_code'] ?? '' );
+    $buyer_fields = lamako_mobile_v2_normalize_checkout_field_answers(
+        lamako_mobile_v2_buyer_fields_schema(),
+        $body['buyerFields'] ?? $body['buyer_fields'] ?? [],
+        'Acheteur'
+    );
+    if ( is_wp_error( $buyer_fields ) ) {
+        return $buyer_fields;
+    }
 
     if ( lamako_mobile_v2_is_rewards_coupon_code( $coupon ) ) {
         foreach ( $validated as $item ) {
@@ -1768,6 +1989,7 @@ function lamako_mobile_v2_create_checkout( WP_REST_Request $request ) {
 
         lamako_mobile_v2_set_order_address( $order, $billing, $shipping );
 
+        $order_item_ids = [];
         foreach ( $validated as $item ) {
             $added = $order->add_product( $item['product'], $item['quantity'] );
             if ( is_wp_error( $added ) ) {
@@ -1775,6 +1997,7 @@ function lamako_mobile_v2_create_checkout( WP_REST_Request $request ) {
                 lamako_mobile_v2_restore_legacy_product_overrides( $removed_filters );
                 return new WP_Error( 'lamako_v2_add_product_failed', $added->get_error_message(), [ 'status' => 409 ] );
             }
+            $order_item_ids[] = (int) $added;
         }
 
         if ( $coupon !== '' ) {
@@ -1803,6 +2026,10 @@ function lamako_mobile_v2_create_checkout( WP_REST_Request $request ) {
             lamako_mobile_v2_restore_legacy_product_overrides( $removed_filters );
             return new WP_Error( 'lamako_v2_ticket_create_failed', $ticket_result->get_error_message(), [ 'status' => 500 ] );
         }
+
+        // Tickera/WooCommerce hooks can rebuild tc_cart_info while totals and
+        // ticket metadata are prepared, so persist form answers last.
+        lamako_mobile_v2_persist_checkout_field_answers( $order, $validated, $order_item_ids, $buyer_fields );
     } catch ( Exception $e ) {
         lamako_mobile_v2_restore_legacy_product_overrides( $removed_filters );
         return new WP_Error( 'lamako_v2_checkout_failed', $e->getMessage(), [ 'status' => 500 ] );
@@ -4328,6 +4555,20 @@ function lamako_mobile_v2_ensure_ticket_instances_for_order( WC_Order $order, ar
                     return $created;
                 }
                 $instances[] = (int) $created;
+            }
+        }
+
+        $attendees = $item->get_meta( '_lamako_mobile_attendees' );
+        if ( ! is_array( $attendees ) || empty( $attendees ) ) {
+            $attendees = $item->get_meta( '_lamako_pos_attendees' );
+        }
+        $attendees = is_array( $attendees ) ? $attendees : [];
+        foreach ( $instances as $attendee_index => $instance_id ) {
+            foreach ( (array) ( $attendees[ $attendee_index ] ?? [] ) as $storage_key => $value ) {
+                $storage_key = sanitize_key( (string) $storage_key );
+                if ( $storage_key !== '' ) {
+                    update_post_meta( (int) $instance_id, $storage_key, $value );
+                }
             }
         }
 

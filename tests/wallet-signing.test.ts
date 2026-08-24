@@ -87,6 +87,9 @@ describe("server-signed ticket wallet passes", () => {
     expect(wallet).toContain("wp_get_upload_dir");
     expect(wallet).toContain("wp_get_image_editor");
     expect(wallet).toContain("strip@2x.png");
+    expect(wallet).toContain("'strip.png'    => [ 375, 98 ]");
+    expect(wallet).toContain("'strip@2x.png' => [ 750, 196 ]");
+    expect(wallet).not.toContain("strip@3x.png");
     expect(wallet).toContain("suppressStripShine");
     expect(wallet).toContain("'ticketId'");
     expect(wallet).toContain("'ticketbylamako://ticket/' . $order->get_id()");
