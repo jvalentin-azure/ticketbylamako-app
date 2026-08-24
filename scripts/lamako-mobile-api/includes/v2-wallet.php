@@ -276,6 +276,85 @@ function lamako_mobile_v2_wallet_local_attachment_path( $url, $event_id = 0 ) {
     return strpos( $normalized_real, $normalized_root ) === 0 ? $real : '';
 }
 
+function lamako_mobile_v2_wallet_brand_logo_url() {
+    if ( defined( 'LAMAKO_WALLET_LOGO_URL' ) ) {
+        $configured = esc_url_raw( (string) LAMAKO_WALLET_LOGO_URL );
+        if ( $configured !== '' ) {
+            return $configured;
+        }
+    }
+
+    $custom_logo_id = absint( get_theme_mod( 'custom_logo' ) );
+    if ( $custom_logo_id > 0 ) {
+        $custom_logo = wp_get_attachment_image_url( $custom_logo_id, 'full' );
+        if ( is_string( $custom_logo ) && $custom_logo !== '' ) {
+            return esc_url_raw( $custom_logo );
+        }
+    }
+
+    $bundled_logo = dirname( __DIR__ ) . '/assets/wallet-logo.png';
+    if ( is_readable( $bundled_logo ) ) {
+        return esc_url_raw(
+            set_url_scheme(
+                plugins_url( 'assets/wallet-logo.png', dirname( __DIR__ ) . '/lamako-mobile-api.php' ),
+                'https'
+            )
+        );
+    }
+
+    return esc_url_raw( (string) get_site_icon_url( 512 ) );
+}
+
+function lamako_mobile_v2_wallet_brand_logo_path() {
+    if ( defined( 'LAMAKO_WALLET_LOGO_PATH' ) && is_readable( LAMAKO_WALLET_LOGO_PATH ) ) {
+        $configured = realpath( LAMAKO_WALLET_LOGO_PATH );
+        if ( $configured ) {
+            return $configured;
+        }
+    }
+
+    $attachment = lamako_mobile_v2_wallet_local_attachment_path(
+        lamako_mobile_v2_wallet_brand_logo_url()
+    );
+    if ( $attachment !== '' ) {
+        return $attachment;
+    }
+
+    $bundled_logo = dirname( __DIR__ ) . '/assets/wallet-logo.png';
+    if ( is_readable( $bundled_logo ) ) {
+        $bundled = realpath( $bundled_logo );
+        if ( $bundled ) {
+            return $bundled;
+        }
+    }
+
+    foreach ( [ 'LAMAKO_WALLET_ICON_2X_PATH', 'LAMAKO_WALLET_ICON_PATH' ] as $constant ) {
+        if ( defined( $constant ) && is_readable( constant( $constant ) ) ) {
+            $fallback = realpath( constant( $constant ) );
+            if ( $fallback ) {
+                return $fallback;
+            }
+        }
+    }
+
+    return '';
+}
+
+function lamako_mobile_v2_wallet_create_logo( $source, $destination, $width, $height ) {
+    $editor = wp_get_image_editor( $source );
+    if ( is_wp_error( $editor ) ) {
+        return false;
+    }
+
+    $resized = $editor->resize( absint( $width ), absint( $height ), false );
+    if ( is_wp_error( $resized ) ) {
+        return false;
+    }
+    $editor->set_quality( 92 );
+    $saved = $editor->save( $destination, 'image/png' );
+    return ! is_wp_error( $saved ) && is_file( $destination );
+}
+
 function lamako_mobile_v2_wallet_create_strip( $source, $destination, $width, $height ) {
     $editor = wp_get_image_editor( $source );
     if ( is_wp_error( $editor ) ) {
@@ -401,11 +480,17 @@ function lamako_mobile_v2_build_apple_wallet_pass( WC_Order $order, array $ticke
             return new WP_Error( 'lamako_wallet_icon_3x_failed', 'Unable to prepare the Apple Wallet 3x icon.' );
         }
     }
-    if ( defined( 'LAMAKO_WALLET_LOGO_PATH' ) && is_readable( LAMAKO_WALLET_LOGO_PATH ) ) {
-        $logo_path = realpath( LAMAKO_WALLET_LOGO_PATH );
-        if ( ! $logo_path || ! copy( $logo_path, $base . '/logo.png' ) ) {
-            $cleanup();
-            return new WP_Error( 'lamako_wallet_logo_failed', 'Unable to prepare the Apple Wallet logo.' );
+    $logo_path = lamako_mobile_v2_wallet_brand_logo_path();
+    if ( $logo_path !== '' ) {
+        $logo_sizes = [
+            'logo.png'    => [ 160, 50 ],
+            'logo@2x.png' => [ 320, 100 ],
+        ];
+        foreach ( $logo_sizes as $filename => $size ) {
+            if ( ! lamako_mobile_v2_wallet_create_logo( $logo_path, $base . '/' . $filename, $size[0], $size[1] ) ) {
+                $cleanup();
+                return new WP_Error( 'lamako_wallet_logo_failed', 'Unable to prepare the Apple Wallet logo.' );
+            }
         }
     }
 
@@ -488,7 +573,7 @@ function lamako_mobile_v2_build_apple_wallet_pass( WC_Order $order, array $ticke
         $cleanup();
         return new WP_Error( 'lamako_wallet_zip_failed', 'Unable to package the Apple Wallet pass.' );
     }
-    foreach ( [ 'pass.json', 'icon.png', 'icon@2x.png', 'icon@3x.png', 'logo.png', 'strip.png', 'strip@2x.png', 'strip@3x.png', 'manifest.json', 'signature' ] as $filename ) {
+    foreach ( [ 'pass.json', 'icon.png', 'icon@2x.png', 'icon@3x.png', 'logo.png', 'logo@2x.png', 'strip.png', 'strip@2x.png', 'strip@3x.png', 'manifest.json', 'signature' ] as $filename ) {
         if ( is_file( $base . '/' . $filename ) ) {
             $zip->addFile( $base . '/' . $filename, $filename );
         }
@@ -527,8 +612,11 @@ function lamako_mobile_v2_google_wallet_url( WC_Order $order, array $ticket ) {
     $event_name   = wp_strip_all_tags( (string) ( $ticket['eventName'] ?? $ticket['productName'] ?? 'Événement' ) );
     $location     = wp_strip_all_tags( (string) ( $ticket['eventLocation'] ?? '' ) );
     $ticket_code  = sanitize_text_field( (string) ( $ticket['ticketCode'] ?? '' ) );
-    $class_id     = $issuer . '.' . lamako_mobile_v2_google_wallet_id_suffix( 'event_' . $event_id );
-    $object_id    = $issuer . '.' . lamako_mobile_v2_google_wallet_id_suffix( 'ticket_' . $ticket_id );
+    // Version the visual contract so previously created Google classes do not
+    // keep serving an obsolete layout when branding assets change.
+    $template_version = 'v2';
+    $class_id     = $issuer . '.' . lamako_mobile_v2_google_wallet_id_suffix( 'event_' . $event_id . '_' . $template_version );
+    $object_id    = $issuer . '.' . lamako_mobile_v2_google_wallet_id_suffix( 'ticket_' . $ticket_id . '_' . $template_version );
     $event_date   = lamako_mobile_v2_wallet_iso_date( $ticket['eventDate'] ?? '' );
     $event_end    = lamako_mobile_v2_wallet_iso_date( $ticket['eventEndDate'] ?? '' );
 
@@ -538,6 +626,13 @@ function lamako_mobile_v2_google_wallet_url( WC_Order $order, array $ticket ) {
         'eventName'    => lamako_mobile_v2_wallet_localized_string( $event_name ),
         'reviewStatus' => 'UNDER_REVIEW',
     ];
+    $brand_logo = lamako_mobile_v2_wallet_brand_logo_url();
+    if ( $brand_logo !== '' ) {
+        $class['logo'] = [
+            'sourceUri'          => [ 'uri' => $brand_logo ],
+            'contentDescription' => lamako_mobile_v2_wallet_localized_string( 'Logo TicketByLamako' ),
+        ];
+    }
     if ( $location !== '' ) {
         $class['venue'] = [
             'name'    => lamako_mobile_v2_wallet_localized_string( $location ),

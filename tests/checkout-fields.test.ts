@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildCheckoutItemInputs,
   buildDefaultCheckoutFieldValues,
+  cartNeedsCheckoutFieldSchema,
   validateCheckoutFieldValues,
 } from "@/lib/checkout-fields";
 import type { MobileCheckoutFieldsResponse } from "@/lib/api/mobile";
@@ -46,6 +47,24 @@ const schema: MobileCheckoutFieldsResponse = {
 };
 
 describe("checkout field helpers", () => {
+  it("always asks the server for ticket fields even when catalog hints are stale", () => {
+    expect(
+      cartNeedsCheckoutFieldSchema([
+        {
+          productId: 12,
+          eventId: 34,
+          name: "Billet QA",
+          price: 300,
+          quantity: 1,
+          image: "",
+          isEvent: true,
+          hasCheckoutFields: false,
+          requiresCheckoutFields: false,
+        },
+      ]),
+    ).toBe(true);
+  });
+
   it("pre-fills buyer and attendee identity from the authenticated user", () => {
     const values = buildDefaultCheckoutFieldValues(schema, {
       firstName: "Miora",

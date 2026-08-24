@@ -4577,7 +4577,7 @@ function lamako_mobile_v2_maybe_serve_seating_flow() {
 <html <?php language_attributes(); ?>>
 <head>
 <meta charset="<?php bloginfo( 'charset' ); ?>" />
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="robots" content="noindex,nofollow" />
 <title><?php echo esc_html( $event_title ?: 'Plan de salle' ); ?> - TicketByLamako</title>
 <style>
@@ -4588,13 +4588,24 @@ body.lamako-mobile-seat-flow { overflow-x: hidden !important; }
 .lamako-seat-title { margin: 0 0 10px; color: #2f2116; font-size: 16px; font-weight: 800; line-height: 1.25; }
 .lamako-seat-helper { margin: 0 0 12px; color: #6f6256; font-size: 13px; line-height: 1.35; }
 .tc_seating_map_button, button.tc_seating_map_button { display: block !important; width: 100% !important; max-width: 360px !important; margin: 12px auto !important; padding: 14px 18px !important; border: 0 !important; border-radius: 12px !important; background: #663d17 !important; color: #fff !important; font-size: 16px !important; font-weight: 800 !important; text-align: center !important; }
-.tc_seating_map, [class*="tc_seating_map"], .tc_seat_chart_wrap, .tc_seat_chart_modal, .tc_seat_chart_container, .tc_seating_chart, .fancybox-overlay, .fancybox-wrap { visibility: visible !important; z-index: 9999 !important; }
+.tc_seat_chart_wrap, .tc_seat_chart_modal, .tc_seat_chart_container, .tc_seating_chart { max-width: 100% !important; }
+.fancybox-overlay, .fancybox-wrap { z-index: 9999 !important; }
 .tc_zoom_in, .tc_zoom_out, .tc-zoom-in, .tc-zoom-out, [class*="zoom_in"], [class*="zoom_out"] { display: block !important; visibility: visible !important; }
 .woocommerce, .woocommerce-cart, .woocommerce-checkout { max-width: 100% !important; padding: 10px !important; box-sizing: border-box !important; }
 .wc-proceed-to-checkout a, .checkout-button, #place_order { display: block !important; width: 100% !important; border-radius: 12px !important; padding: 14px !important; font-size: 16px !important; font-weight: 800 !important; text-align: center !important; }
-.tc-checkout-button, .tc_cart_button, a.tc-checkout-button { background: #16a34a !important; color: #fff !important; -webkit-text-fill-color: #fff !important; opacity: 1 !important; border-radius: 12px !important; font-weight: 900 !important; box-shadow: 0 10px 24px rgba(22,163,74,.24) !important; }
-.tc-checkout-button:hover, .tc_cart_button:hover, a.tc-checkout-button:hover, .tc-checkout-button:focus, .tc_cart_button:focus, a.tc-checkout-button:focus, .tc-checkout-button:active, .tc_cart_button:active, a.tc-checkout-button:active { background: #15803d !important; color: #fff !important; -webkit-text-fill-color: #fff !important; opacity: 1 !important; }
-.tc-checkout-button.is-lamako-loading, .tc_cart_button.is-lamako-loading, .tc-checkout-button.is-lamako-loading:disabled, .tc_cart_button.is-lamako-loading:disabled { background: #15803d !important; color: #fff !important; -webkit-text-fill-color: #fff !important; opacity: 1 !important; visibility: visible !important; pointer-events: none !important; cursor: progress !important; }
+.tc_cart_button { background: #16a34a !important; color: #fff !important; -webkit-text-fill-color: #fff !important; opacity: 1 !important; border-radius: 12px !important; font-weight: 900 !important; box-shadow: 0 10px 24px rgba(22,163,74,.24) !important; }
+.tc_cart_button:hover, .tc_cart_button:focus, .tc_cart_button:active { background: #15803d !important; color: #fff !important; -webkit-text-fill-color: #fff !important; opacity: 1 !important; }
+.tc-checkout-button, a.tc-checkout-button { display: none !important; }
+.tc-seating-legend-wrap { z-index: 2147482800 !important; }
+.tc-seat-dialog.ui-dialog { z-index: 999999 !important; pointer-events: auto !important; }
+.tc-seat-dialog.ui-dialog, .tc-seat-dialog.ui-dialog * { pointer-events: auto !important; }
+.ui-widget-overlay { position: fixed !important; inset: 0 !important; z-index: 999998 !important; pointer-events: auto !important; }
+.tc-seat-dialog .ui-dialog-content { max-width: calc(100vw - 24px) !important; max-height: calc(100vh - 112px) !important; overflow: auto !important; box-sizing: border-box !important; }
+.tc-seat-dialog button, .tc-seat-dialog .button, .tc-seat-dialog .tc_cart_button { min-height: 48px !important; touch-action: manipulation !important; }
+.tc-bottom-controls, .tc-bottom-controls *, .tc-zoom-wrap, .tc-zoom-wrap *, .tc-seating-legend-wrap, .tc-seating-legend-wrap * { pointer-events: auto !important; }
+.tc_seat_unit, .tc_seat_unit * { pointer-events: auto !important; }
+.tc-zoom-wrap .tc-plus-wrap, .tc-zoom-wrap .tc-minus-wrap, .tc-legend-arrow { touch-action: manipulation !important; -webkit-tap-highlight-color: transparent; }
+.tc-zoom-wrap .tc-plus-wrap, .tc-zoom-wrap .tc-minus-wrap, .tc-legend-arrow { min-width: 44px; min-height: 44px; }
 .lamako-seat-notice { position: fixed; left: 12px; right: 12px; bottom: 76px; z-index: 100000; display: none; border-radius: 12px; padding: 12px 14px; background: #fff7ed; color: #9a3412; font-size: 14px; font-weight: 700; box-shadow: 0 8px 24px rgba(0,0,0,.14); }
 .lamako-seat-notice.is-visible { display: block; }
 </style>
@@ -4607,6 +4618,13 @@ body.lamako-mobile-seat-flow { overflow-x: hidden !important; }
     <?php echo do_shortcode( '[tc_seat_chart id="' . absint( $chart_id ) . '" show_legend="true" button_title="Choisir mes sièges" cart_title="Passer au paiement"]' ); ?>
 </main>
 <div class="lamako-seat-notice" id="lamako-seat-notice"></div>
+<?php
+// The native seating flow owns checkout. Public-site drawers must not observe
+// Tickera cart mutations from this isolated route.
+foreach ( [ 'tbl-event-fast-checkout', 'fkcart-script' ] as $script_handle ) {
+    wp_dequeue_script( $script_handle );
+}
+?>
 <?php wp_footer(); ?>
 <script>
 (function() {
@@ -4620,6 +4638,23 @@ body.lamako-mobile-seat-flow { overflow-x: hidden !important; }
   var seatingOpened = false;
   var seatDialogOpen = false;
   var seatingLaunchAttempts = 0;
+  function releaseEmbeddedConsentWall() {
+    if (!document.body) return;
+
+    // Complianz can disable pointer events while its hidden banner is pending.
+    // Release only the transient DOM lock; do not store or imply consent.
+    if (document.body.classList.contains("cmplz-banner-active")) {
+      document.body.classList.remove("cmplz-banner-active");
+    }
+    document.querySelectorAll(".cmplz-cookiebanner").forEach(function(banner) {
+      banner.setAttribute("aria-hidden", "true");
+    });
+  }
+  releaseEmbeddedConsentWall();
+  new MutationObserver(releaseEmbeddedConsentWall).observe(document.body, {
+    attributes: true,
+    attributeFilter: ["class"]
+  });
   function post(type, payload) {
     if (!window.ReactNativeWebView) return;
     window.ReactNativeWebView.postMessage(JSON.stringify({

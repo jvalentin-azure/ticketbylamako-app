@@ -27,6 +27,8 @@ interface NotificationsContextType {
   isHydrated: boolean;
   markAsRead: (id: string) => void;
   markAllAsRead: () => void;
+  archiveNotification: (id: string) => void;
+  archiveRead: () => void;
   clearAll: () => void;
 }
 
@@ -36,6 +38,8 @@ const NotificationsContext = createContext<NotificationsContextType>({
   isHydrated: false,
   markAsRead: () => {},
   markAllAsRead: () => {},
+  archiveNotification: () => {},
+  archiveRead: () => {},
   clearAll: () => {},
 });
 
@@ -164,6 +168,25 @@ export function NotificationsProvider({
     });
   }, [persist]);
 
+  const archiveNotification = useCallback(
+    (id: string) => {
+      setNotifications((prev) => {
+        const updated = prev.filter((notification) => notification.id !== id);
+        persist(updated);
+        return updated;
+      });
+    },
+    [persist],
+  );
+
+  const archiveRead = useCallback(() => {
+    setNotifications((prev) => {
+      const updated = prev.filter((notification) => !notification.read);
+      persist(updated);
+      return updated;
+    });
+  }, [persist]);
+
   const clearAll = useCallback(() => {
     setNotifications([]);
     AsyncStorage.removeItem(storageKey).catch(() => {});
@@ -177,6 +200,8 @@ export function NotificationsProvider({
         isHydrated,
         markAsRead,
         markAllAsRead,
+        archiveNotification,
+        archiveRead,
         clearAll,
       }}
     >

@@ -16,6 +16,12 @@ export interface CheckoutUserDefaults {
   email?: string;
 }
 
+export function cartNeedsCheckoutFieldSchema(items: CartItem[]): boolean {
+  // Ticket metadata in the catalog is only a hint and can be stale. The server
+  // remains the source of truth for Tickera/WooCommerce attendee fields.
+  return items.some((item) => item.isEvent);
+}
+
 export function checkoutFieldKey(field: CheckoutFieldSchema): string {
   return field.storageKey || field.key;
 }

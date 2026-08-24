@@ -22,6 +22,7 @@ import {
 import {
   buildCheckoutItemInputs,
   buildDefaultCheckoutFieldValues,
+  cartNeedsCheckoutFieldSchema,
   validateCheckoutFieldValues,
 } from "@/lib/checkout-fields";
 import { estimatePointsForPrice, useRewards } from "@/lib/rewards-provider";
@@ -55,12 +56,7 @@ export default function CheckoutScreen() {
   const allItemsRewardEligible =
     items.length > 0 && rewardEligibleItems.length === items.length;
   const hasPhysicalProducts = items.some((item) => !item.isEvent);
-  const hasTicketCheckoutFields = items.some(
-    (item) =>
-      item.isEvent &&
-      (item.hasCheckoutFields !== false ||
-        item.requiresCheckoutFields !== false),
-  );
+  const hasTicketCheckoutFields = cartNeedsCheckoutFieldSchema(items);
   const canShowRedeem =
     isAuthenticated &&
     programConfig.enabled &&
@@ -507,15 +503,13 @@ export default function CheckoutScreen() {
           setTicketFieldErrors(errors);
           if (Object.keys(errors).length === 0) void startOrderCreation();
         }}
-        onBack={() =>
-          setPhase(
-            hasPhysicalProducts
-              ? "address"
-              : canShowRedeem
-                ? "confirm"
-                : "creating",
-          )
-        }
+        onBack={() => {
+          if (!hasPhysicalProducts && !canShowRedeem) {
+            router.back();
+            return;
+          }
+          setPhase(hasPhysicalProducts ? "address" : "confirm");
+        }}
       />
     );
   }

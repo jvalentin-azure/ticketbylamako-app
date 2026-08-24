@@ -9,6 +9,7 @@ import {
   Dimensions,
   Modal,
   Alert,
+  Linking,
   Platform,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
@@ -44,7 +45,10 @@ import type {
 import { EmbeddedGoogleMap } from "@/components/maps/embedded-google-map";
 import { CatalogImage } from "@/components/catalog-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { addTicketEventToCalendar } from "@/lib/event-calendar";
+import {
+  addTicketEventToCalendar,
+  CalendarPermissionDeniedError,
+} from "@/lib/event-calendar";
 import { addTicketToNativeWallet } from "@/lib/native-wallet";
 
 const { width: SCREEN_W } = Dimensions.get("window");
@@ -195,6 +199,20 @@ function TicketCard({
         );
       }
     } catch (error) {
+      if (error instanceof CalendarPermissionDeniedError) {
+        Alert.alert(
+          "Autorisation calendrier",
+          "Activez l'accès au calendrier dans les réglages de votre téléphone, puis réessayez.",
+          [
+            { text: "Plus tard", style: "cancel" },
+            {
+              text: "Ouvrir les réglages",
+              onPress: () => void Linking.openSettings(),
+            },
+          ],
+        );
+        return;
+      }
       Alert.alert(
         "Calendrier indisponible",
         error instanceof Error

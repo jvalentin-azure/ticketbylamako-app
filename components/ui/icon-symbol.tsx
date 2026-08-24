@@ -31,6 +31,7 @@ const MAPPING = {
   plus: "add",
   minus: "remove",
   "trash.fill": "delete",
+  "archivebox.fill": "archive",
   "square.and.arrow.up": "share",
   "heart.fill": "favorite",
   heart: "favorite-border",

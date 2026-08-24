@@ -20,6 +20,10 @@ const nativeWallet = fs.readFileSync(
   "utf8",
 );
 const appConfig = fs.readFileSync(path.join(root, "app.config.ts"), "utf8");
+const bundledWalletLogo = path.join(
+  root,
+  "scripts/lamako-mobile-api/assets/wallet-logo.png",
+);
 
 describe("server-signed ticket wallet passes", () => {
   it("requires authentication, order ownership and a paid ticket", () => {
@@ -86,5 +90,16 @@ describe("server-signed ticket wallet passes", () => {
     expect(wallet).toContain("suppressStripShine");
     expect(wallet).toContain("'ticketId'");
     expect(wallet).toContain("'ticketbylamako://ticket/' . $order->get_id()");
+  });
+
+  it("brands Apple and Google passes with the TicketByLamako logo", () => {
+    expect(wallet).toContain("lamako_mobile_v2_wallet_brand_logo_url");
+    expect(wallet).toContain("get_theme_mod( 'custom_logo' )");
+    expect(wallet).toContain("assets/wallet-logo.png");
+    expect(fs.existsSync(bundledWalletLogo)).toBe(true);
+    expect(wallet).toContain("$template_version = 'v2'");
+    expect(wallet).toContain("'logo@2x.png'");
+    expect(wallet).toContain("$class['logo']");
+    expect(wallet).toContain("Logo TicketByLamako");
   });
 });

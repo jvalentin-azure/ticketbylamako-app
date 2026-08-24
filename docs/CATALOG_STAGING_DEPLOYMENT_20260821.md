@@ -646,3 +646,60 @@ La checklist Console affiche `3/3`, `100 %` et une réponse annoncée sous deux 
 trois jours ouvrés. Le mode démo et le testeur autorisé restent utilisables
 pendant l'examen. Après approbation, les classes actives seront publiées
 automatiquement ; aucun fichier de production n'a été modifié dans cette étape.
+
+## Stabilisation client, seating et branding Wallet - 25 août 2026
+
+Ce lot reste limité à l'application client et à son API staging. Il corrige le
+formulaire participant avant paiement, l'autorisation calendrier, la gestion
+des notifications, le récapitulatif du paiement, le seating mobile et le logo
+des passes Wallet. Aucun fichier de production, POS ou back-office n'a été
+modifié.
+
+Déploiement staging ciblé :
+
+- `includes/v2-commerce.php` : couche d'interaction Tickera issue du correctif
+  POS validé, sans sa logique POS, checkout ou paiement ;
+- `includes/v2-wallet.php` : génération Apple/Google avec wordmark
+  TicketByLamako ;
+- `assets/wallet-logo.png` : wordmark horizontal versionné et public en HTTPS ;
+- empreinte locale `v2-commerce.php` :
+  `25756dd24c60bb975b0f4e3dc9ec5c6fd5d001ee1a64f89a9aa717fc9a5a84c1` ;
+- empreinte locale `v2-wallet.php` :
+  `612b6eafeeeb8f402349a63be29efe35fcb78f24b85e0738d6d4e8301e15047f` ;
+- empreinte `wallet-logo.png` :
+  `e1a459a1e85243b14aa6aaebdbd2aeec163aad858df27b3994387fc993bf8449`.
+
+Points de rollback staging :
+
+```text
+/home/master/tbl-compliance-backups/client-ux-wallet-seating-20260824T204352Z
+/home/master/tbl-compliance-backups/client-wallet-logo-20260824T210000Z
+```
+
+Rollback complet du code PHP :
+
+```bash
+cp -p /home/master/tbl-compliance-backups/client-ux-wallet-seating-20260824T204352Z/v2-commerce.php /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
+cp -p /home/master/tbl-compliance-backups/client-ux-wallet-seating-20260824T204352Z/v2-wallet.php /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-wallet.php
+rm -f /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/assets/wallet-logo.png
+php -l /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
+php -l /home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-wallet.php
+```
+
+QA effectuée :
+
+- session seating éphémère créée sur l'événement `12673`, sans commande ni
+  paiement ; page de plan complète, viewport zoomable, interactions restaurées
+  et script FunnelKit absent ;
+- formulaire checkout présent pour l'événement QA `13842` et absent pour
+  l'événement standard `13839`, conformément à la réponse serveur ;
+- pass Apple signé réellement généré depuis le billet QA `14115` : archive
+  valide, `logo.png` et `logo@2x.png` présents, signature présente ;
+- JWT Google signé vérifié sans l'ouvrir : classe
+  `event_13839_v2`, objet `ticket_14115_v2` et wordmark HTTPS en
+  `200 image/png`. Le suffixe `v2` évite de réutiliser une ancienne classe sans
+  branding ;
+- routes catalogue publiques en HTTP 200 et route commandes sans JWT en HTTP
+  401 attendu ;
+- les notices WooCommerce/Eventchamp et la dépréciation WP Mail SMTP observées
+  en WP-CLI existaient avant ce lot et ne sont pas des erreurs du plugin mobile.

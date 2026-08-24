@@ -9,6 +9,13 @@ export interface CalendarTicketEvent {
   notes?: string;
 }
 
+export class CalendarPermissionDeniedError extends Error {
+  constructor() {
+    super("L'accès au calendrier est désactivé pour TicketByLamako.");
+    this.name = "CalendarPermissionDeniedError";
+  }
+}
+
 function parseEventDate(value?: string): Date | null {
   if (!value?.trim()) return null;
   const normalized = value.trim().replace(" ", "T");
@@ -24,11 +31,8 @@ export async function addTicketEventToCalendar(
     throw new Error("La date de cet événement n'est pas disponible.");
   }
 
-  const permission = await Calendar.requestCalendarPermissionsAsync();
-  if (permission.status !== "granted") {
-    throw new Error(
-      "Autorisez TicketByLamako à accéder au calendrier pour ajouter cet événement.",
-    );
+  if (!(await Calendar.isAvailableAsync())) {
+    throw new Error("Le calendrier n'est pas disponible sur cet appareil.");
   }
 
   const explicitEndDate = parseEventDate(event.endDate);
@@ -38,6 +42,8 @@ export async function addTicketEventToCalendar(
       : new Date(startDate.getTime() + 3 * 60 * 60 * 1000);
 
   if (Platform.OS === "ios") {
+    // The native event editor is the least-privileged iOS flow: the user sees
+    // and confirms the event without granting broad calendar access first.
     const result = await Calendar.createEventInCalendarAsync({
       title: event.title,
       startDate,
@@ -47,6 +53,14 @@ export async function addTicketEventToCalendar(
       alarms: [{ relativeOffset: -60 }],
     });
     return result.action === "saved" ? "created" : "cancelled";
+  }
+
+  let permission = await Calendar.getCalendarPermissionsAsync();
+  if (permission.status !== "granted" && permission.canAskAgain) {
+    permission = await Calendar.requestCalendarPermissionsAsync();
+  }
+  if (permission.status !== "granted") {
+    throw new CalendarPermissionDeniedError();
   }
 
   const defaultCalendar = await Calendar.getDefaultCalendarAsync();

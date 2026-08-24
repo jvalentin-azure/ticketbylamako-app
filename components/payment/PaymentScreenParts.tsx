@@ -157,6 +157,10 @@ export function OrderSummary({
 }) {
   const subtotal = Number(order.subtotal || order.total || 0);
   const discount = Number(order.discountTotal || 0);
+  const ticketCount = (order.items || []).reduce(
+    (total, item) => total + Number(item.quantity || 0),
+    0,
+  );
   return (
     <View
       style={[
@@ -165,7 +169,7 @@ export function OrderSummary({
       ]}
     >
       <View style={styles.summaryHeader}>
-        <View>
+        <View style={styles.summaryHeaderCopy}>
           <Text style={[styles.eyebrow, { color: colors.primary }]}>
             COMMANDE #{order.number || order.id}
           </Text>
@@ -173,11 +177,31 @@ export function OrderSummary({
             Votre sélection
           </Text>
         </View>
-        <IconSymbol name="ticket.fill" size={28} color={colors.primary} />
+        <View
+          style={[
+            styles.ticketCountBadge,
+            { backgroundColor: colors.primary + "14" },
+          ]}
+        >
+          <IconSymbol name="ticket.fill" size={17} color={colors.primary} />
+          <Text style={[styles.ticketCountText, { color: colors.primary }]}>
+            {ticketCount} billet{ticketCount > 1 ? "s" : ""}
+          </Text>
+        </View>
       </View>
       {order.items?.map((item) => (
-        <View key={item.id} style={styles.itemRow}>
+        <View
+          key={item.id}
+          style={[
+            styles.itemRow,
+            { backgroundColor: colors.background, borderColor: colors.border },
+          ]}
+        >
+          <View
+            style={[styles.itemAccent, { backgroundColor: colors.primary }]}
+          />
           <View style={styles.itemCopy}>
+            <Text style={[styles.itemType, { color: colors.primary }]}>BILLET</Text>
             <Text style={[styles.itemName, { color: colors.foreground }]}>
               {item.name}
             </Text>
@@ -209,12 +233,19 @@ export function OrderSummary({
           colors={colors}
         />
         {discount > 0 ? (
-          <SummaryLine
-            label="Remise"
-            value={`-${formatAriary(discount)}`}
-            colors={colors}
-            accent
-          />
+          <View
+            style={[
+              styles.discountRow,
+              { backgroundColor: colors.success + "12" },
+            ]}
+          >
+            <SummaryLine
+              label="Remise appliquée"
+              value={`-${formatAriary(discount)}`}
+              colors={colors}
+              accent
+            />
+          </View>
         ) : null}
         <View style={styles.grandTotalRow}>
           <Text style={[styles.grandTotalLabel, { color: colors.foreground }]}>

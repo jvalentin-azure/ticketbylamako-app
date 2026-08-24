@@ -144,6 +144,14 @@ describe("notification account security", () => {
     expect(provider).toContain("setIsHydrated(true)");
   });
 
+  it("archives one notification or all read notifications in persisted storage", () => {
+    expect(provider).toContain("archiveNotification");
+    expect(provider).toContain("archiveRead");
+    expect(provider).toContain("prev.filter((notification) => notification.id !== id)");
+    expect(provider).toContain("prev.filter((notification) => !notification.read)");
+    expect(provider).toContain("persist(updated)");
+  });
+
   it("revokes the device token on logout with a bounded wait", () => {
     expect(auth).toContain("unregisterPushTokenWithBackend");
     expect(auth).toContain("Promise.race");

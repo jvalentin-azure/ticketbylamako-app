@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
 
 import {
   buildSeatingInjectedJavaScript,
@@ -73,5 +75,24 @@ describe("seating WebView protocol", () => {
     const script = buildSeatingInjectedJavaScript("flow-123");
     expect(script).toContain("flowId: 'flow-123'");
     expect(script).toContain("window.ReactNativeWebView.postMessage");
+  });
+
+  it("keeps the embedded Tickera controls interactive without public cart drawers", () => {
+    const commerce = fs.readFileSync(
+      path.resolve(
+        __dirname,
+        "..",
+        "scripts",
+        "lamako-mobile-api",
+        "includes",
+        "v2-commerce.php",
+      ),
+      "utf8",
+    );
+    expect(commerce).toContain('content="width=device-width, initial-scale=1, viewport-fit=cover"');
+    expect(commerce).toContain(".tc-seat-dialog.ui-dialog * { pointer-events: auto");
+    expect(commerce).toContain("'tbl-event-fast-checkout', 'fkcart-script'");
+    expect(commerce).toContain("releaseEmbeddedConsentWall");
+    expect(commerce).not.toContain('content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"');
   });
 });
