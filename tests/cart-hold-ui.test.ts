@@ -14,6 +14,16 @@ const appHeader = fs.readFileSync(
   path.resolve(__dirname, "..", "components", "app-header.tsx"),
   "utf8",
 );
+const checkoutSteps = fs.readFileSync(
+  path.resolve(
+    __dirname,
+    "..",
+    "components",
+    "commerce",
+    "CheckoutSteps.tsx",
+  ),
+  "utf8",
+);
 const rootLayout = fs.readFileSync(
   path.resolve(__dirname, "..", "app", "_layout.tsx"),
   "utf8",
@@ -56,5 +66,8 @@ describe("cart hold experience", () => {
     expect(appHeader).toContain('router.push("/(tabs)/cart"');
     expect(appHeader).toContain("styles.holdBar");
     expect(appHeader).toContain('alignSelf: "center"');
+    expect(checkoutSteps).toContain(
+      "<CartHoldCountdown expiresAt={expiresAt ?? null} />",
+    );
   });
 });

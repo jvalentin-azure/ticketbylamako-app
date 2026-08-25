@@ -112,6 +112,12 @@ describe("mobile ticket issuance integrity", () => {
       "function lamako_mobile_v2_void_closed_order_ticket_instances",
     );
     expect(commerce).toContain(
+      "function lamako_mobile_v2_order_ticket_instance_ids",
+    );
+    expect(commerce).toContain("'key'     => 'item_id'");
+    expect(commerce).toContain("'meta_key'       => 'tc_wc_order_id'");
+    expect(commerce).toContain("'post_parent__in' =>");
+    expect(commerce).toContain(
       "in_array( $to_status, [ 'cancelled', 'failed', 'refunded' ], true )",
     );
     expect(commerce).toContain(

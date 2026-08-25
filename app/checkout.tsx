@@ -448,6 +448,7 @@ export default function CheckoutScreen() {
         address={shippingAddress}
         city={shippingCity}
         loading={checkoutFieldsLoading || billingSaving}
+        expiresAt={cartExpiresAt}
         onPhoneChange={setShippingPhone}
         onAddressChange={setShippingAddress}
         onCityChange={setShippingCity}
@@ -464,6 +465,7 @@ export default function CheckoutScreen() {
         itemCount={items.length}
         total={total}
         loading={checkoutFieldsLoading}
+        expiresAt={cartExpiresAt}
         onContinue={continueAfterPreCheckout}
         onBack={() => router.back()}
       />
@@ -475,6 +477,7 @@ export default function CheckoutScreen() {
       <TicketFieldsStep
         items={items}
         total={total}
+        expiresAt={cartExpiresAt}
         schema={checkoutFields}
         buyerValues={buyerFieldValues}
         ticketValues={ticketFieldValues}
@@ -529,6 +532,7 @@ export default function CheckoutScreen() {
       <CheckoutStateScreen
         title="Impossible de préparer la commande"
         message={errorMessage}
+        expiresAt={cartExpiresAt}
         onBack={() => router.back()}
         onRetry={() => {
           if (errorSource === "fields") {
@@ -549,6 +553,7 @@ export default function CheckoutScreen() {
       title="Création de votre commande..."
       message={`${items.length} article${items.length > 1 ? "s" : ""} · ${formatAriary(total)}`}
       loading
+      expiresAt={cartExpiresAt}
       onBack={() => router.back()}
     />
   );

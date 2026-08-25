@@ -5491,19 +5491,64 @@ function lamako_mobile_v2_order_reservation_deadline( WC_Order $order ) {
     return $created ? $created->getTimestamp() + LAMAKO_MOBILE_V2_CHECKOUT_TTL : 0;
 }
 
-function lamako_mobile_v2_void_unpaid_ticket_instances( WC_Order $order ) {
-    if ( lamako_mobile_v2_payment_is_confirmed( $order ) ) {
-        return 0;
-    }
-
+function lamako_mobile_v2_order_ticket_instance_ids( WC_Order $order, array $statuses = [ 'publish', 'draft' ] ) {
     $instance_ids = get_posts( [
         'post_type'      => 'tc_tickets_instances',
-        'post_status'    => [ 'publish', 'draft' ],
+        'post_status'    => $statuses,
         'post_parent'    => $order->get_id(),
         'fields'         => 'ids',
         'posts_per_page' => -1,
         'no_found_rows'  => true,
     ] );
+
+    $item_ids = array_map( 'absint', array_keys( $order->get_items() ) );
+    if ( ! empty( $item_ids ) ) {
+        $instance_ids = array_merge( $instance_ids, get_posts( [
+            'post_type'      => 'tc_tickets_instances',
+            'post_status'    => $statuses,
+            'fields'         => 'ids',
+            'posts_per_page' => -1,
+            'no_found_rows'  => true,
+            'meta_query'     => [
+                [
+                    'key'     => 'item_id',
+                    'value'   => $item_ids,
+                    'compare' => 'IN',
+                    'type'    => 'NUMERIC',
+                ],
+            ],
+        ] ) );
+    }
+
+    $tc_order_ids = get_posts( [
+        'post_type'      => 'tc_orders',
+        'post_status'    => 'any',
+        'posts_per_page' => -1,
+        'fields'         => 'ids',
+        'no_found_rows'  => true,
+        'meta_key'       => 'tc_wc_order_id',
+        'meta_value'     => $order->get_id(),
+    ] );
+    if ( ! empty( $tc_order_ids ) ) {
+        $instance_ids = array_merge( $instance_ids, get_posts( [
+            'post_type'      => 'tc_tickets_instances',
+            'post_status'    => $statuses,
+            'post_parent__in' => array_map( 'absint', $tc_order_ids ),
+            'fields'         => 'ids',
+            'posts_per_page' => -1,
+            'no_found_rows'  => true,
+        ] ) );
+    }
+
+    return array_values( array_unique( array_filter( array_map( 'absint', $instance_ids ) ) ) );
+}
+
+function lamako_mobile_v2_void_unpaid_ticket_instances( WC_Order $order ) {
+    if ( lamako_mobile_v2_payment_is_confirmed( $order ) ) {
+        return 0;
+    }
+
+    $instance_ids = lamako_mobile_v2_order_ticket_instance_ids( $order );
 
     foreach ( $instance_ids as $instance_id ) {
         wp_trash_post( absint( $instance_id ) );
@@ -5513,14 +5558,7 @@ function lamako_mobile_v2_void_unpaid_ticket_instances( WC_Order $order ) {
 }
 
 function lamako_mobile_v2_void_closed_order_ticket_instances( WC_Order $order ) {
-    $instance_ids = get_posts( [
-        'post_type'      => 'tc_tickets_instances',
-        'post_status'    => [ 'publish', 'draft' ],
-        'post_parent'    => $order->get_id(),
-        'fields'         => 'ids',
-        'posts_per_page' => -1,
-        'no_found_rows'  => true,
-    ] );
+    $instance_ids = lamako_mobile_v2_order_ticket_instance_ids( $order );
 
     foreach ( $instance_ids as $instance_id ) {
         wp_trash_post( absint( $instance_id ) );

@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
+import { CartHoldCountdown } from "@/components/cart-hold-countdown";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { CheckoutRewardsPanel } from "@/components/commerce/CheckoutRewardsPanel";
 import {
@@ -25,42 +26,51 @@ import { useRewards } from "@/lib/rewards-provider";
 export function CheckoutHeader({
   title,
   onBack,
+  expiresAt,
 }: {
   title: string;
   onBack: () => void;
+  expiresAt?: number | null;
 }) {
   const colors = useColors();
   return (
-    <View
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.border,
-      }}
-    >
-      <TouchableOpacity
-        onPress={onBack}
-        accessibilityRole="button"
-        accessibilityLabel="Retour"
-        style={{ width: 40, alignItems: "flex-start", paddingVertical: 4 }}
-      >
-        <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
-      </TouchableOpacity>
-      <Text
+    <View>
+      <View
         style={{
-          flex: 1,
-          textAlign: "center",
-          color: colors.foreground,
-          fontSize: 17,
-          fontWeight: "700",
+          flexDirection: "row",
+          alignItems: "center",
+          paddingHorizontal: 16,
+          paddingVertical: 12,
+          borderBottomWidth: 1,
+          borderBottomColor: colors.border,
         }}
       >
-        {title}
-      </Text>
-      <View style={{ width: 40 }} />
+        <TouchableOpacity
+          onPress={onBack}
+          accessibilityRole="button"
+          accessibilityLabel="Retour"
+          style={{ width: 40, alignItems: "flex-start", paddingVertical: 4 }}
+        >
+          <IconSymbol
+            name="chevron.left"
+            size={24}
+            color={colors.foreground}
+          />
+        </TouchableOpacity>
+        <Text
+          style={{
+            flex: 1,
+            textAlign: "center",
+            color: colors.foreground,
+            fontSize: 17,
+            fontWeight: "700",
+          }}
+        >
+          {title}
+        </Text>
+        <View style={{ width: 40 }} />
+      </View>
+      <CartHoldCountdown expiresAt={expiresAt ?? null} />
     </View>
   );
 }
@@ -139,6 +149,7 @@ function RewardsPanel(props: RewardsProps) {
 }
 
 interface ShippingStepProps extends RewardsProps {
+  expiresAt: number | null;
   items: CartItem[];
   total: number;
   phone: string;
@@ -178,7 +189,11 @@ export function ShippingStep(props: ShippingStepProps) {
 
   return (
     <ScreenContainer edges={["top", "bottom", "left", "right"]}>
-      <CheckoutHeader title="Adresse de livraison" onBack={props.onBack} />
+      <CheckoutHeader
+        title="Adresse de livraison"
+        onBack={props.onBack}
+        expiresAt={props.expiresAt}
+      />
       <ScrollView
         automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
         contentContainerStyle={{ padding: 20, paddingBottom: 48, gap: 16 }}
@@ -274,6 +289,7 @@ export function ShippingStep(props: ShippingStepProps) {
 }
 
 interface ConfirmStepProps extends RewardsProps {
+  expiresAt: number | null;
   itemCount: number;
   total: number;
   loading: boolean;
@@ -285,7 +301,11 @@ export function ConfirmStep(props: ConfirmStepProps) {
   const colors = useColors();
   return (
     <ScreenContainer edges={["top", "bottom", "left", "right"]}>
-      <CheckoutHeader title="Confirmation" onBack={props.onBack} />
+      <CheckoutHeader
+        title="Confirmation"
+        onBack={props.onBack}
+        expiresAt={props.expiresAt}
+      />
       <ScrollView
         contentContainerStyle={{ padding: 20, paddingBottom: 40, gap: 16 }}
       >
@@ -333,6 +353,7 @@ export function ConfirmStep(props: ConfirmStepProps) {
 }
 
 interface TicketFieldsStepProps {
+  expiresAt: number | null;
   items: CartItem[];
   total: number;
   schema: MobileCheckoutFieldsResponse | null;
@@ -354,7 +375,11 @@ export function TicketFieldsStep(props: TicketFieldsStepProps) {
   const colors = useColors();
   return (
     <ScreenContainer edges={["top", "bottom", "left", "right"]}>
-      <CheckoutHeader title="Participants" onBack={props.onBack} />
+      <CheckoutHeader
+        title="Participants"
+        onBack={props.onBack}
+        expiresAt={props.expiresAt}
+      />
       <ScrollView
         automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
         contentContainerStyle={{ padding: 20, paddingBottom: 64, gap: 16 }}
@@ -403,12 +428,14 @@ export function CheckoutStateScreen({
   loading,
   onBack,
   onRetry,
+  expiresAt,
 }: {
   title: string;
   message: string;
   loading?: boolean;
   onBack: () => void;
   onRetry?: () => void;
+  expiresAt?: number | null;
 }) {
   const colors = useColors();
   return (
@@ -416,6 +443,7 @@ export function CheckoutStateScreen({
       <CheckoutHeader
         title={loading ? "Préparation..." : "Erreur"}
         onBack={onBack}
+        expiresAt={expiresAt}
       />
       <View
         style={{
