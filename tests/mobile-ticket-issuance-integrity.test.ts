@@ -47,6 +47,27 @@ describe("mobile ticket issuance integrity", () => {
     );
   });
 
+  it("expands one Tickera chart ID across a multi-seat selection", () => {
+    expect(commerce).toContain(
+      "count( $charts ) === 1 && count( $ids ) > 1",
+    );
+    expect(commerce).toContain(
+      "array_fill( 0, count( $ids ), $charts[0] )",
+    );
+    expect(commerce).toContain(
+      "array_fill( 0, count( $seat_ids ), $chart_ids[0] )",
+    );
+  });
+
+  it("exposes a reservation deadline even when legacy expiry metadata is absent", () => {
+    expect(commerce).toContain(
+      "lamako_mobile_v2_order_reservation_deadline( $order )",
+    );
+    expect(commerce).toContain(
+      "gmdate( 'c', $reservation_deadline )",
+    );
+  });
+
   it("cancels only expired unpaid orders after a final fresh read", () => {
     expect(commerce).toContain("function lamako_mobile_v2_expire_stale_orders");
     expect(commerce).toContain(

@@ -140,7 +140,11 @@ export const paymentStyles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
   },
-  seatText: { fontSize: 13, fontFamily: "Raleway_800ExtraBold" },
+  seatText: {
+    fontSize: 13,
+    fontFamily: "Raleway_800ExtraBold",
+    fontWeight: "800",
+  },
   itemPrice: {
     flexShrink: 0,
     fontSize: 14,

@@ -4434,6 +4434,12 @@ function lamako_mobile_v2_get_item_seat_assignments( $item, $quantity ) {
     $charts     = array_values( array_filter( array_map( 'absint', explode( ',', $charts_raw ) ) ) );
     $seats      = [];
 
+    // Tickera stores one chart for the whole selection. Keep supporting older
+    // mobile orders that therefore contain several seats but one chart ID.
+    if ( count( $charts ) === 1 && count( $ids ) > 1 ) {
+        $charts = array_fill( 0, count( $ids ), $charts[0] );
+    }
+
     for ( $index = 0; $index < max( 1, absint( $quantity ) ); $index++ ) {
         if ( empty( $labels[ $index ] ) || empty( $ids[ $index ] ) || empty( $charts[ $index ] ) ) {
             continue;
@@ -5418,6 +5424,9 @@ function lamako_mobile_v2_release_expired_order_seats( WC_Order $order ) {
     foreach ( $order->get_items() as $item ) {
         $seat_ids  = array_values( array_filter( array_map( 'trim', explode( ',', (string) $item->get_meta( '_lamako_seat_ids', true ) ) ) ) );
         $chart_ids = array_values( array_filter( array_map( 'absint', explode( ',', (string) $item->get_meta( '_lamako_chart_ids', true ) ) ) ) );
+        if ( count( $chart_ids ) === 1 && count( $seat_ids ) > 1 ) {
+            $chart_ids = array_fill( 0, count( $seat_ids ), $chart_ids[0] );
+        }
         foreach ( $seat_ids as $index => $seat_id ) {
             $chart_id = absint( $chart_ids[ $index ] ?? 0 );
             if ( $chart_id <= 0 ) {
@@ -5514,6 +5523,10 @@ function lamako_mobile_v2_order_summary( WC_Order $order, $include_items = false
     $reservation_expires_at = (string) $order->get_meta( '_lamako_v2_reservation_expires_at' );
     if ( $reservation_expires_at === '' ) {
         $reservation_expires_at = (string) $order->get_meta( '_lamako_v2_checkout_expires_at' );
+    }
+    if ( $reservation_expires_at === '' && ! lamako_mobile_v2_payment_is_confirmed( $order ) ) {
+        $reservation_deadline = lamako_mobile_v2_order_reservation_deadline( $order );
+        $reservation_expires_at = $reservation_deadline > 0 ? gmdate( 'c', $reservation_deadline ) : '';
     }
     $data = [
         'id'                  => $order->get_id(),

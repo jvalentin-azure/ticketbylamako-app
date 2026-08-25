@@ -25,8 +25,21 @@ describe("client UX stabilization", () => {
 
   it("shows a structured payment summary with ticket count, seats and discount", () => {
     const payment = read("components", "payment", "PaymentScreenParts.tsx");
+    const paymentStyles = read(
+      "components",
+      "payment",
+      "payment-screen.styles.ts",
+    );
     expect(payment).toContain("ticketCountBadge");
     expect(payment).toContain("item.seatLabels.join");
     expect(payment).toContain("Remise appliquée");
+    expect(paymentStyles).toContain('fontWeight: "800"');
+  });
+
+  it("keeps the payment countdown when only the local cart expiry is available", () => {
+    const hook = read("hooks", "use-mobile-payment.ts");
+    expect(hook).toContain("expiresAt: cartExpiresAt");
+    expect(hook).toContain("Number.isFinite(parsedServerExpiry)");
+    expect(hook).toContain("cartExpiresAt || 0");
   });
 });

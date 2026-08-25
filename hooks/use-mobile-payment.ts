@@ -49,7 +49,7 @@ const IN_PROGRESS_ATTEMPT_STATUSES = new Set([
 export function useMobilePayment({ token, kind }: UseMobilePaymentOptions) {
   const router = useRouter();
   const isFocused = useIsFocused();
-  const { clearCart } = useCart();
+  const { clearCart, expiresAt: cartExpiresAt } = useCart();
   const [phase, setPhase] = useState<PaymentScreenPhase>("loading");
   const [order, setOrder] = useState<MobileOrderSummary | null>(null);
   const [methods, setMethods] = useState<MobilePaymentMethod[]>([]);
@@ -86,9 +86,12 @@ export function useMobilePayment({ token, kind }: UseMobilePaymentOptions) {
   const paymentInProgress =
     order?.paymentStatus === "review" ||
     IN_PROGRESS_ATTEMPT_STATUSES.has(order?.paymentAttemptStatus || "");
-  const expiresAt = order?.reservationExpiresAt
+  const parsedServerExpiry = order?.reservationExpiresAt
     ? Date.parse(order.reservationExpiresAt)
-    : 0;
+    : Number.NaN;
+  const expiresAt = Number.isFinite(parsedServerExpiry)
+    ? parsedServerExpiry
+    : cartExpiresAt || 0;
   const remainingSeconds = expiresAt
     ? Math.max(0, Math.ceil((expiresAt - clock) / 1000))
     : null;
