@@ -8,6 +8,7 @@ import {
 } from "react";
 import { Alert, AppState, AppStateStatus } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { randomUUID } from "expo-crypto";
 import {
   cartHoldRemainingMs,
   createCartExpiryTimestamp,
@@ -31,39 +32,83 @@ interface CartContextType {
   total: number;
   itemCount: number;
   expiresAt: number | null;
+  checkoutRequestKey: string | null;
+  ensureCheckoutRequestKey: () => string;
 }
 
 const CartContext = createContext<CartContextType | null>(null);
 const CART_KEY = "cart_items";
 const CART_EXPIRY_KEY = "cart_expires_at_v2";
+const CART_CHECKOUT_REQUEST_KEY = "cart_checkout_request_key_v1";
 const LEGACY_CART_ACTIVITY_KEY = "cart_last_activity";
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [expiresAt, setExpiresAt] = useState<number | null>(null);
+  const [checkoutRequestKey, setCheckoutRequestKey] = useState<string | null>(
+    null,
+  );
+  const checkoutRequestKeyRef = useRef<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const appState = useRef(AppState.currentState);
+
+  const storeCheckoutRequestKey = useCallback((value: string | null) => {
+    checkoutRequestKeyRef.current = value;
+    setCheckoutRequestKey(value);
+    if (value) {
+      void AsyncStorage.setItem(CART_CHECKOUT_REQUEST_KEY, value).catch(
+        () => undefined,
+      );
+    } else {
+      void AsyncStorage.removeItem(CART_CHECKOUT_REQUEST_KEY).catch(
+        () => undefined,
+      );
+    }
+  }, []);
+
+  const ensureCheckoutRequestKey = useCallback(() => {
+    const current = checkoutRequestKeyRef.current;
+    if (current) return current;
+    const next = randomUUID();
+    storeCheckoutRequestKey(next);
+    return next;
+  }, [storeCheckoutRequestKey]);
+
+  const rotateCheckoutRequestKey = useCallback(() => {
+    const next = randomUUID();
+    storeCheckoutRequestKey(next);
+    return next;
+  }, [storeCheckoutRequestKey]);
 
   // Load cart and check expiry on mount
   useEffect(() => {
     let mounted = true;
     void (async () => {
       try {
-        const [data, storedTimestamp] = await Promise.all([
-          AsyncStorage.getItem(CART_KEY),
-          AsyncStorage.getItem(CART_EXPIRY_KEY),
-        ]);
-        if (!mounted || !data) return;
+        const [data, storedTimestamp, storedCheckoutRequestKey] =
+          await Promise.all([
+            AsyncStorage.getItem(CART_KEY),
+            AsyncStorage.getItem(CART_EXPIRY_KEY),
+            AsyncStorage.getItem(CART_CHECKOUT_REQUEST_KEY),
+          ]);
+        if (!mounted) return;
+        if (!data) {
+          storeCheckoutRequestKey(null);
+          return;
+        }
         const parsed = parseStoredCart(data);
         const storedExpiry = parseCartExpiryTimestamp(storedTimestamp);
         if (parsed.length === 0) {
           await Promise.all([
             AsyncStorage.removeItem(CART_KEY),
             AsyncStorage.removeItem(CART_EXPIRY_KEY),
+            AsyncStorage.removeItem(CART_CHECKOUT_REQUEST_KEY),
             AsyncStorage.removeItem(LEGACY_CART_ACTIVITY_KEY),
           ]);
+          storeCheckoutRequestKey(null);
           return;
         }
+        storeCheckoutRequestKey(storedCheckoutRequestKey || randomUUID());
         if (storedExpiry) {
           const remaining = cartHoldRemainingMs(storedExpiry);
           if (remaining <= 0) {
@@ -92,7 +137,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       mounted = false;
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, []);
+  }, [storeCheckoutRequestKey]);
 
   // Listen for app going to background/foreground
   useEffect(() => {
@@ -151,6 +196,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             () => undefined,
           );
           void AsyncStorage.removeItem(CART_EXPIRY_KEY).catch(() => undefined);
+          storeCheckoutRequestKey(null);
           setExpiresAt(null);
           Alert.alert(
             "Panier expiré",
@@ -170,6 +216,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       () => undefined,
     );
     if (newItems.length > 0) {
+      ensureCheckoutRequestKey();
       if (!expiresAt) {
         const nextExpiry = createCartExpiryTimestamp();
         setExpiresAt(nextExpiry);
@@ -180,11 +227,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       if (timerRef.current) clearTimeout(timerRef.current);
       setExpiresAt(null);
       void AsyncStorage.removeItem(CART_EXPIRY_KEY).catch(() => undefined);
+      storeCheckoutRequestKey(null);
     }
   };
 
   const addItem = useCallback(
     (item: Omit<CartItem, "quantity"> & { quantity?: number }) => {
+      rotateCheckoutRequestKey();
       setItems((prev) => {
         const key = item.seatLabel
           ? `${item.productId}-${item.seatLabel}`
@@ -218,30 +267,36 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         return next;
       });
     },
-    [],
+    [rotateCheckoutRequestKey],
   );
 
-  const removeItem = useCallback((productId: number, seatLabel?: string) => {
-    setItems((prev) => {
-      const next = prev.filter(
-        (i) => !(i.productId === productId && i.seatLabel === seatLabel),
-      );
-      void AsyncStorage.setItem(CART_KEY, JSON.stringify(next)).catch(
-        () => undefined,
-      );
-      if (next.length > 0) {
-        // Removing an item does not extend the original hold.
-      } else {
-        if (timerRef.current) clearTimeout(timerRef.current);
-        setExpiresAt(null);
-        void AsyncStorage.removeItem(CART_EXPIRY_KEY).catch(() => undefined);
-      }
-      return next;
-    });
-  }, []);
+  const removeItem = useCallback(
+    (productId: number, seatLabel?: string) => {
+      rotateCheckoutRequestKey();
+      setItems((prev) => {
+        const next = prev.filter(
+          (i) => !(i.productId === productId && i.seatLabel === seatLabel),
+        );
+        void AsyncStorage.setItem(CART_KEY, JSON.stringify(next)).catch(
+          () => undefined,
+        );
+        if (next.length > 0) {
+          // Removing an item does not extend the original hold.
+        } else {
+          if (timerRef.current) clearTimeout(timerRef.current);
+          setExpiresAt(null);
+          void AsyncStorage.removeItem(CART_EXPIRY_KEY).catch(() => undefined);
+          storeCheckoutRequestKey(null);
+        }
+        return next;
+      });
+    },
+    [rotateCheckoutRequestKey, storeCheckoutRequestKey],
+  );
 
   const updateQuantity = useCallback(
     (productId: number, quantity: number, seatLabel?: string) => {
+      rotateCheckoutRequestKey();
       setItems((prev) => {
         const next =
           quantity <= 0
@@ -263,11 +318,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           if (timerRef.current) clearTimeout(timerRef.current);
           setExpiresAt(null);
           void AsyncStorage.removeItem(CART_EXPIRY_KEY).catch(() => undefined);
+          storeCheckoutRequestKey(null);
         }
         return next;
       });
     },
-    [],
+    [rotateCheckoutRequestKey, storeCheckoutRequestKey],
   );
 
   const clearCart = useCallback(() => {
@@ -288,6 +344,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         total,
         itemCount,
         expiresAt,
+        checkoutRequestKey,
+        ensureCheckoutRequestKey,
       }}
     >
       {children}

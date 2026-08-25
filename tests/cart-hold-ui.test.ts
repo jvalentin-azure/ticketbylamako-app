@@ -36,6 +36,18 @@ describe("cart hold experience", () => {
     );
   });
 
+  it("persists a checkout key and rotates it whenever cart content changes", () => {
+    expect(cartProvider).toContain(
+      'const CART_CHECKOUT_REQUEST_KEY = "cart_checkout_request_key_v1"',
+    );
+    expect(cartProvider).toContain("ensureCheckoutRequestKey");
+    expect(cartProvider).toContain("rotateCheckoutRequestKey");
+    expect(cartProvider).toContain("randomUUID()");
+    expect(cartProvider).toContain(
+      "AsyncStorage.removeItem(CART_CHECKOUT_REQUEST_KEY)",
+    );
+  });
+
   it("keeps a compact reservation reminder available across app routes", () => {
     expect(rootLayout).not.toContain("<GlobalCartHoldBanner />");
     expect(appHeader).toContain("usesOwnReservationTimer");

@@ -39,6 +39,7 @@ add_action( 'lamako_mobile_v2_expire_stale_orders', 'lamako_mobile_v2_expire_sta
 add_action( 'init', 'lamako_mobile_v2_ensure_payment_reconciliation_schedule' );
 add_action( 'woocommerce_order_status_changed', 'lamako_mobile_v2_issue_tickets_after_payment', 50, 4 );
 add_action( 'woocommerce_payment_complete', 'lamako_mobile_v2_issue_tickets_after_payment', 50, 1 );
+add_action( 'woocommerce_order_status_changed', 'lamako_mobile_v2_enforce_closed_order_lifecycle', 60, 4 );
 add_action( 'save_post_tc_events', 'lamako_mobile_v2_invalidate_catalog_cache' );
 add_action( 'save_post_product', 'lamako_mobile_v2_invalidate_catalog_cache' );
 add_action( 'before_delete_post', 'lamako_mobile_v2_invalidate_catalog_cache_for_deleted_post' );
@@ -1914,6 +1915,37 @@ function lamako_mobile_v2_restore_legacy_product_overrides( array $removed ) {
     }
 }
 
+function lamako_mobile_v2_checkout_idempotency_key( array $body ) {
+    $key = sanitize_text_field( $body['idempotencyKey'] ?? $body['idempotency_key'] ?? '' );
+    if ( $key === '' ) {
+        return '';
+    }
+    if ( strlen( $key ) < 16 || strlen( $key ) > 128 || ! preg_match( '/^[A-Za-z0-9._:-]+$/', $key ) ) {
+        return new WP_Error(
+            'lamako_v2_idempotency_key_invalid',
+            'The checkout idempotency key is invalid.',
+            [ 'status' => 400 ]
+        );
+    }
+    return $key;
+}
+
+function lamako_mobile_v2_checkout_idempotency_cache_key( $user_id, $idempotency_key ) {
+    return 'lamako_v2_checkout_req_' . md5( absint( $user_id ) . '|' . (string) $idempotency_key );
+}
+
+function lamako_mobile_v2_checkout_idempotency_lock_name( $user_id, $idempotency_key ) {
+    return 'lamako_v2_checkout_' . substr( hash( 'sha256', absint( $user_id ) . '|' . (string) $idempotency_key ), 0, 40 );
+}
+
+function lamako_mobile_v2_release_checkout_lock( $lock_name ) {
+    if ( $lock_name === '' ) {
+        return;
+    }
+    global $wpdb;
+    $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
+}
+
 function lamako_mobile_v2_create_checkout( WP_REST_Request $request ) {
     if ( ! function_exists( 'wc_create_order' ) ) {
         return new WP_Error( 'lamako_v2_wc_missing', 'WooCommerce is not available.', [ 'status' => 500 ] );
@@ -1986,6 +2018,39 @@ function lamako_mobile_v2_create_checkout( WP_REST_Request $request ) {
         }
     }
 
+    $idempotency_key = lamako_mobile_v2_checkout_idempotency_key( $body );
+    if ( is_wp_error( $idempotency_key ) ) {
+        return $idempotency_key;
+    }
+    $idempotency_cache_key = '';
+    $idempotency_lock_name = '';
+    if ( $idempotency_key !== '' ) {
+        $idempotency_cache_key = lamako_mobile_v2_checkout_idempotency_cache_key( $user_id, $idempotency_key );
+        $cached_response       = get_transient( $idempotency_cache_key );
+        if ( is_array( $cached_response ) && ! empty( $cached_response['orderId'] ) ) {
+            return rest_ensure_response( $cached_response );
+        }
+
+        global $wpdb;
+        $idempotency_lock_name = lamako_mobile_v2_checkout_idempotency_lock_name( $user_id, $idempotency_key );
+        $lock_acquired         = (int) $wpdb->get_var(
+            $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $idempotency_lock_name, 2 )
+        );
+        if ( $lock_acquired !== 1 ) {
+            return new WP_Error(
+                'lamako_v2_checkout_in_progress',
+                'This checkout is already being prepared. Please wait a moment.',
+                [ 'status' => 409 ]
+            );
+        }
+
+        $cached_response = get_transient( $idempotency_cache_key );
+        if ( is_array( $cached_response ) && ! empty( $cached_response['orderId'] ) ) {
+            lamako_mobile_v2_release_checkout_lock( $idempotency_lock_name );
+            return rest_ensure_response( $cached_response );
+        }
+    }
+
     $removed_filters = lamako_mobile_v2_temporarily_disable_legacy_product_overrides();
 
     try {
@@ -1996,6 +2061,7 @@ function lamako_mobile_v2_create_checkout( WP_REST_Request $request ) {
 
         if ( is_wp_error( $order ) ) {
             lamako_mobile_v2_restore_legacy_product_overrides( $removed_filters );
+            lamako_mobile_v2_release_checkout_lock( $idempotency_lock_name );
             return new WP_Error( 'lamako_v2_order_create_failed', $order->get_error_message(), [ 'status' => 500 ] );
         }
 
@@ -2007,6 +2073,7 @@ function lamako_mobile_v2_create_checkout( WP_REST_Request $request ) {
             if ( is_wp_error( $added ) ) {
                 $order->delete( true );
                 lamako_mobile_v2_restore_legacy_product_overrides( $removed_filters );
+                lamako_mobile_v2_release_checkout_lock( $idempotency_lock_name );
                 return new WP_Error( 'lamako_v2_add_product_failed', $added->get_error_message(), [ 'status' => 409 ] );
             }
             $order_item_ids[] = (int) $added;
@@ -2017,6 +2084,7 @@ function lamako_mobile_v2_create_checkout( WP_REST_Request $request ) {
             if ( is_wp_error( $coupon_result ) ) {
                 $order->delete( true );
                 lamako_mobile_v2_restore_legacy_product_overrides( $removed_filters );
+                lamako_mobile_v2_release_checkout_lock( $idempotency_lock_name );
                 return new WP_Error( 'lamako_v2_coupon_invalid', $coupon_result->get_error_message(), [ 'status' => 400 ] );
             }
         }
@@ -2036,6 +2104,7 @@ function lamako_mobile_v2_create_checkout( WP_REST_Request $request ) {
         if ( is_wp_error( $ticket_result ) ) {
             $order->delete( true );
             lamako_mobile_v2_restore_legacy_product_overrides( $removed_filters );
+            lamako_mobile_v2_release_checkout_lock( $idempotency_lock_name );
             return new WP_Error( 'lamako_v2_ticket_create_failed', $ticket_result->get_error_message(), [ 'status' => 500 ] );
         }
 
@@ -2044,6 +2113,7 @@ function lamako_mobile_v2_create_checkout( WP_REST_Request $request ) {
         lamako_mobile_v2_persist_checkout_field_answers( $order, $validated, $order_item_ids, $buyer_fields );
     } catch ( Exception $e ) {
         lamako_mobile_v2_restore_legacy_product_overrides( $removed_filters );
+        lamako_mobile_v2_release_checkout_lock( $idempotency_lock_name );
         return new WP_Error( 'lamako_v2_checkout_failed', $e->getMessage(), [ 'status' => 500 ] );
     }
 
@@ -2051,7 +2121,7 @@ function lamako_mobile_v2_create_checkout( WP_REST_Request $request ) {
 
     set_transient( 'lamako_v2_checkout_' . $token_hash, $order->get_id(), LAMAKO_MOBILE_V2_CHECKOUT_TTL + ( 5 * MINUTE_IN_SECONDS ) );
 
-    return rest_ensure_response( [
+    $response_data = [
         'checkoutToken' => $token,
         'checkoutUrl'   => lamako_mobile_v2_checkout_url( $token ),
         'orderId'       => $order->get_id(),
@@ -2059,7 +2129,17 @@ function lamako_mobile_v2_create_checkout( WP_REST_Request $request ) {
         'total'         => $order->get_total(),
         'currency'      => $order->get_currency(),
         'itemCount'     => $order->get_item_count(),
-    ] );
+    ];
+    if ( $idempotency_cache_key !== '' ) {
+        set_transient(
+            $idempotency_cache_key,
+            $response_data,
+            LAMAKO_MOBILE_V2_CHECKOUT_TTL + ( 5 * MINUTE_IN_SECONDS )
+        );
+    }
+    lamako_mobile_v2_release_checkout_lock( $idempotency_lock_name );
+
+    return rest_ensure_response( $response_data );
 }
 
 function lamako_mobile_v2_create_seating_session( WP_REST_Request $request ) {
@@ -5430,6 +5510,51 @@ function lamako_mobile_v2_void_unpaid_ticket_instances( WC_Order $order ) {
     }
 
     return count( $instance_ids );
+}
+
+function lamako_mobile_v2_void_closed_order_ticket_instances( WC_Order $order ) {
+    $instance_ids = get_posts( [
+        'post_type'      => 'tc_tickets_instances',
+        'post_status'    => [ 'publish', 'draft' ],
+        'post_parent'    => $order->get_id(),
+        'fields'         => 'ids',
+        'posts_per_page' => -1,
+        'no_found_rows'  => true,
+    ] );
+
+    foreach ( $instance_ids as $instance_id ) {
+        wp_trash_post( absint( $instance_id ) );
+    }
+
+    return count( $instance_ids );
+}
+
+function lamako_mobile_v2_enforce_closed_order_lifecycle( $order_id, $from_status = '', $to_status = '', $order = null ) {
+    $order = $order instanceof WC_Order ? $order : wc_get_order( absint( $order_id ) );
+    if ( ! $order instanceof WC_Order
+        || 'yes' !== $order->get_meta( '_lamako_mobile_v2' )
+        || ! in_array( $to_status, [ 'cancelled', 'failed', 'refunded' ], true ) ) {
+        return;
+    }
+
+    $lifecycle_marker = sanitize_key( (string) $order->get_meta( '_lamako_v2_closed_lifecycle_status' ) );
+    if ( $lifecycle_marker === $to_status ) {
+        return;
+    }
+
+    $voided = lamako_mobile_v2_void_closed_order_ticket_instances( $order );
+    lamako_mobile_v2_release_expired_order_seats( $order );
+    $order->update_meta_data( '_lamako_v2_closed_lifecycle_status', $to_status );
+    if ( $voided > 0 ) {
+        $order->add_order_note(
+            sprintf(
+                'Lamako Mobile lifecycle: %d ticket instance(s) voided after order status changed to %s.',
+                $voided,
+                $to_status
+            )
+        );
+    }
+    $order->save();
 }
 
 function lamako_mobile_v2_release_expired_order_seats( WC_Order $order ) {

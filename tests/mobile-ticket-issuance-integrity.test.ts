@@ -48,12 +48,8 @@ describe("mobile ticket issuance integrity", () => {
   });
 
   it("expands one Tickera chart ID across a multi-seat selection", () => {
-    expect(commerce).toContain(
-      "count( $charts ) === 1 && count( $ids ) > 1",
-    );
-    expect(commerce).toContain(
-      "array_fill( 0, count( $ids ), $charts[0] )",
-    );
+    expect(commerce).toContain("count( $charts ) === 1 && count( $ids ) > 1");
+    expect(commerce).toContain("array_fill( 0, count( $ids ), $charts[0] )");
     expect(commerce).toContain(
       "array_fill( 0, count( $seat_ids ), $chart_ids[0] )",
     );
@@ -63,9 +59,7 @@ describe("mobile ticket issuance integrity", () => {
     expect(commerce).toContain(
       "lamako_mobile_v2_order_reservation_deadline( $order )",
     );
-    expect(commerce).toContain(
-      "gmdate( 'c', $reservation_deadline )",
-    );
+    expect(commerce).toContain("gmdate( 'c', $reservation_deadline )");
   });
 
   it("never extends the cart hold when checkout starts", () => {
@@ -96,6 +90,32 @@ describe("mobile ticket issuance integrity", () => {
     );
     expect(commerce).toContain(
       "lamako_mobile_v2_mark_payment_for_review( $order",
+    );
+  });
+
+  it("deduplicates repeated native checkout creation requests", () => {
+    expect(commerce).toContain(
+      "function lamako_mobile_v2_checkout_idempotency_key",
+    );
+    expect(commerce).toContain("SELECT GET_LOCK(%s, %d)");
+    expect(commerce).toContain("lamako_v2_checkout_in_progress");
+    expect(commerce).toContain(
+      "set_transient(\n            $idempotency_cache_key",
+    );
+  });
+
+  it("voids tickets and releases seats when a mobile order closes unsuccessfully", () => {
+    expect(commerce).toContain(
+      "add_action( 'woocommerce_order_status_changed', 'lamako_mobile_v2_enforce_closed_order_lifecycle'",
+    );
+    expect(commerce).toContain(
+      "function lamako_mobile_v2_void_closed_order_ticket_instances",
+    );
+    expect(commerce).toContain(
+      "in_array( $to_status, [ 'cancelled', 'failed', 'refunded' ], true )",
+    );
+    expect(commerce).toContain(
+      "lamako_mobile_v2_release_expired_order_seats( $order )",
     );
   });
 });

@@ -40,7 +40,12 @@ type CheckoutErrorSource = "fields" | "order";
 
 export default function CheckoutScreen() {
   const router = useRouter();
-  const { items, total, expiresAt: cartExpiresAt } = useCart();
+  const {
+    items,
+    total,
+    expiresAt: cartExpiresAt,
+    ensureCheckoutRequestKey,
+  } = useCart();
   const { isAuthenticated, user } = useAuth();
   const {
     currentTier,
@@ -298,6 +303,7 @@ export default function CheckoutScreen() {
 
       const result = await createMobileCheckout({
         items: buildCheckoutItemInputs(items, ticketFieldValues, true),
+        idempotencyKey: ensureCheckoutRequestKey(),
         billing,
         shipping: hasPhysicalProducts ? billing : undefined,
         buyerFields: buyerFieldValues,
@@ -349,6 +355,7 @@ export default function CheckoutScreen() {
   }, [
     appliedCoupon,
     buyerFieldValues,
+    ensureCheckoutRequestKey,
     hasPhysicalProducts,
     items,
     router,

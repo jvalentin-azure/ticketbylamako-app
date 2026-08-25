@@ -196,6 +196,7 @@ export async function updateMobileProfile(input: {
 
 export interface CreateMobileCheckoutRequest {
   items: MobileCheckoutItemInput[];
+  idempotencyKey?: string;
   billing?: MobileAddressInput;
   shipping?: MobileAddressInput;
   buyerFields?: Record<string, CheckoutFieldValue>;
