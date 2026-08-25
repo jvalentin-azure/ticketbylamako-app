@@ -114,7 +114,8 @@ describe("V4.8 - Cart Toast & Plugin Redeploy", () => {
     it("should use HTTP redirect after setting auth cookies in auto-login", () => {
       expect(autoLoginContent).toContain("wp_set_auth_cookie( $user_id, true )");
       expect(autoLoginContent).toContain("setcookie( 'lamako_mobile_session'");
-      expect(autoLoginContent).toContain("header( 'Location: ' . $redirect, true, 302 )");
+      expect(autoLoginContent).toContain("wp_validate_redirect( $redirect, home_url( '/' ) )");
+      expect(autoLoginContent).toContain("wp_safe_redirect( $redirect, 302, 'Lamako Mobile API' )");
     });
 
     it("should not use JavaScript redirect in auto-login", () => {

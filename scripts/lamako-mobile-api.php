@@ -23,6 +23,21 @@ if ( file_exists( $lamako_mobile_v2_file ) ) {
     require_once $lamako_mobile_v2_file;
 }
 
+$lamako_mobile_wallet_file = __DIR__ . '/lamako-mobile-api/includes/v2-wallet.php';
+if ( file_exists( $lamako_mobile_wallet_file ) ) {
+    require_once $lamako_mobile_wallet_file;
+}
+
+$lamako_mobile_social_security_file = __DIR__ . '/lamako-mobile-api/includes/social-auth-security.php';
+if ( file_exists( $lamako_mobile_social_security_file ) ) {
+    require_once $lamako_mobile_social_security_file;
+}
+
+$lamako_mobile_web_apple_auth_file = __DIR__ . '/lamako-mobile-api/includes/web-apple-auth.php';
+if ( file_exists( $lamako_mobile_web_apple_auth_file ) ) {
+    require_once $lamako_mobile_web_apple_auth_file;
+}
+
 // ============================================================
 // 0. ALLOW PAY-FOR-ORDER WITHOUT LOGIN (for mobile app checkout)
 // ============================================================
@@ -182,9 +197,11 @@ a { display: inline-flex; align-items: center; justify-content: center; min-heig
   var appUrl = defaultAppUrl;
 
   function isAllowedReturnUrl(url) {
-    return /^ticketbylamako:\/\/oauth\/(google|facebook)-callback/i.test(url)
-      || /^exp:\/\/.*\/--\/oauth\/(google|facebook)-callback/i.test(url)
-      || /^exps:\/\/.*\/--\/oauth\/(google|facebook)-callback/i.test(url);
+    var allowExpoGo = <?php echo defined( 'LAMAKO_ALLOW_EXPO_GO_OAUTH_CALLBACKS' ) && LAMAKO_ALLOW_EXPO_GO_OAUTH_CALLBACKS ? 'true' : 'false'; ?>;
+    if (/^ticketbylamako:\/\/oauth\/(google|facebook)-callback\/?$/i.test(url)) {
+      return true;
+    }
+    return allowExpoGo && /^exps?:\/\/[^?#]+\/--\/oauth\/(google|facebook)-callback\/?$/i.test(url);
   }
 
   function getParam(name) {
@@ -1169,6 +1186,17 @@ function lamako_mobile_maybe_cancel_checkout() {
         exit;
     }
 
+    if ( function_exists( 'lamako_mobile_v2_order_has_protected_payment_attempt' )
+        && lamako_mobile_v2_order_has_protected_payment_attempt( $order ) ) {
+        status_header( 409 );
+        echo wp_json_encode( [
+            'success' => false,
+            'status'  => 'payment_verification_pending',
+            'message' => 'Payment verification is still in progress. The order was not cancelled.',
+        ] );
+        exit;
+    }
+
     if ( in_array( $order->get_status(), [ 'pending', 'checkout-draft' ], true ) ) {
         $order->update_status( 'cancelled', 'Lamako Mobile checkout cancelled before payment by customer.' );
         if ( function_exists( 'WC' ) && WC()->cart ) {
@@ -1456,7 +1484,7 @@ function lamako_mobile_maybe_serve_checkout() {
 <html <?php language_attributes(); ?>>
 <head>
 <meta charset="<?php bloginfo( 'charset' ); ?>">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
 <title>Paiement - TicketByLamako</title>
 <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -1468,6 +1496,27 @@ function lamako_mobile_maybe_serve_checkout() {
         -webkit-font-smoothing: antialiased;
         min-height: 100vh;
         padding-bottom: 24px;
+        touch-action: auto !important;
+        pointer-events: auto !important;
+    }
+    body.lamako-mobile-checkout input,
+    body.lamako-mobile-checkout button,
+    body.lamako-mobile-checkout select,
+    body.lamako-mobile-checkout textarea,
+    body.lamako-mobile-checkout label,
+    body.lamako-mobile-checkout a,
+    body.lamako-mobile-checkout form,
+    body.lamako-mobile-checkout #payment,
+    body.lamako-mobile-checkout #order_review {
+        pointer-events: auto !important;
+        touch-action: manipulation !important;
+    }
+    body.lamako-mobile-checkout input,
+    body.lamako-mobile-checkout select,
+    body.lamako-mobile-checkout textarea {
+        font-size: 16px !important;
+        -webkit-user-select: text !important;
+        user-select: text !important;
     }
     .lamako-checkout-header {
         background: #fff;
@@ -2337,6 +2386,26 @@ document.addEventListener('DOMContentLoaded', function() {
     var termsCheckbox = document.getElementById('terms');
     var phoneSection = document.getElementById('lamako-phone-section');
     var phoneInput = document.getElementById('billing_phone');
+
+    function restoreCheckoutInteraction() {
+        document.documentElement.style.pointerEvents = 'auto';
+        document.body.style.pointerEvents = 'auto';
+        document.querySelectorAll('#order_review, #payment, .wc_payment_method, input, button, select, textarea, label, a').forEach(function(element) {
+            element.style.pointerEvents = 'auto';
+        });
+
+        var formIsProcessing = !!(btn && btn.classList.contains('is-loading'));
+        if (!formIsProcessing) {
+            document.querySelectorAll('.blockUI.blockOverlay, .woocommerce .blockUI.blockOverlay').forEach(function(overlay) {
+                overlay.remove();
+            });
+        }
+    }
+
+    restoreCheckoutInteraction();
+    window.addEventListener('pageshow', restoreCheckoutInteraction);
+    setTimeout(restoreCheckoutInteraction, 350);
+    setTimeout(restoreCheckoutInteraction, 1200);
     
     // Mobile Money gateway IDs that require phone (MVola and Airtel only - Orange has its own flow)
     var mobileMoneyGateways = ['mvola', 'airtel_money', 'airtel', 'orange_money', 'orangemoney', 'orange', 'mobile_money', 'money'];
@@ -2634,6 +2703,18 @@ add_action( 'rest_api_init', function () {
  * Called after successful payment to prevent old items from reappearing.
  */
 function lamako_mobile_clear_cart( $request ) {
+    $order_id = absint( $request->get_param( 'order_id' ) );
+    $order    = $order_id > 0 ? wc_get_order( $order_id ) : false;
+    if ( $order instanceof WC_Order
+        && function_exists( 'lamako_mobile_v2_order_has_protected_payment_attempt' )
+        && lamako_mobile_v2_order_has_protected_payment_attempt( $order ) ) {
+        return new WP_Error(
+            'lamako_mobile_payment_verification_pending',
+            'Payment verification is still in progress. The cart and seats were not released.',
+            [ 'status' => 409 ]
+        );
+    }
+
     // Clear WC cart if available
     if ( function_exists( 'WC' ) && WC()->cart ) {
         WC()->cart->empty_cart();
@@ -2648,11 +2729,8 @@ function lamako_mobile_clear_cart( $request ) {
     
     // Release Tickera seat reservations from transients
     // Tickera uses multiple transient patterns for seat reservations
-    $order_id = $request->get_param( 'order_id' );
-    
     // Method 1: Clear seats from a specific order
     if ( $order_id ) {
-        $order = wc_get_order( (int) $order_id );
         if ( $order && $order->get_status() !== 'completed' && $order->get_status() !== 'processing' ) {
             foreach ( $order->get_items() as $item ) {
                 $seat_id = $item->get_meta( '_tc_seat_id' );
@@ -3109,7 +3187,7 @@ add_action( 'rest_api_init', function () {
     register_rest_route( 'lamako-mobile/v1', '/social-login', [
         'methods'  => 'POST',
         'callback' => 'lamako_mobile_social_login',
-        'permission_callback' => '__return_true',
+        'permission_callback' => 'lamako_mobile_public_auth_permission',
     ] );
 
     // Mobile registration endpoint.
@@ -3117,7 +3195,7 @@ add_action( 'rest_api_init', function () {
     register_rest_route( 'lamako-mobile/v1', '/register', [
         'methods'  => 'POST',
         'callback' => 'lamako_mobile_register_customer',
-        'permission_callback' => '__return_true',
+        'permission_callback' => 'lamako_mobile_public_auth_permission',
     ] );
 
     // Mobile password reset endpoint.
@@ -3125,7 +3203,7 @@ add_action( 'rest_api_init', function () {
     register_rest_route( 'lamako-mobile/v1', '/password-reset', [
         'methods'  => 'POST',
         'callback' => 'lamako_mobile_password_reset',
-        'permission_callback' => '__return_true',
+        'permission_callback' => 'lamako_mobile_public_auth_permission',
     ] );
 } );
 
@@ -3142,8 +3220,18 @@ function lamako_mobile_register_customer( WP_REST_Request $request ) {
     $first_name = isset( $body['first_name'] ) ? sanitize_text_field( $body['first_name'] ) : '';
     $last_name  = isset( $body['last_name'] ) ? sanitize_text_field( $body['last_name'] ) : '';
 
+    $rate_limit = lamako_mobile_enforce_public_auth_rate_limit( 'register_ip', 10, 15 * MINUTE_IN_SECONDS );
+    if ( is_wp_error( $rate_limit ) ) {
+        return $rate_limit;
+    }
+
     if ( empty( $email ) || ! is_email( $email ) ) {
         return new WP_Error( 'invalid_email', 'Adresse email invalide.', [ 'status' => 400 ] );
+    }
+
+    $rate_limit = lamako_mobile_enforce_public_auth_rate_limit( 'register_email', 3, 15 * MINUTE_IN_SECONDS, $email );
+    if ( is_wp_error( $rate_limit ) ) {
+        return $rate_limit;
     }
 
     if ( email_exists( $email ) ) {
@@ -3217,8 +3305,18 @@ function lamako_mobile_password_reset( WP_REST_Request $request ) {
     $body  = $request->get_json_params();
     $login = isset( $body['login'] ) ? trim( sanitize_text_field( $body['login'] ) ) : '';
 
+    $rate_limit = lamako_mobile_enforce_public_auth_rate_limit( 'password_reset_ip', 10, 15 * MINUTE_IN_SECONDS );
+    if ( is_wp_error( $rate_limit ) ) {
+        return $rate_limit;
+    }
+
     if ( empty( $login ) ) {
         return new WP_Error( 'missing_login', 'Email ou nom utilisateur requis.', [ 'status' => 400 ] );
+    }
+
+    $rate_limit = lamako_mobile_enforce_public_auth_rate_limit( 'password_reset_login', 3, 15 * MINUTE_IN_SECONDS, strtolower( $login ) );
+    if ( is_wp_error( $rate_limit ) ) {
+        return $rate_limit;
     }
 
     $user = is_email( $login ) ? get_user_by( 'email', sanitize_email( $login ) ) : get_user_by( 'login', sanitize_user( $login ) );
@@ -3497,6 +3595,11 @@ function lamako_do_cancel_expired_pending_orders() {
     if ( empty( $pending_orders ) ) return;
     
     foreach ( $pending_orders as $order ) {
+        if ( function_exists( 'lamako_mobile_v2_order_has_protected_payment_attempt' )
+            && lamako_mobile_v2_order_has_protected_payment_attempt( $order ) ) {
+            continue;
+        }
+
         // Cancel the order - this triggers WooCommerce stock restoration automatically
         $order->update_status( 'cancelled', __( 'Commande annulée automatiquement - délai de paiement expiré (10 min).', 'lamako' ) );
         
@@ -3532,6 +3635,11 @@ function lamako_do_cancel_expired_onhold_orders() {
     if ( empty( $onhold_orders ) ) return;
     
     foreach ( $onhold_orders as $order ) {
+        if ( function_exists( 'lamako_mobile_v2_order_has_protected_payment_attempt' )
+            && lamako_mobile_v2_order_has_protected_payment_attempt( $order ) ) {
+            continue;
+        }
+
         $order->update_status( 'cancelled', __( 'Commande en attente annulée automatiquement - délai de 30 min expiré.', 'lamako' ) );
         lamako_cleanup_firebase_seats_for_order( $order );
     }
@@ -3725,17 +3833,16 @@ function lamako_mobile_is_boutique_product( $product_id ) {
  * Social login endpoint - validates provider tokens and creates/logs in WordPress users.
  * 
  * POST /wp-json/lamako-mobile/v1/social-login
- * Body: { "provider": "google|facebook|apple", "token": "...", "email": "...", "first_name": "...", "last_name": "...", "name": "..." }
+ * Body: { "provider": "google|facebook|apple", "token": "...", "nonce": "...", "first_name": "...", "last_name": "..." }
  * 
  * Response: { "success": true, "token": "jwt...", "user": {...}, "is_new_user": bool, "linked_existing": bool }
  */
 function lamako_mobile_social_login( WP_REST_Request $request ) {
     $provider   = sanitize_text_field( $request->get_param( 'provider' ) );
     $token      = sanitize_text_field( $request->get_param( 'token' ) );
-    $email      = sanitize_email( $request->get_param( 'email' ) );
+    $nonce      = sanitize_text_field( $request->get_param( 'nonce' ) );
     $first_name = sanitize_text_field( $request->get_param( 'first_name' ) );
     $last_name  = sanitize_text_field( $request->get_param( 'last_name' ) );
-    $name       = sanitize_text_field( $request->get_param( 'name' ) );
 
     if ( empty( $provider ) || empty( $token ) ) {
         return new WP_Error( 'missing_params', 'Provider et token requis', [ 'status' => 400 ] );
@@ -3745,17 +3852,22 @@ function lamako_mobile_social_login( WP_REST_Request $request ) {
         return new WP_Error( 'invalid_provider', 'Provider invalide. Utilisez google, facebook ou apple.', [ 'status' => 400 ] );
     }
 
+    $rate_limit = lamako_mobile_enforce_social_rate_limit();
+    if ( is_wp_error( $rate_limit ) ) {
+        return $rate_limit;
+    }
+
     // Validate the token with the provider and get user info
     $provider_user = null;
     switch ( $provider ) {
         case 'google':
-            $provider_user = lamako_validate_google_token( $token );
+            $provider_user = lamako_mobile_validate_google_identity( $token, $nonce );
             break;
         case 'facebook':
-            $provider_user = lamako_validate_facebook_token( $token );
+            $provider_user = lamako_mobile_validate_facebook_identity( $token );
             break;
         case 'apple':
-            $provider_user = lamako_validate_apple_token( $token, $email, $first_name, $last_name );
+            $provider_user = lamako_mobile_validate_apple_identity( $token, $nonce, $first_name, $last_name );
             break;
     }
 
@@ -3763,24 +3875,21 @@ function lamako_mobile_social_login( WP_REST_Request $request ) {
         return $provider_user;
     }
 
-    // Override with app-provided data if available (more reliable for Apple)
-    if ( ! empty( $email ) ) {
-        $provider_user['email'] = $email;
-    }
-    if ( ! empty( $first_name ) ) {
+    // Apple returns the name only on the first authorization. Identity fields
+    // still come exclusively from the verified provider token.
+    if ( $provider === 'apple' && ! empty( $first_name ) ) {
         $provider_user['first_name'] = $first_name;
     }
-    if ( ! empty( $last_name ) ) {
+    if ( $provider === 'apple' && ! empty( $last_name ) ) {
         $provider_user['last_name'] = $last_name;
     }
-    if ( ! empty( $name ) && empty( $provider_user['first_name'] ) ) {
-        $parts = explode( ' ', $name, 2 );
-        $provider_user['first_name'] = $parts[0];
-        $provider_user['last_name']  = isset( $parts[1] ) ? $parts[1] : '';
+    if ( empty( $provider_user['email'] ) && ! lamako_mobile_social_identity_is_linked( $provider, $provider_user['provider_id'] ?? '' ) ) {
+        return new WP_Error( 'no_email', 'Impossible de récupérer l\'email depuis le provider. Veuillez autoriser l\'accès à votre email.', [ 'status' => 400 ] );
     }
 
-    if ( empty( $provider_user['email'] ) ) {
-        return new WP_Error( 'no_email', 'Impossible de récupérer l\'email depuis le provider. Veuillez autoriser l\'accès à votre email.', [ 'status' => 400 ] );
+    $nonce_result = lamako_mobile_consume_social_nonce( $provider, $nonce, $provider_user['provider_id'] ?? '' );
+    if ( is_wp_error( $nonce_result ) ) {
+        return $nonce_result;
     }
 
     // Find or create the WordPress user
@@ -3820,109 +3929,6 @@ function lamako_mobile_social_login( WP_REST_Request $request ) {
 }
 
 /**
- * Validate Google OAuth2 access token.
- */
-function lamako_validate_google_token( $access_token ) {
-    // Use the userinfo endpoint to validate the access token
-    $response = wp_remote_get( 'https://www.googleapis.com/oauth2/v3/userinfo', [
-        'headers' => [ 'Authorization' => 'Bearer ' . $access_token ],
-        'timeout' => 10,
-    ] );
-
-    if ( is_wp_error( $response ) ) {
-        return new WP_Error( 'google_error', 'Erreur de connexion à Google: ' . $response->get_error_message(), [ 'status' => 500 ] );
-    }
-
-    $body = json_decode( wp_remote_retrieve_body( $response ), true );
-    $code = wp_remote_retrieve_response_code( $response );
-
-    if ( $code !== 200 || empty( $body['sub'] ) ) {
-        return new WP_Error( 'google_invalid', 'Token Google invalide ou expiré. Veuillez réessayer.', [ 'status' => 401 ] );
-    }
-
-    // Optionally verify the audience matches our client ID
-    // $google_client_id = get_option( 'lamako_google_client_id', '' );
-
-    return [
-        'provider_id' => $body['sub'],
-        'email'       => isset( $body['email'] ) ? $body['email'] : '',
-        'first_name'  => isset( $body['given_name'] ) ? $body['given_name'] : '',
-        'last_name'   => isset( $body['family_name'] ) ? $body['family_name'] : '',
-        'avatar'      => isset( $body['picture'] ) ? $body['picture'] : '',
-    ];
-}
-
-/**
- * Validate Facebook OAuth2 access token.
- */
-function lamako_validate_facebook_token( $access_token ) {
-    $response = wp_remote_get( 'https://graph.facebook.com/me?fields=id,email,first_name,last_name,name,picture.type(large)&access_token=' . urlencode( $access_token ), [
-        'timeout' => 10,
-    ] );
-
-    if ( is_wp_error( $response ) ) {
-        return new WP_Error( 'facebook_error', 'Erreur de connexion à Facebook: ' . $response->get_error_message(), [ 'status' => 500 ] );
-    }
-
-    $body = json_decode( wp_remote_retrieve_body( $response ), true );
-    $code = wp_remote_retrieve_response_code( $response );
-
-    if ( $code !== 200 || empty( $body['id'] ) ) {
-        $error_msg = isset( $body['error']['message'] ) ? $body['error']['message'] : 'Token invalide';
-        return new WP_Error( 'facebook_invalid', 'Token Facebook invalide: ' . $error_msg, [ 'status' => 401 ] );
-    }
-
-    return [
-        'provider_id' => $body['id'],
-        'email'       => isset( $body['email'] ) ? $body['email'] : '',
-        'first_name'  => isset( $body['first_name'] ) ? $body['first_name'] : '',
-        'last_name'   => isset( $body['last_name'] ) ? $body['last_name'] : '',
-        'avatar'      => isset( $body['picture']['data']['url'] ) ? $body['picture']['data']['url'] : '',
-    ];
-}
-
-/**
- * Validate Apple identity token (JWT).
- * Apple tokens are JWTs signed by Apple - we verify the signature using Apple's public keys.
- */
-function lamako_validate_apple_token( $identity_token, $email = '', $first_name = '', $last_name = '' ) {
-    // Decode the JWT without verification first to get the header
-    $parts = explode( '.', $identity_token );
-    if ( count( $parts ) !== 3 ) {
-        return new WP_Error( 'apple_invalid', 'Token Apple invalide (format JWT incorrect)', [ 'status' => 401 ] );
-    }
-
-    $header  = json_decode( base64_decode( strtr( $parts[0], '-_', '+/' ) ), true );
-    $payload = json_decode( base64_decode( strtr( $parts[1], '-_', '+/' ) ), true );
-
-    if ( empty( $payload ) || empty( $payload['sub'] ) ) {
-        return new WP_Error( 'apple_invalid', 'Token Apple invalide (payload manquant)', [ 'status' => 401 ] );
-    }
-
-    // Verify issuer and audience
-    if ( ! isset( $payload['iss'] ) || $payload['iss'] !== 'https://appleid.apple.com' ) {
-        return new WP_Error( 'apple_invalid', 'Token Apple invalide (issuer incorrect)', [ 'status' => 401 ] );
-    }
-
-    // Check expiration
-    if ( isset( $payload['exp'] ) && $payload['exp'] < time() ) {
-        return new WP_Error( 'apple_expired', 'Token Apple expiré. Veuillez réessayer.', [ 'status' => 401 ] );
-    }
-
-    // For production, you should verify the signature against Apple's public keys
-    // https://appleid.apple.com/auth/keys
-    // For now, we trust the token structure and validate basic claims
-
-    return [
-        'provider_id' => $payload['sub'],
-        'email'       => ! empty( $payload['email'] ) ? $payload['email'] : $email,
-        'first_name'  => $first_name,
-        'last_name'   => $last_name,
-        'avatar'      => '',
-    ];
-}
-
-/**
  * Find an existing WordPress user or create a new one from social provider data.
  */
 function lamako_find_or_create_social_user( $provider, $provider_user ) {
@@ -3936,18 +3942,28 @@ function lamako_find_or_create_social_user( $provider, $provider_user ) {
 
     // 1. Check if we already have a user linked to this social provider
     $meta_key = '_lamako_social_' . $provider . '_id';
-    $users = get_users( [
+    $users    = get_users( [
         'meta_key'   => $meta_key,
         'meta_value' => $provider_id,
         'number'     => 1,
     ] );
+    if ( empty( $users ) ) {
+        $users = get_users( [
+            'meta_key'   => '_social_login_' . $provider . '_id',
+            'meta_value' => $provider_id,
+            'number'     => 1,
+        ] );
+        if ( ! empty( $users ) ) {
+            update_user_meta( $users[0]->ID, $meta_key, $provider_id );
+        }
+    }
 
     if ( ! empty( $users ) ) {
         // User already linked to this provider
         $user = $users[0];
     } else {
         // 2. Check if a user with this email already exists
-        $user = get_user_by( 'email', $email );
+        $user = $email ? get_user_by( 'email', $email ) : false;
 
         if ( $user ) {
             // Link existing user to this social provider
@@ -4072,11 +4088,15 @@ add_action( 'rest_api_init', function () {
     register_rest_route( 'lamako-mobile/v1', '/auto-login', [
         'methods'  => 'GET',
         'callback' => 'lamako_mobile_auto_login',
-        'permission_callback' => '__return_true',
+        'permission_callback' => 'lamako_mobile_public_auth_permission',
     ] );
 } );
 
 function lamako_mobile_auto_login( WP_REST_Request $request ) {
+    if ( ! defined( 'LAMAKO_ENABLE_LEGACY_AUTO_LOGIN' ) || ! LAMAKO_ENABLE_LEGACY_AUTO_LOGIN ) {
+        return new WP_Error( 'legacy_auto_login_disabled', 'Cette methode de connexion a ete desactivee. Mettez a jour l application.', [ 'status' => 410 ] );
+    }
+
     $token    = $request->get_param( 'token' );
     $redirect = $request->get_param( 'redirect' );
 
@@ -4153,6 +4173,7 @@ function lamako_mobile_auto_login( WP_REST_Request $request ) {
     if ( strpos( $redirect, 'http' ) !== 0 ) {
         $redirect = home_url( $redirect );
     }
+    $redirect = wp_validate_redirect( $redirect, home_url( '/' ) );
     
     // Add a query parameter to identify mobile app requests
     $separator = ( strpos( $redirect, '?' ) !== false ) ? '&' : '?';
@@ -4163,7 +4184,7 @@ function lamako_mobile_auto_login( WP_REST_Request $request ) {
     // HTTP response as the redirect, so they are available when the browser loads the
     // redirected page. JS redirect (window.location.href) was unreliable in WebView
     // because the cookie might not be stored before the new page request.
-    header( 'Location: ' . $redirect, true, 302 );
+    wp_safe_redirect( $redirect, 302, 'Lamako Mobile API' );
     exit;
 }
 
