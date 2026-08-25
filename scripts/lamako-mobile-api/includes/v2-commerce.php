@@ -1948,7 +1948,19 @@ function lamako_mobile_v2_create_checkout( WP_REST_Request $request ) {
 
     $token      = lamako_mobile_v2_token();
     $token_hash = lamako_mobile_v2_token_hash( $token );
-    $expires_at = time() + LAMAKO_MOBILE_V2_CHECKOUT_TTL;
+    $now        = time();
+    $expires_at = $now + LAMAKO_MOBILE_V2_CHECKOUT_TTL;
+    $requested_expiry_raw = sanitize_text_field( $body['reservationExpiresAt'] ?? $body['reservation_expires_at'] ?? '' );
+    if ( $requested_expiry_raw !== '' ) {
+        $requested_expiry = strtotime( $requested_expiry_raw );
+        if ( ! $requested_expiry ) {
+            return new WP_Error( 'lamako_v2_reservation_expiry_invalid', 'Reservation expiry is invalid.', [ 'status' => 400 ] );
+        }
+        if ( $requested_expiry <= $now ) {
+            return new WP_Error( 'lamako_v2_reservation_expired', 'The cart reservation has expired.', [ 'status' => 409 ] );
+        }
+        $expires_at = min( $expires_at, (int) $requested_expiry );
+    }
     $billing    = lamako_mobile_v2_get_billing_from_request( $body['billing'] ?? [], $user );
     $shipping   = $body['shipping'] ?? [];
     $source     = sanitize_text_field( $body['source'] ?? 'native_cart' );

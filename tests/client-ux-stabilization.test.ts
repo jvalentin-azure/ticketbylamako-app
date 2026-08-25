@@ -39,7 +39,15 @@ describe("client UX stabilization", () => {
   it("keeps the payment countdown when only the local cart expiry is available", () => {
     const hook = read("hooks", "use-mobile-payment.ts");
     expect(hook).toContain("expiresAt: cartExpiresAt");
-    expect(hook).toContain("Number.isFinite(parsedServerExpiry)");
-    expect(hook).toContain("cartExpiresAt || 0");
+    expect(hook).toContain("Number.isFinite(value)");
+    expect(hook).toContain("Math.min(...expiryCandidates)");
+  });
+
+  it("preserves the original cart deadline when creating the checkout", () => {
+    const checkout = read("app", "checkout.tsx");
+    const api = read("lib", "api", "mobile.ts");
+    expect(checkout).toContain("expiresAt: cartExpiresAt");
+    expect(checkout).toContain("reservationExpiresAt: cartExpiresAt");
+    expect(api).toContain("reservationExpiresAt?: string");
   });
 });

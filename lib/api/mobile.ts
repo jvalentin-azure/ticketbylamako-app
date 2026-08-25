@@ -200,6 +200,7 @@ export interface CreateMobileCheckoutRequest {
   shipping?: MobileAddressInput;
   buyerFields?: Record<string, CheckoutFieldValue>;
   couponCode?: string;
+  reservationExpiresAt?: string;
   source?: "native_cart" | "product" | "ticket" | string;
 }
 

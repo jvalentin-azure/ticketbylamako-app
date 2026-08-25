@@ -89,9 +89,13 @@ export function useMobilePayment({ token, kind }: UseMobilePaymentOptions) {
   const parsedServerExpiry = order?.reservationExpiresAt
     ? Date.parse(order.reservationExpiresAt)
     : Number.NaN;
-  const expiresAt = Number.isFinite(parsedServerExpiry)
-    ? parsedServerExpiry
-    : cartExpiresAt || 0;
+  const expiryCandidates = [parsedServerExpiry, cartExpiresAt].filter(
+    (value): value is number =>
+      typeof value === "number" && Number.isFinite(value) && value > 0,
+  );
+  const expiresAt = expiryCandidates.length
+    ? Math.min(...expiryCandidates)
+    : 0;
   const remainingSeconds = expiresAt
     ? Math.max(0, Math.ceil((expiresAt - clock) / 1000))
     : null;

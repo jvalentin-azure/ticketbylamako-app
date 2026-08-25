@@ -68,6 +68,14 @@ describe("mobile ticket issuance integrity", () => {
     );
   });
 
+  it("never extends the cart hold when checkout starts", () => {
+    expect(commerce).toContain("$body['reservationExpiresAt']");
+    expect(commerce).toContain(
+      "$expires_at = min( $expires_at, (int) $requested_expiry )",
+    );
+    expect(commerce).toContain("lamako_v2_reservation_expired");
+  });
+
   it("cancels only expired unpaid orders after a final fresh read", () => {
     expect(commerce).toContain("function lamako_mobile_v2_expire_stale_orders");
     expect(commerce).toContain(

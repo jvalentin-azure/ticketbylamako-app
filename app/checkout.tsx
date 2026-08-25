@@ -40,7 +40,7 @@ type CheckoutErrorSource = "fields" | "order";
 
 export default function CheckoutScreen() {
   const router = useRouter();
-  const { items, total } = useCart();
+  const { items, total, expiresAt: cartExpiresAt } = useCart();
   const { isAuthenticated, user } = useAuth();
   const {
     currentTier,
@@ -302,6 +302,9 @@ export default function CheckoutScreen() {
         shipping: hasPhysicalProducts ? billing : undefined,
         buyerFields: buyerFieldValues,
         couponCode: appliedCoupon || undefined,
+        reservationExpiresAt: cartExpiresAt
+          ? new Date(cartExpiresAt).toISOString()
+          : undefined,
         source: items.every((item) => item.isEvent)
           ? "ticket"
           : items.some((item) => item.isEvent)
