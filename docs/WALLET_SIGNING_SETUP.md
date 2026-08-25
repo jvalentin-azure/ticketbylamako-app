@@ -69,16 +69,33 @@ The paid staging ticket `14115` from order `14114` successfully created class
 `3388000000023176380.event_13839`, opened the Google "Add to Wallet" flow, and
 was added to the authorized test account. The resulting pass displayed the
 event name, start/end date, venue, holder, ticket number and QR code. Google
-Wallet remains in demo mode while Google reviews the business profile and the
-publication request submitted on 23 August 2026. The Console checklist is
-complete (`3/3`, `100%`) and announces a response within two to three business
-days. Once Google approves the request, active classes become public
-automatically and the issuer cannot return to demo mode.
+approved the issuer and its active event-ticket class. The Google Wallet API
+was enabled in the dedicated Cloud project on 25 August 2026.
 
 Before changing the Google constants, staging `wp-config.php` is backed up below
 `/home/master/tbl-compliance-backups/wallet-google-<timestamp>/`. The latest
 backup location is also recorded outside the web root in
 `/home/master/.ticketbylamako-secrets/wallet/staging/google/last-wp-config-backup.txt`.
+
+### Production activation - 25 August 2026
+
+- Apple and Google signing assets are stored outside the WordPress web root in
+  `/home/master/.ticketbylamako-secrets/wallet/production/`.
+- WordPress reports both providers as available.
+- Apple generated a signed, structurally valid `.pkpass` from an existing paid
+  ticket without creating an order or changing ticket data.
+- The Google service account authenticated successfully, read the approved
+  event-ticket class through Google Wallet API, and generated a verifiable
+  Save-to-Wallet JWT containing an event class and ticket object.
+- Unauthenticated Apple and Google Wallet routes return HTTP 401.
+- Production activation backup:
+  `/home/master/tbl-compliance-backups/wallet-prod-20260825T202111Z/`.
+
+The current Google signer belongs to the dedicated
+`ticketbylamako-wallet-stg` Cloud project even though it now signs links served
+by production. This is functionally valid because the issuer authorization is
+shared, but a production-named signer should replace it during credential
+rotation to make environment ownership explicit.
 
 ## Rollback
 
@@ -90,6 +107,13 @@ For staging Google Wallet, restore the recorded `wp-config.php` backup and clear
 the WordPress/application cache. If the signer credential is suspected to be
 exposed, revoke key ID `35a7acc716b21f663353e2c5797fda2db1613c8d` in Google
 Cloud before creating a replacement; never copy the old key into the repository.
+
+For the 25 August production activation, restore
+`wallet-prod-20260825T202111Z/wp-config.php.before-wallet-activation` to the
+production WordPress root. This immediately points Wallet back to the previous
+unavailable path, causing the API to report both providers as unavailable and
+the mobile app to hide both buttons. The production signing directory may then
+be archived after confirming rollback.
 
 ## Required QA
 
