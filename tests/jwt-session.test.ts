@@ -1,6 +1,9 @@
 import { SignJWT } from "jose";
 import { describe, expect, it } from "vitest";
-import { isJwtLocallyUsable } from "../lib/jwt-session";
+import {
+  isExplicitJwtServerRejection,
+  isJwtLocallyUsable,
+} from "../lib/jwt-session";
 
 const secret = new TextEncoder().encode("test-only-secret");
 
@@ -24,5 +27,20 @@ describe("offline JWT session validation", () => {
 
     expect(isJwtLocallyUsable(expired, now)).toBe(false);
     expect(isJwtLocallyUsable("not-a-jwt", now)).toBe(false);
+  });
+
+  it("distinguishes an invalid JWT from transient server and proxy errors", () => {
+    expect(
+      isExplicitJwtServerRejection(403, "jwt_auth_invalid_token"),
+    ).toBe(true);
+    expect(isExplicitJwtServerRejection(403, "jwt_auth_bad_iss")).toBe(
+      true,
+    );
+    expect(isExplicitJwtServerRejection(403, "jwt_auth_bad_config")).toBe(
+      false,
+    );
+    expect(isExplicitJwtServerRejection(403, undefined)).toBe(false);
+    expect(isExplicitJwtServerRejection(429, "rate_limited")).toBe(false);
+    expect(isExplicitJwtServerRejection(500, "server_error")).toBe(false);
   });
 });

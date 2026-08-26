@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { User, login as apiLogin, register as apiRegister, logout as apiLogout, getStoredUser, storeUser, validateToken } from "./api/auth";
+import { User, login as apiLogin, register as apiRegister, logout as apiLogout, getStoredToken, getStoredUser, storeUser, validateToken } from "./api/auth";
 import { invalidateAllCaches } from "./api/cache";
 import { clearTicketDetailCache } from "./ticket-detail-cache";
+import { isJwtLocallyUsable } from "./jwt-session";
 
 interface AuthState {
   user: User | null;
@@ -33,20 +34,62 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
 
   useEffect(() => {
+    let cancelled = false;
+
     (async () => {
       try {
-        const user = await getStoredUser();
-        if (user) {
-          const valid = await validateToken();
-          if (valid) {
-            setState({ user, isLoading: false, isAuthenticated: true });
-            syncPushTokenForAuthenticatedUser();
-            return;
-          }
+        const [user, token] = await Promise.all([
+          getStoredUser(),
+          getStoredToken(),
+        ]);
+
+        if (!user || !token || cancelled) {
+          if (!cancelled) setState(s => ({ ...s, isLoading: false }));
+          return;
         }
-      } catch {}
-      setState(s => ({ ...s, isLoading: false }));
+
+        if (isJwtLocallyUsable(token)) {
+          setState({ user, isLoading: false, isAuthenticated: true });
+          syncPushTokenForAuthenticatedUser();
+
+          void validateToken(token).then(async (valid) => {
+            if (valid || cancelled) return;
+
+            // Do not let validation of an older token erase a session created
+            // while the background request was still running.
+            const currentToken = await getStoredToken().catch(() => null);
+            if (cancelled || currentToken !== token) return;
+
+            await apiLogout().catch(() => undefined);
+            if (!cancelled) {
+              setState({ user: null, isLoading: false, isAuthenticated: false });
+            }
+          });
+          return;
+        }
+
+        const valid = await validateToken(token);
+        if (valid && !cancelled) {
+          setState({ user, isLoading: false, isAuthenticated: true });
+          syncPushTokenForAuthenticatedUser();
+          return;
+        }
+
+        const currentToken = await getStoredToken().catch(() => null);
+        if (currentToken === token) {
+          await apiLogout().catch(() => undefined);
+        }
+      } catch {
+        // Keep startup resilient; storage/network failures are retried on the
+        // next launch and never trigger an unsafe AsyncStorage token fallback.
+      }
+
+      if (!cancelled) setState(s => ({ ...s, isLoading: false }));
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const login = useCallback(async (username: string, password: string) => {

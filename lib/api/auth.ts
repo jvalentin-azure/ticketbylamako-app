@@ -2,11 +2,15 @@ import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { parseStoredUser } from "@/lib/auth-user";
-import { isJwtLocallyUsable } from "@/lib/jwt-session";
+import {
+  isExplicitJwtServerRejection,
+  isJwtLocallyUsable,
+} from "@/lib/jwt-session";
 
 const SITE_URL = process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
 const TOKEN_KEY = "jwt_token";
 const USER_KEY = "user_data";
+const NATIVE_STORAGE_RETRY_DELAYS_MS = [120, 300];
 
 export type UserRole = "customer" | "shop_manager" | "administrator";
 
@@ -59,7 +63,20 @@ async function secureGet(key: string): Promise<string | null> {
   if (Platform.OS === "web") {
     return AsyncStorage.getItem(key);
   }
-  return SecureStore.getItemAsync(key);
+
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= NATIVE_STORAGE_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      return await SecureStore.getItemAsync(key);
+    } catch (error) {
+      lastError = error;
+      const retryDelay = NATIVE_STORAGE_RETRY_DELAYS_MS[attempt];
+      if (retryDelay === undefined) break;
+      await new Promise((resolve) => setTimeout(resolve, retryDelay));
+    }
+  }
+
+  throw lastError;
 }
 
 async function secureDelete(key: string) {
@@ -190,8 +207,8 @@ export async function getStoredToken(): Promise<string | null> {
   return secureGet(TOKEN_KEY);
 }
 
-export async function validateToken(): Promise<boolean> {
-  const token = await getStoredToken();
+export async function validateToken(storedToken?: string): Promise<boolean> {
+  const token = storedToken ?? (await getStoredToken());
   if (!token) return false;
 
   const controller =
@@ -205,10 +222,19 @@ export async function validateToken(): Promise<boolean> {
       headers: { Authorization: `Bearer ${token}` },
       signal: controller?.signal,
     });
-    return res.ok;
+    if (res.ok) return true;
+
+    const errorBody = await res.json().catch(() => null);
+    if (isExplicitJwtServerRejection(res.status, errorBody?.code)) {
+      return false;
+    }
+
+    // A proxy, WAF, rate limit or temporary WordPress error must not destroy
+    // an otherwise unexpired native session during app startup.
+    return isJwtLocallyUsable(token);
   } catch {
     // Preserve a still-valid local session when the venue has no network.
-    // An explicit server rejection still returns false above.
+    // Explicit JWT rejection is handled above before reaching this branch.
     return isJwtLocallyUsable(token);
   } finally {
     if (timeout) clearTimeout(timeout);
