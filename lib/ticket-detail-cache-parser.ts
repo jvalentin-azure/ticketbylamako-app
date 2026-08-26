@@ -3,7 +3,7 @@ import type {
   MobileOrderTicketsResponse,
 } from "@/lib/api/mobile";
 
-export const TICKET_DETAIL_CACHE_VERSION = 3;
+export const TICKET_DETAIL_CACHE_VERSION = 4;
 const BLOCKED_ORDER_STATUSES = new Set([
   "cancelled",
   "failed",

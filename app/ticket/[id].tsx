@@ -176,10 +176,15 @@ function TicketCard({
   const qrValue = ticket.ticket_code;
   const [calendarBusy, setCalendarBusy] = useState(false);
   const [walletBusy, setWalletBusy] = useState(false);
-  const walletAvailable =
+  const walletProviderAvailability =
     Platform.OS === "ios"
-      ? ticket.apple_wallet_available === true
-      : ticket.google_wallet_available === true;
+      ? ticket.apple_wallet_available
+      : ticket.google_wallet_available;
+  const walletAvailable =
+    isValid &&
+    ticket.instance_id > 0 &&
+    qrValue.length > 0 &&
+    walletProviderAvailability !== false;
 
   const handleAddToCalendar = async () => {
     if (calendarBusy) return;

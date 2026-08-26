@@ -61,8 +61,14 @@ export function mobileTicketToTicketInstance(
     event_image: ticket.eventImage || "",
     apple_wallet_url: ticket.appleWalletUrl || "",
     google_wallet_url: ticket.googleWalletUrl || "",
-    apple_wallet_available: ticket.appleWalletAvailable === true,
-    google_wallet_available: ticket.googleWalletAvailable === true,
+    apple_wallet_available:
+      typeof ticket.appleWalletAvailable === "boolean"
+        ? ticket.appleWalletAvailable
+        : undefined,
+    google_wallet_available:
+      typeof ticket.googleWalletAvailable === "boolean"
+        ? ticket.googleWalletAvailable
+        : undefined,
     checked_in: ticket.checkedIn === true,
     checked_in_at: ticket.checkedInAt || "",
     checkin_count: ticket.checkinCount || 0,
