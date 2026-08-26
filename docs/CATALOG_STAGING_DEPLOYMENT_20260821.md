@@ -856,3 +856,56 @@ rm -rf /home/master/applications/wvvtwdcenn/public_html/wp-content/uploads/lamak
 Après rollback serveur, l'application continue à fonctionner grâce au fallback
 REST. Pour retirer aussi la préférence snapshot du client, republier le commit
 mobile précédent sur le canal EAS concerné.
+
+### Publication production et OTA
+
+La couche snapshot a été publiée en production depuis les commits :
+
+```text
+64dacda perf(catalog): serve self-healing public snapshots
+d15fa25 fix(catalog): invalidate snapshots on initial version
+```
+
+Backup serveur avant déploiement :
+
+```text
+/home/master/applications/bvprmuerhv/tmp/catalog-snapshots-20260826-64dacda
+```
+
+Les fichiers n'existaient pas avant ce lot. Le rollback serveur de production
+consiste donc à les retirer, avec le cache de snapshots généré :
+
+```bash
+rm -f /home/master/applications/bvprmuerhv/public_html/wp-content/mu-plugins/tbl-public-catalog-snapshots.php
+rm -rf /home/master/applications/bvprmuerhv/public_html/lamako-catalog
+rm -rf /home/master/applications/bvprmuerhv/public_html/wp-content/uploads/lamako-catalog-cache
+```
+
+La parité des trois réponses production avec les routes REST a été validée sur
+les IDs et les volumes. Après invalidation réelle, chaque scope a répondu une
+première fois en `503`, a été reconstruit en 2 à 3 secondes, puis a répondu en
+`200`. Le smoke test final après publication mobile donne :
+
+```text
+home            HTTP 200  0,360 s
+events          HTTP 200  0,323 s
+shop            HTTP 200  0,342 s
+scope interdit  HTTP 404  0,262 s
+orders sans JWT HTTP 401  3,089 s
+```
+
+OTA EAS publiée sur la branche `production`, runtime `1.0.0`, pour Android et
+iOS :
+
+```text
+Groupe OTA       c5b1270d-62c6-4cfa-b1c1-490b709dc451
+Android update   01a03e2d-ff39-78f7-8173-e37b2c3f2e41
+iOS update       01a03e2d-ff39-715d-b786-66e9a33d1394
+Commit           d15fa2573256df9a4baf8c65928a7017b0800e24
+Message          perf: self-healing public catalog snapshots
+```
+
+Rollback mobile : republier le commit précédent `9a73fdd` sur la branche EAS
+`production`. Le groupe OTA précédent est
+`90ec3060-37b6-419e-b1e1-cc678c186d6f`. Le fallback REST reste opérationnel si
+la couche snapshot serveur est retirée avant la republication mobile.
