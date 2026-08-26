@@ -34,6 +34,14 @@ describe("ticket wallet API performance", () => {
     expect(source).toContain("is_array( $preloaded_tickets )");
   });
 
+  it("omits billing and order-item payloads from the ticket wallet view", () => {
+    expect(source).toContain("$wallet_view");
+    expect(source).toContain(
+      "sanitize_key( $request->get_param( 'view' ) ) === 'tickets'",
+    );
+    expect(source).toContain("! $wallet_view, $include_tickets");
+  });
+
   it("preserves the legacy tc_orders fallback", () => {
     expect(source).toContain("'post_type'      => 'tc_orders'");
     expect(source).toContain(

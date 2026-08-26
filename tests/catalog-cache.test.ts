@@ -120,4 +120,62 @@ describe("catalogue cache-first", () => {
     expect(fallback.events).toEqual(initial.events);
     expect(fallback.cacheStatus).toBe("stale");
   });
+
+  it("renders a stale catalogue immediately and refreshes it in the background", async () => {
+    storage.set(
+      "api_cache_home-data",
+      JSON.stringify({
+        data: {
+          events: [publishEvent],
+          products: [],
+          categories: [],
+        },
+        timestamp: Date.now() - 10 * 60_000,
+      }),
+    );
+
+    let finishRefresh!: (value: unknown) => void;
+    mobileV2FetchMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishRefresh = resolve;
+      }),
+    );
+
+    const first = await getHomeData();
+    const second = await getHomeData();
+
+    expect(first.cacheStatus).toBe("stale");
+    expect(second.events[0].id).toBe(10);
+    expect(mobileV2FetchMock).toHaveBeenCalledTimes(1);
+
+    finishRefresh({
+      events: [{ ...publishEvent, id: 20 }],
+      products: [],
+      categories: [],
+    });
+
+    await vi.waitFor(async () => {
+      const refreshed = await getCachedValue<{ events: Array<{ id: number }> }>(
+        "home-data",
+        60_000,
+      );
+      expect(refreshed?.data.events[0].id).toBe(20);
+    });
+  });
+
+  it("shares concurrent catalogue refreshes", async () => {
+    mobileV2FetchMock.mockResolvedValue({
+      events: [publishEvent],
+      products: [],
+      categories: [],
+    });
+
+    const [first, second] = await Promise.all([
+      getHomeData({ forceRefresh: true }),
+      getHomeData({ forceRefresh: true }),
+    ]);
+
+    expect(first.events).toEqual(second.events);
+    expect(mobileV2FetchMock).toHaveBeenCalledTimes(1);
+  });
 });

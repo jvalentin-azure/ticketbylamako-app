@@ -32,9 +32,16 @@ describe("mobile API catalogue query", () => {
     expect(source).toContain("lamako_mobile_v2_catalog_fresh_response");
     expect(source).toContain("save_post_tc_events");
     expect(source).toContain("save_post_product");
+    expect(source).toContain("woocommerce_checkout_order_created");
+    expect(source).toContain("woocommerce_order_status_changed");
     expect(source).toContain("created_event_category");
     expect(source).toContain("created_product_cat");
     expect(source).toContain("X-Lamako-Catalog-Cache");
+    expect(source).toContain("10 * MINUTE_IN_SECONDS");
+    expect(source).toContain("LAMAKO_MOBILE_V2_CATALOG_DETAIL_TTL");
+    expect(source).toContain("2 * MINUTE_IN_SECONDS");
+    expect(source).toContain("'event-detail'");
+    expect(source).toContain("'product-detail'");
   });
 
   it("serves card-sized images in lists while preserving large detail images", () => {

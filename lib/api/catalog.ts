@@ -57,6 +57,26 @@ export interface CatalogRequestOptions {
   forceRefresh?: boolean;
 }
 
+const catalogRequests = new Map<string, Promise<unknown>>();
+
+function shareCatalogRequest<T>(
+  key: string,
+  request: () => Promise<T>,
+): Promise<T> {
+  const existing = catalogRequests.get(key) as Promise<T> | undefined;
+  if (existing) return existing;
+
+  const pending = request().finally(() => {
+    if (catalogRequests.get(key) === pending) catalogRequests.delete(key);
+  });
+  catalogRequests.set(key, pending);
+  return pending;
+}
+
+function refreshInBackground(request: Promise<unknown>): void {
+  void request.catch(() => undefined);
+}
+
 function normalizeTicket(raw: any, eventId: number | string): TicketType {
   return {
     id: Number(raw?.id || 0),
@@ -209,23 +229,33 @@ export async function getHomeData(
   );
   if (cache.fresh) return { ...cache.fresh, cacheStatus: "fresh" };
 
-  try {
-    const raw = await mobileV2Fetch<any>("public/home-data", {
-      requireAuth: false,
-      params: { summary: true, events_limit: 12, products_limit: 8 },
+  const refresh = () =>
+    shareCatalogRequest("home-data", async () => {
+      const raw = await mobileV2Fetch<any>("public/home-data", {
+        requireAuth: false,
+        params: { summary: true, events_limit: 12, products_limit: 8 },
+      });
+      const result: HomeDataResponse = {
+        events: (raw?.events || [])
+          .map(normalizeEvent)
+          .filter(isPublicCatalogEvent),
+        products: (raw?.products || []).map(normalizeProduct),
+        categories: (raw?.categories || []).map(normalizeEventCategory),
+        version: raw?.version,
+        generatedAt: raw?.generatedAt,
+        cacheStatus: "fresh",
+      };
+      await setCache("home-data", result);
+      return result;
     });
-    const result: HomeDataResponse = {
-      events: (raw?.events || [])
-        .map(normalizeEvent)
-        .filter(isPublicCatalogEvent),
-      products: (raw?.products || []).map(normalizeProduct),
-      categories: (raw?.categories || []).map(normalizeEventCategory),
-      version: raw?.version,
-      generatedAt: raw?.generatedAt,
-      cacheStatus: "fresh",
-    };
-    await setCache("home-data", result);
-    return result;
+
+  if (cache.fallback && !options.forceRefresh) {
+    refreshInBackground(refresh());
+    return { ...cache.fallback, cacheStatus: "stale" };
+  }
+
+  try {
+    return await refresh();
   } catch (error) {
     if (cache.fallback) return { ...cache.fallback, cacheStatus: "stale" };
     throw error;
@@ -242,22 +272,32 @@ export async function getEventsData(
   );
   if (cache.fresh) return { ...cache.fresh, cacheStatus: "fresh" };
 
-  try {
-    const raw = await mobileV2Fetch<any>("public/events-data", {
-      requireAuth: false,
-      params: { summary: true, limit: 80 },
+  const refresh = () =>
+    shareCatalogRequest("events-data", async () => {
+      const raw = await mobileV2Fetch<any>("public/events-data", {
+        requireAuth: false,
+        params: { summary: true, limit: 80 },
+      });
+      const result: EventsDataResponse = {
+        events: (raw?.events || [])
+          .map(normalizeEvent)
+          .filter(isPublicCatalogEvent),
+        categories: (raw?.categories || []).map(normalizeEventCategory),
+        version: raw?.version,
+        generatedAt: raw?.generatedAt,
+        cacheStatus: "fresh",
+      };
+      await setCache("events-data", result);
+      return result;
     });
-    const result: EventsDataResponse = {
-      events: (raw?.events || [])
-        .map(normalizeEvent)
-        .filter(isPublicCatalogEvent),
-      categories: (raw?.categories || []).map(normalizeEventCategory),
-      version: raw?.version,
-      generatedAt: raw?.generatedAt,
-      cacheStatus: "fresh",
-    };
-    await setCache("events-data", result);
-    return result;
+
+  if (cache.fallback && !options.forceRefresh) {
+    refreshInBackground(refresh());
+    return { ...cache.fallback, cacheStatus: "stale" };
+  }
+
+  try {
+    return await refresh();
   } catch (error) {
     if (cache.fallback) return { ...cache.fallback, cacheStatus: "stale" };
     throw error;
@@ -274,17 +314,27 @@ export async function getShopData(
   );
   if (cache.fresh) return { ...cache.fresh, cacheStatus: "fresh" };
 
-  try {
-    const raw = await mobileV2Fetch<any>("public/shop-data", {
-      requireAuth: false,
+  const refresh = () =>
+    shareCatalogRequest("shop-data", async () => {
+      const raw = await mobileV2Fetch<any>("public/shop-data", {
+        requireAuth: false,
+      });
+      const result: ShopDataResponse = {
+        products: (raw?.products || []).map(normalizeProduct),
+        categories: (raw?.categories || []).map(normalizeShopCategory),
+        cacheStatus: "fresh",
+      };
+      await setCache("shop-data", result);
+      return result;
     });
-    const result: ShopDataResponse = {
-      products: (raw?.products || []).map(normalizeProduct),
-      categories: (raw?.categories || []).map(normalizeShopCategory),
-      cacheStatus: "fresh",
-    };
-    await setCache("shop-data", result);
-    return result;
+
+  if (cache.fallback && !options.forceRefresh) {
+    refreshInBackground(refresh());
+    return { ...cache.fallback, cacheStatus: "stale" };
+  }
+
+  try {
+    return await refresh();
   } catch (error) {
     if (cache.fallback) return { ...cache.fallback, cacheStatus: "stale" };
     throw error;
@@ -303,12 +353,24 @@ export async function getProduct(
   );
   if (cache.fresh) return cache.fresh;
 
+  const refresh = () =>
+    shareCatalogRequest(cacheKey, async () => {
+      const product = normalizeProduct(
+        await mobileV2Fetch<any>(`public/products/${id}`, {
+          requireAuth: false,
+        }),
+      );
+      await setCache(cacheKey, product);
+      return product;
+    });
+
+  if (cache.fallback && !options.forceRefresh) {
+    refreshInBackground(refresh());
+    return cache.fallback;
+  }
+
   try {
-    const product = normalizeProduct(
-      await mobileV2Fetch<any>(`public/products/${id}`, { requireAuth: false }),
-    );
-    await setCache(cacheKey, product);
-    return product;
+    return await refresh();
   } catch (error) {
     if (cache.fallback) return cache.fallback;
     throw error;
@@ -323,14 +385,22 @@ export async function getTCEvent(id: number): Promise<TCEvent> {
   );
   if (cached && !cached.isStale) return cached.data;
 
-  try {
+  const refresh = shareCatalogRequest(cacheKey, async () => {
     const event = normalizeEvent(
       await mobileV2Fetch<any>(`public/events/${id}`, { requireAuth: false }),
     );
     await setCache(cacheKey, event);
     return event;
+  });
+
+  if (cached) {
+    refreshInBackground(refresh);
+    return cached.data;
+  }
+
+  try {
+    return await refresh;
   } catch (error) {
-    if (cached) return cached.data;
     throw error;
   }
 }

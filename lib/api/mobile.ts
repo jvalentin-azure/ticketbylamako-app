@@ -716,6 +716,7 @@ export async function getMobileOrders(
       status: params.status,
       limit: params.limit,
       include_tickets: params.includeTickets ? 1 : undefined,
+      view: params.includeTickets ? "tickets" : undefined,
     },
   });
   return response.orders;
