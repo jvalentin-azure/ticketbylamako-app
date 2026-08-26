@@ -9,6 +9,11 @@
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
+$lamako_mobile_v2_catalog_images = __DIR__ . '/v2-catalog-images.php';
+if ( file_exists( $lamako_mobile_v2_catalog_images ) ) {
+    require_once $lamako_mobile_v2_catalog_images;
+}
+
 if ( ! defined( 'LAMAKO_MOBILE_V2_CHECKOUT_TTL' ) ) {
     define( 'LAMAKO_MOBILE_V2_CHECKOUT_TTL', 10 * MINUTE_IN_SECONDS );
 }

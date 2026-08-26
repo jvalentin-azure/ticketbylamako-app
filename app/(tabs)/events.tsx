@@ -75,7 +75,14 @@ export default function EventsScreen() {
           upcoming.push(e);
         }
       });
-      void prefetchCatalogImages(upcoming.map((event) => event.featuredImage));
+      void prefetchCatalogImages(
+        upcoming.map(
+          (event) =>
+            event.featuredImageVariants?.webp ||
+            event.featuredImageVariants?.avif ||
+            event.featuredImage,
+        ),
+      );
       setEvents(upcoming);
       setFiltered(upcoming);
       setPastEvents(past);
@@ -470,6 +477,10 @@ export default function EventsScreen() {
                         >
                           <CatalogImage
                             uri={item.featuredImage}
+                            optimizedUri={
+                              item.featuredImageVariants?.webp ||
+                              item.featuredImageVariants?.avif
+                            }
                             style={{ width: 220, height: 120 }}
                             accessibilityLabel={`Affiche de ${name}`}
                             recyclingKey={`events-past-${item.id}`}

@@ -9,6 +9,7 @@ const CATALOG_IMAGE_PLACEHOLDER = "|rF?hV%2WCj[ayj[a|j[azj[ayj[";
 
 interface CatalogImageProps {
   uri?: string | null;
+  optimizedUri?: string | null;
   style?: StyleProp<ViewStyle>;
   contentFit?: "cover" | "contain";
   accessibilityLabel: string;
@@ -17,15 +18,21 @@ interface CatalogImageProps {
 
 export function CatalogImage({
   uri,
+  optimizedUri,
   style,
   contentFit = "cover",
   accessibilityLabel,
   recyclingKey,
 }: CatalogImageProps) {
   const colors = useColors();
+  const preferredUri = optimizedUri || uri || null;
+  const [activeUri, setActiveUri] = useState(preferredUri);
   const [failed, setFailed] = useState(false);
 
-  useEffect(() => setFailed(false), [uri]);
+  useEffect(() => {
+    setActiveUri(preferredUri);
+    setFailed(false);
+  }, [preferredUri, uri]);
 
   return (
     <View
@@ -33,17 +40,23 @@ export function CatalogImage({
       accessibilityRole="image"
       accessibilityLabel={accessibilityLabel}
     >
-      {uri && !failed ? (
+      {activeUri && !failed ? (
         <Image
-          source={{ uri }}
+          source={{ uri: activeUri }}
           style={StyleSheet.absoluteFill}
           contentFit={contentFit}
           cachePolicy="memory-disk"
           placeholder={CATALOG_IMAGE_PLACEHOLDER}
           placeholderContentFit={contentFit}
           transition={{ duration: 160, effect: "cross-dissolve" }}
-          recyclingKey={recyclingKey || uri}
-          onError={() => setFailed(true)}
+          recyclingKey={recyclingKey || activeUri}
+          onError={() => {
+            if (uri && activeUri !== uri) {
+              setActiveUri(uri);
+              return;
+            }
+            setFailed(true);
+          }}
           accessibilityIgnoresInvertColors
         />
       ) : (

@@ -15,6 +15,8 @@ describe("events catalogue behavior", () => {
 
   it("prefetches only the bounded shared catalogue image selection", () => {
     expect(source).toContain("prefetchCatalogImages");
-    expect(source).toContain("upcoming.map((event) => event.featuredImage)");
+    expect(source).toContain("event.featuredImageVariants?.webp");
+    expect(source).toContain("event.featuredImageVariants?.avif");
+    expect(source).toContain("event.featuredImage");
   });
 });

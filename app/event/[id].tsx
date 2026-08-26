@@ -415,6 +415,12 @@ export default function EventDetailScreen() {
                 renderItem={({ item, index }) => (
                   <CatalogImage
                     uri={item}
+                    optimizedUri={
+                      index === 0
+                        ? event.featuredImageVariants?.webp ||
+                          event.featuredImageVariants?.avif
+                        : undefined
+                    }
                     style={{ width: SCREEN_W, height: 280 }}
                     accessibilityLabel={`Photo ${index + 1} de ${name}`}
                     recyclingKey={`event-gallery-${event.id}-${item}`}
@@ -440,6 +446,10 @@ export default function EventDetailScreen() {
           ) : (
             <CatalogImage
               uri={event.featuredImage}
+              optimizedUri={
+                event.featuredImageVariants?.webp ||
+                event.featuredImageVariants?.avif
+              }
               style={{ width: SCREEN_W, height: 280 }}
               accessibilityLabel={`Affiche de ${name}`}
               recyclingKey={`event-featured-${event.id}`}

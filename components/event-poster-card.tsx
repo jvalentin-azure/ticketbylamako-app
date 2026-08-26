@@ -56,6 +56,10 @@ export function EventPosterCard({
       <View style={styles.media}>
         <CatalogImage
           uri={event.featuredImage}
+          optimizedUri={
+            event.featuredImageVariants?.webp ||
+            event.featuredImageVariants?.avif
+          }
           style={StyleSheet.absoluteFill}
           accessibilityLabel={`Affiche de ${title}`}
           recyclingKey={`event-poster-${event.id}`}

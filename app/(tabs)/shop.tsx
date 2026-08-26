@@ -90,7 +90,14 @@ export default function ShopScreen() {
         forceRefresh,
       });
       if (requestId.current !== activeRequest) return;
-      void prefetchCatalogImages(p.map((product) => product.images?.[0]?.src));
+      void prefetchCatalogImages(
+        p.map(
+          (product) =>
+            product.images?.[0]?.variants?.webp ||
+            product.images?.[0]?.variants?.avif ||
+            product.images?.[0]?.src,
+        ),
+      );
       setProducts(p);
       // Build shop category chips from API data with colors
       const SHOP_CAT_COLORS: Record<string, string> = {
@@ -158,6 +165,9 @@ export default function ShopScreen() {
       <View style={{ position: "relative" }}>
         <CatalogImage
           uri={item.images?.[0]?.src}
+          optimizedUri={
+            item.images?.[0]?.variants?.webp || item.images?.[0]?.variants?.avif
+          }
           style={{ width: cardWidth, aspectRatio: 1 }}
           accessibilityLabel={`Photo de ${decodeHtmlEntities(item.name)}`}
           recyclingKey={`shop-${item.id}`}

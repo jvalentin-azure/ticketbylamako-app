@@ -36,13 +36,23 @@ function getProductErrorMessage(error: unknown): string {
 function getProductImageUrls(product: WCProduct): string[] {
   const mobileGallery = (product as any).lamako_mobile?.gallery;
   const urls = Array.isArray(mobileGallery)
-    ? mobileGallery.filter((url): url is string => typeof url === "string" && Boolean(url))
+    ? mobileGallery.filter(
+        (url): url is string => typeof url === "string" && Boolean(url),
+      )
     : [];
 
   for (const image of product.images || []) {
     if (image.src && !urls.includes(image.src)) urls.push(image.src);
   }
   return urls;
+}
+
+function getProductOptimizedImageUrl(
+  product: WCProduct,
+  originalUrl?: string,
+): string | undefined {
+  const image = product.images?.find((item) => item.src === originalUrl);
+  return image?.variants?.webp || image?.variants?.avif || undefined;
 }
 
 function ProductDetailSkeleton({
@@ -240,15 +250,14 @@ export default function ProductDetailScreen() {
                 })}
                 showsHorizontalScrollIndicator={false}
                 onMomentumScrollEnd={(e) => {
-                  const idx = Math.round(
-                    e.nativeEvent.contentOffset.x / width,
-                  );
+                  const idx = Math.round(e.nativeEvent.contentOffset.x / width);
                   setGalleryIndex(idx);
                 }}
                 keyExtractor={(_, i) => String(i)}
                 renderItem={({ item }) => (
                   <CatalogImage
                     uri={item}
+                    optimizedUri={getProductOptimizedImageUrl(product, item)}
                     style={{ width, aspectRatio: 1 / 0.85 }}
                     accessibilityLabel={`Photo de ${productName}`}
                     recyclingKey={`product-gallery-${product.id}-${item}`}
@@ -274,6 +283,7 @@ export default function ProductDetailScreen() {
           ) : (
             <CatalogImage
               uri={allImages[0]}
+              optimizedUri={getProductOptimizedImageUrl(product, allImages[0])}
               style={{ width, aspectRatio: 1 / 0.85 }}
               accessibilityLabel={`Photo de ${productName}`}
               recyclingKey={`product-featured-${product.id}`}

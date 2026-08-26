@@ -948,3 +948,50 @@ dimensions dans le contrat catalogue, puis laisser `expo-image` choisir la
 source adaptée. Ne pas remplacer ni supprimer les médias originaux et ne pas
 forcer la taille WordPress `medium`, qui serait insuffisante sur certains
 écrans Retina.
+
+## Variantes WebP/AVIF non destructives - 26 août 2026
+
+Le lot images est déployé sur le staging uniquement. Les originaux et les
+tailles WordPress existantes restent inchangés. Les dérivés `medium_large` et
+`large` sont écrits dans :
+
+```text
+wp-content/uploads/lamako-catalog-variants/{attachment_id}/
+```
+
+Le backend expose les URLs WebP/AVIF et leurs dimensions à côté de l'URL
+originale. L'application privilégie WebP, puis revient automatiquement à
+l'original si le chargement échoue. AVIF est généré et exposé pour les clients
+compatibles, sans être imposé au mobile.
+
+La fusion staging a été faite depuis le fichier réellement actif. Son
+empreinte a été contrôlée avant écriture afin de préserver les changements
+checkout/idempotence propres à cet environnement.
+
+```text
+Backup staging : /home/master/applications/wvvtwdcenn/tmp/tbl-catalog-modern-images-20260826T2346Z
+v2-commerce.php staging : 66bafe0844303a761143793db2bd486687e8d537057d689ea238a64ec6a7241b
+v2-catalog-images.php : f89595ef81154c8898a1a2f6d947e6ce4e3e11bbe8181f16593225c64758972f
+```
+
+Validation staging : 27 médias catalogue, 104 variantes disponibles, 30
+événements servis avec WebP dans le snapshot. Sur l'affiche PNG de référence,
+la variante `medium_large` passe de 418 172 octets à 25 454 octets en WebP et
+26 669 octets en AVIF. L'original répond toujours en HTTP 200. Les trois
+lectures répétées du snapshot événements ont mesuré 160 à 178 ms.
+
+Rollback staging :
+
+```bash
+cp -p /home/master/applications/wvvtwdcenn/tmp/tbl-catalog-modern-images-20260826T2346Z/v2-commerce.php.before \
+  /home/master/applications/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
+rm -f /home/master/applications/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-catalog-images.php
+rm -rf /home/master/applications/wvvtwdcenn/public_html/wp-content/uploads/lamako-catalog-variants
+rm -rf /home/master/applications/wvvtwdcenn/public_html/wp-content/uploads/lamako-catalog-cache
+cp -a /home/master/applications/wvvtwdcenn/tmp/tbl-catalog-modern-images-20260826T2346Z/lamako-catalog-cache.before \
+  /home/master/applications/wvvtwdcenn/public_html/wp-content/uploads/lamako-catalog-cache
+php -l /home/master/applications/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php
+```
+
+Aucun fichier de production et aucun média original n'ont été modifiés par ce
+lot staging.

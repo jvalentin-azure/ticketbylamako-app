@@ -31,6 +31,13 @@ export interface OrderTicketsResponse {
   tickets: TicketInstance[];
 }
 
+export interface CatalogImageVariants {
+  width?: number;
+  height?: number;
+  webp?: string | null;
+  avif?: string | null;
+}
+
 export interface WCProduct {
   id: number;
   name: string;
@@ -41,7 +48,12 @@ export interface WCProduct {
   sale_price: string;
   description: string;
   short_description: string;
-  images: { id: number; src: string; alt: string }[];
+  images: {
+    id: number;
+    src: string;
+    alt: string;
+    variants?: CatalogImageVariants;
+  }[];
   categories: { id: number; name: string; slug: string }[];
   stock_status: string;
   type: string;
@@ -146,6 +158,7 @@ export interface TCEvent {
   event_category: number[];
   link: string;
   featuredImage?: string;
+  featuredImageVariants?: CatalogImageVariants;
   categoryNames?: string[];
   mobileFields?: MobileFields;
   tickets?: TicketType[];

@@ -11,6 +11,7 @@ import {
 } from "./cache";
 import type {
   EventCategory,
+  CatalogImageVariants,
   MobileFields,
   TCEvent,
   TicketType,
@@ -22,6 +23,7 @@ import { normalizeRewardsEnabled } from "@/lib/rewards-eligibility";
 export { SITE_URL };
 
 export type {
+  CatalogImageVariants,
   EventCategory,
   MobileFields,
   TCEvent,
@@ -29,6 +31,21 @@ export type {
   WCCategory,
   WCProduct,
 };
+
+function normalizeCatalogImageVariants(
+  raw: any,
+): CatalogImageVariants | undefined {
+  const webp = typeof raw?.webp === "string" ? raw.webp.trim() : "";
+  const avif = typeof raw?.avif === "string" ? raw.avif.trim() : "";
+  if (!webp && !avif) return undefined;
+
+  return {
+    width: Number(raw?.width || 0) || undefined,
+    height: Number(raw?.height || 0) || undefined,
+    webp: webp || undefined,
+    avif: avif || undefined,
+  };
+}
 
 interface HomeDataResponse {
   events: TCEvent[];
@@ -154,6 +171,9 @@ function normalizeEvent(raw: any): TCEvent {
     event_category: raw?.event_category || [],
     link: raw?.link || "",
     featuredImage: raw?.featuredImage || undefined,
+    featuredImageVariants: normalizeCatalogImageVariants(
+      raw?.featuredImageVariants,
+    ),
     categoryNames: raw?.categoryNames || [],
     mobileFields: raw?.mobileFields || undefined,
     tickets: (raw?.tickets || []).map((ticket: any) =>
@@ -206,6 +226,7 @@ function normalizeProduct(raw: any): WCProduct {
       id: Number(image?.id || 0),
       src: String(image?.src || ""),
       alt: String(image?.alt || ""),
+      variants: normalizeCatalogImageVariants(image?.variants),
     })),
     categories: (raw?.categories || [])
       .filter(Boolean)

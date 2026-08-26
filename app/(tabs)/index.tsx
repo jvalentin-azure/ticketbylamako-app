@@ -105,7 +105,14 @@ export default function HomeScreen() {
       try {
         const data = await getHomeData({ forceRefresh });
         void prefetchCatalogImages(
-          data.events.filter(isUpcoming).map((event) => event.featuredImage),
+          data.events
+            .filter(isUpcoming)
+            .map(
+              (event) =>
+                event.featuredImageVariants?.webp ||
+                event.featuredImageVariants?.avif ||
+                event.featuredImage,
+            ),
         );
         setEvents(data.events);
         setProducts(data.products);
@@ -401,6 +408,10 @@ function Hero({
       <View style={styles.heroCard}>
         <CatalogImage
           uri={event.featuredImage}
+          optimizedUri={
+            event.featuredImageVariants?.webp ||
+            event.featuredImageVariants?.avif
+          }
           style={StyleSheet.absoluteFill}
           accessibilityLabel={`Affiche de ${title}`}
           recyclingKey={`hero-${event.id}`}
@@ -516,6 +527,9 @@ function PastEvent({
     >
       <CatalogImage
         uri={event.featuredImage}
+        optimizedUri={
+          event.featuredImageVariants?.webp || event.featuredImageVariants?.avif
+        }
         style={styles.pastImage}
         accessibilityLabel={`Affiche de ${title}`}
         recyclingKey={`past-${event.id}`}
@@ -568,6 +582,10 @@ function ProductCard({
       <View style={styles.productMedia}>
         <CatalogImage
           uri={product.images?.[0]?.src}
+          optimizedUri={
+            product.images?.[0]?.variants?.webp ||
+            product.images?.[0]?.variants?.avif
+          }
           style={StyleSheet.absoluteFill}
           accessibilityLabel={`Photo de ${title}`}
           recyclingKey={`product-${product.id}`}
