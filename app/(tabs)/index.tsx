@@ -64,7 +64,6 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showingSavedData, setShowingSavedData] = useState(false);
   const [heroIndex, setHeroIndex] = useState(0);
   const heroRef = useRef<FlatList<TCEvent>>(null);
 
@@ -110,7 +109,6 @@ export default function HomeScreen() {
         );
         setEvents(data.events);
         setProducts(data.products);
-        setShowingSavedData(data.cacheStatus === "stale");
         void rememberEvents(data.events);
       } catch {
         setError(
@@ -198,24 +196,6 @@ export default function HomeScreen() {
           />
         }
       >
-        {showingSavedData ? (
-          <View
-            accessibilityRole="alert"
-            style={[
-              styles.savedDataBanner,
-              { backgroundColor: `${colors.primary}18` },
-            ]}
-          >
-            <IconSymbol
-              name="info.circle.fill"
-              size={16}
-              color={colors.primary}
-            />
-            <Text style={[styles.savedDataText, { color: colors.foreground }]}>
-              Données enregistrées. Actualisez quand la connexion revient.
-            </Text>
-          </View>
-        ) : null}
         {isAuthenticated && user ? (
           <Text style={[styles.greeting, { color: colors.muted }]}>
             Bonjour, {user.firstName || user.displayName}
@@ -847,15 +827,4 @@ const styles = StyleSheet.create({
   },
   retryText: { color: "#fff", fontSize: 15, fontWeight: "800" },
   bottomSpace: { height: 40 },
-  savedDataBanner: {
-    minHeight: 40,
-    marginHorizontal: 16,
-    marginTop: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  savedDataText: { flex: 1, fontSize: 12, lineHeight: 17, fontWeight: "600" },
 });

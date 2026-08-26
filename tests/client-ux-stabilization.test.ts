@@ -50,4 +50,13 @@ describe("client UX stabilization", () => {
     expect(checkout).toContain("reservationExpiresAt: cartExpiresAt");
     expect(api).toContain("reservationExpiresAt?: string");
   });
+
+  it("keeps cached catalogue data transparent to customers", () => {
+    const home = read("app", "(tabs)", "index.tsx");
+    const events = read("app", "(tabs)", "events.tsx");
+    expect(home).not.toContain("Données enregistrées");
+    expect(events).not.toContain("Données enregistrées");
+    expect(home).toContain("Impossible de charger les événements");
+    expect(events).toContain("Impossible de charger les événements");
+  });
 });

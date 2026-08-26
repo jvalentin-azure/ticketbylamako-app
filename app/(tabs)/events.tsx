@@ -40,7 +40,6 @@ export default function EventsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [showingSavedData, setShowingSavedData] = useState(false);
   const [search, setSearch] = useState("");
   const [categories, setCategories] = useState<EventCategory[]>([]);
   const [selectedCat, setSelectedCat] = useState<number | null>(null);
@@ -55,14 +54,9 @@ export default function EventsScreen() {
   const load = useCallback(async (forceRefresh = false) => {
     setLoadError(null);
     try {
-      const {
-        events: ev,
-        categories: freshCats,
-        cacheStatus,
-      } = await getEventsData({
+      const { events: ev, categories: freshCats } = await getEventsData({
         forceRefresh,
       });
-      setShowingSavedData(cacheStatus === "stale");
       // Separate active (upcoming) from past events
       const now = new Date();
       const upcoming: TCEvent[] = [];
@@ -81,9 +75,7 @@ export default function EventsScreen() {
           upcoming.push(e);
         }
       });
-      void prefetchCatalogImages(
-        upcoming.map((event) => event.featuredImage),
-      );
+      void prefetchCatalogImages(upcoming.map((event) => event.featuredImage));
       setEvents(upcoming);
       setFiltered(upcoming);
       setPastEvents(past);
@@ -280,25 +272,6 @@ export default function EventsScreen() {
           </TouchableOpacity>
         )}
       </View>
-
-      {showingSavedData ? (
-        <View
-          accessibilityRole="alert"
-          style={[
-            styles.savedDataBanner,
-            { backgroundColor: colors.primary + "18" },
-          ]}
-        >
-          <IconSymbol
-            name="info.circle.fill"
-            size={16}
-            color={colors.primary}
-          />
-          <Text style={[styles.savedDataText, { color: colors.foreground }]}>
-            Données enregistrées. Tirez vers le bas pour actualiser.
-          </Text>
-        </View>
-      ) : null}
 
       {/* Search */}
       <View
@@ -727,15 +700,4 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   modalOptionText: { fontSize: 15 },
-  savedDataBanner: {
-    minHeight: 40,
-    marginHorizontal: 16,
-    marginBottom: 10,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  savedDataText: { flex: 1, fontSize: 12, lineHeight: 17, fontWeight: "600" },
 });
