@@ -181,6 +181,7 @@ function TicketCard({
       ? ticket.apple_wallet_available
       : ticket.google_wallet_available;
   const walletAvailable =
+    Platform.OS !== "web" &&
     isValid &&
     ticket.instance_id > 0 &&
     qrValue.length > 0 &&

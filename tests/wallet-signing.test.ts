@@ -19,6 +19,10 @@ const nativeWallet = fs.readFileSync(
   path.join(root, "lib/native-wallet.ts"),
   "utf8",
 );
+const webWallet = fs.readFileSync(
+  path.join(root, "lib/native-wallet.web.ts"),
+  "utf8",
+);
 const appConfig = fs.readFileSync(path.join(root, "app.config.ts"), "utf8");
 const bundledWalletLogo = path.join(
   root,
@@ -79,6 +83,12 @@ describe("server-signed ticket wallet passes", () => {
     expect(nativeWallet).toContain("application/vnd.apple.pkpass");
     expect(nativeWallet).toContain("/gp/v/save/");
     expect(appConfig).toContain("./plugins/with-wallet-kit");
+  });
+
+  it("keeps the native Wallet SDK out of the web bundle", () => {
+    expect(webWallet).not.toContain("@azizuysal/wallet-kit");
+    expect(webWallet).toContain("Wallet natif indisponible");
+    expect(ticketScreen).toContain('Platform.OS !== "web"');
   });
 
   it("uses only local WordPress media for the premium Apple strip", () => {
