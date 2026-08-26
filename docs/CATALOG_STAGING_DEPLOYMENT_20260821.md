@@ -995,3 +995,16 @@ php -l /home/master/applications/wvvtwdcenn/public_html/wp-content/plugins/lamak
 
 Aucun fichier de production et aucun média original n'ont été modifiés par ce
 lot staging.
+
+OTA de validation publiée sur la branche EAS `staging`, runtime `1.0.0` :
+
+```text
+Groupe OTA       5c29c550-939b-40b5-8f43-5887f9112a39
+Android update   01a03fdb-8ba7-7664-bfc5-e86cc23a32b3
+iOS update       01a03fdb-8ba7-7e8d-bd0d-8822955ed8ca
+Commit           1307fb783f49559e0424ba59978d5d06763360c7
+```
+
+Le rollback mobile staging consiste à republier le commit précédent sur la
+branche `staging`. Le groupe précédent est
+`2c122007-5476-4b7f-bd62-477c86822901`.
