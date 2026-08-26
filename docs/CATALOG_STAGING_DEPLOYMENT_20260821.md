@@ -909,3 +909,42 @@ Rollback mobile : republier le commit précédent `9a73fdd` sur la branche EAS
 `production`. Le groupe OTA précédent est
 `90ec3060-37b6-419e-b1e1-cc678c186d6f`. Le fallback REST reste opérationnel si
 la couche snapshot serveur est retirée avant la republication mobile.
+
+### QA post-publication et compatibilité Web
+
+Un benchmark de 15 lectures par scope via le client HTTP de l'application a
+confirmé des médianes de 54 à 58 ms et un p95 de 69 ms pour `events` et
+`shop`. Le premier appel `home` a porté son p95 à 407 ms. La parité des IDs
+avec les routes REST est restée exacte, avec un gain observé d'environ 2,4 à
+2,9 secondes par lecture à chaud.
+
+Le smoke test Expo Web a détecté que `@azizuysal/wallet-kit`, exclusivement
+natif, empêchait le bundle Web de compiler. Le commit `403b60f` ajoute un
+adaptateur `.web.ts`, masque l'action Wallet sur Web et laisse les contrôleurs
+iOS/Android inchangés. Accueil, événements, boutique et affichage responsive
+ont ensuite été rendus sans erreur d'exécution. Cette correction ne nécessite
+ni build EAS ni OTA. Rollback Git :
+
+```bash
+git revert 403b60f
+```
+
+La QA complète après correction compte 55 fichiers réussis, 3 ignorés, 287
+tests réussis et 4 ignorés. TypeScript, ESLint, contrôle des secrets mobiles et
+`git diff --check` sont réussis.
+
+### Risque résiduel images
+
+Les cartes utilisent déjà `expo-image`, un placeholder, une transition courte,
+le cache mémoire/disque et un préchargement borné. WordPress fournit déjà les
+résumés catalogue en taille `medium_large`. Plusieurs anciennes affiches PNG
+restent néanmoins entre 408 et 448 Ko, alors que les affiches WebP comparables
+sont autour de 62 Ko. Les en-têtes de cache sont corrects et aucune variante
+WebP homonyme n'existe actuellement pour ces PNG.
+
+La prochaine optimisation doit donc être un lot serveur séparé et
+rollbackable : générer des variantes 300/768 px en WebP ou AVIF, exposer les
+dimensions dans le contrat catalogue, puis laisser `expo-image` choisir la
+source adaptée. Ne pas remplacer ni supprimer les médias originaux et ne pas
+forcer la taille WordPress `medium`, qui serait insuffisante sur certains
+écrans Retina.
