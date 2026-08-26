@@ -716,3 +716,76 @@ Builds de validation issus du commit
   `45e66bc3-47bc-47ef-bd88-06f3b1b0d132` ;
 - Apple traite ensuite le binaire avant sa disponibilité dans TestFlight ;
 - aucun build ni déploiement de production n'a été lancé.
+
+## Performance catalogue en production - 26 août 2026
+
+Le lot performance client a été publié après validation complète. Il reste
+strictement limité aux lectures catalogue, billets et commandes. Les parcours
+checkout, paiement, seating chart et POS n'ont pas été modifiés par ce lot.
+
+Références de release :
+
+- commit : `9a73fdd2183ad9e7e1e145254166e75960652089` ;
+- tag : `codex/prod-performance-20260826` ;
+- groupe OTA Android et iOS :
+  `90ec3060-37b6-419e-b1e1-cc678c186d6f` ;
+- empreinte du backend actif `v2-commerce.php` :
+  `f72d3eb1ad2fc10894cf953c44c550d46ff7b2ab90f2533c0eee8efd96b6343b`.
+
+Sauvegardes de production :
+
+```text
+/home/1525593.cloudwaysapps.com/bvprmuerhv/tmp/tbl-release-20260826-9a73fdd/v2-commerce.php.before
+/home/master/applications/bvprmuerhv/public_html/wp-content/plugins/.lamako-mobile-api.before-20260826-9a73fdd
+C:\tbl-release-backups\20260826-9a73fdd\v2-commerce.php.before
+```
+
+Validation avant publication : `pnpm qa:mobile`, TypeScript, ESLint,
+contrôle des secrets, `php -l` et `git diff --check`. Résultat : 54 fichiers de
+tests réussis, 3 ignorés ; 282 tests réussis, 4 ignorés.
+
+### Isolation Redis staging/production
+
+L'audit après publication a identifié une collision de cache entre les deux
+environnements : production et staging utilisaient la même base Redis `3931`
+avec des préfixes différents. Object Cache Pro protège son intégrité avec un
+`FLUSHDB`; un préfixe ne suffit donc pas à empêcher un environnement d'effacer
+le cache de l'autre. Le symptôme était répétable : métadonnée Object Cache Pro
+absente, purge à chaque processus et transients perdus.
+
+Correction appliquée :
+
+- production conservée sur Redis `3931` ;
+- staging isolé sur Redis `3932` ;
+- initialisation synchrone contrôlée des métadonnées ;
+- configuration `async_flush` d'origine restaurée après stabilisation ;
+- deux contrôles `wp redis status` consécutifs sans purge ;
+- transients staging et production vérifiés entre deux processus WP-CLI.
+
+Backups de configuration :
+
+```text
+/home/master/applications/wvvtwdcenn/tmp/wp-config.php.20260826-redis-isolation.before
+/home/master/applications/bvprmuerhv/tmp/wp-config.php.20260826-redis-prod-stabilize.before
+/home/master/applications/bvprmuerhv/tmp/wp-config.php.20260826-objectcache-async-repair.before
+```
+
+Rollback de l'isolation staging uniquement :
+
+```bash
+cp -p /home/master/applications/wvvtwdcenn/tmp/wp-config.php.20260826-redis-isolation.before \
+  /home/master/applications/wvvtwdcenn/public_html/wp-config.php
+cd /home/master/applications/wvvtwdcenn/public_html
+wp redis status
+```
+
+Ce rollback ne doit être utilisé qu'en cas d'incident confirmé : il remettrait
+staging et production sur la même base Redis et réintroduirait le risque de
+purge croisée.
+
+Après stabilisation, les routes publiques restent en cache applicatif avec des
+réponses répétées autour de 2,1 à 2,4 secondes. Le précédent pic de MISS autour
+de 4 secondes a disparu. Le plancher restant vient du bootstrap WordPress et
+des plugins : une future passe CDN/Varnish devra cibler uniquement les trois
+routes GET publiques du catalogue, jamais les routes authentifiées,
+transactionnelles, checkout, paiement ou seating.
