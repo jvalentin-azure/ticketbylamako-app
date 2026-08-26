@@ -29,6 +29,7 @@ describe("public catalogue snapshots", () => {
     expect(generator).toContain("file_put_contents( $temp, $json, LOCK_EX )");
     expect(generator).toContain("rename( $temp, $target )");
     expect(generator).toContain("lamako_mobile_v2_catalog_cache_version");
+    expect(generator).toContain("added_option");
     expect(generator).toContain("wp_schedule_single_event");
     expect(generator).toContain(".invalidated");
     expect(generator).toContain("sanitize_key( $scope ) . '.version'");

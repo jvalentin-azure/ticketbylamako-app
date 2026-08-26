@@ -15,6 +15,7 @@ add_filter( 'cron_schedules', 'tbl_catalog_snapshot_cron_schedules' );
 add_action( 'init', 'tbl_catalog_snapshot_ensure_schedule' );
 add_action( TBL_CATALOG_SNAPSHOT_CRON, 'tbl_catalog_snapshot_generate_all' );
 add_action( 'updated_option', 'tbl_catalog_snapshot_on_option_updated', 10, 3 );
+add_action( 'added_option', 'tbl_catalog_snapshot_on_option_added', 10, 2 );
 
 function tbl_catalog_snapshot_cron_schedules( $schedules ) {
     $schedules['tbl_catalog_two_minutes'] = [
@@ -48,6 +49,10 @@ function tbl_catalog_snapshot_on_option_updated( $option, $old_value, $value ) {
     if ( ! wp_next_scheduled( TBL_CATALOG_SNAPSHOT_CRON, [ 'content-change' ] ) ) {
         wp_schedule_single_event( time(), TBL_CATALOG_SNAPSHOT_CRON, [ 'content-change' ] );
     }
+}
+
+function tbl_catalog_snapshot_on_option_added( $option, $value ) {
+    tbl_catalog_snapshot_on_option_updated( $option, null, $value );
 }
 
 function tbl_catalog_snapshot_directory() {
