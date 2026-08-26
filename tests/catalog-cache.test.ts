@@ -41,6 +41,10 @@ const publishEvent = {
 
 beforeEach(async () => {
   mobileV2FetchMock.mockReset();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockRejectedValue(new Error("snapshot unavailable in unit test")),
+  );
   storage.clear();
   await Promise.all([
     invalidateCache("home-data"),

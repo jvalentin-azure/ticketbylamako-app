@@ -57,6 +57,52 @@ export interface CatalogRequestOptions {
   forceRefresh?: boolean;
 }
 
+type CatalogSnapshotScope = "home" | "events" | "shop";
+
+async function fetchCatalogSnapshot<T>(
+  scope: CatalogSnapshotScope,
+  forceRefresh = false,
+): Promise<T> {
+  const controller =
+    typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeout = controller
+    ? setTimeout(() => controller.abort(), 2500)
+    : null;
+  const url = new URL(`${SITE_URL}/lamako-catalog/index.php`);
+  url.searchParams.set("scope", scope);
+  if (forceRefresh) url.searchParams.set("refresh", String(Date.now()));
+
+  try {
+    const response = await fetch(url.toString(), {
+      headers: { Accept: "application/json" },
+      signal: controller?.signal,
+    });
+    if (!response.ok) {
+      throw new Error(`Catalog snapshot unavailable: ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      throw new Error("Catalog snapshot is malformed");
+    }
+    return data as T;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+async function fetchCatalogWithFallback<T>(
+  scope: CatalogSnapshotScope,
+  fallback: () => Promise<T>,
+  forceRefresh = false,
+): Promise<T> {
+  try {
+    return await fetchCatalogSnapshot<T>(scope, forceRefresh);
+  } catch {
+    return fallback();
+  }
+}
+
 const catalogRequests = new Map<string, Promise<unknown>>();
 
 function shareCatalogRequest<T>(
@@ -231,10 +277,15 @@ export async function getHomeData(
 
   const refresh = () =>
     shareCatalogRequest("home-data", async () => {
-      const raw = await mobileV2Fetch<any>("public/home-data", {
-        requireAuth: false,
-        params: { summary: true, events_limit: 12, products_limit: 8 },
-      });
+      const raw = await fetchCatalogWithFallback<any>(
+        "home",
+        () =>
+          mobileV2Fetch<any>("public/home-data", {
+            requireAuth: false,
+            params: { summary: true, events_limit: 12, products_limit: 8 },
+          }),
+        Boolean(options.forceRefresh),
+      );
       const result: HomeDataResponse = {
         events: (raw?.events || [])
           .map(normalizeEvent)
@@ -274,10 +325,15 @@ export async function getEventsData(
 
   const refresh = () =>
     shareCatalogRequest("events-data", async () => {
-      const raw = await mobileV2Fetch<any>("public/events-data", {
-        requireAuth: false,
-        params: { summary: true, limit: 80 },
-      });
+      const raw = await fetchCatalogWithFallback<any>(
+        "events",
+        () =>
+          mobileV2Fetch<any>("public/events-data", {
+            requireAuth: false,
+            params: { summary: true, limit: 80 },
+          }),
+        Boolean(options.forceRefresh),
+      );
       const result: EventsDataResponse = {
         events: (raw?.events || [])
           .map(normalizeEvent)
@@ -316,9 +372,14 @@ export async function getShopData(
 
   const refresh = () =>
     shareCatalogRequest("shop-data", async () => {
-      const raw = await mobileV2Fetch<any>("public/shop-data", {
-        requireAuth: false,
-      });
+      const raw = await fetchCatalogWithFallback<any>(
+        "shop",
+        () =>
+          mobileV2Fetch<any>("public/shop-data", {
+            requireAuth: false,
+          }),
+        Boolean(options.forceRefresh),
+      );
       const result: ShopDataResponse = {
         products: (raw?.products || []).map(normalizeProduct),
         categories: (raw?.categories || []).map(normalizeShopCategory),

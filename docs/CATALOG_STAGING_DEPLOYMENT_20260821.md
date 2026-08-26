@@ -789,3 +789,70 @@ de 4 secondes a disparu. Le plancher restant vient du bootstrap WordPress et
 des plugins : une future passe CDN/Varnish devra cibler uniquement les trois
 routes GET publiques du catalogue, jamais les routes authentifiées,
 transactionnelles, checkout, paiement ou seating.
+
+## Snapshots publics auto-réparateurs - 26 août 2026
+
+La couche suivante retire le bootstrap WordPress du chemin nominal des trois
+lectures anonymes utilisées par l'application : `home`, `events` et `shop`.
+Le plugin MU génère des fichiers JSON atomiques dans
+`wp-content/uploads/lamako-catalog-cache/`. Le transport
+`/lamako-catalog/index.php` sert uniquement ces trois scopes, avec ETag et
+cache HTTP. L'application conserve son cache local et retombe sur les routes
+REST existantes si le snapshot est indisponible.
+
+La validité est pilotée par la version catalogue existante. Lorsqu'un
+événement, produit, stock ou statut de commande invalide le catalogue, un
+marqueur est publié. Le premier appel de chaque scope répond alors rapidement
+en `503`, ce qui active le fallback REST, tandis que le snapshot concerné est
+reconstruit en arrière-plan sous verrou. Il n'y a aucune dépendance au WP-Cron
+Cloudways et aucun risque de servir silencieusement un snapshot antérieur à
+l'invalidation.
+
+Fichiers versionnés :
+
+```text
+scripts/tbl-public-catalog-snapshots.php
+scripts/lamako-catalog/index.php
+lib/api/catalog.ts
+tests/public-catalog-snapshots.test.ts
+tests/catalog-cache.test.ts
+```
+
+Validation staging :
+
+- parité complète des IDs et volumes avec les routes REST pour les trois
+  scopes ;
+- temps répétés : `home` environ 0,21 à 0,25 s, `events` environ 0,25 à
+  0,29 s, `shop` environ 0,20 à 0,25 s ;
+- ETag : deuxième requête en HTTP `304` ;
+- scope non autorisé : HTTP `404` ;
+- route commande sans JWT : HTTP `401` attendu ;
+- invalidation réelle : HTTP `503`, reconstruction en arrière-plan en environ
+  2 s, puis HTTP `200` ;
+- suppression contrôlée du snapshot `shop` : même auto-réparation en 2 s ;
+- PHP lint, ESLint, TypeScript, contrôle des secrets et `git diff --check` :
+  OK ;
+- Vitest : 55 fichiers réussis, 3 ignorés ; 286 tests réussis, 4 ignorés.
+
+Backups staging :
+
+```text
+/home/master/applications/wvvtwdcenn/tmp/catalog-snapshots-20260826
+/home/master/applications/wvvtwdcenn/tmp/catalog-missing-test-20260826
+/home/master/tmp/crontab.20260826.catalog.before
+```
+
+Le test de crontab utilisateur a été annulé : Cloudways ne l'exécute pas dans
+cet environnement et la solution finale n'en dépend pas.
+
+Rollback staging :
+
+```bash
+rm -f /home/master/applications/wvvtwdcenn/public_html/wp-content/mu-plugins/tbl-public-catalog-snapshots.php
+rm -rf /home/master/applications/wvvtwdcenn/public_html/lamako-catalog
+rm -rf /home/master/applications/wvvtwdcenn/public_html/wp-content/uploads/lamako-catalog-cache
+```
+
+Après rollback serveur, l'application continue à fonctionner grâce au fallback
+REST. Pour retirer aussi la préférence snapshot du client, republier le commit
+mobile précédent sur le canal EAS concerné.
