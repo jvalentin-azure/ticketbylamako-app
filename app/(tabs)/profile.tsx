@@ -14,7 +14,7 @@ import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/lib/auth-provider";
 import { useThemeContext } from "@/lib/theme-provider";
 import { useRewards } from "@/lib/rewards-provider";
-import { getAppVersionLabel } from "@/lib/app-version";
+import { getAppReleaseLabel, getAppVersionLabel } from "@/lib/app-version";
 
 export default function ProfileScreen() {
   const colors = useColors();
@@ -250,6 +250,8 @@ export default function ProfileScreen() {
         ) : null}
         <Text style={[styles.version, { color: colors.muted }]}>
           {getAppVersionLabel()}
+          {"\n"}
+          {getAppReleaseLabel()}
         </Text>
       </ScrollView>
     </ScreenContainer>

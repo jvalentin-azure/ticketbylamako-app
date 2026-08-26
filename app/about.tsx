@@ -19,7 +19,7 @@ import {
   LAMAKO_WHATSAPP_DISPLAY,
   buildLamakoWhatsAppUrl,
 } from "@/lib/contact";
-import { getAppVersionLabel } from "@/lib/app-version";
+import { getAppReleaseLabel, getAppVersionLabel } from "@/lib/app-version";
 
 const SOCIAL_LINKS = [
   {
@@ -380,6 +380,8 @@ export default function AboutScreen() {
         {/* Version */}
         <Text style={[styles.versionText, { color: colors.muted }]}>
           {getAppVersionLabel()}
+          {"\n"}
+          {getAppReleaseLabel()}
           {"\n"}© {new Date().getFullYear()} Lamako Events. Tous droits
           réservés.
         </Text>
