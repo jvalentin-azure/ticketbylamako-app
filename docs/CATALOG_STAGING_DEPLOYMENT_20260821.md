@@ -1094,3 +1094,38 @@ Rollback mobile : republier le commit précédent `d15fa2573256df9a4baf8c65928a7
 sur la branche EAS `production`. Le groupe production précédent est
 `c5b1270d-62c6-4cfa-b1c1-490b709dc451`. Le fallback vers les URLs originales
 reste actif même avant ce rollback OTA.
+
+#### Protection contre une copie edge périmée
+
+Le smoke final sans paramètre a révélé que l'edge continuait à servir une copie
+âgée de plus de vingt minutes malgré la régénération atomique des fichiers et
+une purge Varnish Breeze réussie. Le backend, les URLs avec cache-buster et les
+fichiers sur disque étaient corrects; seule la clé historique `scope=...`
+restait retenue par l'edge.
+
+Le commit `6e459f07ed0b5cdde7a8e4d8614cb0e9210bd695` ajoute donc un
+`cacheBucket` partagé par minute aux trois lectures snapshot. Cette stratégie
+préserve la mutualisation CDN pendant une minute tout en bornant la fraîcheur,
+indépendamment d'une purge externe. Un rafraîchissement manuel conserve son
+paramètre horodaté distinct.
+
+Validation : 13 tests ciblés, ESLint, TypeScript et `git diff --check` réussis.
+Les trois URLs utilisant le bucket ont répondu en HTTP 200 entre 0,23 et 0,29 s
+avec respectivement 12, 34 et 3 références WebP.
+
+OTA corrective production :
+
+```text
+Groupe OTA          38ad42bd-6c52-4695-8b94-c474c1c244eb
+Android update      01a03ffe-1300-70bb-b0c6-8872a4c94894
+iOS update          01a03ffe-1300-796a-80fe-f30c4c1ce818
+Commit              6e459f07ed0b5cdde7a8e4d8614cb0e9210bd695
+Message             fix: prevent stale catalog edge responses
+```
+
+Dashboard :
+`https://expo.dev/accounts/jvdizignr/projects/ticketbylamako-app/updates/38ad42bd-6c52-4695-8b94-c474c1c244eb`.
+
+Rollback de cette protection : republier le commit `1292181d6984b2f72082329e7f4fe29c3fd6295c`
+sur la branche EAS `production`. Le groupe OTA immédiatement précédent est
+`1727972e-9cfb-47a6-aa9d-30cd4912d08f`.
