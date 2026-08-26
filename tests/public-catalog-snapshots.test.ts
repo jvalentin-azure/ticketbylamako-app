@@ -53,6 +53,8 @@ describe("public catalogue snapshots", () => {
   it("uses a bounded snapshot request with the existing REST API as fallback", () => {
     expect(client).toContain("/lamako-catalog/index.php");
     expect(client).toContain("setTimeout(() => controller.abort(), 2500)");
+    expect(client).toContain('url.searchParams.set("cacheBucket"');
+    expect(client).toContain("Math.floor(Date.now() / 60_000)");
     expect(client).toContain("fetchCatalogWithFallback<any>");
     expect(client).toContain('mobileV2Fetch<any>("public/home-data"');
     expect(client).toContain('mobileV2Fetch<any>("public/events-data"');

@@ -87,6 +87,7 @@ async function fetchCatalogSnapshot<T>(
     : null;
   const url = new URL(`${SITE_URL}/lamako-catalog/index.php`);
   url.searchParams.set("scope", scope);
+  url.searchParams.set("cacheBucket", String(Math.floor(Date.now() / 60_000)));
   if (forceRefresh) url.searchParams.set("refresh", String(Date.now()));
 
   try {
