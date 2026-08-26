@@ -1008,3 +1008,89 @@ Commit           1307fb783f49559e0424ba59978d5d06763360c7
 Le rollback mobile staging consiste à republier le commit précédent sur la
 branche `staging`. Le groupe précédent est
 `2c122007-5476-4b7f-bd62-477c86822901`.
+
+### Publication production - 27 août 2026
+
+La promotion a été autorisée après la QA physique staging. Le périmètre reste
+limité aux variantes d'images du catalogue et à leur sélection côté application.
+Checkout, paiements, seating chart, POS et médias originaux n'ont pas été
+modifiés.
+
+Version publiée :
+
+```text
+Commit Git         1292181d6984b2f72082329e7f4fe29c3fd6295c
+Branche Git        codex/catalog-edge-cache-20260826
+v2-commerce.php    c23a3e54748405ee9b444e2dafc30471da51268514b79d390f8633a366b5791d
+v2-catalog-images  f89595ef81154c8898a1a2f6d947e6ce4e3e11bbe8181f16593225c64758972f
+```
+
+Le fichier `v2-commerce.php` actif en production avait l'empreinte attendue
+`f72d3eb1ad2fc10894cf953c44c550d46ff7b2ab90f2533c0eee8efd96b6343b`.
+Seules les quatre lignes chargeant le helper ont été fusionnées dans cette
+version active; le fichier métier complet n'a pas été remplacé par une variante
+staging.
+
+Point de rollback serveur créé avant toute écriture :
+
+```text
+/home/master/applications/bvprmuerhv/tmp/tbl-catalog-modern-images-20260827-1292181
+```
+
+Il contient `v2-commerce.php.before`, son manifeste SHA-256 et une copie du
+cache snapshot précédent. Une copie locale du fichier actif avant release est
+également conservée sous :
+
+```text
+C:\tbl-release-backups\20260827-1292181\v2-commerce.php.prod-before
+```
+
+Backfill production : 19 médias réellement référencés par les 34 événements et
+le produit publiés, 76 variantes WebP/AVIF, 5,7 Mo, aucun fichier vide et 19
+originaux vérifiés inchangés. Les snapshots ont ensuite été régénérés
+atomiquement. Ils exposent 12 images WebP sur l'accueil, 34 sur les événements
+et 3 dans la boutique. La parité des IDs est complète pour événements et
+boutique.
+
+Smoke test final :
+
+```text
+home snapshot       HTTP 200  0,283 s
+events snapshot     HTTP 200  0,336 s
+shop snapshot       HTTP 200  0,261 s
+orders sans JWT     HTTP 401 attendu
+WebP de référence   HTTP 200 image/webp, 25 454 octets
+Logs liés au lot    0 erreur sur les 600 dernières lignes
+```
+
+OTA EAS production, runtime `1.0.0` :
+
+```text
+Groupe OTA          1727972e-9cfb-47a6-aa9d-30cd4912d08f
+Android update      01a03ff0-426a-75bf-b7eb-b14606dfdbb9
+iOS update          01a03ff0-426a-7c6a-8c1a-dd6aa40631b7
+Message             perf: transparent catalog cache and modern images
+```
+
+Dashboard :
+`https://expo.dev/accounts/jvdizignr/projects/ticketbylamako-app/updates/1727972e-9cfb-47a6-aa9d-30cd4912d08f`.
+
+Rollback serveur immédiat :
+
+```bash
+ROOT=/home/master/applications/bvprmuerhv/public_html
+BAK=/home/master/applications/bvprmuerhv/tmp/tbl-catalog-modern-images-20260827-1292181
+cp -p "$BAK/v2-commerce.php.before" \
+  "$ROOT/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php"
+rm -f "$ROOT/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-catalog-images.php"
+rm -rf "$ROOT/wp-content/uploads/lamako-catalog-variants"
+rm -rf "$ROOT/wp-content/uploads/lamako-catalog-cache"
+cp -a "$BAK/lamako-catalog-cache.before" \
+  "$ROOT/wp-content/uploads/lamako-catalog-cache"
+php -l "$ROOT/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php"
+```
+
+Rollback mobile : republier le commit précédent `d15fa2573256df9a4baf8c65928a7017b0800e24`
+sur la branche EAS `production`. Le groupe production précédent est
+`c5b1270d-62c6-4cfa-b1c1-490b709dc451`. Le fallback vers les URLs originales
+reste actif même avant ce rollback OTA.
