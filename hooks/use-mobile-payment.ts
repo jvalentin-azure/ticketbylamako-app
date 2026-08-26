@@ -93,9 +93,7 @@ export function useMobilePayment({ token, kind }: UseMobilePaymentOptions) {
     (value): value is number =>
       typeof value === "number" && Number.isFinite(value) && value > 0,
   );
-  const expiresAt = expiryCandidates.length
-    ? Math.min(...expiryCandidates)
-    : 0;
+  const expiresAt = expiryCandidates.length ? Math.min(...expiryCandidates) : 0;
   const remainingSeconds = expiresAt
     ? Math.max(0, Math.ceil((expiresAt - clock) / 1000))
     : null;
@@ -341,7 +339,7 @@ export function useMobilePayment({ token, kind }: UseMobilePaymentOptions) {
         );
         setPhase("pending");
       } else if (response.flow === "redirect" && response.redirectUrl) {
-        await openCommerceSession(response.redirectUrl);
+        await openCommerceSession(response.redirectUrl, token);
         // The provider callback can already have opened /payment-return.
         // Do not let this covered payment screen race the terminal route.
         await new Promise((resolve) => setTimeout(resolve, 250));

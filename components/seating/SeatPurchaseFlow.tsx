@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Platform,
   Text,
   TouchableOpacity,
   View,
@@ -37,13 +36,9 @@ import {
   getMobileSeatingSessionStatus,
   type CreateMobileSeatingSessionResponse,
 } from "@/lib/api/mobile";
+import SeatingBrowserFrame from "@/components/seating/seating-browser-frame";
 
-let WebViewComponent: any = null;
-if (Platform.OS !== "web") {
-  try {
-    WebViewComponent = require("react-native-webview").default;
-  } catch {}
-}
+const WebViewComponent: any = SeatingBrowserFrame;
 
 type FlowPhase =
   | "loading"
@@ -171,10 +166,7 @@ export function SeatPurchaseFlow({
             session.flowToken,
           );
           if (response.order?.id) {
-            return openPaymentForOrder(
-              session.flowToken,
-              response.order.id,
-            );
+            return openPaymentForOrder(session.flowToken, response.order.id);
           }
           if (attempt < attempts - 1) {
             await new Promise((resolve) => setTimeout(resolve, intervalMs));
@@ -580,25 +572,6 @@ export function SeatPurchaseFlow({
           >
             <Text style={styles.primaryButtonText}>Voir mes commandes</Text>
           </TouchableOpacity>
-        </View>
-      </ScreenContainer>
-    );
-  }
-
-  if (Platform.OS === "web" || !WebViewComponent) {
-    return (
-      <ScreenContainer edges={["top", "left", "right", "bottom"]}>
-        <SeatFlowHeader
-          title={title}
-          onClose={handleClose}
-          selectedCount={visibleSelectedCount}
-          onSeatSummary={() => setShowSeatSummary(true)}
-        />
-        {seatSummaryModal}
-        <View style={styles.center}>
-          <Text style={[styles.centerText, { color: colors.muted }]}>
-            Le plan de salle est disponible dans l'application mobile.
-          </Text>
         </View>
       </ScreenContainer>
     );

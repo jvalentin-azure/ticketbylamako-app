@@ -37,18 +37,18 @@ export function CartToast({
       Animated.parallel([
         Animated.spring(translateY, {
           toValue: 0,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== "web",
           tension: 80,
           friction: 12,
         }),
         Animated.timing(opacity, {
           toValue: 1,
           duration: 200,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== "web",
         }),
         Animated.spring(scale, {
           toValue: 1,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== "web",
           tension: 80,
           friction: 10,
         }),
@@ -60,17 +60,17 @@ export function CartToast({
           Animated.timing(translateY, {
             toValue: -100,
             duration: 250,
-            useNativeDriver: true,
+            useNativeDriver: Platform.OS !== "web",
           }),
           Animated.timing(opacity, {
             toValue: 0,
             duration: 200,
-            useNativeDriver: true,
+            useNativeDriver: Platform.OS !== "web",
           }),
           Animated.timing(scale, {
             toValue: 0.9,
             duration: 200,
-            useNativeDriver: true,
+            useNativeDriver: Platform.OS !== "web",
           }),
         ]).start(() => {
           onHide?.();

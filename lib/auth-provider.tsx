@@ -1,5 +1,20 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { User, login as apiLogin, register as apiRegister, logout as apiLogout, getStoredToken, getStoredUser, storeUser, validateToken } from "./api/auth";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+} from "react";
+import {
+  User,
+  login as apiLogin,
+  register as apiRegister,
+  logout as apiLogout,
+  getStoredToken,
+  getStoredUser,
+  storeUser,
+  validateToken,
+} from "./api/auth";
 import { invalidateAllCaches } from "./api/cache";
 import { clearTicketDetailCache } from "./ticket-detail-cache";
 import { isJwtLocallyUsable } from "./jwt-session";
@@ -12,7 +27,12 @@ interface AuthState {
 
 interface AuthContextType extends AuthState {
   login: (username: string, password: string) => Promise<void>;
-  register: (email: string, password: string, firstName: string, lastName: string) => Promise<void>;
+  register: (
+    email: string,
+    password: string,
+    firstName: string,
+    lastName: string,
+  ) => Promise<void>;
   loginWithUser: (user: User) => void;
   updateCurrentUser: (user: User) => Promise<void>;
   logout: () => Promise<void>;
@@ -23,7 +43,9 @@ const AuthContext = createContext<AuthContextType | null>(null);
 function syncPushTokenForAuthenticatedUser() {
   import("./notifications")
     .then(({ registerPushTokenWithBackend }) => registerPushTokenWithBackend())
-    .catch((error) => console.warn("Push token sync after auth failed:", error));
+    .catch((error) =>
+      console.warn("Push token sync after auth failed:", error),
+    );
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -44,7 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ]);
 
         if (!user || !token || cancelled) {
-          if (!cancelled) setState(s => ({ ...s, isLoading: false }));
+          if (!cancelled) setState((s) => ({ ...s, isLoading: false }));
           return;
         }
 
@@ -62,7 +84,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
             await apiLogout().catch(() => undefined);
             if (!cancelled) {
-              setState({ user: null, isLoading: false, isAuthenticated: false });
+              setState({
+                user: null,
+                isLoading: false,
+                isAuthenticated: false,
+              });
             }
           });
           return;
@@ -84,7 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // next launch and never trigger an unsafe AsyncStorage token fallback.
       }
 
-      if (!cancelled) setState(s => ({ ...s, isLoading: false }));
+      if (!cancelled) setState((s) => ({ ...s, isLoading: false }));
     })();
 
     return () => {
@@ -98,24 +124,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     syncPushTokenForAuthenticatedUser();
   }, []);
 
-  const register = useCallback(async (email: string, password: string, firstName: string, lastName: string) => {
-    const user = await apiRegister(email, password, firstName, lastName);
-    setState({ user, isLoading: false, isAuthenticated: true });
-    syncPushTokenForAuthenticatedUser();
-  }, []);
+  const register = useCallback(
+    async (
+      email: string,
+      password: string,
+      firstName: string,
+      lastName: string,
+    ) => {
+      const user = await apiRegister(email, password, firstName, lastName);
+      setState({ user, isLoading: false, isAuthenticated: true });
+      syncPushTokenForAuthenticatedUser();
+    },
+    [],
+  );
 
   const logout = useCallback(async () => {
     const currentUserId = state.user?.id;
+    const { unregisterPushTokenWithBackend } = await import("./notifications");
+    await Promise.race([
+      unregisterPushTokenWithBackend(),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1500)),
+    ]).catch(() => false);
+    await apiLogout();
     try {
-      const { unregisterPushTokenWithBackend } = await import("./notifications");
-      await Promise.race([
-        unregisterPushTokenWithBackend(),
-        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1500)),
-      ]);
-      await apiLogout();
-    } finally {
       await invalidateAllCaches();
       if (currentUserId) await clearTicketDetailCache(currentUserId);
+    } finally {
       setState({ user: null, isLoading: false, isAuthenticated: false });
     }
   }, [state.user?.id]);
@@ -131,7 +165,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ ...state, login, register, loginWithUser, updateCurrentUser, logout }}>
+    <AuthContext.Provider
+      value={{
+        ...state,
+        login,
+        register,
+        loginWithUser,
+        updateCurrentUser,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

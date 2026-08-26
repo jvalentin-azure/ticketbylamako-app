@@ -85,10 +85,12 @@ describe("server-signed ticket wallet passes", () => {
     expect(appConfig).toContain("./plugins/with-wallet-kit");
   });
 
-  it("keeps the native Wallet SDK out of the web bundle", () => {
+  it("keeps the native Wallet SDK out while handing signed links to the browser", () => {
     expect(webWallet).not.toContain("@azizuysal/wallet-kit");
-    expect(webWallet).toContain("Wallet natif indisponible");
-    expect(ticketScreen).toContain('Platform.OS !== "web"');
+    expect(webWallet).toContain('url.protocol !== "https:"');
+    expect(webWallet).toContain("window.location.assign");
+    expect(ticketScreen).toContain("webPrefersAppleWallet");
+    expect(ticketScreen).toContain("walletPlatform");
   });
 
   it("uses only local WordPress media for the premium Apple strip", () => {

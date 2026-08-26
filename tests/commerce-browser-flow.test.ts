@@ -40,7 +40,7 @@ describe("native commerce payment flow", () => {
     const screenSource = source("app/payment.tsx");
     expect(paymentSource).toContain('response.flow === "redirect"');
     expect(paymentSource).toContain(
-      "openCommerceSession(response.redirectUrl)",
+      "openCommerceSession(response.redirectUrl, token)",
     );
     expect(paymentSource).not.toContain("openAuthSessionAsync");
     expect(browserSource).toContain("openBrowserAsync");

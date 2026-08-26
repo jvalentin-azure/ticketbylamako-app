@@ -41,7 +41,7 @@ import {
   notificationTargetFromData,
   type NotificationTarget,
 } from "@/lib/notification-navigation";
-import * as Notifications from "expo-notifications";
+import * as Notifications from "@/lib/notification-runtime";
 
 // Set up notification handler at module level (before any component renders)
 try {

@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { View, Text, Animated, StyleSheet, TouchableOpacity, Dimensions, Modal } from "react-native";
+import {
+  View,
+  Text,
+  Animated,
+  StyleSheet,
+  TouchableOpacity,
+  Dimensions,
+  Modal,
+  Platform,
+} from "react-native";
 import { Image } from "expo-image";
 import { router } from "expo-router";
 import { useAuth } from "@/lib/auth-provider";
@@ -42,13 +51,13 @@ export function RewardsPopup({ delay = 30000 }: RewardsPopupProps) {
         Animated.timing(fadeAnim, {
           toValue: 1,
           duration: 300,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== "web",
         }),
         Animated.spring(scaleAnim, {
           toValue: 1,
           tension: 60,
           friction: 8,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== "web",
         }),
       ]).start();
     }, delay);
@@ -62,7 +71,7 @@ export function RewardsPopup({ delay = 30000 }: RewardsPopupProps) {
     Animated.timing(fadeAnim, {
       toValue: 0,
       duration: 200,
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== "web",
     }).start(() => setVisible(false));
   };
 
@@ -79,11 +88,27 @@ export function RewardsPopup({ delay = 30000 }: RewardsPopupProps) {
   if (!visible) return null;
 
   return (
-    <Modal transparent visible={visible} animationType="none" statusBarTranslucent>
+    <Modal
+      transparent
+      visible={visible}
+      animationType="none"
+      statusBarTranslucent
+    >
       <View style={styles.backdrop}>
-        <Animated.View style={[styles.card, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
+        <Animated.View
+          style={[
+            styles.card,
+            { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
+          ]}
+        >
           {/* Close button */}
-          <TouchableOpacity onPress={handleClose} style={styles.closeBtn} activeOpacity={0.7}>
+          <TouchableOpacity
+            onPress={handleClose}
+            style={styles.closeBtn}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Fermer la présentation LamakoRewards"
+          >
             <View style={styles.closeBtnInner}>
               <Text style={styles.closeBtnText}>✕</Text>
             </View>
@@ -111,16 +136,26 @@ export function RewardsPopup({ delay = 30000 }: RewardsPopupProps) {
             </Text>
 
             <Text style={styles.features}>
-              Vos avantages restent associés à votre compte, sur le site et dans l'application.
+              Vos avantages restent associés à votre compte, sur le site et dans
+              l'application.
             </Text>
 
-            <TouchableOpacity onPress={handleJoin} style={styles.joinBtn} activeOpacity={0.85}>
+            <TouchableOpacity
+              onPress={handleJoin}
+              style={styles.joinBtn}
+              activeOpacity={0.85}
+            >
               <Text style={styles.joinBtnText}>Rejoindre maintenant !</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={handleLogin} style={styles.loginLink} activeOpacity={0.7}>
+            <TouchableOpacity
+              onPress={handleLogin}
+              style={styles.loginLink}
+              activeOpacity={0.7}
+            >
               <Text style={styles.loginLinkText}>
-                Déjà un compte ? <Text style={styles.loginLinkAccent}>Se connecter</Text>
+                Déjà un compte ?{" "}
+                <Text style={styles.loginLinkAccent}>Se connecter</Text>
               </Text>
             </TouchableOpacity>
           </View>

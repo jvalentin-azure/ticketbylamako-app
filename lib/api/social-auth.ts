@@ -4,6 +4,7 @@ import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import { Platform } from "react-native";
 import { User } from "./auth";
+import { setWebSessionNonce } from "./web-session";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -56,10 +57,18 @@ interface SocialLoginResponse {
   message?: string;
 }
 
+interface WebSocialLoginResponse {
+  authenticated: boolean;
+  nonce: string;
+  user: User;
+  message?: string;
+}
+
 async function secureSet(key: string, value: string) {
   if (Platform.OS === "web") {
-    await AsyncStorage.setItem(key, value);
-    return;
+    throw new Error(
+      "Les identifiants web doivent rester dans la session WordPress HttpOnly.",
+    );
   }
 
   const SecureStore = await import("expo-secure-store");
@@ -180,11 +189,13 @@ export async function socialLogin(
   provider: SocialProvider,
   credential: SocialCredential,
 ): Promise<User> {
+  const isWeb = Platform.OS === "web";
   const res = await fetchWithTimeout(
-    `${SITE_URL_BASE}/wp-json/lamako-mobile/v1/social-login`,
+    `${SITE_URL_BASE}/wp-json/lamako-mobile/${isWeb ? "v2/web-session/social" : "v1/social-login"}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: isWeb ? "include" : undefined,
       body: JSON.stringify({
         provider,
         token: credential.token,
@@ -200,6 +211,15 @@ export async function socialLogin(
     throw new Error(
       errorBody.message || `Erreur de connexion ${provider} (${res.status})`,
     );
+  }
+
+  if (isWeb) {
+    const data: WebSocialLoginResponse = await res.json();
+    if (!data.authenticated || !data.user || !data.nonce) {
+      throw new Error(data.message || "Échec de l'authentification");
+    }
+    setWebSessionNonce(data.nonce);
+    return data.user;
   }
 
   const data: SocialLoginResponse = await res.json();

@@ -1,5 +1,13 @@
 import { useRef, useCallback, useState } from "react";
-import { View, StyleSheet, Platform, Animated, TouchableOpacity, Text, useWindowDimensions } from "react-native";
+import {
+  View,
+  StyleSheet,
+  Platform,
+  Animated,
+  TouchableOpacity,
+  Text,
+  useWindowDimensions,
+} from "react-native";
 import { Tabs } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { HapticTab } from "@/components/haptic-tab";
@@ -25,7 +33,7 @@ export default function TabLayout() {
     setDrawerOpen(true);
     Animated.spring(drawerAnim, {
       toValue: 1,
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== "web",
       tension: 65,
       friction: 11,
     }).start();
@@ -35,7 +43,7 @@ export default function TabLayout() {
     Animated.timing(drawerAnim, {
       toValue: 0,
       duration: 250,
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== "web",
     }).start(() => {
       setDrawerOpen(false);
     });
@@ -124,7 +132,12 @@ export default function TabLayout() {
                 <View>
                   <IconSymbol size={24} name="cart.fill" color={color} />
                   {itemCount > 0 && (
-                    <View style={[styles.cartBadge, { backgroundColor: colors.primary }]}>
+                    <View
+                      style={[
+                        styles.cartBadge,
+                        { backgroundColor: colors.primary },
+                      ]}
+                    >
                       <Text style={styles.cartBadgeText}>
                         {itemCount > 99 ? "99+" : String(itemCount)}
                       </Text>
@@ -143,12 +156,7 @@ export default function TabLayout() {
       {/* Drawer Overlay */}
       {drawerOpen && (
         <>
-          <Animated.View
-            style={[
-              styles.overlay,
-              { opacity: overlayOpacity },
-            ]}
-          >
+          <Animated.View style={[styles.overlay, { opacity: overlayOpacity }]}>
             <TouchableOpacity
               style={StyleSheet.absoluteFill}
               activeOpacity={1}

@@ -1,5 +1,7 @@
 import { getStoredToken } from "./auth";
 import type { CheckoutFieldSchema } from "@/lib/types/commerce";
+import { Platform } from "react-native";
+import { getWebSessionNonce } from "./web-session";
 
 export const SITE_URL =
   process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
@@ -66,6 +68,7 @@ export async function mobileV2Fetch<T>(
   options: MobileFetchOptions = {},
 ): Promise<T> {
   const requireAuth = options.requireAuth !== false;
+  const usesWebCookieSession = Platform.OS === "web";
   const token = options.token ?? (requireAuth ? await getStoredToken() : null);
 
   if (requireAuth && !token) {
@@ -79,7 +82,13 @@ export async function mobileV2Fetch<T>(
   const headers: Record<string, string> = {
     Accept: "application/json",
   };
-  if (token) headers.Authorization = `Bearer ${token}`;
+  if (token && !usesWebCookieSession) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  if (usesWebCookieSession) {
+    const nonce = getWebSessionNonce();
+    if (nonce) headers["X-WP-Nonce"] = nonce;
+  }
   if (options.body !== undefined) headers["Content-Type"] = "application/json";
 
   const controller =
@@ -97,6 +106,7 @@ export async function mobileV2Fetch<T>(
       body:
         options.body !== undefined ? JSON.stringify(options.body) : undefined,
       signal: controller?.signal,
+      credentials: usesWebCookieSession ? "include" : undefined,
     });
   } catch (error: any) {
     if (error?.name === "AbortError") {

@@ -30,6 +30,7 @@ const env = {
   iosBundleId: bundleId,
   androidPackage: bundleId,
 };
+const webBaseUrl = process.env.EXPO_PUBLIC_WEB_BASE_URL || "/mobile";
 
 const config: ExpoConfig = {
   name: env.appName,
@@ -125,7 +126,10 @@ const config: ExpoConfig = {
   },
   web: {
     bundler: "metro",
-    output: "static",
+    // The mobile browser experience is a regular SPA served below WordPress.
+    // It deliberately has no manifest or service worker: this is not an
+    // installable PWA and must never prompt visitors to add it to their device.
+    output: "single",
     favicon: "./assets/images/favicon.png",
   },
   updates: {
@@ -171,6 +175,7 @@ const config: ExpoConfig = {
   ],
   experiments: {
     typedRoutes: true,
+    baseUrl: webBaseUrl,
   },
   extra: {
     eas: {

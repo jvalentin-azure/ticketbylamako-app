@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Alert,
   Linking,
+  Platform,
   useWindowDimensions,
 } from "react-native";
 import { Image } from "expo-image";
@@ -19,6 +20,9 @@ import { LinearGradient } from "expo-linear-gradient";
 import { buildLamakoWhatsAppUrl } from "@/lib/contact";
 import { getAppVersionLabel } from "@/lib/app-version";
 import { useRewards } from "@/lib/rewards-provider";
+
+const SITE_URL =
+  process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
 
 interface DrawerContentProps {
   onClose?: () => void;
@@ -57,8 +61,17 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
         text: "Déconnexion",
         style: "destructive",
         onPress: async () => {
-          await logout();
-          onClose?.();
+          try {
+            await logout();
+            onClose?.();
+          } catch (error) {
+            Alert.alert(
+              "Déconnexion impossible",
+              error instanceof Error
+                ? error.message
+                : "Vérifiez votre connexion puis réessayez.",
+            );
+          }
         },
       },
     ]);
@@ -74,6 +87,15 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
         "Impossible d'ouvrir WhatsApp pour le moment.",
       );
     });
+  };
+
+  const openClassicWebsite = () => {
+    onClose?.();
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      window.location.assign(`${SITE_URL}/?desktop=1`);
+      return;
+    }
+    void Linking.openURL(SITE_URL);
   };
 
   const menuSections = [
@@ -148,6 +170,15 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
           label: "À propos",
           onPress: () => navigate("/about"),
         },
+        ...(Platform.OS === "web"
+          ? [
+              {
+                icon: "globe" as const,
+                label: "Version classique du site",
+                onPress: openClassicWebsite,
+              },
+            ]
+          : []),
       ],
     },
   ];

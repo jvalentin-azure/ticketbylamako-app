@@ -25,7 +25,7 @@ import {
   cancelScheduledNotificationsByType,
   type NotificationPreferences,
 } from "@/lib/notifications";
-import * as Notifications from "expo-notifications";
+import * as Notifications from "@/lib/notification-runtime";
 import { useAuth } from "@/lib/auth-provider";
 
 interface SettingItem {

@@ -3,10 +3,12 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 const root = path.resolve(__dirname, "..");
-const commerce = fs.readFileSync(
-  path.join(root, "scripts/lamako-mobile-api/includes/v2-commerce.php"),
-  "utf8",
-);
+const commerce = fs
+  .readFileSync(
+    path.join(root, "scripts/lamako-mobile-api/includes/v2-commerce.php"),
+    "utf8",
+  )
+  .replace(/\r\n/g, "\n");
 const expiryGuard = fs.readFileSync(
   path.join(root, "scripts/tbl-mobile-order-expiry-guard.php"),
   "utf8",

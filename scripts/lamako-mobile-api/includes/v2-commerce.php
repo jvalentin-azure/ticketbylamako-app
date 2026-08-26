@@ -9,6 +9,11 @@
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
+$lamako_mobile_web_router = __DIR__ . '/mobile-web-router.php';
+if ( file_exists( $lamako_mobile_web_router ) ) {
+    require_once $lamako_mobile_web_router;
+}
+
 $lamako_mobile_v2_catalog_images = __DIR__ . '/v2-catalog-images.php';
 if ( file_exists( $lamako_mobile_v2_catalog_images ) ) {
     require_once $lamako_mobile_v2_catalog_images;
@@ -163,6 +168,36 @@ function lamako_mobile_v2_register_routes() {
         'methods'             => WP_REST_Server::READABLE,
         'callback'            => 'lamako_mobile_v2_public_product',
         'permission_callback' => '__return_true',
+    ] );
+
+    register_rest_route( $namespace, '/web-session', [
+        'methods'             => WP_REST_Server::READABLE,
+        'callback'            => 'lamako_mobile_v2_get_web_session',
+        'permission_callback' => 'lamako_mobile_v2_allow_same_origin_web_auth',
+    ] );
+
+    register_rest_route( $namespace, '/web-session/login', [
+        'methods'             => WP_REST_Server::CREATABLE,
+        'callback'            => 'lamako_mobile_v2_web_session_login',
+        'permission_callback' => 'lamako_mobile_v2_allow_same_origin_web_auth',
+    ] );
+
+    register_rest_route( $namespace, '/web-session/register', [
+        'methods'             => WP_REST_Server::CREATABLE,
+        'callback'            => 'lamako_mobile_v2_web_session_register',
+        'permission_callback' => 'lamako_mobile_v2_allow_same_origin_web_auth',
+    ] );
+
+    register_rest_route( $namespace, '/web-session/social', [
+        'methods'             => WP_REST_Server::CREATABLE,
+        'callback'            => 'lamako_mobile_v2_web_session_social_login',
+        'permission_callback' => 'lamako_mobile_v2_allow_same_origin_web_auth',
+    ] );
+
+    register_rest_route( $namespace, '/web-session/logout', [
+        'methods'             => WP_REST_Server::CREATABLE,
+        'callback'            => 'lamako_mobile_v2_web_session_logout',
+        'permission_callback' => 'lamako_mobile_v2_require_user',
     ] );
 
     register_rest_route( $namespace, '/checkouts', [
@@ -334,6 +369,258 @@ function lamako_mobile_v2_register_routes() {
         'callback'            => 'lamako_mobile_v2_register_referral',
         'permission_callback' => 'lamako_mobile_v2_require_user',
     ] );
+}
+
+/**
+ * Web authentication is same-origin only. The mobile browser SPA lives below
+ * /mobile on the WordPress domain and never receives or stores a JWT.
+ */
+function lamako_mobile_v2_allow_same_origin_web_auth( WP_REST_Request $request ) {
+    $source = get_http_origin();
+    if ( ! $source ) {
+        $source = wp_get_referer();
+    }
+
+    $source_parts = $source ? wp_parse_url( $source ) : [];
+    $site_parts   = wp_parse_url( home_url( '/' ) );
+    $source_parts = is_array( $source_parts ) ? $source_parts : [];
+    $site_parts   = is_array( $site_parts ) ? $site_parts : [];
+    $source_host  = strtolower( (string) ( $source_parts['host'] ?? '' ) );
+    $site_host    = strtolower( (string) ( $site_parts['host'] ?? '' ) );
+    $source_scheme = strtolower( (string) ( $source_parts['scheme'] ?? '' ) );
+    $site_scheme   = strtolower( (string) ( $site_parts['scheme'] ?? '' ) );
+    $source_port   = absint( $source_parts['port'] ?? ( $source_scheme === 'https' ? 443 : 80 ) );
+    $site_port     = absint( $site_parts['port'] ?? ( $site_scheme === 'https' ? 443 : 80 ) );
+    $same_origin   = $source_host !== ''
+        && $site_host !== ''
+        && hash_equals( $site_host, $source_host )
+        && hash_equals( $site_scheme, $source_scheme )
+        && $site_port === $source_port;
+    if ( $same_origin ) {
+        return true;
+    }
+
+    $fetch_site = isset( $_SERVER['HTTP_SEC_FETCH_SITE'] )
+        ? strtolower( sanitize_text_field( wp_unslash( $_SERVER['HTTP_SEC_FETCH_SITE'] ) ) )
+        : '';
+    if ( $source_host === '' && $fetch_site === 'same-origin' ) {
+        return true;
+    }
+
+    if ( $source_host === '' ) {
+        return new WP_Error( 'lamako_v2_web_origin_required', 'Origine de requete manquante.', [ 'status' => 403 ] );
+    }
+    if ( ! $same_origin ) {
+        return new WP_Error( 'lamako_v2_web_origin_invalid', 'Origine de requete non autorisee.', [ 'status' => 403 ] );
+    }
+
+    return true;
+}
+
+function lamako_mobile_v2_web_auth_rate_limit( $action, $dimension = '', $limit = 8, $window = 600 ) {
+    $address = isset( $_SERVER['REMOTE_ADDR'] )
+        ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) )
+        : 'unknown';
+    $key   = 'lamako_v2_web_auth_' . md5( sanitize_key( $action ) . '|' . $address . '|' . strtolower( (string) $dimension ) );
+    $count = (int) get_transient( $key );
+    if ( $count >= max( 1, (int) $limit ) ) {
+        return new WP_Error( 'lamako_v2_web_rate_limited', 'Trop de tentatives. Reessayez dans quelques minutes.', [ 'status' => 429 ] );
+    }
+
+    set_transient( $key, $count + 1, max( MINUTE_IN_SECONDS, (int) $window ) );
+    return true;
+}
+
+function lamako_mobile_v2_web_user_response( WP_User $user ) {
+    $role = 'customer';
+    if ( in_array( 'administrator', (array) $user->roles, true ) ) {
+        $role = 'administrator';
+    } elseif ( in_array( 'shop_manager', (array) $user->roles, true ) ) {
+        $role = 'shop_manager';
+    }
+
+    return [
+        'id'          => (int) $user->ID,
+        'email'       => (string) $user->user_email,
+        'displayName' => (string) $user->display_name,
+        'firstName'   => (string) get_user_meta( $user->ID, 'first_name', true ),
+        'lastName'    => (string) get_user_meta( $user->ID, 'last_name', true ),
+        'role'        => $role,
+        'avatar'      => (string) get_avatar_url( $user->ID, [ 'size' => 96 ] ),
+    ];
+}
+
+function lamako_mobile_v2_web_session_response( WP_User $user ) {
+    $response = rest_ensure_response( [
+        'authenticated' => true,
+        'nonce'         => wp_create_nonce( 'wp_rest' ),
+        'user'          => lamako_mobile_v2_web_user_response( $user ),
+    ] );
+    $response->header( 'Cache-Control', 'no-store, private' );
+    $response->header( 'Vary', 'Cookie' );
+    return $response;
+}
+
+function lamako_mobile_v2_get_web_session( WP_REST_Request $request ) {
+    $user_id = get_current_user_id();
+    if ( $user_id <= 0 ) {
+        // WordPress REST cookie auth intentionally clears the current user
+        // when a nonce is absent. A read-only bootstrap may validate the
+        // HttpOnly logged-in cookie directly so a refreshed tab can obtain a
+        // fresh REST nonce without exposing the cookie to JavaScript.
+        $user_id = (int) wp_validate_auth_cookie( '', 'logged_in' );
+        if ( $user_id > 0 ) {
+            wp_set_current_user( $user_id );
+        }
+    }
+
+    $user = $user_id > 0 ? get_user_by( 'id', $user_id ) : false;
+    if ( ! $user instanceof WP_User ) {
+        $response = rest_ensure_response( [ 'authenticated' => false ] );
+        $response->header( 'Cache-Control', 'no-store, private' );
+        $response->header( 'Vary', 'Cookie' );
+        return $response;
+    }
+
+    return lamako_mobile_v2_web_session_response( $user );
+}
+
+function lamako_mobile_v2_web_session_login( WP_REST_Request $request ) {
+    $params   = $request->get_json_params();
+    $params   = is_array( $params ) ? $params : [];
+    $username = trim( sanitize_text_field( $params['username'] ?? '' ) );
+    $password = isset( $params['password'] ) ? (string) $params['password'] : '';
+
+    $rate_limit = lamako_mobile_v2_web_auth_rate_limit( 'login_ip', '', 30, 10 * MINUTE_IN_SECONDS );
+    if ( is_wp_error( $rate_limit ) ) {
+        return $rate_limit;
+    }
+    $rate_limit = lamako_mobile_v2_web_auth_rate_limit( 'login_account', $username, 8, 10 * MINUTE_IN_SECONDS );
+    if ( is_wp_error( $rate_limit ) ) {
+        return $rate_limit;
+    }
+    if ( $username === '' || $password === '' ) {
+        return new WP_Error( 'lamako_v2_web_credentials_required', 'Email et mot de passe requis.', [ 'status' => 400 ] );
+    }
+
+    $user = wp_signon( [
+        'user_login'    => $username,
+        'user_password' => $password,
+        'remember'      => true,
+    ], is_ssl() );
+    if ( is_wp_error( $user ) ) {
+        return new WP_Error( 'lamako_v2_web_login_failed', 'Identifiants incorrects.', [ 'status' => 401 ] );
+    }
+
+    wp_set_current_user( $user->ID );
+    return lamako_mobile_v2_web_session_response( $user );
+}
+
+function lamako_mobile_v2_web_session_register( WP_REST_Request $request ) {
+    $params     = $request->get_json_params();
+    $params     = is_array( $params ) ? $params : [];
+    $email      = sanitize_email( $params['email'] ?? '' );
+    $password   = isset( $params['password'] ) ? (string) $params['password'] : '';
+    $first_name = sanitize_text_field( $params['first_name'] ?? '' );
+    $last_name  = sanitize_text_field( $params['last_name'] ?? '' );
+
+    $rate_limit = lamako_mobile_v2_web_auth_rate_limit( 'register_ip', '', 10, 15 * MINUTE_IN_SECONDS );
+    if ( is_wp_error( $rate_limit ) ) {
+        return $rate_limit;
+    }
+    $rate_limit = lamako_mobile_v2_web_auth_rate_limit( 'register_email', $email, 4, 15 * MINUTE_IN_SECONDS );
+    if ( is_wp_error( $rate_limit ) ) {
+        return $rate_limit;
+    }
+    if ( $email === '' || ! is_email( $email ) ) {
+        return new WP_Error( 'lamako_v2_web_invalid_email', 'Adresse email invalide.', [ 'status' => 400 ] );
+    }
+    if ( email_exists( $email ) ) {
+        return new WP_Error( 'lamako_v2_web_email_exists', 'Un compte existe deja avec cette adresse email.', [ 'status' => 409 ] );
+    }
+    if ( $first_name === '' ) {
+        return new WP_Error( 'lamako_v2_web_first_name_required', 'Le prenom est requis.', [ 'status' => 400 ] );
+    }
+    if ( strlen( $password ) < 6 ) {
+        return new WP_Error( 'lamako_v2_web_weak_password', 'Le mot de passe doit contenir au moins 6 caracteres.', [ 'status' => 400 ] );
+    }
+
+    $parts         = explode( '@', $email );
+    $base_username = sanitize_user( $parts[0], true );
+    $base_username = strlen( $base_username ) >= 3 ? $base_username : 'client';
+    $username      = $base_username;
+    $suffix        = 1;
+    while ( username_exists( $username ) ) {
+        $username = $base_username . $suffix;
+        $suffix++;
+    }
+
+    $user_id = wp_insert_user( [
+        'user_login'   => $username,
+        'user_email'   => $email,
+        'user_pass'    => $password,
+        'first_name'   => $first_name,
+        'last_name'    => $last_name,
+        'display_name' => trim( $first_name . ' ' . $last_name ),
+        'role'         => 'customer',
+    ] );
+    if ( is_wp_error( $user_id ) ) {
+        return new WP_Error( 'lamako_v2_web_registration_failed', 'Impossible de creer le compte.', [ 'status' => 500 ] );
+    }
+
+    update_user_meta( $user_id, 'billing_email', $email );
+    update_user_meta( $user_id, 'billing_first_name', $first_name );
+    update_user_meta( $user_id, 'billing_last_name', $last_name );
+
+    wp_set_current_user( $user_id );
+    wp_set_auth_cookie( $user_id, true, is_ssl() );
+    $user = get_user_by( 'id', $user_id );
+    if ( ! $user instanceof WP_User ) {
+        wp_logout();
+        return new WP_Error( 'lamako_v2_web_session_failed', 'Le compte a ete cree, mais la session n a pas pu etre ouverte.', [ 'status' => 500 ] );
+    }
+    return lamako_mobile_v2_web_session_response( $user );
+}
+
+function lamako_mobile_v2_web_session_social_login( WP_REST_Request $request ) {
+    $provider = sanitize_key( $request->get_param( 'provider' ) );
+    if ( ! in_array( $provider, [ 'google', 'facebook', 'apple' ], true ) ) {
+        return new WP_Error( 'lamako_v2_web_social_provider_invalid', 'Fournisseur de connexion invalide.', [ 'status' => 400 ] );
+    }
+
+    $rate_limit = lamako_mobile_v2_web_auth_rate_limit( 'social', $provider, 12, 10 * MINUTE_IN_SECONDS );
+    if ( is_wp_error( $rate_limit ) ) {
+        return $rate_limit;
+    }
+    if ( ! function_exists( 'lamako_mobile_social_login' ) ) {
+        return new WP_Error( 'lamako_v2_web_social_unavailable', 'Connexion sociale temporairement indisponible.', [ 'status' => 503 ] );
+    }
+
+    // Reuse the native provider-proof validation and account-linking logic,
+    // but consume its result on the server. The returned JWT is never sent to
+    // browser JavaScript; the web client receives only an HttpOnly WP session.
+    $native_response = lamako_mobile_social_login( $request );
+    if ( is_wp_error( $native_response ) ) {
+        return $native_response;
+    }
+    $native_data = rest_ensure_response( $native_response )->get_data();
+    $user_id     = absint( $native_data['user']['id'] ?? 0 );
+    $user        = $user_id > 0 ? get_user_by( 'id', $user_id ) : false;
+    if ( ! $user instanceof WP_User ) {
+        return new WP_Error( 'lamako_v2_web_social_failed', 'La session sociale n a pas pu etre ouverte.', [ 'status' => 401 ] );
+    }
+
+    wp_set_current_user( $user_id );
+    wp_set_auth_cookie( $user_id, true, is_ssl() );
+    return lamako_mobile_v2_web_session_response( $user );
+}
+
+function lamako_mobile_v2_web_session_logout( WP_REST_Request $request ) {
+    wp_logout();
+    $response = rest_ensure_response( [ 'authenticated' => false ] );
+    $response->header( 'Cache-Control', 'no-store, private' );
+    $response->header( 'Vary', 'Cookie' );
+    return $response;
 }
 
 function lamako_mobile_v2_require_user( WP_REST_Request $request ) {
@@ -4194,6 +4481,13 @@ function lamako_mobile_v2_maybe_serve_payment_return() {
         ? $request['statusHint']
         : $status;
     $app_url = lamako_mobile_v2_app_payment_return_url( $token, $kind, $navigation_status, $order );
+    $web_url = add_query_arg( [
+        'kind'        => $kind,
+        'token'       => $token,
+        'status'      => $navigation_status,
+        'orderId'     => $order['id'] ?? '',
+        'orderNumber' => $order['number'] ?? '',
+    ], home_url( '/mobile/payment-return' ) );
 
     $title = 'Retour paiement';
     if ( $status === 'success' ) {
@@ -4270,6 +4564,32 @@ function lamako_mobile_v2_maybe_serve_payment_return() {
         if (window.ReactNativeWebView) {
           window.ReactNativeWebView.postMessage(JSON.stringify(message));
         }
+      }
+      var webStorageKey = "ticketbylamako_web_payment";
+      var webCompletedKey = "ticketbylamako_web_payment_completed";
+      var webStartedAt = 0;
+      try {
+        webStartedAt = Number(window.localStorage.getItem(webStorageKey) || 0);
+      } catch (error) {}
+      var isRecentWebPayment = webStartedAt > Date.now() - (20 * 60 * 1000);
+      if (window.opener) {
+        try {
+          window.opener.postMessage(envelope, <?php echo wp_json_encode( home_url( '/' ) ); ?>);
+          window.localStorage.removeItem(webStorageKey);
+          window.close();
+          return;
+        } catch (error) {}
+      }
+      if (isRecentWebPayment && !window.ReactNativeWebView) {
+        try {
+          window.localStorage.removeItem(webStorageKey);
+          window.localStorage.setItem(webCompletedKey, String(Date.now()));
+        } catch (error) {}
+        setTimeout(function() {
+          window.location.replace(<?php echo wp_json_encode( $web_url ); ?>);
+        }, 150);
+        window.close();
+        return;
       }
       post(envelope);
       setTimeout(function() {

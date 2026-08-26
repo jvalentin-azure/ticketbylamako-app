@@ -176,12 +176,17 @@ function TicketCard({
   const qrValue = ticket.ticket_code;
   const [calendarBusy, setCalendarBusy] = useState(false);
   const [walletBusy, setWalletBusy] = useState(false);
+  const webPrefersAppleWallet =
+    Platform.OS === "web" &&
+    typeof navigator !== "undefined" &&
+    /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const walletPlatform =
+    Platform.OS === "ios" || webPrefersAppleWallet ? "apple" : "google";
   const walletProviderAvailability =
-    Platform.OS === "ios"
+    walletPlatform === "apple"
       ? ticket.apple_wallet_available
       : ticket.google_wallet_available;
   const walletAvailable =
-    Platform.OS !== "web" &&
     isValid &&
     ticket.instance_id > 0 &&
     qrValue.length > 0 &&
@@ -234,17 +239,16 @@ function TicketCard({
     if (!walletAvailable || walletBusy) return;
     setWalletBusy(true);
     try {
-      const platform = Platform.OS === "ios" ? "apple" : "google";
       const response = await getMobileTicketWalletLink(
         order.id,
         ticket.instance_id,
-        platform,
+        walletPlatform,
       );
       const result = await addTicketToNativeWallet(response.url);
       if (result === "added") {
         Alert.alert(
           "Billet ajouté",
-          `Votre billet est maintenant disponible dans ${Platform.OS === "ios" ? "Apple Wallet" : "Google Wallet"}.`,
+          `Votre billet est maintenant disponible dans ${walletPlatform === "apple" ? "Apple Wallet" : "Google Wallet"}.`,
         );
       } else {
         Alert.alert(
@@ -415,7 +419,7 @@ function TicketCard({
               <TouchableOpacity
                 accessibilityRole="button"
                 accessibilityLabel={
-                  Platform.OS === "ios"
+                  walletPlatform === "apple"
                     ? "Ajouter à Apple Wallet"
                     : "Ajouter à Google Wallet"
                 }
@@ -429,7 +433,7 @@ function TicketCard({
                   <IconSymbol name="wallet.fill" size={19} color="#fff" />
                 )}
                 <Text style={styles.walletButtonText}>
-                  {Platform.OS === "ios"
+                  {walletPlatform === "apple"
                     ? "Ajouter à Apple Wallet"
                     : "Ajouter à Google Wallet"}
                 </Text>
