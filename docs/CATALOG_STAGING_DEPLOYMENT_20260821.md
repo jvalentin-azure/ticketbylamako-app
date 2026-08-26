@@ -1109,9 +1109,10 @@ préserve la mutualisation CDN pendant une minute tout en bornant la fraîcheur,
 indépendamment d'une purge externe. Un rafraîchissement manuel conserve son
 paramètre horodaté distinct.
 
-Validation : 13 tests ciblés, ESLint, TypeScript et `git diff --check` réussis.
-Les trois URLs utilisant le bucket ont répondu en HTTP 200 entre 0,23 et 0,29 s
-avec respectivement 12, 34 et 3 références WebP.
+Validation : 13 tests ciblés, ESLint, TypeScript et `git diff --check` réussis,
+puis `pnpm qa:mobile` complet avec 56 fichiers et 291 tests réussis, 3 fichiers
+et 4 tests ignorés. Les trois URLs utilisant le bucket ont répondu en HTTP 200
+entre 0,23 et 0,29 s avec respectivement 12, 34 et 3 références WebP.
 
 OTA corrective production :
 
