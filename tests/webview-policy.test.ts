@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import { isAllowedWebViewUrl } from "../lib/webview-policy";
 
 const originalPaymentHosts = process.env.EXPO_PUBLIC_PAYMENT_HOSTS;
+const configuredSiteUrl =
+  process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
+const configuredSiteHost = new URL(configuredSiteUrl).hostname;
 
 afterEach(() => {
   process.env.EXPO_PUBLIC_PAYMENT_HOSTS = originalPaymentHosts;
@@ -11,13 +14,13 @@ describe("WebView navigation policy", () => {
   it("allows first-party HTTPS navigation", () => {
     expect(
       isAllowedWebViewUrl(
-        "https://www.ticketbylamako.com/checkout/order-pay/42",
+        new URL("/checkout/order-pay/42", configuredSiteUrl).toString(),
         "first-party",
       ),
     ).toBe(true);
     expect(
       isAllowedWebViewUrl(
-        "https://ticketbylamako.com/lamako-mobile/payment-return",
+        new URL("/lamako-mobile/payment-return", configuredSiteUrl).toString(),
         "payment",
       ),
     ).toBe(true);
@@ -26,7 +29,7 @@ describe("WebView navigation policy", () => {
   it("does not trust arbitrary first-party subdomains", () => {
     expect(
       isAllowedWebViewUrl(
-        "https://untrusted.ticketbylamako.com/checkout",
+        `https://untrusted.${configuredSiteHost}/checkout`,
         "first-party",
       ),
     ).toBe(false);
@@ -37,7 +40,7 @@ describe("WebView navigation policy", () => {
       false,
     );
     expect(
-      isAllowedWebViewUrl("http://www.ticketbylamako.com/checkout", "payment"),
+      isAllowedWebViewUrl(`http://${configuredSiteHost}/checkout`, "payment"),
     ).toBe(false);
     expect(isAllowedWebViewUrl("javascript:alert(1)", "payment")).toBe(false);
   });
