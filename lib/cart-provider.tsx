@@ -6,9 +6,10 @@ import {
   useRef,
   useEffect,
 } from "react";
-import { Alert, AppState, AppStateStatus } from "react-native";
+import { AppState, AppStateStatus } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { randomUUID } from "expo-crypto";
+import { Alert } from "@/lib/platform-alert";
 import {
   cartHoldRemainingMs,
   createCartExpiryTimestamp,

@@ -1,6 +1,5 @@
 import {
   ActivityIndicator,
-  Alert,
   Platform,
   ScrollView,
   Text,
@@ -8,6 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Alert } from "@/lib/platform-alert";
 import { ScreenContainer } from "@/components/screen-container";
 import { CartHoldCountdown } from "@/components/cart-hold-countdown";
 import { IconSymbol } from "@/components/ui/icon-symbol";

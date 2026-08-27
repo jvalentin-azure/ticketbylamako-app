@@ -5,8 +5,8 @@ import {
   ScrollView,
   StyleSheet,
   Linking,
-  Alert,
 } from "react-native";
+import { Alert } from "@/lib/platform-alert";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";

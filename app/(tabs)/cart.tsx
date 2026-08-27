@@ -3,9 +3,9 @@ import {
   View,
   TouchableOpacity,
   FlatList,
-  Alert,
   StyleSheet,
 } from "react-native";
+import { Alert } from "@/lib/platform-alert";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CatalogImage } from "@/components/catalog-image";

@@ -25,6 +25,26 @@ const wordpressRouter = readFileSync(
   "utf8",
 );
 const apacheRules = readFileSync(resolve("public/.htaccess"), "utf8");
+const webAlert = readFileSync(resolve("lib/platform-alert.web.ts"), "utf8");
+const alertConsumers = [
+  "app/about.tsx",
+  "app/checkout.tsx",
+  "app/edit-profile.tsx",
+  "app/event/[id].tsx",
+  "app/help.tsx",
+  "app/notification-settings.tsx",
+  "app/notifications.tsx",
+  "app/payment.tsx",
+  "app/privacy-data.tsx",
+  "app/ticket/[id].tsx",
+  "app/(tabs)/cart.tsx",
+  "app/(tabs)/profile.tsx",
+  "components/commerce/CheckoutSteps.tsx",
+  "components/drawer-content.tsx",
+  "components/organizer-event-cta.tsx",
+  "components/seating/SeatPurchaseFlow.tsx",
+  "lib/cart-provider.tsx",
+].map((path) => readFileSync(resolve(path), "utf8"));
 
 describe("non-installable mobile web foundation", () => {
   it("exports an Expo Router SPA below the WordPress /mobile path", () => {
@@ -67,6 +87,12 @@ describe("non-installable mobile web foundation", () => {
       'credentials: usesWebCookieSession ? "include" : undefined',
     );
     expect(mobileApi).toContain("token && !usesWebCookieSession");
+    expect(mobileApi).toContain(
+      "requireAuth && !usesWebCookieSession ? await getStoredToken() : null",
+    );
+    expect(mobileApi).toContain(
+      "requireAuth && !usesWebCookieSession && !token",
+    );
   });
 
   it("provides same-origin, rate-limited WordPress web sessions", () => {
@@ -98,6 +124,18 @@ describe("non-installable mobile web foundation", () => {
       "`${WEB_PAYMENT_STORAGE_KEY}${flowToken}`",
     );
     expect(commerce).toContain("home_url( '/mobile/payment-return' )");
+  });
+
+  it("keeps confirmations and error alerts actionable in the browser", () => {
+    expect(webAlert).toContain('role", "alertdialog"');
+    expect(webAlert).toContain('aria-modal", "true"');
+    expect(webAlert).toContain("action.onPress?.()");
+    expect(webAlert).toContain('event.key === "Escape"');
+    expect(
+      alertConsumers.every((source) =>
+        source.includes('from "@/lib/platform-alert"'),
+      ),
+    ).toBe(true);
   });
 
   it("switches phone visitors without replacing desktop WordPress", () => {

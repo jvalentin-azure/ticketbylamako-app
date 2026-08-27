@@ -69,9 +69,11 @@ export async function mobileV2Fetch<T>(
 ): Promise<T> {
   const requireAuth = options.requireAuth !== false;
   const usesWebCookieSession = Platform.OS === "web";
-  const token = options.token ?? (requireAuth ? await getStoredToken() : null);
+  const token =
+    options.token ??
+    (requireAuth && !usesWebCookieSession ? await getStoredToken() : null);
 
-  if (requireAuth && !token) {
+  if (requireAuth && !usesWebCookieSession && !token) {
     throw new MobileApiError(
       "Authentication required",
       401,

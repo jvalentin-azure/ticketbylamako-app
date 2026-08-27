@@ -1,4 +1,5 @@
-import { Alert, Linking, StyleSheet, Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from "react-native";
+import { Linking, StyleSheet, Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from "react-native";
+import { Alert } from "@/lib/platform-alert";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 
 import { IconSymbol } from "@/components/ui/icon-symbol";

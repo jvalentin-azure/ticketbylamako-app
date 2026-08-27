@@ -1,11 +1,11 @@
 import {
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { Alert } from "@/lib/platform-alert";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";

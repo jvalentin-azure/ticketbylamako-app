@@ -4,11 +4,11 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  Alert,
   Linking,
   Platform,
   useWindowDimensions,
 } from "react-native";
+import { Alert } from "@/lib/platform-alert";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";

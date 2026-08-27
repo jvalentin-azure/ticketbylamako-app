@@ -8,10 +8,10 @@ import {
   StyleSheet,
   Dimensions,
   Modal,
-  Alert,
   Linking,
   Platform,
 } from "react-native";
+import { Alert } from "@/lib/platform-alert";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { useKeepAwake } from "expo-keep-awake";
 import { useLocalSearchParams, useRouter } from "expo-router";

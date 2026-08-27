@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert } from "react-native";
 import { useRouter } from "expo-router";
+import { Alert } from "@/lib/platform-alert";
 import {
   CheckoutStateScreen,
   ConfirmStep,

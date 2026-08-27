@@ -9,8 +9,8 @@ import {
   StyleSheet,
   FlatList,
   Share,
-  Alert,
 } from "react-native";
+import { Alert } from "@/lib/platform-alert";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScreenContainer } from "@/components/screen-container";

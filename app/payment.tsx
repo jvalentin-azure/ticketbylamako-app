@@ -1,6 +1,5 @@
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -9,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Alert } from "@/lib/platform-alert";
 import { useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 

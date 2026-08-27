@@ -9,8 +9,8 @@ import {
   Platform,
   Linking,
   ActivityIndicator,
-  Alert,
 } from "react-native";
+import { Alert } from "@/lib/platform-alert";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";

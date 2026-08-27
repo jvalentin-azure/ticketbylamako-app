@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { Alert } from "@/lib/platform-alert";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { Confetti } from "@/components/confetti";
