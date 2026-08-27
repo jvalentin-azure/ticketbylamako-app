@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 const appConfig = readFileSync(resolve("app.config.ts"), "utf8");
 const webAuth = readFileSync(resolve("lib/api/auth.web.ts"), "utf8");
 const mobileApi = readFileSync(resolve("lib/api/mobile.ts"), "utf8");
+const webSession = readFileSync(resolve("lib/api/web-session.web.ts"), "utf8");
 const socialAuth = readFileSync(resolve("lib/api/social-auth.ts"), "utf8");
 const commerce = readFileSync(
   resolve("scripts/lamako-mobile-api/includes/v2-commerce.php"),
@@ -97,6 +98,11 @@ describe("non-installable mobile web foundation", () => {
     expect(mobileApi).toContain(
       "requireAuth && !usesWebCookieSession && !token",
     );
+    expect(mobileApi).toContain('errorBody.code === "rest_cookie_invalid_nonce"');
+    expect(mobileApi).toContain("await refreshWebSessionNonce()");
+    expect(webSession).toContain('credentials: "include"');
+    expect(webSession).toContain('cache: "no-store"');
+    expect(webSession).toContain("if (refreshRequest) return refreshRequest");
   });
 
   it("provides same-origin, rate-limited WordPress web sessions", () => {

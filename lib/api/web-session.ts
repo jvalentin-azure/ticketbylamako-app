@@ -9,3 +9,7 @@ export function getWebSessionNonce(): string | null {
 export function setWebSessionNonce(_nonce: string | null): void {}
 
 export function clearWebSessionNonce(): void {}
+
+export async function refreshWebSessionNonce(): Promise<string | null> {
+  return null;
+}

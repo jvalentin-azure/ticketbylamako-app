@@ -1,7 +1,10 @@
 import { getStoredToken } from "./auth";
 import type { CheckoutFieldSchema } from "@/lib/types/commerce";
 import { Platform } from "react-native";
-import { getWebSessionNonce } from "./web-session";
+import {
+  getWebSessionNonce,
+  refreshWebSessionNonce,
+} from "./web-session";
 
 export const SITE_URL =
   process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
@@ -93,37 +96,58 @@ export async function mobileV2Fetch<T>(
   }
   if (options.body !== undefined) headers["Content-Type"] = "application/json";
 
-  const controller =
-    typeof AbortController !== "undefined" ? new AbortController() : null;
   const timeoutMs = options.timeoutMs ?? 30000;
-  const timeout = controller
-    ? setTimeout(() => controller.abort(), timeoutMs)
-    : null;
+  const requestUrl = mobileV2Url(endpoint, options.params);
+  const requestMethod =
+    options.method || (options.body !== undefined ? "POST" : "GET");
+  const requestBody =
+    options.body !== undefined ? JSON.stringify(options.body) : undefined;
 
-  let res: Response;
-  try {
-    res = await fetch(mobileV2Url(endpoint, options.params), {
-      method: options.method || (options.body !== undefined ? "POST" : "GET"),
-      headers,
-      body:
-        options.body !== undefined ? JSON.stringify(options.body) : undefined,
-      signal: controller?.signal,
-      credentials: usesWebCookieSession ? "include" : undefined,
-    });
-  } catch (error: any) {
-    if (error?.name === "AbortError") {
-      throw new MobileApiError(
-        "La requête a expiré. Vérifiez votre connexion puis réessayez.",
-        408,
-        "request_timeout",
-      );
+  const performRequest = async (): Promise<Response> => {
+    const controller =
+      typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timeout = controller
+      ? setTimeout(() => controller.abort(), timeoutMs)
+      : null;
+    try {
+      return await fetch(requestUrl, {
+        method: requestMethod,
+        headers: { ...headers },
+        body: requestBody,
+        signal: controller?.signal,
+        credentials: usesWebCookieSession ? "include" : undefined,
+      });
+    } catch (error: any) {
+      if (error?.name === "AbortError") {
+        throw new MobileApiError(
+          "La requête a expiré. Vérifiez votre connexion puis réessayez.",
+          408,
+          "request_timeout",
+        );
+      }
+      throw error;
+    } finally {
+      if (timeout) clearTimeout(timeout);
     }
-    throw error;
-  } finally {
-    if (timeout) clearTimeout(timeout);
+  };
+
+  let res = await performRequest();
+  let data = await parseResponse(res);
+  const errorBody =
+    data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+  if (
+    usesWebCookieSession &&
+    res.status === 403 &&
+    errorBody.code === "rest_cookie_invalid_nonce"
+  ) {
+    const refreshedNonce = await refreshWebSessionNonce();
+    if (refreshedNonce) {
+      headers["X-WP-Nonce"] = refreshedNonce;
+      res = await performRequest();
+      data = await parseResponse(res);
+    }
   }
 
-  const data = await parseResponse(res);
   if (!res.ok) {
     const body =
       data && typeof data === "object" ? (data as Record<string, unknown>) : {};

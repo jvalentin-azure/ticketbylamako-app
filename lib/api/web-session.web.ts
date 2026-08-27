@@ -1,6 +1,9 @@
 const NONCE_STORAGE_KEY = "ticketbylamako_wp_rest_nonce";
+const SITE_URL =
+  process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
 
 let memoryNonce: string | null = null;
+let refreshRequest: Promise<string | null> | null = null;
 
 function browserSessionStorage(): Storage | null {
   try {
@@ -25,4 +28,36 @@ export function setWebSessionNonce(nonce: string | null): void {
 
 export function clearWebSessionNonce(): void {
   setWebSessionNonce(null);
+}
+
+export async function refreshWebSessionNonce(): Promise<string | null> {
+  if (refreshRequest) return refreshRequest;
+
+  clearWebSessionNonce();
+  refreshRequest = fetch(
+    `${SITE_URL}/wp-json/lamako-mobile/v2/web-session`,
+    {
+      headers: { Accept: "application/json" },
+      credentials: "include",
+      cache: "no-store",
+    },
+  )
+    .then(async (response) => {
+      if (!response.ok) return null;
+      const data = (await response.json().catch(() => null)) as {
+        authenticated?: boolean;
+        nonce?: string;
+      } | null;
+      if (data?.authenticated && data.nonce) {
+        setWebSessionNonce(data.nonce);
+        return data.nonce;
+      }
+      return null;
+    })
+    .catch(() => null)
+    .finally(() => {
+      refreshRequest = null;
+    });
+
+  return refreshRequest;
 }
