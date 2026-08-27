@@ -118,13 +118,14 @@ describe("mobile ticket issuance integrity", () => {
 
   it("deduplicates repeated native checkout creation requests", () => {
     expect(commerce).toContain(
-      "function lamako_mobile_v2_checkout_idempotency_key",
+      "function lamako_mobile_v2_begin_checkout_idempotency",
     );
     expect(commerce).toContain("SELECT GET_LOCK(%s, %d)");
     expect(commerce).toContain("lamako_v2_checkout_in_progress");
-    expect(commerce).toContain(
-      "set_transient(\n            $idempotency_cache_key",
-    );
+    expect(commerce).toContain("_lamako_v2_idempotency_key_hash");
+    expect(commerce).toContain("_lamako_v2_idempotency_request_hash");
+    expect(commerce).toContain("lamako_v2_idempotency_conflict");
+    expect(commerce).toContain("'idempotentReplay' => (bool) $idempotent_replay");
   });
 
   it("voids tickets and releases seats when a mobile order closes unsuccessfully", () => {

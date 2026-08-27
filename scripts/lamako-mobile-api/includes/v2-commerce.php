@@ -2239,27 +2239,96 @@ function lamako_mobile_v2_restore_legacy_product_overrides( array $removed ) {
     }
 }
 
-function lamako_mobile_v2_checkout_idempotency_key( array $body ) {
-    $key = sanitize_text_field( $body['idempotencyKey'] ?? $body['idempotency_key'] ?? '' );
-    if ( $key === '' ) {
-        return '';
+function lamako_mobile_v2_canonicalize_request_value( $value ) {
+    if ( ! is_array( $value ) ) {
+        return $value;
     }
-    if ( strlen( $key ) < 16 || strlen( $key ) > 128 || ! preg_match( '/^[A-Za-z0-9._:-]+$/', $key ) ) {
+
+    $keys    = array_keys( $value );
+    $is_list = $keys === range( 0, count( $value ) - 1 );
+    if ( ! $is_list ) {
+        ksort( $value, SORT_STRING );
+    }
+
+    $canonicalized = [];
+    foreach ( $value as $key => $item ) {
+        $canonicalized[ $key ] = lamako_mobile_v2_canonicalize_request_value( $item );
+    }
+
+    return $canonicalized;
+}
+
+/**
+ * Bind an idempotency key to one user and one canonical checkout payload.
+ * Only HMAC/hash material is persisted; the raw key never reaches order meta.
+ *
+ * @return array|WP_Error
+ */
+function lamako_mobile_v2_begin_checkout_idempotency( WP_REST_Request $request, array $body, $user_id ) {
+    global $wpdb;
+
+    $key = trim( (string) $request->get_header( 'Idempotency-Key' ) );
+    if ( $key === '' ) {
+        $key = trim( (string) ( $body['idempotencyKey'] ?? $body['idempotency_key'] ?? '' ) );
+    }
+    if ( $key === '' ) {
+        return [
+            'enabled'      => false,
+            'key_hash'     => '',
+            'request_hash' => '',
+            'lock_name'    => '',
+            'order'        => false,
+        ];
+    }
+    if ( ! preg_match( '/^[A-Za-z0-9._:~-]{16,128}$/', $key ) ) {
         return new WP_Error(
             'lamako_v2_idempotency_key_invalid',
-            'The checkout idempotency key is invalid.',
+            'Idempotency-Key must contain 16 to 128 URL-safe characters.',
             [ 'status' => 400 ]
         );
     }
-    return $key;
-}
 
-function lamako_mobile_v2_checkout_idempotency_cache_key( $user_id, $idempotency_key ) {
-    return 'lamako_v2_checkout_req_' . md5( absint( $user_id ) . '|' . (string) $idempotency_key );
-}
+    $payload = $body;
+    unset( $payload['idempotencyKey'], $payload['idempotency_key'] );
+    $payload      = lamako_mobile_v2_canonicalize_request_value( $payload );
+    $payload_json = wp_json_encode( $payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+    $key_hash     = hash_hmac( 'sha256', absint( $user_id ) . '|checkout|' . $key, wp_salt( 'auth' ) );
+    $request_hash = hash( 'sha256', (string) $payload_json );
+    $lock_name    = 'lamako:v2:' . substr( $key_hash, 0, 48 );
+    $lock_result  = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $lock_name, 5 ) );
 
-function lamako_mobile_v2_checkout_idempotency_lock_name( $user_id, $idempotency_key ) {
-    return 'lamako_v2_checkout_' . substr( hash( 'sha256', absint( $user_id ) . '|' . (string) $idempotency_key ), 0, 40 );
+    if ( '1' !== (string) $lock_result ) {
+        return new WP_Error(
+            'lamako_v2_checkout_in_progress',
+            'This checkout is already being prepared. Please wait a moment.',
+            [ 'status' => 409, 'retryable' => true ]
+        );
+    }
+
+    $orders = wc_get_orders( [
+        'limit'      => 1,
+        'meta_key'   => '_lamako_v2_idempotency_key_hash',
+        'meta_value' => $key_hash,
+        'orderby'    => 'date',
+        'order'      => 'DESC',
+    ] );
+    $order = ! empty( $orders ) ? $orders[0] : false;
+    if ( $order && ! hash_equals( (string) $order->get_meta( '_lamako_v2_idempotency_request_hash' ), $request_hash ) ) {
+        $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
+        return new WP_Error(
+            'lamako_v2_idempotency_conflict',
+            'This idempotency key was already used with a different checkout payload.',
+            [ 'status' => 409 ]
+        );
+    }
+
+    return [
+        'enabled'      => true,
+        'key_hash'     => $key_hash,
+        'request_hash' => $request_hash,
+        'lock_name'    => $lock_name,
+        'order'        => $order,
+    ];
 }
 
 function lamako_mobile_v2_release_checkout_lock( $lock_name ) {
@@ -2268,6 +2337,25 @@ function lamako_mobile_v2_release_checkout_lock( $lock_name ) {
     }
     global $wpdb;
     $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
+}
+
+function lamako_mobile_v2_checkout_response( WC_Order $order, $token, $expires_at, $idempotent_replay = false ) {
+    $token_hash = lamako_mobile_v2_token_hash( $token );
+    $order->update_meta_data( '_lamako_v2_checkout_token_hash', $token_hash );
+    $order->update_meta_data( '_lamako_v2_checkout_expires_at', gmdate( 'c', $expires_at ) );
+    $order->save();
+    set_transient( 'lamako_v2_checkout_' . $token_hash, $order->get_id(), LAMAKO_MOBILE_V2_CHECKOUT_TTL + ( 5 * MINUTE_IN_SECONDS ) );
+
+    return rest_ensure_response( [
+        'checkoutToken'    => $token,
+        'checkoutUrl'      => lamako_mobile_v2_checkout_url( $token ),
+        'orderId'          => $order->get_id(),
+        'expiresAt'        => gmdate( 'c', $expires_at ),
+        'total'            => $order->get_total(),
+        'currency'         => $order->get_currency(),
+        'itemCount'        => $order->get_item_count(),
+        'idempotentReplay' => (bool) $idempotent_replay,
+    ] );
 }
 
 function lamako_mobile_v2_create_checkout( WP_REST_Request $request ) {
@@ -2342,37 +2430,15 @@ function lamako_mobile_v2_create_checkout( WP_REST_Request $request ) {
         }
     }
 
-    $idempotency_key = lamako_mobile_v2_checkout_idempotency_key( $body );
-    if ( is_wp_error( $idempotency_key ) ) {
-        return $idempotency_key;
+    $idempotency = lamako_mobile_v2_begin_checkout_idempotency( $request, $body, $user_id );
+    if ( is_wp_error( $idempotency ) ) {
+        return $idempotency;
     }
-    $idempotency_cache_key = '';
-    $idempotency_lock_name = '';
-    if ( $idempotency_key !== '' ) {
-        $idempotency_cache_key = lamako_mobile_v2_checkout_idempotency_cache_key( $user_id, $idempotency_key );
-        $cached_response       = get_transient( $idempotency_cache_key );
-        if ( is_array( $cached_response ) && ! empty( $cached_response['orderId'] ) ) {
-            return rest_ensure_response( $cached_response );
-        }
-
-        global $wpdb;
-        $idempotency_lock_name = lamako_mobile_v2_checkout_idempotency_lock_name( $user_id, $idempotency_key );
-        $lock_acquired         = (int) $wpdb->get_var(
-            $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $idempotency_lock_name, 2 )
-        );
-        if ( $lock_acquired !== 1 ) {
-            return new WP_Error(
-                'lamako_v2_checkout_in_progress',
-                'This checkout is already being prepared. Please wait a moment.',
-                [ 'status' => 409 ]
-            );
-        }
-
-        $cached_response = get_transient( $idempotency_cache_key );
-        if ( is_array( $cached_response ) && ! empty( $cached_response['orderId'] ) ) {
-            lamako_mobile_v2_release_checkout_lock( $idempotency_lock_name );
-            return rest_ensure_response( $cached_response );
-        }
+    $idempotency_lock_name = (string) ( $idempotency['lock_name'] ?? '' );
+    if ( ! empty( $idempotency['order'] ) ) {
+        $response = lamako_mobile_v2_checkout_response( $idempotency['order'], $token, $expires_at, true );
+        lamako_mobile_v2_release_checkout_lock( $idempotency_lock_name );
+        return $response;
     }
 
     $removed_filters = lamako_mobile_v2_temporarily_disable_legacy_product_overrides();
@@ -2421,6 +2487,10 @@ function lamako_mobile_v2_create_checkout( WP_REST_Request $request ) {
         $order->update_meta_data( '_lamako_checkout_source', $source );
         $order->update_meta_data( '_lamako_v2_checkout_token_hash', $token_hash );
         $order->update_meta_data( '_lamako_v2_checkout_expires_at', gmdate( 'c', $expires_at ) );
+        if ( ! empty( $idempotency['enabled'] ) ) {
+            $order->update_meta_data( '_lamako_v2_idempotency_key_hash', $idempotency['key_hash'] );
+            $order->update_meta_data( '_lamako_v2_idempotency_request_hash', $idempotency['request_hash'] );
+        }
         $order->add_order_note( 'Lamako Mobile v2 checkout session created.' );
         $order->save();
 
@@ -2435,7 +2505,10 @@ function lamako_mobile_v2_create_checkout( WP_REST_Request $request ) {
         // Tickera/WooCommerce hooks can rebuild tc_cart_info while totals and
         // ticket metadata are prepared, so persist form answers last.
         lamako_mobile_v2_persist_checkout_field_answers( $order, $validated, $order_item_ids, $buyer_fields );
-    } catch ( Exception $e ) {
+    } catch ( Throwable $e ) {
+        if ( isset( $order ) && $order instanceof WC_Order && ! $order->is_paid() ) {
+            $order->delete( true );
+        }
         lamako_mobile_v2_restore_legacy_product_overrides( $removed_filters );
         lamako_mobile_v2_release_checkout_lock( $idempotency_lock_name );
         return new WP_Error( 'lamako_v2_checkout_failed', $e->getMessage(), [ 'status' => 500 ] );
@@ -2443,27 +2516,9 @@ function lamako_mobile_v2_create_checkout( WP_REST_Request $request ) {
 
     lamako_mobile_v2_restore_legacy_product_overrides( $removed_filters );
 
-    set_transient( 'lamako_v2_checkout_' . $token_hash, $order->get_id(), LAMAKO_MOBILE_V2_CHECKOUT_TTL + ( 5 * MINUTE_IN_SECONDS ) );
-
-    $response_data = [
-        'checkoutToken' => $token,
-        'checkoutUrl'   => lamako_mobile_v2_checkout_url( $token ),
-        'orderId'       => $order->get_id(),
-        'expiresAt'     => gmdate( 'c', $expires_at ),
-        'total'         => $order->get_total(),
-        'currency'      => $order->get_currency(),
-        'itemCount'     => $order->get_item_count(),
-    ];
-    if ( $idempotency_cache_key !== '' ) {
-        set_transient(
-            $idempotency_cache_key,
-            $response_data,
-            LAMAKO_MOBILE_V2_CHECKOUT_TTL + ( 5 * MINUTE_IN_SECONDS )
-        );
-    }
+    $response = lamako_mobile_v2_checkout_response( $order, $token, $expires_at, false );
     lamako_mobile_v2_release_checkout_lock( $idempotency_lock_name );
-
-    return rest_ensure_response( $response_data );
+    return $response;
 }
 
 function lamako_mobile_v2_create_seating_session( WP_REST_Request $request ) {
