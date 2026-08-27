@@ -34,12 +34,18 @@ export async function refreshWebSessionNonce(): Promise<string | null> {
   if (refreshRequest) return refreshRequest;
 
   clearWebSessionNonce();
+  const controller =
+    typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeout = controller
+    ? setTimeout(() => controller.abort(), 8_000)
+    : null;
   refreshRequest = fetch(
     `${SITE_URL}/wp-json/lamako-mobile/v2/web-session`,
     {
       headers: { Accept: "application/json" },
       credentials: "include",
       cache: "no-store",
+      signal: controller?.signal,
     },
   )
     .then(async (response) => {
@@ -56,6 +62,7 @@ export async function refreshWebSessionNonce(): Promise<string | null> {
     })
     .catch(() => null)
     .finally(() => {
+      if (timeout) clearTimeout(timeout);
       refreshRequest = null;
     });
 

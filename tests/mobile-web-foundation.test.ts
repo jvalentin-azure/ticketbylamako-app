@@ -103,6 +103,7 @@ describe("non-installable mobile web foundation", () => {
     expect(webSession).toContain('credentials: "include"');
     expect(webSession).toContain('cache: "no-store"');
     expect(webSession).toContain("if (refreshRequest) return refreshRequest");
+    expect(webSession).toContain("controller.abort()");
   });
 
   it("provides same-origin, rate-limited WordPress web sessions", () => {
