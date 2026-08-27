@@ -272,6 +272,12 @@ function lamako_mobile_v2_register_routes() {
         'permission_callback' => 'lamako_mobile_v2_require_user',
     ] );
 
+    register_rest_route( $namespace, '/seating-sessions/(?P<token>[A-Za-z0-9_-]+)/cancel', [
+        'methods'             => WP_REST_Server::CREATABLE,
+        'callback'            => 'lamako_mobile_v2_cancel_seating_session',
+        'permission_callback' => 'lamako_mobile_v2_require_user',
+    ] );
+
     register_rest_route( $namespace, '/seating-sessions/(?P<token>[A-Za-z0-9_-]+)/order', [
         'methods'             => WP_REST_Server::CREATABLE,
         'callback'            => 'lamako_mobile_v2_create_seating_order',
@@ -2566,6 +2572,40 @@ function lamako_mobile_v2_get_seating_session_status( WP_REST_Request $request )
         'checkoutUrl'   => function_exists( 'wc_get_checkout_url' ) ? wc_get_checkout_url() : home_url( '/checkout/' ),
         'order'         => $order ? lamako_mobile_v2_order_summary( $order, true ) : null,
         'ticketsReady'  => $order ? count( lamako_mobile_v2_get_tickets_for_order( $order ) ) > 0 : false,
+    ] );
+}
+
+function lamako_mobile_v2_cancel_seating_session( WP_REST_Request $request ) {
+    $token = sanitize_text_field( $request['token'] ?? '' );
+    $flow  = lamako_mobile_v2_get_seating_flow( $token );
+    if ( ! is_array( $flow ) ) {
+        return new WP_Error( 'lamako_v2_seating_session_not_found', 'Seating session not found.', [ 'status' => 404 ] );
+    }
+    if ( (int) ( $flow['user_id'] ?? 0 ) !== get_current_user_id() && ! current_user_can( 'manage_woocommerce' ) ) {
+        return new WP_Error( 'lamako_v2_forbidden', 'You cannot cancel this seating session.', [ 'status' => 403 ] );
+    }
+
+    $order = lamako_mobile_v2_find_seating_order( $flow );
+    if ( $order instanceof WC_Order ) {
+        if ( lamako_mobile_v2_payment_is_confirmed( $order ) ) {
+            return new WP_Error( 'lamako_v2_seating_already_paid', 'A paid seating order cannot be modified.', [ 'status' => 409 ] );
+        }
+        if ( lamako_mobile_v2_order_has_protected_payment_attempt( $order ) ) {
+            return new WP_Error( 'lamako_v2_seating_payment_pending', 'Payment verification is in progress. The seats cannot be modified yet.', [ 'status' => 409 ] );
+        }
+        if ( ! $order->has_status( 'cancelled' ) ) {
+            $cancelled = lamako_mobile_v2_cancel_unpaid_payment( $order, 'Customer released the seating selection before payment.' );
+            if ( ! $cancelled || ! $order->has_status( 'cancelled' ) ) {
+                return new WP_Error( 'lamako_v2_seating_release_failed', 'The seating order could not be cancelled safely.', [ 'status' => 500 ] );
+            }
+        }
+    }
+
+    lamako_mobile_v2_delete_seating_flow( $token );
+    return rest_ensure_response( [
+        'cancelled' => true,
+        'orderId'   => $order instanceof WC_Order ? $order->get_id() : null,
+        'released'  => $order instanceof WC_Order ? $order->has_status( 'cancelled' ) : false,
     ] );
 }
 

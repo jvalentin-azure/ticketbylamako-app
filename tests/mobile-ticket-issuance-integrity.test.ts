@@ -95,6 +95,27 @@ describe("mobile ticket issuance integrity", () => {
     );
   });
 
+  it("releases an owned unpaid seating session without touching protected payments", () => {
+    expect(commerce).toContain(
+      "'/seating-sessions/(?P<token>[A-Za-z0-9_-]+)/cancel'",
+    );
+    expect(commerce).toContain(
+      "function lamako_mobile_v2_cancel_seating_session",
+    );
+    expect(commerce).toContain(
+      "lamako_mobile_v2_payment_is_confirmed( $order )",
+    );
+    expect(commerce).toContain(
+      "lamako_mobile_v2_order_has_protected_payment_attempt( $order )",
+    );
+    expect(commerce).toContain(
+      "lamako_mobile_v2_cancel_unpaid_payment( $order",
+    );
+    expect(commerce).toContain(
+      "lamako_mobile_v2_delete_seating_flow( $token )",
+    );
+  });
+
   it("deduplicates repeated native checkout creation requests", () => {
     expect(commerce).toContain(
       "function lamako_mobile_v2_checkout_idempotency_key",
