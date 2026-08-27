@@ -8,7 +8,7 @@
     "dev:server": "cross-env NODE_ENV=development tsx watch server/_core/index.ts",
     "dev:metro": "cross-env EXPO_USE_METRO_WORKSPACE_ROOT=1 npx expo start --web --port ${EXPO_PORT:-8081}",
     "web": "cross-env EXPO_USE_METRO_WORKSPACE_ROOT=1 EXPO_PUBLIC_WEB_BASE_URL=/mobile expo start --web",
-    "export:web": "cross-env EXPO_PUBLIC_WEB_BASE_URL=/mobile expo export --platform web --output-dir dist-web",
+    "export:web": "cross-env EXPO_PUBLIC_WEB_BASE_URL=/mobile expo export --platform web --output-dir dist-web --clear",
     "build": "esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc --noEmit",
