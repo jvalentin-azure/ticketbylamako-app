@@ -3,8 +3,8 @@ import * as Crypto from "expo-crypto";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import { Platform } from "react-native";
-import { User } from "./auth";
-import { setWebSessionNonce } from "./web-session";
+import type { User } from "./auth";
+import { clearWebSessionNonce } from "./web-session";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -190,6 +190,7 @@ export async function socialLogin(
   credential: SocialCredential,
 ): Promise<User> {
   const isWeb = Platform.OS === "web";
+  if (isWeb) clearWebSessionNonce();
   const res = await fetchWithTimeout(
     `${SITE_URL_BASE}/wp-json/lamako-mobile/${isWeb ? "v2/web-session/social" : "v1/social-login"}`,
     {
@@ -215,11 +216,16 @@ export async function socialLogin(
 
   if (isWeb) {
     const data: WebSocialLoginResponse = await res.json();
-    if (!data.authenticated || !data.user || !data.nonce) {
+    if (!data.authenticated || !data.user) {
       throw new Error(data.message || "Échec de l'authentification");
     }
-    setWebSessionNonce(data.nonce);
-    return data.user;
+    const { getStoredUser, validateToken } = await import("./auth");
+    const valid = await validateToken();
+    const sessionUser = valid ? await getStoredUser() : null;
+    if (!sessionUser || sessionUser.id !== data.user.id) {
+      throw new Error("La session sécurisée n'a pas pu être confirmée.");
+    }
+    return sessionUser;
   }
 
   const data: SocialLoginResponse = await res.json();

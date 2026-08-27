@@ -110,6 +110,10 @@ async function sessionMutation(
   endpoint: "login" | "register",
   body: Record<string, string>,
 ): Promise<User> {
+  // A stale nonce would make WordPress reject an otherwise valid account
+  // switch before the same-origin login/register handler can run.
+  cachedUser = null;
+  clearWebSessionNonce();
   const response = await fetchWithTimeout(
     `${SITE_URL}/wp-json/lamako-mobile/v2/web-session/${endpoint}`,
     {
@@ -122,11 +126,26 @@ async function sessionMutation(
   );
   const raw = await parseJson(response);
   const data = raw as unknown as WebSessionResponse;
-  if (!response.ok || !data.authenticated || !data.user || !data.nonce) {
+  if (!response.ok || !data.authenticated || !data.user) {
     throw new Error(responseMessage(raw, "Impossible d'ouvrir la session."));
   }
-  acceptSession(data);
-  return data.user;
+
+  // The nonce produced in the same response as wp_set_auth_cookie() is not
+  // yet bound to the new cookie's session token. Bootstrap once more without
+  // a nonce so WordPress can validate the HttpOnly cookie and mint a nonce
+  // that protected REST requests can actually use.
+  cachedUser = data.user;
+  const verifiedSession = await fetchSession(true);
+  if (
+    !verifiedSession.authenticated ||
+    !verifiedSession.user ||
+    verifiedSession.user.id !== data.user.id
+  ) {
+    cachedUser = null;
+    clearWebSessionNonce();
+    throw new Error("La session sécurisée n'a pas pu être confirmée.");
+  }
+  return verifiedSession.user;
 }
 
 export async function storeUser(user: User): Promise<void> {
