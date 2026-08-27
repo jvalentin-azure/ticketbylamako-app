@@ -299,6 +299,8 @@ export interface MobileOrderItem {
   subtotal?: string;
   price?: number;
   sku?: string;
+  isTicket?: boolean;
+  isSeating?: boolean;
   seatLabels?: string[];
 }
 

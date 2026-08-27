@@ -6,6 +6,11 @@ import { paymentStyles as styles } from "@/components/payment/payment-screen.sty
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import type { MobileOrderSummary, MobilePaymentMethod } from "@/lib/api/mobile";
 import { formatAriary } from "@/lib/format";
+import {
+  isTicketOrderItem,
+  orderItemQuantityLabel,
+  orderItemsCountLabel,
+} from "@/lib/order-item-presentation";
 import { getPaymentMethodPresentation } from "@/lib/payment-method-presentation";
 
 type Colors = Record<string, string>;
@@ -93,7 +98,7 @@ export function PaymentHeader({
 
 export function PaymentProgress({ colors }: { colors: Colors }) {
   const steps = [
-    { label: "Billets", done: true },
+    { label: "Panier", done: true },
     { label: "Informations", done: true },
     { label: "Paiement", done: false },
   ];
@@ -157,10 +162,8 @@ export function OrderSummary({
 }) {
   const subtotal = Number(order.subtotal || order.total || 0);
   const discount = Number(order.discountTotal || 0);
-  const ticketCount = (order.items || []).reduce(
-    (total, item) => total + Number(item.quantity || 0),
-    0,
-  );
+  const items = order.items || [];
+  const ticketsOnly = items.length > 0 && items.every(isTicketOrderItem);
   return (
     <View
       style={[
@@ -183,9 +186,13 @@ export function OrderSummary({
             { backgroundColor: colors.primary + "14" },
           ]}
         >
-          <IconSymbol name="ticket.fill" size={17} color={colors.primary} />
+          <IconSymbol
+            name={ticketsOnly ? "ticket.fill" : "bag.fill"}
+            size={17}
+            color={colors.primary}
+          />
           <Text style={[styles.ticketCountText, { color: colors.primary }]}>
-            {ticketCount} billet{ticketCount > 1 ? "s" : ""}
+            {orderItemsCountLabel(items)}
           </Text>
         </View>
       </View>
@@ -201,12 +208,14 @@ export function OrderSummary({
             style={[styles.itemAccent, { backgroundColor: colors.primary }]}
           />
           <View style={styles.itemCopy}>
-            <Text style={[styles.itemType, { color: colors.primary }]}>BILLET</Text>
+            <Text style={[styles.itemType, { color: colors.primary }]}>
+              {isTicketOrderItem(item) ? "BILLET" : "ARTICLE"}
+            </Text>
             <Text style={[styles.itemName, { color: colors.foreground }]}>
               {item.name}
             </Text>
             <Text style={[styles.itemQty, { color: colors.muted }]}>
-              {item.quantity} billet{item.quantity > 1 ? "s" : ""}
+              {orderItemQuantityLabel(item)}
             </Text>
             {item.seatLabels?.length ? (
               <View style={styles.seatRow}>

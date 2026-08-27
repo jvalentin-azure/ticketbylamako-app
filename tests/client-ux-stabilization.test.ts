@@ -23,7 +23,7 @@ describe("client UX stabilization", () => {
     expect(checkout).toContain("cartNeedsCheckoutFieldSchema(items)");
   });
 
-  it("shows a structured payment summary with ticket count, seats and discount", () => {
+  it("shows a structured payment summary with item count, seats and discount", () => {
     const payment = read("components", "payment", "PaymentScreenParts.tsx");
     const paymentStyles = read(
       "components",
@@ -31,6 +31,8 @@ describe("client UX stabilization", () => {
       "payment-screen.styles.ts",
     );
     expect(payment).toContain("ticketCountBadge");
+    expect(payment).toContain("orderItemsCountLabel");
+    expect(payment).toContain('isTicketOrderItem(item) ? "BILLET" : "ARTICLE"');
     expect(payment).toContain("item.seatLabels.join");
     expect(payment).toContain("Remise appliquée");
     expect(paymentStyles).toContain('fontWeight: "800"');

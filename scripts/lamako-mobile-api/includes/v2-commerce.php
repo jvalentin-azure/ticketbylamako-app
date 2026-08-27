@@ -6210,6 +6210,7 @@ function lamako_mobile_v2_order_summary( WC_Order $order, $include_items = false
             $chart_ids = array_values( array_filter( array_map( 'absint', explode( ',', $chart_ids_raw ) ) ) );
             $is_seating = ! empty( $seat_labels )
                 || ( $product && 'yes' === get_post_meta( $product->get_id(), '_tc_used_for_seatings', true ) );
+            $is_ticket = 'yes' === get_post_meta( $item->get_product_id(), '_tc_is_ticket', true );
             $data['items'][] = [
                 'id'         => $item_id,
                 'name'       => html_entity_decode( $item->get_name(), ENT_QUOTES, 'UTF-8' ),
@@ -6219,6 +6220,7 @@ function lamako_mobile_v2_order_summary( WC_Order $order, $include_items = false
                 'subtotal'   => $item->get_subtotal(),
                 'price'      => (float) $item->get_total() / $quantity,
                 'sku'        => $product ? $product->get_sku() : '',
+                'isTicket'   => $is_ticket,
                 'isSeating'  => $is_seating,
                 'seatLabels' => $seat_labels,
                 'seatIds'    => $seat_ids,
