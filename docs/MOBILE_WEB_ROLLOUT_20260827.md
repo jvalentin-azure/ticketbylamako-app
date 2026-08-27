@@ -44,16 +44,19 @@ Le build staging doit définir `EXPO_PUBLIC_SITE_URL=https://staging.ticketbylam
 
 ## Release staging active
 
-- commit client : `e835fcd` ;
-- release immuable : `tbl-mobile-web-e835fcd-20260827T211337Z` ;
-- bundle : `entry-7adb538408d940dcd746b4972ddae262.js` ;
-- SHA-256 du bundle : `8fa604ec9f376a187986c8a1061c6662a760fa2b9de95d03b3a4363a1dbe9538` ;
-- SHA-256 de l'archive : `4896a5cbd3ecffd628d15636e6155c428cec7690a3ef3d403c40fca3a875378e` ;
-- rollback du bundle précédent : `tmp/tbl-mobile-web-e835fcd-20260827T211337Z/backup/mobile.before` ;
+- commit client : `94084df` ;
+- release immuable : `tbl-mobile-web-94084df-20260828T011900Z` ;
+- bundle : `entry-9c0c4cb9b6271ddab2c4206439b290ce.js` ;
+- SHA-256 du bundle : `a48b1c4a1079845fd60175a97ea1cdf77ce633e0228f22357716c92ef577ca61` ;
+- SHA-256 de l'archive : `eee5d4ad22806ac243b7eb29b51d349b458d38648add6dd8a45a43fc8be98c3c` ;
+- SHA-256 de l'API `v2-commerce.php` active : `51198073a3c507f81d995f7e1bd67bb5c45d67cec1a5b08260de40c6d6667272` ;
+- SHA-256 de l'index actif : `bed40d11332842bfb5245e7a3ade150f4c03707d6dd265b69b9f1cd71b05ed40` ;
+- sauvegarde API : `tmp/tbl-mobile-web-94084df-20260828T011900Z/backup/v2-commerce.php.before` ;
+- rollback du bundle précédent : `tmp/tbl-mobile-web-94084df-20260828T011900Z/release/mobile.previous` ;
 - URL de QA : `https://staging.ticketbylamako.com/mobile/` ;
 - `LAMAKO_MOBILE_WEB_ENABLED` absent de `wp-config.php`, donc aucun visiteur mobile de la racine WordPress n'est redirigé.
 
-Le bundle a été construit avec l'origine staging. Il ne contient pas l'origine production, ni manifest, service worker, prompt d'installation ou stockage JWT navigateur. Aucun second domaine n'est nécessaire ou souhaitable.
+Les constantes d'API du bundle pointent vers le staging. Trois URL publiques de contact/partage restent volontairement sur le domaine public, sans servir d'origine API. Le bundle ne contient ni manifest, service worker, prompt d'installation ou stockage JWT navigateur. Aucun second domaine n'est nécessaire ou souhaitable.
 
 ## Déploiement staging proposé
 
@@ -96,12 +99,13 @@ Les paiements doivent utiliser exclusivement le sandbox staging et des comptes d
 
 ### Code et artefact
 
-- Vitest : 59 fichiers réussis, 3 ignorés ; 304 tests réussis, 4 ignorés intentionnellement ;
+- Vitest : 60 fichiers réussis, 3 ignorés ; 308 tests réussis, 4 ignorés intentionnellement ;
 - TypeScript `tsc --noEmit` : réussi ;
 - lint Expo : réussi ;
 - export web Expo avec cache Metro vidé : réussi ;
 - routes `/mobile/`, `/mobile/event/12673`, `/mobile/shop`, `/mobile/cart` et `/mobile/login` : HTTP 200 ;
 - bundle statique : HTTP 200, cache immuable ; index : `no-store` ;
+- route API publique `/wp-json/lamako-mobile/v2/public/shop-data` : HTTP 200 ;
 - CSP, `nosniff`, politique de référent, permissions et protection d'iframe présentes ;
 - un user-agent iPhone sur `/` reste sur WordPress pendant que le flag est désactivé.
 
@@ -124,9 +128,14 @@ Les paiements doivent utiliser exclusivement le sandbox staging et des comptes d
 ### Paiements et limites restantes
 
 - CyberSource est configuré en environnement `sandbox` sur staging ;
+- le parcours CyberSource sandbox a été validé de bout en bout dans le navigateur : Hosted Checkout, carte de test, 3-D Secure, retour applicatif, confirmation persistante après actualisation et historique de commande payé ;
+- le serveur a conservé exactement une commande et une transaction `ACCEPT` de 300 MGA pour cette tentative, sans billet émis puisque le produit QA était un article boutique ;
+- la signature de callback, l'idempotence du rejeu, le maintien d'une commande non payée et le refus d'une signature altérée ont réussi dans le smoke test isolé ;
+- le récapitulatif distingue maintenant les articles boutique des billets : `Panier`, `1 article`, `ARTICLE` et quantité `1 article` ont été vérifiés sur la release active ;
+- les deux commandes QA, la transaction sandbox et le compte synthétique ont été supprimés après vérification ; le contrôle final indique zéro commande, transaction ou billet résiduel ;
 - Airtel Money, MVola et Orange utilisent des endpoints qui ressemblent aux endpoints de production et n'exposent aucun mode test vérifiable dans leur configuration active ;
 - aucun appel de paiement Airtel, MVola ou Orange n'a été lancé, afin d'éviter un paiement réel ;
-- les scénarios succès, attente, annulation et retour de paiement ne sont donc pas encore validés de bout en bout ;
+- les scénarios d'attente et d'annulation CyberSource, ainsi que tous les scénarios Airtel, MVola et Orange, ne sont pas encore validés de bout en bout ;
 - Safari iOS et Chrome Android sur appareils physiques, les fournisseurs sociaux réels et les Wallets physiques restent à vérifier ;
 - l'iframe WordPress embarquée émet des avertissements de dépréciation jQuery/blocs et Complianz, sans erreur applicative observée.
 
@@ -162,6 +171,6 @@ Si l'API web-session est en cause, restaurer les sauvegardes de `v2-commerce.php
 
 ## Décision actuelle
 
-- `GO` pour poursuivre la recette sur l'URL directe staging `/mobile` avec le flag désactivé ;
-- `NO GO` pour activer le routage automatique staging ou promouvoir en production tant que les moyens de paiement mobile ne disposent pas d'un sandbox vérifiable et que la matrice de paiement n'a pas été exécutée ;
+- `GO` pour la release directe staging `/mobile` avec le flag désactivé et pour le parcours de succès CyberSource sandbox ;
+- `NO GO` pour activer le routage automatique staging ou promouvoir cette expérience web mobile en production tant que les moyens de paiement mobile ne disposent pas d'un sandbox vérifiable et que leur matrice de paiement n'a pas été exécutée ;
 - `NO GO` également pour un passage à 100 % sans contrôle Safari iOS et Chrome Android sur appareils physiques.
