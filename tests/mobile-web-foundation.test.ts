@@ -80,6 +80,10 @@ describe("non-installable mobile web foundation", () => {
     expect(webAuth).not.toContain('const TOKEN_KEY = "jwt_token"');
     expect(webAuth).toContain("const verifiedSession = await fetchSession(true)");
     expect(webAuth).toContain("verifiedSession.user.id !== data.user.id");
+    expect(webAuth).toContain("requestSessionWithNonceRecovery");
+    expect(webAuth).toContain(
+      'errorData.code === "rest_cookie_invalid_nonce"',
+    );
     expect(socialAuth).toContain("v2/web-session/social");
     expect(socialAuth).toContain("const valid = await validateToken()");
     expect(socialAuth).toContain("session WordPress HttpOnly");

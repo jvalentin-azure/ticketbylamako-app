@@ -79,10 +79,8 @@ function acceptSession(data: WebSessionResponse): WebSessionResponse {
   return { authenticated: false };
 }
 
-async function fetchSession(force = false): Promise<WebSessionResponse> {
-  if (!force && sessionRequest) return sessionRequest;
-
-  sessionRequest = fetchWithTimeout(
+async function requestSessionWithNonceRecovery(): Promise<WebSessionResponse> {
+  let response = await fetchWithTimeout(
     `${SITE_URL}/wp-json/lamako-mobile/v2/web-session`,
     {
       headers: sessionHeaders(),
@@ -90,14 +88,36 @@ async function fetchSession(force = false): Promise<WebSessionResponse> {
       cache: "no-store",
     },
     8_000,
-  )
-    .then(async (response) => {
-      if (!response.ok) return acceptSession({ authenticated: false });
-      return acceptSession(
-        (await parseJson(response)) as unknown as WebSessionResponse,
+  );
+
+  if (response.status === 403) {
+    const errorData = await parseJson(response);
+    if (errorData.code === "rest_cookie_invalid_nonce") {
+      clearWebSessionNonce();
+      response = await fetchWithTimeout(
+        `${SITE_URL}/wp-json/lamako-mobile/v2/web-session`,
+        {
+          headers: { Accept: "application/json" },
+          credentials: "include",
+          cache: "no-store",
+        },
+        8_000,
       );
-    })
-    .catch(() => ({ authenticated: false }));
+    }
+  }
+
+  if (!response.ok) return acceptSession({ authenticated: false });
+  return acceptSession(
+    (await parseJson(response)) as unknown as WebSessionResponse,
+  );
+}
+
+async function fetchSession(force = false): Promise<WebSessionResponse> {
+  if (!force && sessionRequest) return sessionRequest;
+
+  sessionRequest = requestSessionWithNonceRecovery().catch(() => ({
+    authenticated: false,
+  }));
 
   try {
     return await sessionRequest;
