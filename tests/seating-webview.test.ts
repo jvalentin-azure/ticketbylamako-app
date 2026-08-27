@@ -114,5 +114,7 @@ describe("seating WebView protocol", () => {
     expect(flow).not.toContain("injectedJavaScript={");
     expect(flow.match(/refreshSeatingOrder\(8, 600\)/g)).toHaveLength(2);
     expect(flow).toContain("getMobileSeatingSessionStatus");
+    expect(flow).toContain("cancelMobileSeatingSession(flowToken)");
+    expect(flow).toContain("void releaseAndClose()");
   });
 });

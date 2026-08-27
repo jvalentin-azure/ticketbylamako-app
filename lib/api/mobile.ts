@@ -370,6 +370,12 @@ export interface MobileSeatingSessionStatusResponse {
   ticketsReady: boolean;
 }
 
+export interface CancelMobileSeatingSessionResponse {
+  cancelled: boolean;
+  orderId: number | null;
+  released: boolean;
+}
+
 export interface MobilePaymentReturnStatusResponse {
   kind: "checkout" | "seating";
   token: string;
@@ -655,6 +661,15 @@ export async function getMobileSeatingSessionStatus(
 ): Promise<MobileSeatingSessionStatusResponse> {
   return mobileV2Fetch<MobileSeatingSessionStatusResponse>(
     `seating-sessions/${encodeURIComponent(flowToken)}/status`,
+  );
+}
+
+export async function cancelMobileSeatingSession(
+  flowToken: string,
+): Promise<CancelMobileSeatingSessionResponse> {
+  return mobileV2Fetch<CancelMobileSeatingSessionResponse>(
+    `seating-sessions/${encodeURIComponent(flowToken)}/cancel`,
+    { method: "POST" },
   );
 }
 

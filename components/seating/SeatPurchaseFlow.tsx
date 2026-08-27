@@ -32,6 +32,7 @@ import {
   seatingSelectionSnapshot,
 } from "@/lib/seating-bridge";
 import {
+  cancelMobileSeatingSession,
   createMobileSeatingSession,
   getMobileSeatingSessionStatus,
   type CreateMobileSeatingSessionResponse,
@@ -65,6 +66,7 @@ export function SeatPurchaseFlow({
   const webviewRef = useRef<any>(null);
   const verifyingRef = useRef(false);
   const closingCheckoutRef = useRef(false);
+  const closingFlowRef = useRef(false);
   const sessionRecoveryRef = useRef(0);
   const orderTransitionRef = useRef(false);
   const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -155,6 +157,27 @@ export function SeatPurchaseFlow({
     },
     [onClose, router],
   );
+
+  const releaseAndClose = useCallback(async () => {
+    if (closingFlowRef.current) return;
+    closingFlowRef.current = true;
+    const flowToken = session?.flowToken;
+    const shouldRelease =
+      !!flowToken &&
+      !orderTransitionRef.current &&
+      phase !== "success" &&
+      phase !== "pending";
+    try {
+      if (shouldRelease && flowToken) {
+        await cancelMobileSeatingSession(flowToken);
+      }
+    } catch {
+      // The server protects paid and provider-pending orders. A failed release
+      // must not trap the customer inside the seating interface.
+    } finally {
+      onClose();
+    }
+  }, [onClose, phase, session?.flowToken]);
 
   const refreshSeatingOrder = useCallback(
     async (attempts = 1, intervalMs = 600) => {
@@ -354,7 +377,7 @@ export function SeatPurchaseFlow({
           break;
         case "CANCEL_REQUESTED":
           closingCheckoutRef.current = false;
-          onClose();
+          void releaseAndClose();
           break;
       }
     } catch {
@@ -380,12 +403,12 @@ export function SeatPurchaseFlow({
       setTimeout(() => {
         if (closingCheckoutRef.current) {
           closingCheckoutRef.current = false;
-          onClose();
+          void releaseAndClose();
         }
       }, 1200);
       return;
     }
-    onClose();
+    void releaseAndClose();
   };
 
   const title =
@@ -500,7 +523,10 @@ export function SeatPurchaseFlow({
           >
             <Text style={styles.primaryButtonText}>Réessayer</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={onClose} style={styles.secondaryButton}>
+          <TouchableOpacity
+            onPress={handleClose}
+            style={styles.secondaryButton}
+          >
             <Text
               style={[styles.secondaryButtonText, { color: colors.primary }]}
             >
