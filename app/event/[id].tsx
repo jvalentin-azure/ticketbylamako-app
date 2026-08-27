@@ -66,7 +66,7 @@ export default function EventDetailScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { addItem } = useCart();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const [event, setEvent] = useState<TCEvent | null>(null);
   const [tickets, setTickets] = useState<TicketType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -331,6 +331,7 @@ export default function EventDetailScreen() {
 
   const handleOpenSeatingChart = async () => {
     if (!hasSeating || !event) return;
+    if (isAuthLoading) return;
     if (eventClosed) {
       Alert.alert("Billetterie fermée", closedMessage);
       return;
@@ -1050,16 +1051,17 @@ export default function EventDetailScreen() {
         {hasSeating ? (
           <TouchableOpacity
             onPress={handleOpenSeatingChart}
-            disabled={seatingLoading || eventClosed}
+            disabled={seatingLoading || isAuthLoading || eventClosed}
             style={[
               styles.ctaButton,
               {
-                backgroundColor: eventClosed ? colors.muted : "#663d17",
-                opacity: seatingLoading ? 0.7 : 1,
+                backgroundColor:
+                  eventClosed || isAuthLoading ? colors.muted : "#663d17",
+                opacity: seatingLoading || isAuthLoading ? 0.7 : 1,
               },
             ]}
           >
-            {seatingLoading ? (
+            {seatingLoading || isAuthLoading ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
               <IconSymbol name="mappin" size={20} color="#fff" />
@@ -1067,6 +1069,8 @@ export default function EventDetailScreen() {
             <Text style={styles.ctaButtonText}>
               {eventClosed
                 ? "Billetterie fermée"
+                : isAuthLoading
+                  ? "Vérification de la session..."
                 : seatingLoading
                   ? "Chargement du plan..."
                   : "Choisir mon siège"}

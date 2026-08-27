@@ -14,6 +14,7 @@ const seatingFrame = readFileSync(
   resolve("components/seating/seating-browser-frame.web.tsx"),
   "utf8",
 );
+const eventDetail = readFileSync(resolve("app/event/[id].tsx"), "utf8");
 const calendar = readFileSync(resolve("lib/event-calendar.web.ts"), "utf8");
 const commerceBrowser = readFileSync(
   resolve("lib/commerce-browser.web.ts"),
@@ -116,6 +117,19 @@ describe("non-installable mobile web foundation", () => {
   it("keeps critical ticket journeys inside the mobile browser experience", () => {
     expect(seatingFrame).toContain("Plan de salle interactif");
     expect(seatingFrame).toContain("allow-same-origin allow-scripts");
+    expect(existsSync(resolve("components/seating/seating-browser-frame.ts"))).toBe(
+      false,
+    );
+    expect(
+      existsSync(resolve("components/seating/seating-browser-frame.native.ts")),
+    ).toBe(true);
+    expect(
+      existsSync(resolve("components/seating/seating-browser-frame.d.ts")),
+    ).toBe(true);
+    expect(eventDetail).toContain("isLoading: isAuthLoading");
+    expect(eventDetail).toContain(
+      "seatingLoading || isAuthLoading || eventClosed",
+    );
     expect(calendar).toContain('type: "text/calendar;charset=utf-8"');
     expect(calendar).toContain("BEGIN:VALARM");
     expect(wallet).toContain("window.location.assign");
