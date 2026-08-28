@@ -251,6 +251,19 @@ export default function EventDetailScreen() {
   const eventLocation = event.mobileFields?.event_location
     ? decodeHtmlEntities(event.mobileFields.event_location).trim()
     : "";
+  const eventAddress = event.mobileFields?.event_address
+    ? decodeHtmlEntities(event.mobileFields.event_address).trim()
+    : "";
+  const eventLatitude = event.mobileFields?.event_latitude;
+  const eventLongitude = event.mobileFields?.event_longitude;
+  const hasEventCoordinates =
+    typeof eventLatitude === "number" &&
+    Number.isFinite(eventLatitude) &&
+    typeof eventLongitude === "number" &&
+    Number.isFinite(eventLongitude);
+  const eventMapQuery = hasEventCoordinates
+    ? `${eventLatitude},${eventLongitude}`
+    : eventAddress;
   const eventTerms = event.mobileFields?.event_terms
     ? decodeHtmlEntities(event.mobileFields.event_terms).trim()
     : "";
@@ -977,7 +990,37 @@ export default function EventDetailScreen() {
                         {eventLocation}
                       </Text>
                     </View>
-                    <EmbeddedGoogleMap location={eventLocation} />
+                    {eventMapQuery ? (
+                      <EmbeddedGoogleMap
+                        location={eventLocation}
+                        mapQuery={eventMapQuery}
+                      />
+                    ) : (
+                      <View
+                        style={[
+                          styles.mapLocationMissing,
+                          {
+                            backgroundColor: colors.surface,
+                            borderColor: colors.border,
+                          },
+                        ]}
+                      >
+                        <IconSymbol
+                          name="map.fill"
+                          size={22}
+                          color={colors.primary}
+                        />
+                        <Text
+                          style={[
+                            styles.mapLocationMissingText,
+                            { color: colors.muted },
+                          ]}
+                        >
+                          L’adresse précise de ce lieu n’est pas encore
+                          disponible.
+                        </Text>
+                      </View>
+                    )}
                   </>
                 ) : null}
               </View>
@@ -1423,6 +1466,21 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   locationText: { fontSize: 14, flex: 1 },
+  mapLocationMissing: {
+    minHeight: 72,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+  },
+  mapLocationMissingText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 19,
+    fontFamily: "Raleway_500Medium",
+  },
   // Upcoming events
   upcomingHeader: {
     flexDirection: "row",

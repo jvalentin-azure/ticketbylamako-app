@@ -8,6 +8,10 @@ const mapSource = readFileSync(
 );
 const eventSource = readFileSync(resolve("app/event/[id].tsx"), "utf8");
 const ticketSource = readFileSync(resolve("app/ticket/[id].tsx"), "utf8");
+const commerceSource = readFileSync(
+  resolve("scripts/lamako-mobile-api/includes/v2-commerce.php"),
+  "utf8",
+);
 
 describe("embedded event map", () => {
   it("loads Google Maps inside the page and keeps directions secondary", () => {
@@ -32,10 +36,21 @@ describe("embedded event map", () => {
   });
 
   it("is rendered on event and ticket detail screens", () => {
-    expect(eventSource).toContain(
-      "<EmbeddedGoogleMap location={eventLocation}",
-    );
+    expect(eventSource).toContain("<EmbeddedGoogleMap");
+    expect(eventSource).toContain("mapQuery={eventMapQuery}");
     expect(ticketSource).toContain("<EmbeddedGoogleMap");
     expect(ticketSource).toContain("showMap={i === activeIndex}");
+  });
+
+  it("prefers exact venue coordinates or address over a display label", () => {
+    expect(eventSource).toContain("hasEventCoordinates");
+    expect(eventSource).toContain(": eventAddress;");
+    expect(mapSource).toContain("mapQuery?.trim() || normalizedLocation");
+    expect(commerceSource).toContain("venue-map-lat");
+    expect(commerceSource).toContain("venue-map-lng");
+    expect(commerceSource).toContain("venue_detailed_address");
+    expect(eventSource).toContain(
+      "L’adresse précise de ce lieu n’est pas encore",
+    );
   });
 });

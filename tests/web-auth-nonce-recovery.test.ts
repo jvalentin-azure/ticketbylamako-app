@@ -62,4 +62,36 @@ describe("browser session nonce recovery", () => {
     });
     expect(values.get("ticketbylamako_wp_rest_nonce")).toBe("fresh-nonce");
   });
+
+  it("recovers when an intermediary hides the WordPress nonce error body", async () => {
+    const values = new Map<string, string>([
+      ["ticketbylamako_wp_rest_nonce", "stale-nonce"],
+    ]);
+    vi.stubGlobal("window", {
+      sessionStorage: {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => values.set(key, value),
+        removeItem: (key: string) => values.delete(key),
+      },
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("Forbidden", { status: 403 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ authenticated: false }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getStoredUser } = await import("../lib/api/auth.web");
+    await expect(getStoredUser()).resolves.toBeNull();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
+      headers: { Accept: "application/json" },
+    });
+    expect(values.has("ticketbylamako_wp_rest_nonce")).toBe(false);
+  });
 });

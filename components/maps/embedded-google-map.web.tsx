@@ -12,16 +12,19 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 
 export function EmbeddedGoogleMap({
   location,
+  mapQuery,
   height = 210,
 }: {
   location: string;
+  mapQuery?: string;
   height?: number;
 }) {
   const colors = useColors();
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   const normalizedLocation = location.trim();
-  const encodedLocation = encodeURIComponent(normalizedLocation);
+  const normalizedMapQuery = mapQuery?.trim() || normalizedLocation;
+  const encodedLocation = encodeURIComponent(normalizedMapQuery);
   const embedUrl = useMemo(
     () => `https://www.google.com/maps?q=${encodedLocation}&output=embed`,
     [encodedLocation],

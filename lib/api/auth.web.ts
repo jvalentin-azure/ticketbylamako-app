@@ -80,6 +80,7 @@ function acceptSession(data: WebSessionResponse): WebSessionResponse {
 }
 
 async function requestSessionWithNonceRecovery(): Promise<WebSessionResponse> {
+  const sentNonce = Boolean(getWebSessionNonce());
   let response = await fetchWithTimeout(
     `${SITE_URL}/wp-json/lamako-mobile/v2/web-session`,
     {
@@ -92,7 +93,11 @@ async function requestSessionWithNonceRecovery(): Promise<WebSessionResponse> {
 
   if (response.status === 403) {
     const errorData = await parseJson(response);
-    if (errorData.code === "rest_cookie_invalid_nonce") {
+    // This read-only bootstrap is the one REST route that may safely retry
+    // without a nonce: it authenticates the HttpOnly cookie server-side. A few
+    // Safari/proxy combinations return an HTML 403 before the WordPress JSON
+    // error, so the fact that we sent a nonce is also a sufficient signal.
+    if (errorData.code === "rest_cookie_invalid_nonce" || sentNonce) {
       clearWebSessionNonce();
       response = await fetchWithTimeout(
         `${SITE_URL}/wp-json/lamako-mobile/v2/web-session`,

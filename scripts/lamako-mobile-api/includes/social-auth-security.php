@@ -388,10 +388,11 @@ function lamako_mobile_validate_facebook_identity( $token ) {
         return new WP_Error( 'facebook_unconfigured', 'Connexion Facebook temporairement indisponible.', [ 'status' => 503 ] );
     }
 
+    $graph_base = 'https://graph.facebook.com/v24.0';
     $debug_url = add_query_arg( [
         'input_token'  => $token,
         'access_token' => $app_id . '|' . $app_secret,
-    ], 'https://graph.facebook.com/debug_token' );
+    ], $graph_base . '/debug_token' );
     $debug_response = wp_safe_remote_get( $debug_url, [
         'timeout'     => 8,
         'redirection' => 0,
@@ -408,7 +409,7 @@ function lamako_mobile_validate_facebook_identity( $token ) {
         return new WP_Error( 'facebook_invalid', 'Token Facebook invalide ou expire.', [ 'status' => 401 ] );
     }
 
-    $profile_url = add_query_arg( 'fields', 'id,email,first_name,last_name,picture.type(large)', 'https://graph.facebook.com/me' );
+    $profile_url = add_query_arg( 'fields', 'id,email,first_name,last_name,picture.type(large)', $graph_base . '/me' );
     $profile_response = wp_safe_remote_get( $profile_url, [
         'headers'     => [ 'Authorization' => 'Bearer ' . $token ],
         'timeout'     => 8,

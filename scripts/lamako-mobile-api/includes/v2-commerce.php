@@ -1187,18 +1187,71 @@ function lamako_mobile_v2_public_ticket_map( $event_ids = [], $include_checkout_
     return $map;
 }
 
+function lamako_mobile_v2_public_event_coordinate( $value, $minimum, $maximum ) {
+    if ( ! is_scalar( $value ) ) {
+        return null;
+    }
+
+    // Some historical venue values were imported from spreadsheets with a
+    // leading apostrophe. It is formatting, not part of the coordinate.
+    $normalized = trim( ltrim( (string) $value, "'" ) );
+    if ( $normalized === '' || ! is_numeric( $normalized ) ) {
+        return null;
+    }
+
+    $coordinate = (float) $normalized;
+    if ( $coordinate < $minimum || $coordinate > $maximum ) {
+        return null;
+    }
+
+    return $coordinate;
+}
+
+function lamako_mobile_v2_public_event_map_fields( $event_id ) {
+    $address = lamako_mobile_v2_meta_first( $event_id, [ 'event_address', '_event_address' ], '' );
+    $lat     = lamako_mobile_v2_meta_first( $event_id, [ 'event_latitude', '_event_latitude', 'event_lat', '_event_lat' ], '' );
+    $lng     = lamako_mobile_v2_meta_first( $event_id, [ 'event_longitude', '_event_longitude', 'event_lng', '_event_lng' ], '' );
+
+    $venue_id = absint( lamako_mobile_v2_meta_first( $event_id, [ '_tbl_event_venue_id', 'event_venue_id' ], 0 ) );
+    if ( $venue_id > 0 ) {
+        if ( ! $address ) {
+            $address = lamako_mobile_v2_meta_first( $venue_id, [ 'venue_detailed_address', 'venue_address', 'event_address' ], '' );
+        }
+        if ( $lat === '' || $lat === null ) {
+            $lat = lamako_mobile_v2_meta_first( $venue_id, [ 'venue-map-lat', 'venue_latitude', 'event_latitude' ], '' );
+        }
+        if ( $lng === '' || $lng === null ) {
+            $lng = lamako_mobile_v2_meta_first( $venue_id, [ 'venue-map-lng', 'venue_longitude', 'event_longitude' ], '' );
+        }
+    }
+
+    if ( ! $address ) {
+        $location = lamako_mobile_v2_meta_first( $event_id, [ 'event_location', '_event_location' ], '' );
+        // A city/street separator or street number is a useful geocoding
+        // signal. Do not treat internal labels such as "QA Lab" as an address.
+        if ( is_scalar( $location ) && preg_match( '/,|\d/u', (string) $location ) ) {
+            $address = $location;
+        }
+    }
+
+    return [
+        'event_address'   => is_scalar( $address ) ? html_entity_decode( trim( (string) $address ), ENT_QUOTES, 'UTF-8' ) : '',
+        'event_latitude'  => lamako_mobile_v2_public_event_coordinate( $lat, -90, 90 ),
+        'event_longitude' => lamako_mobile_v2_public_event_coordinate( $lng, -180, 180 ),
+    ];
+}
+
 function lamako_mobile_v2_public_event_mobile_fields( $event_id, $include_details = true ) {
     $fields = [
         'event_date_time'     => lamako_mobile_v2_meta_first( $event_id, [ 'event_date_time', '_event_date_time', 'event_start_date', '_event_start_date' ], null ),
         'event_end_date_time' => lamako_mobile_v2_meta_first( $event_id, [ 'event_end_date_time', '_event_end_date_time', 'event_end_date', '_event_end_date' ], null ),
         'event_location'      => lamako_mobile_v2_meta_first( $event_id, [ 'event_location', '_event_location' ], null ),
     ];
-
     if ( ! $include_details ) {
         return $fields;
     }
 
-    return array_merge( $fields, [
+    return array_merge( $fields, lamako_mobile_v2_public_event_map_fields( $event_id ), [
         'description'         => lamako_mobile_v2_meta_first( $event_id, [
             'lamako_mobile_description',
             '_lamako_mobile_description',

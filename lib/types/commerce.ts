@@ -142,6 +142,9 @@ export interface MobileFields {
   event_date_time?: string | null;
   event_end_date_time?: string | null;
   event_location?: string | null;
+  event_address?: string | null;
+  event_latitude?: number | null;
+  event_longitude?: number | null;
   event_terms?: string | null;
   event_logo?: string | null;
   sponsors_logo?: string | null;

@@ -64,9 +64,11 @@ function buildMapHtml(embedUrl: string): string {
 
 export function EmbeddedGoogleMap({
   location,
+  mapQuery,
   height = 210,
 }: {
   location: string;
+  mapQuery?: string;
   height?: number;
 }) {
   const colors = useColors();
@@ -75,14 +77,14 @@ export function EmbeddedGoogleMap({
   >("public");
   const [loaded, setLoaded] = useState(false);
   const normalizedLocation = location.trim();
-  const encodedLocation = encodeURIComponent(normalizedLocation);
+  const normalizedMapQuery = mapQuery?.trim() || normalizedLocation;
+  const encodedLocation = encodeURIComponent(normalizedMapQuery);
   const publicEmbedUrl = useMemo(
     () => `https://www.google.com/maps?q=${encodedLocation}&output=embed`,
     [encodedLocation],
   );
   const alternateEmbedUrl = useMemo(
-    () =>
-      `https://maps.google.com/maps?q=${encodedLocation}&z=15&output=embed`,
+    () => `https://maps.google.com/maps?q=${encodedLocation}&z=15&output=embed`,
     [encodedLocation],
   );
   const embedUrl =

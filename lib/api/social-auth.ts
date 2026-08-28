@@ -17,6 +17,7 @@ const GOOGLE_CLIENT_ID =
   "189168265008-it6ve6n3s60h3u9t6telunafnchv4v3s.apps.googleusercontent.com";
 const FACEBOOK_APP_ID =
   process.env.EXPO_PUBLIC_FACEBOOK_APP_ID || "1642777483642147";
+const FACEBOOK_GRAPH_VERSION = "v24.0";
 const SITE_URL_BASE = SITE_URL.replace(/\/$/, "");
 
 const TOKEN_KEY = "jwt_token";
@@ -108,6 +109,18 @@ async function createOAuthState(
   );
 
   return { state: JSON.stringify(payload), stored };
+}
+
+function getOAuthAppReturnUrl(provider: "google" | "facebook"): string {
+  if (Platform.OS === "web") {
+    const origin =
+      typeof window !== "undefined" && window.location?.origin
+        ? window.location.origin
+        : SITE_URL_BASE;
+    return `${origin.replace(/\/$/, "")}/mobile/oauth/${provider}-callback`;
+  }
+
+  return Linking.createURL(`oauth/${provider}-callback`);
 }
 
 function getOAuthParams(url: string): URLSearchParams {
@@ -264,7 +277,7 @@ export async function startGoogleLogin(): Promise<SocialCredential | null> {
     throw new Error("Google Client ID non configuré");
   }
 
-  const appRedirectUri = Linking.createURL("oauth/google-callback");
+  const appRedirectUri = getOAuthAppReturnUrl("google");
   const webRedirectUri = `${SITE_URL_BASE}/lamako-mobile/oauth/google-callback`;
   const { state, stored } = await createOAuthState("google", appRedirectUri);
   const authParams = new URLSearchParams({
@@ -298,6 +311,9 @@ export async function startGoogleLogin(): Promise<SocialCredential | null> {
 
 export async function startAppleLogin(): Promise<SocialCredential | null> {
   if (Platform.OS === "web") {
+    // The WordPress cookie changes when Apple returns. Never send a REST nonce
+    // minted for the previous cookie while the refreshed app bootstraps.
+    clearWebSessionNonce();
     const startUrl = new URL(`${SITE_URL_BASE}/wp-admin/admin-post.php`);
     startUrl.searchParams.set("action", "lamako_apple_start");
     startUrl.searchParams.set("redirect_to", `${SITE_URL_BASE}/mobile/`);
@@ -354,7 +370,7 @@ export async function startFacebookLogin(): Promise<SocialCredential | null> {
     throw new Error("Facebook App ID non configuré");
   }
 
-  const appRedirectUri = Linking.createURL("oauth/facebook-callback");
+  const appRedirectUri = getOAuthAppReturnUrl("facebook");
   const webRedirectUri = `${SITE_URL_BASE}/lamako-mobile/oauth/facebook-callback`;
   const { state } = await createOAuthState("facebook", appRedirectUri);
   const authParams = new URLSearchParams({
@@ -366,7 +382,7 @@ export async function startFacebookLogin(): Promise<SocialCredential | null> {
   });
 
   const result = await WebBrowser.openAuthSessionAsync(
-    `https://www.facebook.com/v18.0/dialog/oauth?${authParams.toString()}`,
+    `https://www.facebook.com/${FACEBOOK_GRAPH_VERSION}/dialog/oauth?${authParams.toString()}`,
     appRedirectUri,
   );
   if (result.type !== "success" || !result.url) {
