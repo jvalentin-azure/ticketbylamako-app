@@ -65,6 +65,7 @@ describe("non-installable mobile web foundation", () => {
   it("ships an SPA fallback and browser security headers", () => {
     expect(apacheRules).toContain("RewriteRule . /mobile/index.html [L]");
     expect(apacheRules).toContain("Content-Security-Policy");
+    expect(apacheRules).toContain("Strict-Transport-Security");
     expect(apacheRules).toContain("script-src 'self'");
     expect(apacheRules).toContain("object-src 'none'");
     expect(apacheRules).toContain("X-Content-Type-Options");
