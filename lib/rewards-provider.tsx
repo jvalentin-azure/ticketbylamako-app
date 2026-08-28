@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { randomUUID } from "expo-crypto";
 import { useAuth } from "@/lib/auth-provider";
 import {
   getMobileReferralCode,
@@ -285,9 +286,10 @@ export async function registerReferral(
 export async function redeemPointsApi(
   points: number,
   wpUserId: number,
+  idempotencyKey: string,
 ): Promise<RedeemResult> {
   try {
-    const data = await redeemMobileRewards(points);
+    const data = await redeemMobileRewards(points, idempotencyKey);
     return {
       success: data.success,
       coupon_code: data.couponCode,
@@ -404,6 +406,7 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
   const [isSyncing, setIsSyncing] = useState(false);
   const stateRef = useRef(state);
   const syncingRef = useRef(false);
+  const redemptionKeysRef = useRef<Map<string, string>>(new Map());
 
   useEffect(() => {
     stateRef.current = state;
@@ -597,8 +600,16 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
   // Redeem points - calls API and updates local state
   const redeemPoints = useCallback(
     async (points: number, wpUserId: number): Promise<RedeemResult> => {
-      const result = await redeemPointsApi(points, wpUserId);
+      const redemptionKey = `${wpUserId}:${points}`;
+      let idempotencyKey = redemptionKeysRef.current.get(redemptionKey);
+      if (!idempotencyKey) {
+        idempotencyKey = randomUUID();
+        redemptionKeysRef.current.set(redemptionKey, idempotencyKey);
+      }
+
+      const result = await redeemPointsApi(points, wpUserId, idempotencyKey);
       if (result.success && result.new_balance !== undefined) {
+        redemptionKeysRef.current.delete(redemptionKey);
         // Update local state with new balance
         const newState: RewardsState = {
           ...state,

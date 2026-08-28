@@ -18,7 +18,8 @@
  * - POST /wp-json/lamako-rewards/v1/referral/validate
  * - GET  /wp-json/lamako-rewards/v1/referral/code?user_id={id}
  *
- * Authentication: JWT token (from mobile app) OR API key (legacy)
+ * Authentication: user-scoped routes require a JWT token from the mobile app.
+ * The legacy API key remains available only to non-user-scoped integrations.
  * Rate Limiting: 60 requests per minute per IP
  */
 
@@ -114,6 +115,46 @@ function lr_authenticate_request( $request ) {
     return new WP_Error( 'unauthorized', 'Invalid authentication.', array( 'status' => 401 ) );
 }
 
+/**
+ * Require an authenticated end-user for user-scoped Rewards routes.
+ * Legacy API keys identify an application, not the customer whose balance is
+ * being changed, so they are intentionally rejected here.
+ */
+function lr_rest_require_user( $request ) {
+    $auth = lr_authenticate_request( $request );
+    if ( is_wp_error( $auth ) ) {
+        return $auth;
+    }
+
+    if ( true === $auth || ! is_numeric( $auth ) || (int) $auth <= 0 ) {
+        return new WP_Error( 'user_auth_required', 'A user JWT is required.', array( 'status' => 403 ) );
+    }
+
+    $request->set_param( '_lr_authenticated_user_id', (int) $auth );
+    return true;
+}
+
+/**
+ * Return the authenticated user and reject a conflicting caller-supplied ID.
+ */
+function lr_authenticated_user_id( $request, $claimed_user_id = 0 ) {
+    $user_id = (int) $request->get_param( '_lr_authenticated_user_id' );
+    if ( $user_id <= 0 ) {
+        $allowed = lr_rest_require_user( $request );
+        if ( is_wp_error( $allowed ) ) {
+            return $allowed;
+        }
+        $user_id = (int) $request->get_param( '_lr_authenticated_user_id' );
+    }
+
+    $claimed_user_id = (int) $claimed_user_id;
+    if ( $claimed_user_id > 0 && $claimed_user_id !== $user_id ) {
+        return new WP_Error( 'forbidden_user', 'You cannot access another user account.', array( 'status' => 403 ) );
+    }
+
+    return $user_id;
+}
+
 function lr_validate_jwt( $token ) {
     // Use the JWT Auth plugin's validation if available
     if ( function_exists( 'jwt_auth_validate_token' ) ) {
@@ -144,6 +185,217 @@ function lr_validate_jwt( $token ) {
     }
     
     return false;
+}
+
+function lr_rewards_idempotency_context( $user_id, $points, $raw_key ) {
+    $raw_key = trim( (string) $raw_key );
+    if ( strlen( $raw_key ) < 16 || strlen( $raw_key ) > 128 || ! preg_match( '/^[A-Za-z0-9._:-]+$/', $raw_key ) ) {
+        return new WP_Error( 'invalid_idempotency_key', 'A valid Idempotency-Key is required.', array( 'status' => 400 ) );
+    }
+
+    $key_hash = hash_hmac( 'sha256', (int) $user_id . '|' . $raw_key, wp_salt( 'nonce' ) );
+    return array(
+        'option_name'  => '_lr_redeem_' . $key_hash,
+        'request_hash' => hash_hmac( 'sha256', (int) $user_id . '|' . (int) $points, wp_salt( 'auth' ) ),
+    );
+}
+
+function lr_rewards_transaction_tables_are_innodb() {
+    global $wpdb;
+
+    $tables = array(
+        $wpdb->posts,
+        $wpdb->postmeta,
+        $wpdb->options,
+        $wpdb->usermeta,
+        $wpdb->prefix . 'myCRED_log',
+    );
+
+    foreach ( array_unique( $tables ) as $table ) {
+        $status = $wpdb->get_row( $wpdb->prepare( 'SHOW TABLE STATUS WHERE Name = %s', $table ) );
+        if ( ! $status || strtoupper( (string) $status->Engine ) !== 'INNODB' ) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+function lr_rewards_replay_response( $record, $request_hash ) {
+    if ( ! is_array( $record ) || empty( $record['request_hash'] ) ) {
+        return new WP_Error( 'idempotency_record_invalid', 'This redemption cannot be replayed safely.', array( 'status' => 409 ) );
+    }
+    if ( ! hash_equals( (string) $record['request_hash'], (string) $request_hash ) ) {
+        return new WP_Error( 'idempotency_conflict', 'This Idempotency-Key was already used for another redemption.', array( 'status' => 409 ) );
+    }
+    if ( ( $record['status'] ?? '' ) !== 'completed' || ! is_array( $record['response'] ?? null ) ) {
+        return new WP_Error( 'redemption_in_progress', 'This redemption is already being processed.', array( 'status' => 409 ) );
+    }
+
+    $response = $record['response'];
+    $response['idempotent_replay'] = true;
+    return $response;
+}
+
+/**
+ * Atomically exchange points for a user-bound, single-use coupon.
+ *
+ * The named lock serializes redemptions for one user, the database
+ * transaction binds the myCred debit, coupon and idempotency ledger, and the
+ * unique option name prevents a retry from issuing another coupon.
+ */
+function lr_redeem_points_for_user( $user_id, $points, $raw_idempotency_key ) {
+    if ( ! function_exists( 'mycred_get_users_balance' ) || ! function_exists( 'mycred_subtract' ) ) {
+        return new WP_Error( 'mycred_missing', 'myCred plugin not active.', array( 'status' => 500 ) );
+    }
+    if ( ! class_exists( 'WC_Coupon' ) ) {
+        return new WP_Error( 'woocommerce_missing', 'WooCommerce is not available.', array( 'status' => 500 ) );
+    }
+
+    $user_id = (int) $user_id;
+    $points  = (int) $points;
+    $values  = array( 500 => 10000, 1000 => 20000, 2000 => 40000, 5000 => 100000 );
+    if ( $user_id <= 0 || ! isset( $values[ $points ] ) ) {
+        return new WP_Error( 'invalid_points', 'Invalid rewards redemption tier.', array( 'status' => 400 ) );
+    }
+
+    $context = lr_rewards_idempotency_context( $user_id, $points, $raw_idempotency_key );
+    if ( is_wp_error( $context ) ) {
+        return $context;
+    }
+    if ( ! lr_rewards_transaction_tables_are_innodb() ) {
+        return new WP_Error( 'redemption_storage_unsafe', 'Rewards redemption is temporarily unavailable.', array( 'status' => 503 ) );
+    }
+
+    global $wpdb;
+    $lock_name = 'lamako_rewards_redeem_' . $user_id;
+    $locked    = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $lock_name, 5 ) );
+    if ( 1 !== $locked ) {
+        return new WP_Error( 'redemption_busy', 'Another redemption is already being processed.', array( 'status' => 409 ) );
+    }
+
+    $transaction_started = false;
+    $coupon_id            = 0;
+    try {
+        wp_cache_delete( $context['option_name'], 'options' );
+        $existing = get_option( $context['option_name'], null );
+        if ( null !== $existing ) {
+            return lr_rewards_replay_response( $existing, $context['request_hash'] );
+        }
+
+        if ( false === $wpdb->query( 'START TRANSACTION' ) ) {
+            throw new RuntimeException( 'Unable to start rewards transaction.' );
+        }
+        $transaction_started = true;
+
+        // Lock the myCred balance row before the final balance check.
+        $wpdb->get_var( $wpdb->prepare(
+            "SELECT umeta_id FROM {$wpdb->usermeta} WHERE user_id = %d AND meta_key = %s LIMIT 1 FOR UPDATE",
+            $user_id,
+            'mycred_default'
+        ) );
+        wp_cache_delete( $user_id, 'user_meta' );
+
+        $total_earned = lr_get_total_earned( $user_id );
+        if ( $total_earned < LR_REDEMPTION_MIN_LIFETIME ) {
+            $wpdb->query( 'ROLLBACK' );
+            $transaction_started = false;
+            return new WP_Error( 'tier_too_low', 'Rewards redemption is not unlocked for this account.', array( 'status' => 403 ) );
+        }
+
+        $balance = (float) mycred_get_users_balance( $user_id );
+        if ( $balance < $points ) {
+            $wpdb->query( 'ROLLBACK' );
+            $transaction_started = false;
+            return new WP_Error( 'insufficient_points', 'Solde insuffisant.', array( 'status' => 400 ) );
+        }
+
+        $processing_record = array(
+            'status'       => 'processing',
+            'request_hash' => $context['request_hash'],
+            'created_at'   => time(),
+        );
+        if ( ! add_option( $context['option_name'], $processing_record, '', false ) ) {
+            throw new RuntimeException( 'Unable to reserve the idempotency key.' );
+        }
+
+        $user = get_userdata( $user_id );
+        if ( ! $user || ! is_email( $user->user_email ) ) {
+            throw new RuntimeException( 'Rewards user has no valid email.' );
+        }
+
+        $discount_value = $values[ $points ];
+        $expires_at     = strtotime( '+30 days' );
+        $coupon_code    = 'LR-' . strtoupper( wp_generate_password( 12, false ) );
+        $coupon         = new WC_Coupon();
+        $coupon->set_code( $coupon_code );
+        $coupon->set_discount_type( 'fixed_cart' );
+        $coupon->set_amount( $discount_value );
+        $coupon->set_usage_limit( 1 );
+        $coupon->set_usage_limit_per_user( 1 );
+        $coupon->set_individual_use( true );
+        $coupon->set_email_restrictions( array( sanitize_email( $user->user_email ) ) );
+        $coupon->set_date_expires( $expires_at );
+        $coupon->set_description( sprintf( 'LamakoRewards - %d points exchanged by user #%d', $points, $user_id ) );
+        $coupon_id = (int) $coupon->save();
+        if ( $coupon_id <= 0 ) {
+            throw new RuntimeException( 'Unable to create rewards coupon.' );
+        }
+        update_post_meta( $coupon_id, '_lamako_rewards_user_id', $user_id );
+        update_post_meta( $coupon_id, '_lamako_rewards_idempotency_hash', $context['option_name'] );
+
+        $deducted = mycred_subtract(
+            'redemption',
+            $user_id,
+            $points,
+            sprintf( 'LamakoRewards redemption %d pts', $points ),
+            $coupon_id,
+            $context['request_hash']
+        );
+        if ( ! $deducted ) {
+            throw new RuntimeException( 'Unable to debit rewards balance.' );
+        }
+
+        $response = array(
+            'success'           => true,
+            'coupon_code'       => $coupon_code,
+            'discount_value'    => $discount_value,
+            'points_deducted'   => $points,
+            'new_balance'       => max( 0, $balance - $points ),
+            'expires'           => date( 'c', $expires_at ),
+            'idempotent_replay' => false,
+        );
+        $completed_record = array(
+            'status'       => 'completed',
+            'request_hash' => $context['request_hash'],
+            'response'     => $response,
+            'completed_at' => time(),
+        );
+        if ( ! update_option( $context['option_name'], $completed_record, false ) ) {
+            throw new RuntimeException( 'Unable to finalize redemption ledger.' );
+        }
+        if ( false === $wpdb->query( 'COMMIT' ) ) {
+            throw new RuntimeException( 'Unable to commit rewards transaction.' );
+        }
+        $transaction_started = false;
+
+        return $response;
+    } catch ( Throwable $error ) {
+        if ( $transaction_started ) {
+            $wpdb->query( 'ROLLBACK' );
+        }
+        wp_cache_delete( $context['option_name'], 'options' );
+        wp_cache_delete( $user_id, 'user_meta' );
+        if ( $coupon_id > 0 && get_post( $coupon_id ) ) {
+            $coupon_marker = (string) get_post_meta( $coupon_id, '_lamako_rewards_idempotency_hash', true );
+            if ( $coupon_marker && hash_equals( (string) $context['option_name'], $coupon_marker ) ) {
+                wp_delete_post( $coupon_id, true );
+            }
+        }
+        return new WP_Error( 'redemption_failed', 'Rewards redemption could not be completed safely.', array( 'status' => 500 ) );
+    } finally {
+        $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
+    }
 }
 
 // ============================================================
@@ -256,46 +508,66 @@ function lr_generate_referral_code( $user_id ) {
  */
 function lr_register_referral( $referee_user_id, $referrer_code ) {
     global $wpdb;
-    
-    // Find referrer by code
-    $referrer_id = $wpdb->get_var( $wpdb->prepare(
-        "SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key = '_lamako_referral_code' AND meta_value = %s",
-        $referrer_code
-    ) );
-    
-    if ( ! $referrer_id ) {
-        return new WP_Error( 'invalid_code', 'Code de parrainage invalide.' );
+
+    $referee_user_id = (int) $referee_user_id;
+    if ( $referee_user_id <= 0 ) {
+        return new WP_Error( 'invalid_referee', 'Utilisateur invalide.' );
     }
-    
-    if ( (int) $referrer_id === (int) $referee_user_id ) {
-        return new WP_Error( 'self_referral', 'Vous ne pouvez pas vous parrainer vous-même.' );
+
+    $lock_name = 'lamako_referral_' . $referee_user_id;
+    $locked    = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $lock_name, 5 ) );
+    if ( 1 !== $locked ) {
+        return new WP_Error( 'referral_busy', 'Le parrainage est déjà en cours de traitement.' );
     }
-    
-    // Check if referee already has a referrer
-    $existing = get_user_meta( $referee_user_id, '_lamako_referred_by', true );
-    if ( $existing ) {
-        return new WP_Error( 'already_referred', 'Vous avez déjà un parrain.' );
+
+    try {
+        // Find referrer by code
+        $referrer_id = $wpdb->get_var( $wpdb->prepare(
+            "SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key = '_lamako_referral_code' AND meta_value = %s",
+            $referrer_code
+        ) );
+
+        if ( ! $referrer_id ) {
+            return new WP_Error( 'invalid_code', 'Code de parrainage invalide.' );
+        }
+
+        if ( (int) $referrer_id === $referee_user_id ) {
+            return new WP_Error( 'self_referral', 'Vous ne pouvez pas vous parrainer vous-même.' );
+        }
+
+        // A unique relationship marker makes repeated requests idempotent.
+        if ( get_user_meta( $referee_user_id, '_lamako_referred_by', true ) ) {
+            return new WP_Error( 'already_referred', 'Vous avez déjà un parrain.' );
+        }
+        if ( ! add_user_meta( $referee_user_id, '_lamako_referred_by', (int) $referrer_id, true ) ) {
+            return new WP_Error( 'already_referred', 'Vous avez déjà un parrain.' );
+        }
+
+        update_user_meta( $referee_user_id, '_lamako_referral_code_used', $referrer_code );
+        update_user_meta( $referee_user_id, '_lamako_referral_date', current_time( 'mysql' ) );
+
+        $count = (int) get_user_meta( $referrer_id, '_lamako_referral_count', true );
+        update_user_meta( $referrer_id, '_lamako_referral_count', $count + 1 );
+
+        if ( function_exists( 'mycred_add' ) ) {
+            mycred_add(
+                'referral_signup',
+                $referee_user_id,
+                LR_REFEREE_BONUS,
+                'Bonus parrainage (inscription)',
+                (int) $referrer_id,
+                'referee:' . $referee_user_id
+            );
+        }
+
+        return array(
+            'success' => true,
+            'referrer_id' => (int) $referrer_id,
+            'referee_bonus' => LR_REFEREE_BONUS,
+        );
+    } finally {
+        $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
     }
-    
-    // Store the relationship
-    update_user_meta( $referee_user_id, '_lamako_referred_by', $referrer_id );
-    update_user_meta( $referee_user_id, '_lamako_referral_code_used', $referrer_code );
-    update_user_meta( $referee_user_id, '_lamako_referral_date', current_time( 'mysql' ) );
-    
-    // Add referrer's referral count
-    $count = (int) get_user_meta( $referrer_id, '_lamako_referral_count', true );
-    update_user_meta( $referrer_id, '_lamako_referral_count', $count + 1 );
-    
-    // Give referee bonus immediately
-    if ( function_exists( 'mycred_add' ) ) {
-        mycred_add( 'referral_signup', $referee_user_id, LR_REFEREE_BONUS, 'Bonus parrainage (inscription)' );
-    }
-    
-    return array(
-        'success' => true,
-        'referrer_id' => (int) $referrer_id,
-        'referee_bonus' => LR_REFEREE_BONUS,
-    );
 }
 
 /**
@@ -589,49 +861,49 @@ add_action( 'rest_api_init', function() {
     register_rest_route( $namespace, '/balance', array(
         'methods' => 'GET',
         'callback' => 'lr_api_get_balance',
-        'permission_callback' => '__return_true',
+        'permission_callback' => 'lr_rest_require_user',
     ) );
     
     // GET /history
     register_rest_route( $namespace, '/history', array(
         'methods' => 'GET',
         'callback' => 'lr_api_get_history',
-        'permission_callback' => '__return_true',
+        'permission_callback' => 'lr_rest_require_user',
     ) );
     
     // GET /user-by-email
     register_rest_route( $namespace, '/user-by-email', array(
         'methods' => 'GET',
         'callback' => 'lr_api_get_user_by_email',
-        'permission_callback' => '__return_true',
+        'permission_callback' => 'lr_rest_require_user',
     ) );
     
     // POST /redeem
     register_rest_route( $namespace, '/redeem', array(
         'methods' => 'POST',
         'callback' => 'lr_api_redeem_points',
-        'permission_callback' => '__return_true',
+        'permission_callback' => 'lr_rest_require_user',
     ) );
     
     // POST /referral/register
     register_rest_route( $namespace, '/referral/register', array(
         'methods' => 'POST',
         'callback' => 'lr_api_register_referral',
-        'permission_callback' => '__return_true',
+        'permission_callback' => 'lr_rest_require_user',
     ) );
     
     // POST /referral/validate
     register_rest_route( $namespace, '/referral/validate', array(
         'methods' => 'POST',
         'callback' => 'lr_api_validate_referral_code',
-        'permission_callback' => '__return_true',
+        'permission_callback' => 'lr_rest_require_user',
     ) );
     
     // GET /referral/code
     register_rest_route( $namespace, '/referral/code', array(
         'methods' => 'GET',
         'callback' => 'lr_api_get_referral_code',
-        'permission_callback' => '__return_true',
+        'permission_callback' => 'lr_rest_require_user',
     ) );
     
     // GET /tiers
@@ -644,13 +916,8 @@ add_action( 'rest_api_init', function() {
 
 // ----- BALANCE -----
 function lr_api_get_balance( $request ) {
-    $auth = lr_authenticate_request( $request );
-    if ( is_wp_error( $auth ) ) return $auth;
-    
-    $user_id = (int) $request->get_param( 'user_id' );
-    if ( ! $user_id ) {
-        return new WP_Error( 'missing_param', 'user_id is required.', array( 'status' => 400 ) );
-    }
+    $user_id = lr_authenticated_user_id( $request, $request->get_param( 'user_id' ) );
+    if ( is_wp_error( $user_id ) ) return $user_id;
     
     if ( ! function_exists( 'mycred_get_users_balance' ) ) {
         return new WP_Error( 'mycred_missing', 'myCred plugin not active.', array( 'status' => 500 ) );
@@ -681,15 +948,9 @@ function lr_get_discount_percent( $tier ) {
 
 // ----- HISTORY -----
 function lr_api_get_history( $request ) {
-    $auth = lr_authenticate_request( $request );
-    if ( is_wp_error( $auth ) ) return $auth;
-    
-    $user_id = (int) $request->get_param( 'user_id' );
+    $user_id = lr_authenticated_user_id( $request, $request->get_param( 'user_id' ) );
+    if ( is_wp_error( $user_id ) ) return $user_id;
     $limit = min( (int) ( $request->get_param( 'limit' ) ?: 20 ), 100 );
-    
-    if ( ! $user_id ) {
-        return new WP_Error( 'missing_param', 'user_id is required.', array( 'status' => 400 ) );
-    }
     
     global $wpdb;
     $table = $wpdb->prefix . 'myCRED_log';
@@ -716,8 +977,8 @@ function lr_api_get_history( $request ) {
 
 // ----- USER BY EMAIL -----
 function lr_api_get_user_by_email( $request ) {
-    $auth = lr_authenticate_request( $request );
-    if ( is_wp_error( $auth ) ) return $auth;
+    $authenticated_user_id = lr_authenticated_user_id( $request );
+    if ( is_wp_error( $authenticated_user_id ) ) return $authenticated_user_id;
     
     $email = sanitize_email( $request->get_param( 'email' ) );
     if ( ! $email ) {
@@ -727,6 +988,9 @@ function lr_api_get_user_by_email( $request ) {
     $user = get_user_by( 'email', $email );
     if ( ! $user ) {
         return new WP_Error( 'not_found', 'User not found.', array( 'status' => 404 ) );
+    }
+    if ( (int) $user->ID !== (int) $authenticated_user_id ) {
+        return new WP_Error( 'forbidden_user', 'You cannot access another user account.', array( 'status' => 403 ) );
     }
     
     $balance = function_exists( 'mycred_get_users_balance' ) ? mycred_get_users_balance( $user->ID ) : 0;
@@ -741,90 +1005,30 @@ function lr_api_get_user_by_email( $request ) {
 
 // ----- REDEEM POINTS -----
 function lr_api_redeem_points( $request ) {
-    $auth = lr_authenticate_request( $request );
-    if ( is_wp_error( $auth ) ) return $auth;
-    
     $body = $request->get_json_params();
-    $user_id = (int) ( $body['user_id'] ?? 0 );
+    $body = is_array( $body ) ? $body : array();
+    $user_id = lr_authenticated_user_id( $request, $body['user_id'] ?? 0 );
+    if ( is_wp_error( $user_id ) ) return $user_id;
     $points = (int) ( $body['points'] ?? 0 );
-    
-    if ( ! $user_id || ! $points ) {
-        return new WP_Error( 'missing_params', 'user_id and points are required.', array( 'status' => 400 ) );
+
+    $idempotency_key = $request->get_header( 'Idempotency-Key' );
+    if ( ! $idempotency_key ) {
+        $idempotency_key = $body['idempotencyKey'] ?? ( $body['idempotency_key'] ?? '' );
     }
-    
-    // Check minimum lifetime points for redemption (750 pts = 750 000 Ar spent)
-    $total_earned = lr_get_total_earned( $user_id );
-    if ( $total_earned < LR_REDEMPTION_MIN_LIFETIME ) {
-        return new WP_Error( 'tier_too_low', 
-            sprintf( 'L\'échange de points est disponible à partir de %d pts cumulés (= %s Ar dépensés). Il vous manque %d pts.', 
-                LR_REDEMPTION_MIN_LIFETIME, 
-                number_format( LR_REDEMPTION_MIN_LIFETIME * 1000, 0, ',', ' ' ),
-                LR_REDEMPTION_MIN_LIFETIME - $total_earned 
-            ),
-            array( 'status' => 403 ) 
-        );
-    }
-    
-    // Validate redemption tiers (fixed rate: 20 Ar/pt = 2% cashback)
-    $valid_tiers = array( 500, 1000, 2000, 5000 );
-    if ( ! in_array( $points, $valid_tiers ) ) {
-        return new WP_Error( 'invalid_points', 'Points must be one of: 500, 1000, 2000, 5000.', array( 'status' => 400 ) );
-    }
-    
-    // Check balance
-    if ( ! function_exists( 'mycred_get_users_balance' ) ) {
-        return new WP_Error( 'mycred_missing', 'myCred plugin not active.', array( 'status' => 500 ) );
-    }
-    
-    $balance = mycred_get_users_balance( $user_id );
-    if ( $balance < $points ) {
-        return new WP_Error( 'insufficient_points', 'Solde insuffisant.', array( 'status' => 400 ) );
-    }
-    
-    // Calculate discount value (fixed rate: 20 Ar per point = 2% cashback)
-    $values = array( 500 => 10000, 1000 => 20000, 2000 => 40000, 5000 => 100000 );
-    $discount_value = $values[ $points ];
-    
-    // Deduct points
-    mycred_subtract( 'redemption', $user_id, $points, 
-        sprintf( 'Échange %d pts → %s Ar de réduction', $points, number_format( $discount_value, 0, ',', ' ' ) )
-    );
-    
-    // Generate coupon code
-    $coupon_code = 'LR-' . strtoupper( wp_generate_password( 8, false ) );
-    
-    // Create WooCommerce coupon
-    $coupon = new WC_Coupon();
-    $coupon->set_code( $coupon_code );
-    $coupon->set_discount_type( 'fixed_cart' );
-    $coupon->set_amount( $discount_value );
-    $coupon->set_usage_limit( 1 );
-    $coupon->set_usage_limit_per_user( 1 );
-    $coupon->set_date_expires( strtotime( '+30 days' ) );
-    $coupon->set_description( sprintf( 'LamakoRewards - %d points échangés par user #%d', $points, $user_id ) );
-    $coupon->save();
-    
-    return rest_ensure_response( array(
-        'success' => true,
-        'coupon_code' => $coupon_code,
-        'discount_value' => $discount_value,
-        'points_deducted' => $points,
-        'new_balance' => mycred_get_users_balance( $user_id ),
-        'expires' => date( 'c', strtotime( '+30 days' ) ),
-    ) );
+    $result = lr_redeem_points_for_user( $user_id, $points, $idempotency_key );
+    return is_wp_error( $result ) ? $result : rest_ensure_response( $result );
 }
 
 // ----- REFERRAL: REGISTER -----
 function lr_api_register_referral( $request ) {
-    $auth = lr_authenticate_request( $request );
-    if ( is_wp_error( $auth ) ) return $auth;
-    
     $body = $request->get_json_params();
-    $referee_user_id = (int) ( $body['referee_user_id'] ?? 0 );
+    $body = is_array( $body ) ? $body : array();
+    $referee_user_id = lr_authenticated_user_id( $request, $body['referee_user_id'] ?? 0 );
+    if ( is_wp_error( $referee_user_id ) ) return $referee_user_id;
     $referrer_code = sanitize_text_field( $body['referrer_code'] ?? '' );
     
-    if ( ! $referee_user_id || ! $referrer_code ) {
-        return new WP_Error( 'missing_params', 'referee_user_id and referrer_code are required.', array( 'status' => 400 ) );
+    if ( ! $referrer_code ) {
+        return new WP_Error( 'missing_params', 'referrer_code is required.', array( 'status' => 400 ) );
     }
     
     $result = lr_register_referral( $referee_user_id, $referrer_code );
@@ -838,8 +1042,8 @@ function lr_api_register_referral( $request ) {
 
 // ----- REFERRAL: VALIDATE CODE -----
 function lr_api_validate_referral_code( $request ) {
-    $auth = lr_authenticate_request( $request );
-    if ( is_wp_error( $auth ) ) return $auth;
+    $user_id = lr_authenticated_user_id( $request );
+    if ( is_wp_error( $user_id ) ) return $user_id;
     
     $body = $request->get_json_params();
     $code = sanitize_text_field( $body['code'] ?? '' );
@@ -870,13 +1074,8 @@ function lr_api_validate_referral_code( $request ) {
 
 // ----- REFERRAL: GET CODE -----
 function lr_api_get_referral_code( $request ) {
-    $auth = lr_authenticate_request( $request );
-    if ( is_wp_error( $auth ) ) return $auth;
-    
-    $user_id = (int) $request->get_param( 'user_id' );
-    if ( ! $user_id ) {
-        return new WP_Error( 'missing_param', 'user_id is required.', array( 'status' => 400 ) );
-    }
+    $user_id = lr_authenticated_user_id( $request, $request->get_param( 'user_id' ) );
+    if ( is_wp_error( $user_id ) ) return $user_id;
     
     $code = lr_generate_referral_code( $user_id );
     $referral_count = (int) get_user_meta( $user_id, '_lamako_referral_count', true );

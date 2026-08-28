@@ -2934,6 +2934,9 @@ function lamako_mobile_v2_enabled_payment_gateways() {
         if ( empty( $gateways[ $gateway_id ] ) || $gateways[ $gateway_id ]->enabled !== 'yes' ) {
             continue;
         }
+        if ( 'papi_paiement' === $gateway_id && ! lamako_mobile_v2_orange_server_verification_available() ) {
+            continue;
+        }
         $gateway  = $gateways[ $gateway_id ];
         $icon_url = lamako_mobile_v2_payment_gateway_icon_url( $gateway, $definition['icon'] ?? '' );
         $enabled[] = [
@@ -3180,6 +3183,16 @@ function lamako_mobile_v2_orange_endpoint( $gateway, $property, $fallback ) {
     return $url;
 }
 
+/**
+ * Orange Web Payment does not expose an authenticated transaction-status
+ * contract in the currently installed merchant integration. Until one is
+ * implemented and amount/currency/reference are re-read from Orange, the
+ * gateway must remain unavailable for new mobile transactions.
+ */
+function lamako_mobile_v2_orange_server_verification_available() {
+    return false;
+}
+
 function lamako_mobile_v2_orange_token( $gateway ) {
     $endpoint = lamako_mobile_v2_orange_endpoint(
         $gateway,
@@ -3229,6 +3242,14 @@ function lamako_mobile_v2_orange_token( $gateway ) {
 }
 
 function lamako_mobile_v2_initiate_orange( WC_Order $order, $gateway, $attempt_id, $token, $kind ) {
+    if ( ! lamako_mobile_v2_orange_server_verification_available() ) {
+        return new WP_Error(
+            'lamako_v2_orange_verification_unavailable',
+            'Orange Money is temporarily unavailable while provider verification is being secured.',
+            [ 'status' => 503 ]
+        );
+    }
+
     $access_token = lamako_mobile_v2_orange_token( $gateway );
     if ( is_wp_error( $access_token ) ) {
         return $access_token;
@@ -3907,34 +3928,37 @@ function lamako_mobile_v2_orange_callback( WP_REST_Request $request ) {
         return new WP_REST_Response( [ 'received' => false ], 409 );
     }
 
-    if ( in_array( $status, [ 'SUCCESS', 'COMPLETED', 'TS' ], true ) ) {
-        $order->payment_complete( $transaction_id !== '' ? $transaction_id : (string) $order->get_meta( '_papi_pay_token' ) );
-        $order->update_meta_data( '_lamako_v2_payment_attempt_status', 'success' );
-        $order->update_meta_data( '_lamako_v2_payment_next_poll_at', 0 );
-        $order->add_order_note( 'Orange Money payment confirmed by the provider callback.' );
-        $result = lamako_mobile_v2_gateway_response( $order, 'papi_paiement', $attempt_id, [ 'result' => 'success' ] );
-        $order->update_meta_data( '_lamako_v2_payment_result', wp_json_encode( $result ) );
-        $order->save();
-        return new WP_REST_Response( [ 'received' => true ], 200 );
+    // The callback contains no verifiable signature in the installed Orange
+    // contract. Treat every field as an untrusted hint and make replays a
+    // no-op. In particular, never complete, fail or cancel an order here.
+    $amount       = array_key_exists( 'amount', $body ) && is_numeric( $body['amount'] ) ? (float) $body['amount'] : null;
+    $currency     = strtoupper( sanitize_text_field( $body['currency'] ?? '' ) );
+    $payload_hash = hash_hmac(
+        'sha256',
+        implode( '|', [ $notif_token, $status, $transaction_id, null === $amount ? '' : (string) $amount, $currency ] ),
+        wp_salt( 'nonce' )
+    );
+    $previous_hash = (string) $order->get_meta( '_lamako_v2_orange_callback_payload_hash' );
+    if ( $previous_hash !== '' && hash_equals( $previous_hash, $payload_hash ) ) {
+        return new WP_REST_Response( [ 'received' => true ], 202 );
     }
 
-    if ( $status === 'CANCELLED' ) {
-        lamako_mobile_v2_cancel_unpaid_payment( $order, 'Orange Money reported that the customer cancelled the payment.' );
-        return new WP_REST_Response( [ 'received' => true ], 200 );
+    $amount_mismatch   = null !== $amount && abs( (float) $order->get_total() - $amount ) > 0.01;
+    $currency_mismatch = $currency !== '' && strtoupper( (string) $order->get_currency() ) !== $currency;
+    $order->update_meta_data( '_lamako_v2_orange_callback_payload_hash', $payload_hash );
+    $order->update_meta_data( '_lamako_v2_orange_callback_received_at', time() );
+    $order->update_meta_data( '_lamako_v2_orange_callback_hint', $status );
+    $order->update_meta_data( '_lamako_v2_orange_callback_amount_mismatch', $amount_mismatch ? 'yes' : 'no' );
+    $order->update_meta_data( '_lamako_v2_orange_callback_currency_mismatch', $currency_mismatch ? 'yes' : 'no' );
+    if ( $transaction_id !== '' ) {
+        $order->update_meta_data( '_lamako_v2_orange_callback_transaction_hash', hash( 'sha256', $transaction_id ) );
     }
-
-    if ( in_array( $status, [ 'FAILED', 'INSUFFICIENT_BALANCE' ], true ) ) {
-        lamako_mobile_v2_provider_failure( $order, 'The operator declined or cancelled the payment.' );
-        return new WP_REST_Response( [ 'received' => true ], 200 );
-    }
-
-    if ( $order->has_status( [ 'failed', 'cancelled' ] ) ) {
-        return new WP_REST_Response( [ 'received' => true ], 200 );
-    }
-
-    $order->update_status( 'on-hold', 'Orange Money payment confirmation is pending.' );
-    $order->update_meta_data( '_lamako_v2_payment_attempt_status', 'pending' );
     $order->save();
+
+    $review_message = ( $amount_mismatch || $currency_mismatch )
+        ? 'Orange callback data did not match the order. Authenticated provider verification is required.'
+        : 'Orange callback received. Authenticated provider verification is required before changing payment state.';
+    lamako_mobile_v2_mark_payment_for_review( $order, $review_message );
     return new WP_REST_Response( [ 'received' => true ], 202 );
 }
 
@@ -6942,86 +6966,32 @@ function lamako_mobile_v2_rewards_history( WP_REST_Request $request ) {
 }
 
 function lamako_mobile_v2_rewards_redeem( WP_REST_Request $request ) {
-    if ( ! function_exists( 'mycred_get_users_balance' ) || ! function_exists( 'mycred_subtract' ) ) {
-        return new WP_Error( 'lamako_v2_mycred_missing', 'myCred is not available.', [ 'status' => 500 ] );
-    }
-    if ( ! class_exists( 'WC_Coupon' ) ) {
-        return new WP_Error( 'lamako_v2_wc_missing', 'WooCommerce is not available.', [ 'status' => 500 ] );
-    }
-
     $body    = $request->get_json_params();
     $body    = is_array( $body ) ? $body : [];
     $user_id = get_current_user_id();
     $points  = absint( $body['points'] ?? 0 );
-
-    $minimum_redeem_points = function_exists( 'lr_rewards_minimum_redeem_points' ) ? lr_rewards_minimum_redeem_points() : 750;
-    $valid_tiers = [];
-    if ( function_exists( 'lr_rewards_redemption_options' ) ) {
-        foreach ( lr_rewards_redemption_options() as $option ) {
-            $option_points = absint( $option['points'] ?? 0 );
-            $option_value  = absint( $option['amount_ariary'] ?? $option['value'] ?? 0 );
-            if ( $option_points > 0 && $option_value > 0 ) {
-                $valid_tiers[ $option_points ] = $option_value;
-            }
-        }
-    }
-    if ( empty( $valid_tiers ) ) {
-        $valid_tiers = [ 1000 => 20000, 2000 => 40000 ];
+    $idempotency_key = $request->get_header( 'Idempotency-Key' );
+    if ( ! $idempotency_key ) {
+        $idempotency_key = $body['idempotencyKey'] ?? ( $body['idempotency_key'] ?? '' );
     }
 
-    if ( ! isset( $valid_tiers[ $points ] ) ) {
-        return new WP_Error( 'lamako_v2_invalid_reward_points', 'Invalid redemption tier.', [ 'status' => 400 ] );
+    if ( ! function_exists( 'lr_redeem_points_for_user' ) ) {
+        return new WP_Error( 'lamako_v2_rewards_backend_unavailable', 'Rewards redemption is temporarily unavailable.', [ 'status' => 503 ] );
+    }
+    $result = lr_redeem_points_for_user( $user_id, $points, $idempotency_key );
+    if ( is_wp_error( $result ) ) {
+        return $result;
     }
 
-    $total_earned = function_exists( 'lr_get_total_earned' ) ? lr_get_total_earned( $user_id ) : (float) get_user_meta( $user_id, 'mycred_default_total', true );
-    if ( $total_earned < $minimum_redeem_points ) {
-        return new WP_Error( 'lamako_v2_rewards_locked', 'Rewards redemption is not unlocked for this account.', [ 'status' => 403 ] );
-    }
-
-    $balance = mycred_get_users_balance( $user_id );
-    if ( $balance < $minimum_redeem_points ) {
-        return new WP_Error( 'lamako_v2_rewards_minimum_balance_required', 'Rewards redemption requires at least 750 available points.', [ 'status' => 403 ] );
-    }
-    if ( $balance < $points ) {
-        return new WP_Error( 'lamako_v2_insufficient_points', 'Insufficient rewards balance.', [ 'status' => 400 ] );
-    }
-
-    $idempotency_key = sanitize_text_field( $body['idempotencyKey'] ?? $body['idempotency_key'] ?? '' );
-    if ( $idempotency_key !== '' ) {
-        $existing = get_user_meta( $user_id, '_lamako_v2_reward_redeem_' . md5( $idempotency_key ), true );
-        if ( is_array( $existing ) && ! empty( $existing['couponCode'] ) ) {
-            return rest_ensure_response( $existing );
-        }
-    }
-
-    $discount_value = $valid_tiers[ $points ];
-    mycred_subtract( 'redemption', $user_id, $points, sprintf( 'Lamako Mobile v2 redemption %d pts', $points ) );
-
-    $coupon_code = 'LR-' . strtoupper( wp_generate_password( 8, false ) );
-    $coupon = new WC_Coupon();
-    $coupon->set_code( $coupon_code );
-    $coupon->set_discount_type( 'fixed_cart' );
-    $coupon->set_amount( $discount_value );
-    $coupon->set_usage_limit( 1 );
-    $coupon->set_usage_limit_per_user( 1 );
-    $coupon->set_date_expires( strtotime( '+30 days' ) );
-    $coupon->set_description( sprintf( 'Lamako Mobile v2 rewards coupon for user #%d, %d points.', $user_id, $points ) );
-    $coupon->save();
-
-    $response = [
-        'success'       => true,
-        'couponCode'    => $coupon_code,
-        'discountValue' => $discount_value,
-        'pointsDeducted'=> $points,
-        'newBalance'    => mycred_get_users_balance( $user_id ),
-        'expiresAt'     => date( 'c', strtotime( '+30 days' ) ),
-    ];
-
-    if ( $idempotency_key !== '' ) {
-        update_user_meta( $user_id, '_lamako_v2_reward_redeem_' . md5( $idempotency_key ), $response );
-    }
-
-    return rest_ensure_response( $response );
+    return rest_ensure_response( [
+        'success'          => ! empty( $result['success'] ),
+        'couponCode'       => (string) ( $result['coupon_code'] ?? '' ),
+        'discountValue'    => (int) ( $result['discount_value'] ?? 0 ),
+        'pointsDeducted'   => (int) ( $result['points_deducted'] ?? 0 ),
+        'newBalance'       => (float) ( $result['new_balance'] ?? 0 ),
+        'expiresAt'        => (string) ( $result['expires'] ?? '' ),
+        'idempotentReplay' => ! empty( $result['idempotent_replay'] ),
+    ] );
 }
 
 function lamako_mobile_v2_referral_code() {
