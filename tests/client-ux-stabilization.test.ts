@@ -35,7 +35,8 @@ describe("client UX stabilization", () => {
     expect(payment).toContain('isTicketOrderItem(item) ? "BILLET" : "ARTICLE"');
     expect(payment).toContain("item.seatLabels.join");
     expect(payment).toContain("Remise appliquée");
-    expect(paymentStyles).toContain('fontWeight: "800"');
+    expect(paymentStyles).toContain('fontFamily: "Raleway_800ExtraBold"');
+    expect(paymentStyles).not.toContain("fontWeight");
   });
 
   it("keeps the payment countdown when only the local cart expiry is available", () => {

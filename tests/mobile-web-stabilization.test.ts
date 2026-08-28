@@ -7,6 +7,32 @@ import * as WebNotifications from "../lib/notification-runtime.web";
 
 const source = (path: string) => readFileSync(resolve(path), "utf8");
 
+function themeLightColor(name: string): string {
+  const match = source("theme.config.js").match(
+    new RegExp(`${name}:\\s*\\{\\s*light:\\s*['\"]([^'\"]+)`),
+  );
+  if (!match) throw new Error(`Missing light theme color: ${name}`);
+  return match[1];
+}
+
+function contrastRatio(foreground: string, background: string): number {
+  const luminance = (hex: string) => {
+    const channels = hex
+      .replace("#", "")
+      .match(/.{2}/g)
+      ?.map((channel) => Number.parseInt(channel, 16) / 255);
+    if (!channels || channels.length !== 3)
+      throw new Error(`Invalid hex: ${hex}`);
+    const [red, green, blue] = channels.map((channel) =>
+      channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
+    );
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+  };
+  const lighter = Math.max(luminance(foreground), luminance(background));
+  const darker = Math.min(luminance(foreground), luminance(background));
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 afterEach(async () => {
   await WebNotifications.cancelAllScheduledNotificationsAsync();
   vi.useRealTimers();
@@ -148,6 +174,19 @@ describe("mobile web stabilization", () => {
     expect(paymentReturn).toContain('fontFamily: "Raleway_500Medium"');
     expect(paymentReturn).not.toContain('fontWeight: "700"');
     expect(paymentReturn).not.toContain('fontWeight: "800"');
+  });
+
+  it("keeps light-theme payment copy readable on cards and pages", () => {
+    const muted = themeLightColor("muted");
+    expect(
+      contrastRatio(muted, themeLightColor("surface")),
+    ).toBeGreaterThanOrEqual(4.5);
+    expect(
+      contrastRatio(muted, themeLightColor("background")),
+    ).toBeGreaterThanOrEqual(4.5);
+    expect(source("components/payment/payment-screen.styles.ts")).not.toContain(
+      "fontWeight",
+    );
   });
 
   it("loads every Raleway weight referenced by the payment experience", () => {
