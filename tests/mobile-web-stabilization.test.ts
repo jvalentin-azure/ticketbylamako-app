@@ -64,7 +64,7 @@ describe("mobile web stabilization", () => {
       back: vi.fn(),
       replace: vi.fn(),
     };
-    goBackOrFallback(withHistory as never, "/(tabs)/events");
+    goBackOrFallback(withHistory as never, "/(tabs)/events", false);
     expect(withHistory.back).toHaveBeenCalledOnce();
     expect(withHistory.replace).not.toHaveBeenCalled();
 
@@ -73,9 +73,18 @@ describe("mobile web stabilization", () => {
       back: vi.fn(),
       replace: vi.fn(),
     };
-    goBackOrFallback(directEntry as never, "/(tabs)/events");
+    goBackOrFallback(directEntry as never, "/(tabs)/events", false);
     expect(directEntry.back).not.toHaveBeenCalled();
     expect(directEntry.replace).toHaveBeenCalledWith("/(tabs)/events");
+
+    const syntheticWebHistory = {
+      canGoBack: vi.fn(() => true),
+      back: vi.fn(),
+      replace: vi.fn(),
+    };
+    goBackOrFallback(syntheticWebHistory as never, "/(tabs)/events", true);
+    expect(syntheticWebHistory.back).not.toHaveBeenCalled();
+    expect(syntheticWebHistory.replace).toHaveBeenCalledWith("/(tabs)/events");
   });
 
   it("renders a real Google Maps iframe on web", () => {
