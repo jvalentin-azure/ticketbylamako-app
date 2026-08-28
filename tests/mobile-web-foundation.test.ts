@@ -78,14 +78,14 @@ describe("non-installable mobile web foundation", () => {
     expect(webAuth).not.toContain("AsyncStorage");
     expect(webAuth).not.toContain("SecureStore");
     expect(webAuth).not.toContain('const TOKEN_KEY = "jwt_token"');
-    expect(webAuth).toContain("const verifiedSession = await fetchSession(true)");
-    expect(webAuth).toContain("verifiedSession.user.id !== data.user.id");
+    expect(webAuth).toContain("confirmAuthenticatedUser(data.user.id)");
+    expect(webAuth).toContain("requestEpoch !== sessionEpoch");
     expect(webAuth).toContain("requestSessionWithNonceRecovery");
     expect(webAuth).toContain(
       'errorData.code === "rest_cookie_invalid_nonce"',
     );
     expect(socialAuth).toContain("v2/web-session/social");
-    expect(socialAuth).toContain("const valid = await validateToken()");
+    expect(socialAuth).toContain("confirmAuthenticatedUser(data.user.id)");
     expect(socialAuth).toContain("session WordPress HttpOnly");
   });
 
@@ -107,6 +107,7 @@ describe("non-installable mobile web foundation", () => {
     expect(webSession).toContain('credentials: "include"');
     expect(webSession).toContain('cache: "no-store"');
     expect(webSession).toContain("if (refreshRequest) return refreshRequest");
+    expect(webSession).toContain("refreshEpoch === nonceEpoch");
     expect(webSession).toContain("controller.abort()");
   });
 

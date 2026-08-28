@@ -4,6 +4,7 @@ const SITE_URL =
 
 let memoryNonce: string | null = null;
 let refreshRequest: Promise<string | null> | null = null;
+let nonceEpoch = 0;
 
 function browserSessionStorage(): Storage | null {
   try {
@@ -27,6 +28,7 @@ export function setWebSessionNonce(nonce: string | null): void {
 }
 
 export function clearWebSessionNonce(): void {
+  nonceEpoch += 1;
   setWebSessionNonce(null);
 }
 
@@ -34,6 +36,7 @@ export async function refreshWebSessionNonce(): Promise<string | null> {
   if (refreshRequest) return refreshRequest;
 
   clearWebSessionNonce();
+  const refreshEpoch = nonceEpoch;
   const controller =
     typeof AbortController !== "undefined" ? new AbortController() : null;
   const timeout = controller
@@ -54,7 +57,11 @@ export async function refreshWebSessionNonce(): Promise<string | null> {
         authenticated?: boolean;
         nonce?: string;
       } | null;
-      if (data?.authenticated && data.nonce) {
+      if (
+        refreshEpoch === nonceEpoch &&
+        data?.authenticated &&
+        data.nonce
+      ) {
         setWebSessionNonce(data.nonce);
         return data.nonce;
       }

@@ -3,8 +3,11 @@ import * as Crypto from "expo-crypto";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import { Platform } from "react-native";
-import type { User } from "./auth";
-import { clearWebSessionNonce } from "./web-session";
+import {
+  confirmAuthenticatedUser,
+  prepareForExternalAuth,
+  type User,
+} from "./auth";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -208,7 +211,7 @@ export async function socialLogin(
   credential: SocialCredential,
 ): Promise<User> {
   const isWeb = Platform.OS === "web";
-  if (isWeb) clearWebSessionNonce();
+  if (isWeb) prepareForExternalAuth();
   const res = await fetchWithTimeout(
     `${SITE_URL_BASE}/wp-json/lamako-mobile/${isWeb ? "v2/web-session/social" : "v1/social-login"}`,
     {
@@ -237,10 +240,8 @@ export async function socialLogin(
     if (!data.authenticated || !data.user) {
       throw new Error(data.message || "Échec de l'authentification");
     }
-    const { getStoredUser, validateToken } = await import("./auth");
-    const valid = await validateToken();
-    const sessionUser = valid ? await getStoredUser() : null;
-    if (!sessionUser || sessionUser.id !== data.user.id) {
+    const sessionUser = await confirmAuthenticatedUser(data.user.id);
+    if (!sessionUser) {
       throw new Error("La session sécurisée n'a pas pu être confirmée.");
     }
     return sessionUser;
@@ -276,6 +277,7 @@ export async function startGoogleLogin(): Promise<SocialCredential | null> {
   if (!GOOGLE_CLIENT_ID) {
     throw new Error("Google Client ID non configuré");
   }
+  if (Platform.OS === "web") prepareForExternalAuth();
 
   const appRedirectUri = getOAuthAppReturnUrl("google");
   const webRedirectUri = `${SITE_URL_BASE}/lamako-mobile/oauth/google-callback`;
@@ -313,7 +315,7 @@ export async function startAppleLogin(): Promise<SocialCredential | null> {
   if (Platform.OS === "web") {
     // The WordPress cookie changes when Apple returns. Never send a REST nonce
     // minted for the previous cookie while the refreshed app bootstraps.
-    clearWebSessionNonce();
+    prepareForExternalAuth();
     const startUrl = new URL(`${SITE_URL_BASE}/wp-admin/admin-post.php`);
     startUrl.searchParams.set("action", "lamako_apple_start");
     startUrl.searchParams.set("redirect_to", `${SITE_URL_BASE}/mobile/`);
@@ -369,6 +371,7 @@ export async function startFacebookLogin(): Promise<SocialCredential | null> {
   if (!FACEBOOK_APP_ID) {
     throw new Error("Facebook App ID non configuré");
   }
+  if (Platform.OS === "web") prepareForExternalAuth();
 
   const appRedirectUri = getOAuthAppReturnUrl("facebook");
   const webRedirectUri = `${SITE_URL_BASE}/lamako-mobile/oauth/facebook-callback`;

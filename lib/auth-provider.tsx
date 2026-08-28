@@ -14,6 +14,7 @@ import {
   getStoredUser,
   storeUser,
   validateToken,
+  confirmAuthenticatedUser,
 } from "./api/auth";
 import { invalidateAllCaches } from "./api/cache";
 import { clearTicketDetailCache } from "./ticket-detail-cache";
@@ -48,6 +49,18 @@ function syncPushTokenForAuthenticatedUser() {
     );
 }
 
+function hasExternalWebAuthReturn(): boolean {
+  if (typeof window === "undefined") return false;
+  return new URLSearchParams(window.location.search).has("lamako_auth");
+}
+
+function clearExternalWebAuthReturn(): void {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  url.searchParams.delete("lamako_auth");
+  window.history.replaceState(window.history.state, "", url.toString());
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>({
     user: null,
@@ -60,6 +73,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     (async () => {
       try {
+        if (hasExternalWebAuthReturn()) {
+          const returnedUser = await confirmAuthenticatedUser();
+          if (returnedUser && !cancelled) {
+            clearExternalWebAuthReturn();
+            setState({
+              user: returnedUser,
+              isLoading: false,
+              isAuthenticated: true,
+            });
+            syncPushTokenForAuthenticatedUser();
+            return;
+          }
+        }
+
         const [user, token] = await Promise.all([
           getStoredUser(),
           getStoredToken(),

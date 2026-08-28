@@ -186,13 +186,14 @@ a { display: inline-flex; align-items: center; justify-content: center; min-heig
   <div class="box">
     <div class="mark"><?php echo esc_html( $mark ); ?></div>
     <h1>Retour a TicketByLamako</h1>
-    <p>La connexion <?php echo esc_html( $provider ); ?> est terminee. Retour automatique vers l'application.</p>
+    <p id="lamako-return-message">La connexion <?php echo esc_html( $provider ); ?> est terminee. Retour automatique vers l'application.</p>
     <a id="lamako-open-app" href="<?php echo esc_attr( $app_callback ); ?>">Ouvrir l'application</a>
   </div>
 </main>
 <script>
 (function() {
   var defaultAppUrl = "<?php echo esc_js( $app_callback ); ?>";
+  var providerLabel = <?php echo wp_json_encode( $provider ); ?>;
   var suffix = window.location.hash || window.location.search || "";
   var appUrl = defaultAppUrl;
 
@@ -235,6 +236,17 @@ a { display: inline-flex; align-items: center; justify-content: center; min-heig
 
   var target = appUrl + suffix;
   var link = document.getElementById("lamako-open-app");
+  var message = document.getElementById("lamako-return-message");
+  try {
+    var parsedTarget = new URL(appUrl, window.location.origin);
+    var isWebReturn = parsedTarget.origin === window.location.origin && /^\/mobile\/oauth\/(google|facebook)-callback\/?$/i.test(parsedTarget.pathname);
+    if (isWebReturn) {
+      if (message) message.textContent = "La connexion " + providerLabel + " est terminee. Retour automatique vers TicketByLamako.";
+      if (link) link.textContent = "Continuer sur TicketByLamako";
+    }
+  } catch (e) {
+    // Keep the native fallback copy when the target cannot be parsed.
+  }
   if (link) link.setAttribute("href", target);
   window.setTimeout(function() {
     window.location.replace(target);

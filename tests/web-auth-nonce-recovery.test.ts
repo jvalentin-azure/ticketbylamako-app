@@ -94,4 +94,72 @@ describe("browser session nonce recovery", () => {
     });
     expect(values.has("ticketbylamako_wp_rest_nonce")).toBe(false);
   });
+
+  it("ignores a session read that started before an OAuth account handoff", async () => {
+    const values = new Map<string, string>([
+      ["ticketbylamako_wp_rest_nonce", "old-nonce"],
+    ]);
+    vi.stubGlobal("window", {
+      sessionStorage: {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => values.set(key, value),
+        removeItem: (key: string) => values.delete(key),
+      },
+    });
+
+    let resolveOldSession!: (response: Response) => void;
+    const oldSession = new Promise<Response>((resolve) => {
+      resolveOldSession = resolve;
+    });
+    const fetchMock = vi
+      .fn()
+      .mockReturnValueOnce(oldSession)
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            authenticated: true,
+            nonce: "new-nonce",
+            user: {
+              id: 178,
+              email: "oauth-user@example.test",
+              displayName: "OAuth User",
+              firstName: "OAuth",
+              lastName: "User",
+              role: "customer",
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { confirmAuthenticatedUser, getStoredUser, prepareForExternalAuth } =
+      await import("../lib/api/auth.web");
+    const staleRead = getStoredUser();
+    prepareForExternalAuth();
+    const confirmed = confirmAuthenticatedUser(178);
+
+    resolveOldSession(
+      new Response(
+        JSON.stringify({
+          authenticated: true,
+          nonce: "old-nonce-refreshed",
+          user: {
+            id: 99,
+            email: "old-user@example.test",
+            displayName: "Old User",
+            firstName: "Old",
+            lastName: "User",
+            role: "customer",
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    await expect(staleRead).resolves.toBeNull();
+    await expect(confirmed).resolves.toMatchObject({ id: 178 });
+    expect(values.get("ticketbylamako_wp_rest_nonce")).toBe("new-nonce");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });

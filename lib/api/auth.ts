@@ -241,6 +241,20 @@ export async function validateToken(storedToken?: string): Promise<boolean> {
   }
 }
 
+// Native OAuth stores a provider-issued JWT after validation. Browser builds
+// replace this module with auth.web.ts, where these helpers reset and confirm
+// the HttpOnly WordPress cookie handoff.
+export function prepareForExternalAuth(): void {}
+
+export async function confirmAuthenticatedUser(
+  expectedUserId?: number,
+): Promise<User | null> {
+  const [valid, user] = await Promise.all([validateToken(), getStoredUser()]);
+  if (!valid || !user) return null;
+  if (expectedUserId !== undefined && user.id !== expectedUserId) return null;
+  return user;
+}
+
 export async function logout(): Promise<void> {
   await secureDelete(TOKEN_KEY);
   await secureDelete(USER_KEY);

@@ -7,6 +7,7 @@ import {
 const SITE_URL =
   process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
 const WEB_SESSION_TOKEN = "wordpress-cookie-session";
+const WEB_SESSION_CONFIRM_DELAYS_MS = [0, 120, 350];
 
 export type UserRole = "customer" | "shop_manager" | "administrator";
 
@@ -28,7 +29,11 @@ interface WebSessionResponse {
 }
 
 let cachedUser: User | null = null;
-let sessionRequest: Promise<WebSessionResponse> | null = null;
+let sessionEpoch = 0;
+let sessionRequest: {
+  epoch: number;
+  promise: Promise<WebSessionResponse>;
+} | null = null;
 
 async function parseJson(response: Response): Promise<Record<string, unknown>> {
   return response.json().catch(() => ({}));
@@ -68,7 +73,14 @@ function sessionHeaders(includeJson = false): Record<string, string> {
   return headers;
 }
 
-function acceptSession(data: WebSessionResponse): WebSessionResponse {
+function acceptSession(
+  data: WebSessionResponse,
+  requestEpoch: number,
+): WebSessionResponse {
+  // A response started before an OAuth handoff must never overwrite the
+  // account established by the provider callback.
+  if (requestEpoch !== sessionEpoch) return { authenticated: false };
+
   if (data.authenticated && data.user && data.nonce) {
     cachedUser = data.user;
     setWebSessionNonce(data.nonce);
@@ -79,7 +91,9 @@ function acceptSession(data: WebSessionResponse): WebSessionResponse {
   return { authenticated: false };
 }
 
-async function requestSessionWithNonceRecovery(): Promise<WebSessionResponse> {
+async function requestSessionWithNonceRecovery(
+  requestEpoch: number,
+): Promise<WebSessionResponse> {
   const sentNonce = Boolean(getWebSessionNonce());
   let response = await fetchWithTimeout(
     `${SITE_URL}/wp-json/lamako-mobile/v2/web-session`,
@@ -97,7 +111,10 @@ async function requestSessionWithNonceRecovery(): Promise<WebSessionResponse> {
     // without a nonce: it authenticates the HttpOnly cookie server-side. A few
     // Safari/proxy combinations return an HTML 403 before the WordPress JSON
     // error, so the fact that we sent a nonce is also a sufficient signal.
-    if (errorData.code === "rest_cookie_invalid_nonce" || sentNonce) {
+    if (
+      requestEpoch === sessionEpoch &&
+      (errorData.code === "rest_cookie_invalid_nonce" || sentNonce)
+    ) {
       clearWebSessionNonce();
       response = await fetchWithTimeout(
         `${SITE_URL}/wp-json/lamako-mobile/v2/web-session`,
@@ -111,24 +128,67 @@ async function requestSessionWithNonceRecovery(): Promise<WebSessionResponse> {
     }
   }
 
-  if (!response.ok) return acceptSession({ authenticated: false });
+  if (!response.ok) {
+    return acceptSession({ authenticated: false }, requestEpoch);
+  }
   return acceptSession(
     (await parseJson(response)) as unknown as WebSessionResponse,
+    requestEpoch,
   );
 }
 
 async function fetchSession(force = false): Promise<WebSessionResponse> {
-  if (!force && sessionRequest) return sessionRequest;
+  if (!force && sessionRequest?.epoch === sessionEpoch) {
+    return sessionRequest.promise;
+  }
 
-  sessionRequest = requestSessionWithNonceRecovery().catch(() => ({
+  const requestEpoch = sessionEpoch;
+  const promise = requestSessionWithNonceRecovery(requestEpoch).catch(() => ({
     authenticated: false,
   }));
+  const trackedRequest = { epoch: requestEpoch, promise };
+  sessionRequest = trackedRequest;
 
   try {
-    return await sessionRequest;
+    return await promise;
   } finally {
-    sessionRequest = null;
+    if (sessionRequest === trackedRequest) sessionRequest = null;
   }
+}
+
+export function prepareForExternalAuth(): void {
+  sessionEpoch += 1;
+  sessionRequest = null;
+  cachedUser = null;
+  clearWebSessionNonce();
+}
+
+export async function confirmAuthenticatedUser(
+  expectedUserId?: number,
+): Promise<User | null> {
+  // Discard both a stale REST nonce and any read that began before the browser
+  // accepted the new Set-Cookie response. Safari can expose that race during
+  // OAuth popup/full-page handoffs, so retry the cookie bootstrap briefly.
+  prepareForExternalAuth();
+
+  for (const delayMs of WEB_SESSION_CONFIRM_DELAYS_MS) {
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+
+    const session = await fetchSession(true);
+    if (
+      session.authenticated &&
+      session.user &&
+      (expectedUserId === undefined || session.user.id === expectedUserId)
+    ) {
+      return session.user;
+    }
+
+    prepareForExternalAuth();
+  }
+
+  return null;
 }
 
 async function sessionMutation(
@@ -137,8 +197,7 @@ async function sessionMutation(
 ): Promise<User> {
   // A stale nonce would make WordPress reject an otherwise valid account
   // switch before the same-origin login/register handler can run.
-  cachedUser = null;
-  clearWebSessionNonce();
+  prepareForExternalAuth();
   const response = await fetchWithTimeout(
     `${SITE_URL}/wp-json/lamako-mobile/v2/web-session/${endpoint}`,
     {
@@ -159,18 +218,11 @@ async function sessionMutation(
   // yet bound to the new cookie's session token. Bootstrap once more without
   // a nonce so WordPress can validate the HttpOnly cookie and mint a nonce
   // that protected REST requests can actually use.
-  cachedUser = data.user;
-  const verifiedSession = await fetchSession(true);
-  if (
-    !verifiedSession.authenticated ||
-    !verifiedSession.user ||
-    verifiedSession.user.id !== data.user.id
-  ) {
-    cachedUser = null;
-    clearWebSessionNonce();
+  const verifiedUser = await confirmAuthenticatedUser(data.user.id);
+  if (!verifiedUser) {
     throw new Error("La session sécurisée n'a pas pu être confirmée.");
   }
-  return verifiedSession.user;
+  return verifiedUser;
 }
 
 export async function storeUser(user: User): Promise<void> {

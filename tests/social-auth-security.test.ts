@@ -23,6 +23,10 @@ const seatingFlow = fs.readFileSync(
   "utf8",
 );
 const appConfig = fs.readFileSync(path.join(root, "app.config.ts"), "utf8");
+const oauthCallbackPage = fs.readFileSync(
+  path.join(root, "scripts/lamako-mobile-api.php"),
+  "utf8",
+);
 
 describe("social authentication security", () => {
   it("keeps browser OAuth callbacks on the HTTPS mobile site", () => {
@@ -37,9 +41,22 @@ describe("social authentication security", () => {
       socialAuth.indexOf("export async function startAppleLogin"),
       socialAuth.indexOf("export async function startFacebookLogin"),
     );
-    expect(appleStart).toContain("clearWebSessionNonce()");
-    expect(appleStart.indexOf("clearWebSessionNonce()")).toBeLessThan(
+    expect(appleStart).toContain("prepareForExternalAuth()");
+    expect(appleStart.indexOf("prepareForExternalAuth()")).toBeLessThan(
       appleStart.indexOf("window.location.assign"),
+    );
+  });
+
+  it("confirms the browser cookie session after social login", () => {
+    expect(socialAuth).toContain("confirmAuthenticatedUser(data.user.id)");
+    expect(socialAuth).not.toContain("const valid = await validateToken()");
+  });
+
+  it("keeps the browser callback copy on the site instead of opening the app", () => {
+    expect(oauthCallbackPage).toContain("isWebReturn");
+    expect(oauthCallbackPage).toContain("Continuer sur TicketByLamako");
+    expect(oauthCallbackPage).toContain(
+      "Retour automatique vers TicketByLamako.",
     );
   });
 
