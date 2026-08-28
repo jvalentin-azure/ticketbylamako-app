@@ -111,11 +111,15 @@ describe("V2.1 - LamakoRewards & Bug Fixes", () => {
 
   describe("Logo Files", () => {
     it("logo-white.png exists", () => {
-      expect(existsSync(resolve(root, "assets/images/logo-white.png"))).toBe(true);
+      expect(existsSync(resolve(root, "assets/images/logo-white.png"))).toBe(
+        true,
+      );
     });
 
     it("logo-dark.png exists", () => {
-      expect(existsSync(resolve(root, "assets/images/logo-dark.png"))).toBe(true);
+      expect(existsSync(resolve(root, "assets/images/logo-dark.png"))).toBe(
+        true,
+      );
     });
   });
 
@@ -123,7 +127,7 @@ describe("V2.1 - LamakoRewards & Bug Fixes", () => {
     it("login screen has accessible back button", () => {
       const filePath = resolve(root, "app/(auth)/login.tsx");
       const content = readFileSync(filePath, "utf-8");
-      expect(content).toContain("router.back");
+      expect(content).toContain("goBackOrFallback");
       // Should not have absolute positioning at top: 0 which causes issues
       expect(content).not.toContain("top: 0");
     });
@@ -131,13 +135,13 @@ describe("V2.1 - LamakoRewards & Bug Fixes", () => {
     it("help screen has accessible back button", () => {
       const filePath = resolve(root, "app/help.tsx");
       const content = readFileSync(filePath, "utf-8");
-      expect(content).toContain("router.back");
+      expect(content).toContain("goBackOrFallback");
     });
 
     it("privacy screen has accessible back button", () => {
       const filePath = resolve(root, "app/privacy.tsx");
       const content = readFileSync(filePath, "utf-8");
-      expect(content).toContain("router.back");
+      expect(content).toContain("goBackOrFallback");
     });
   });
 });

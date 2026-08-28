@@ -8,7 +8,6 @@ import React, {
 } from "react";
 import * as Notifications from "@/lib/notification-runtime";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Platform } from "react-native";
 import {
   mergeStoredNotification,
   notificationTypeIsEnabled,
@@ -115,8 +114,6 @@ export function NotificationsProvider({
 
   // Listen for incoming notifications
   useEffect(() => {
-    if (Platform.OS === "web") return;
-
     const subscription = Notifications.addNotificationReceivedListener(
       (notification) => {
         void getNotificationPreferences(user?.id).then((preferences) => {

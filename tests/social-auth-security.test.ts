@@ -7,8 +7,8 @@ const socialAuth = fs.readFileSync(
   path.join(root, "lib/api/social-auth.ts"),
   "utf8",
 );
-const loginScreen = fs.readFileSync(
-  path.join(root, "app/(auth)/login.tsx"),
+const socialButtons = fs.readFileSync(
+  path.join(root, "components/auth/social-auth-buttons.tsx"),
   "utf8",
 );
 const seatingFlow = fs.readFileSync(
@@ -30,8 +30,8 @@ describe("social authentication security", () => {
   });
 
   it("uses the official Apple button and entitlement configuration", () => {
-    expect(loginScreen).toContain("AppleAuthenticationButton");
-    expect(loginScreen).toContain("AppleAuthentication.isAvailableAsync");
+    expect(socialButtons).toContain("AppleAuthenticationButton");
+    expect(socialButtons).toContain("AppleAuthentication.isAvailableAsync");
     expect(appConfig).toContain("usesAppleSignIn: true");
     expect(appConfig).toContain('"expo-apple-authentication"');
   });

@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { Alert } from "@/lib/platform-alert";
 import { useRouter } from "expo-router";
+import { goBackOrFallback } from "@/lib/navigation";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -247,7 +248,10 @@ export default function NotificationSettingsScreen() {
     <ScreenContainer edges={["top", "left", "right"]}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity
+          onPress={() => goBackOrFallback(router, "/notifications")}
+          style={styles.backBtn}
+        >
           <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>
@@ -261,7 +265,29 @@ export default function NotificationSettingsScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Permission Status */}
-        {permissionStatus !== "granted" && (
+        {Platform.OS === "web" ? (
+          <View
+            style={[
+              styles.permissionBanner,
+              { backgroundColor: colors.success + "12" },
+            ]}
+          >
+            <IconSymbol name="bell.fill" size={24} color={colors.success} />
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={[styles.permissionTitle, { color: colors.success }]}>
+                Notifications dans l’application
+              </Text>
+              <Text style={[styles.permissionSub, { color: colors.muted }]}>
+                Les confirmations s’affichent ici pendant votre navigation.
+              </Text>
+            </View>
+            <IconSymbol
+              name="checkmark.circle.fill"
+              size={22}
+              color={colors.success}
+            />
+          </View>
+        ) : permissionStatus !== "granted" ? (
           <TouchableOpacity
             onPress={handleEnableNotifications}
             disabled={enabling}
@@ -286,9 +312,9 @@ export default function NotificationSettingsScreen() {
             </View>
             <IconSymbol name="chevron.right" size={16} color="#F59E0B" />
           </TouchableOpacity>
-        )}
+        ) : null}
 
-        {permissionStatus === "granted" && (
+        {Platform.OS !== "web" && permissionStatus === "granted" && (
           <TouchableOpacity
             accessibilityRole={hasPushToken ? undefined : "button"}
             accessibilityLabel={
@@ -467,8 +493,9 @@ export default function NotificationSettingsScreen() {
         {/* Info */}
         <View style={{ paddingHorizontal: 24, paddingTop: 20 }}>
           <Text style={[styles.infoText, { color: colors.muted }]}>
-            Les notifications push nécessitent un appareil physique. Les rappels
-            d'événements sont programmés localement sur votre appareil.
+            {Platform.OS === "web"
+              ? "Sur le navigateur, les confirmations et rappels apparaissent dans le centre de notifications tant que le site est ouvert. Pour recevoir des alertes en arrière-plan, utilisez l’application mobile."
+              : "Les notifications push nécessitent un appareil physique. Les rappels d'événements sont programmés localement sur votre appareil."}
           </Text>
         </View>
       </ScrollView>

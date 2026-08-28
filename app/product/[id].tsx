@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { goBackOrFallback } from "@/lib/navigation";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CatalogImage } from "@/components/catalog-image";
 import { CartToast } from "@/components/cart-toast";
@@ -181,7 +182,7 @@ export default function ProductDetailScreen() {
             <Text style={styles.retryButtonText}>Réessayer</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={() => goBackOrFallback(router, "/(tabs)/shop")}
             style={styles.secondaryButton}
             accessibilityRole="button"
           >
@@ -290,7 +291,7 @@ export default function ProductDetailScreen() {
             />
           )}
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={() => goBackOrFallback(router, "/(tabs)/shop")}
             style={styles.backButton}
           >
             <IconSymbol name="chevron.left" size={22} color="#fff" />

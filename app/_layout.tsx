@@ -19,7 +19,11 @@ import {
   initialWindowMetrics,
 } from "react-native-safe-area-context";
 import type { EdgeInsets, Metrics, Rect } from "react-native-safe-area-context";
-// System font used - no custom font loading
+import { Raleway_500Medium } from "@expo-google-fonts/raleway/500Medium";
+import { Raleway_600SemiBold } from "@expo-google-fonts/raleway/600SemiBold";
+import { Raleway_700Bold } from "@expo-google-fonts/raleway/700Bold";
+import { Raleway_800ExtraBold } from "@expo-google-fonts/raleway/800ExtraBold";
+import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -132,9 +136,12 @@ export default function RootLayout() {
   const [insets, setInsets] = useState<EdgeInsets>(initialInsets);
   const [frame, setFrame] = useState<Rect>(initialFrame);
 
-  // System font is used - no custom font loading needed
-  const fontsLoaded = true;
-  const fontError = null;
+  const [fontsLoaded, fontError] = useFonts({
+    Raleway_500Medium,
+    Raleway_600SemiBold,
+    Raleway_700Bold,
+    Raleway_800ExtraBold,
+  });
 
   const [showSplash, setShowSplash] = useState<boolean | null>(null); // null = checking auth state
 

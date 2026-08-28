@@ -15,6 +15,7 @@ import { Alert } from "@/lib/platform-alert";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { useKeepAwake } from "expo-keep-awake";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { goBackOrFallback } from "@/lib/navigation";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -763,7 +764,7 @@ export default function TicketDetailScreen() {
         </TouchableOpacity>
         <TouchableOpacity
           accessibilityRole="button"
-          onPress={() => router.back()}
+          onPress={() => goBackOrFallback(router, "/(tabs)/tickets")}
           style={styles.backLink}
         >
           <Text style={{ color: colors.primary }}>Retour à mes billets</Text>
@@ -777,7 +778,7 @@ export default function TicketDetailScreen() {
       <ScreenContainer>
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={() => goBackOrFallback(router, "/(tabs)/tickets")}
             style={styles.backBtn}
           >
             <IconSymbol
@@ -831,7 +832,7 @@ export default function TicketDetailScreen() {
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityLabel="Retour à mes billets"
-          onPress={() => router.back()}
+          onPress={() => goBackOrFallback(router, "/(tabs)/tickets")}
           style={styles.backBtn}
         >
           <IconSymbol name="chevron.left" size={24} color={colors.foreground} />

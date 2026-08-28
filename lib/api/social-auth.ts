@@ -10,8 +10,13 @@ WebBrowser.maybeCompleteAuthSession();
 
 const SITE_URL =
   process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
-const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || "";
-const FACEBOOK_APP_ID = process.env.EXPO_PUBLIC_FACEBOOK_APP_ID || "";
+// OAuth client identifiers are public by design. These fallbacks match the
+// committed EAS profiles and keep a standalone web export functional.
+const GOOGLE_CLIENT_ID =
+  process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ||
+  "189168265008-it6ve6n3s60h3u9t6telunafnchv4v3s.apps.googleusercontent.com";
+const FACEBOOK_APP_ID =
+  process.env.EXPO_PUBLIC_FACEBOOK_APP_ID || "1642777483642147";
 const SITE_URL_BASE = SITE_URL.replace(/\/$/, "");
 
 const TOKEN_KEY = "jwt_token";
@@ -175,8 +180,8 @@ async function fetchWithTimeout(
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(input, { ...init, signal: controller.signal });
-  } catch (error: any) {
-    if (error?.name === "AbortError") {
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === "AbortError") {
       throw new Error("Le service de connexion met trop de temps à répondre.");
     }
     throw error;
@@ -292,6 +297,14 @@ export async function startGoogleLogin(): Promise<SocialCredential | null> {
 }
 
 export async function startAppleLogin(): Promise<SocialCredential | null> {
+  if (Platform.OS === "web") {
+    const startUrl = new URL(`${SITE_URL_BASE}/wp-admin/admin-post.php`);
+    startUrl.searchParams.set("action", "lamako_apple_start");
+    startUrl.searchParams.set("redirect_to", `${SITE_URL_BASE}/mobile/`);
+    window.location.assign(startUrl.toString());
+    return null;
+  }
+
   if (Platform.OS !== "ios") {
     throw new Error("La connexion Apple est disponible uniquement sur iOS.");
   }
@@ -323,8 +336,15 @@ export async function startAppleLogin(): Promise<SocialCredential | null> {
       firstName: credential.fullName?.givenName || undefined,
       lastName: credential.fullName?.familyName || undefined,
     };
-  } catch (error: any) {
-    if (error?.code === "ERR_REQUEST_CANCELED") return null;
+  } catch (error: unknown) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "ERR_REQUEST_CANCELED"
+    ) {
+      return null;
+    }
     throw error;
   }
 }

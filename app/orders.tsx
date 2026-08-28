@@ -8,6 +8,7 @@ import {
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { goBackOrFallback } from "@/lib/navigation";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
@@ -359,7 +360,7 @@ export default function OrdersScreen() {
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityLabel="Revenir à l'écran précédent"
-          onPress={() => router.back()}
+          onPress={() => goBackOrFallback(router, "/(tabs)/profile")}
           style={styles.backBtn}
         >
           <IconSymbol name="chevron.left" size={24} color={colors.foreground} />

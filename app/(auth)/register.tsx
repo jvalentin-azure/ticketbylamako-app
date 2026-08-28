@@ -1,5 +1,15 @@
 import { useState } from "react";
-import { Text, View, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from "react-native";
+import {
+  Text,
+  View,
+  TextInput,
+  TouchableOpacity,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+} from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
@@ -7,7 +17,9 @@ import { useColors } from "@/hooks/use-colors";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useAuth } from "@/lib/auth-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
+import { SocialAuthButtons } from "@/components/auth/social-auth-buttons";
 import { validateReferralCode, registerReferral } from "@/lib/rewards-provider";
+import { goBackOrFallback } from "@/lib/navigation";
 
 export default function RegisterScreen() {
   const colors = useColors();
@@ -22,7 +34,10 @@ export default function RegisterScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [referralCode, setReferralCode] = useState("");
-  const [referralStatus, setReferralStatus] = useState<{ valid: boolean; name?: string } | null>(null);
+  const [referralStatus, setReferralStatus] = useState<{
+    valid: boolean;
+    name?: string;
+  } | null>(null);
   const [checkingReferral, setCheckingReferral] = useState(false);
 
   const handleCheckReferral = async (code: string) => {
@@ -30,7 +45,11 @@ export default function RegisterScreen() {
     if (code.length >= 8) {
       setCheckingReferral(true);
       const result = await validateReferralCode(code.trim());
-      setReferralStatus(result.valid ? { valid: true, name: result.referrer_name } : { valid: false });
+      setReferralStatus(
+        result.valid
+          ? { valid: true, name: result.referrer_name }
+          : { valid: false },
+      );
       setCheckingReferral(false);
     } else {
       setReferralStatus(null);
@@ -38,7 +57,10 @@ export default function RegisterScreen() {
   };
 
   const handleRegister = async () => {
-    if (!email.trim() || !password.trim() || !firstName.trim()) { setError("Veuillez remplir tous les champs obligatoires"); return; }
+    if (!email.trim() || !password.trim() || !firstName.trim()) {
+      setError("Veuillez remplir tous les champs obligatoires");
+      return;
+    }
     setError("");
     setLoading(true);
     try {
@@ -55,19 +77,46 @@ export default function RegisterScreen() {
         }
       }
       router.replace("/(tabs)/" as any);
-    } catch (e: any) {
-      setError(e.message || "Erreur lors de l'inscription");
-    } finally { setLoading(false); }
+    } catch (error: unknown) {
+      setError(
+        error instanceof Error ? error.message : "Erreur lors de l'inscription",
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <ScreenContainer edges={["top", "bottom", "left", "right"]}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 24 }} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+      >
+        <ScrollView
+          contentContainerStyle={{
+            flexGrow: 1,
+            justifyContent: "center",
+            padding: 24,
+          }}
+          keyboardShouldPersistTaps="handled"
+        >
           {/* Back button */}
-          <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.surface }]}>
-            <IconSymbol name="chevron.left" size={22} color={colors.foreground} />
-            <Text style={{ color: colors.foreground, fontSize: 15, marginLeft: 4 }}>Retour</Text>
+          <TouchableOpacity
+            onPress={() => goBackOrFallback(router, "/(tabs)/")}
+            accessibilityRole="button"
+            accessibilityLabel="Retour"
+            style={[styles.backButton, { backgroundColor: colors.surface }]}
+          >
+            <IconSymbol
+              name="chevron.left"
+              size={22}
+              color={colors.foreground}
+            />
+            <Text
+              style={{ color: colors.foreground, fontSize: 15, marginLeft: 4 }}
+            >
+              Retour
+            </Text>
           </TouchableOpacity>
 
           {/* Logo */}
@@ -81,93 +130,249 @@ export default function RegisterScreen() {
               style={styles.logo}
               contentFit="contain"
             />
-            <Text style={[styles.titleText, { color: colors.foreground }]}>Créer un compte</Text>
-            <Text style={[styles.subtitleText, { color: colors.muted }]}>Créez votre compte pour retrouver vos billets et vos avantages</Text>
+            <Text style={[styles.titleText, { color: colors.foreground }]}>
+              Créer un compte
+            </Text>
+            <Text style={[styles.subtitleText, { color: colors.muted }]}>
+              Créez votre compte pour retrouver vos billets et vos avantages
+            </Text>
           </View>
 
           {error ? (
-            <View style={[styles.errorBox, { backgroundColor: colors.error + "15" }]}>
-              <IconSymbol name="xmark.circle.fill" size={18} color={colors.error} />
-              <Text style={{ color: colors.error, fontSize: 13, marginLeft: 8, flex: 1 }}>{error}</Text>
+            <View
+              style={[
+                styles.errorBox,
+                { backgroundColor: colors.error + "15" },
+              ]}
+            >
+              <IconSymbol
+                name="xmark.circle.fill"
+                size={18}
+                color={colors.error}
+              />
+              <Text
+                style={{
+                  color: colors.error,
+                  fontSize: 13,
+                  marginLeft: 8,
+                  flex: 1,
+                }}
+              >
+                {error}
+              </Text>
             </View>
           ) : null}
+
+          <SocialAuthButtons
+            onError={setError}
+            onAuthenticated={() => router.replace("/(tabs)/" as any)}
+          />
+
+          <View style={styles.divider}>
+            <View
+              style={[styles.dividerLine, { backgroundColor: colors.border }]}
+            />
+            <Text style={[styles.dividerText, { color: colors.muted }]}>
+              ou avec votre e-mail
+            </Text>
+            <View
+              style={[styles.dividerLine, { backgroundColor: colors.border }]}
+            />
+          </View>
 
           {/* Name fields */}
           <View style={styles.nameRow}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.inputLabel, { color: colors.foreground }]}>Prénom *</Text>
-              <View style={[styles.inputRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <TextInput placeholder="Prénom" placeholderTextColor={colors.muted} value={firstName} onChangeText={setFirstName}
-                  style={[styles.input, { color: colors.foreground }]} />
+              <Text style={[styles.inputLabel, { color: colors.foreground }]}>
+                Prénom *
+              </Text>
+              <View
+                style={[
+                  styles.inputRow,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <TextInput
+                  placeholder="Prénom"
+                  placeholderTextColor={colors.muted}
+                  value={firstName}
+                  onChangeText={setFirstName}
+                  style={[styles.input, { color: colors.foreground }]}
+                />
               </View>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.inputLabel, { color: colors.foreground }]}>Nom</Text>
-              <View style={[styles.inputRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <TextInput placeholder="Nom" placeholderTextColor={colors.muted} value={lastName} onChangeText={setLastName}
-                  style={[styles.input, { color: colors.foreground }]} />
+              <Text style={[styles.inputLabel, { color: colors.foreground }]}>
+                Nom
+              </Text>
+              <View
+                style={[
+                  styles.inputRow,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <TextInput
+                  placeholder="Nom"
+                  placeholderTextColor={colors.muted}
+                  value={lastName}
+                  onChangeText={setLastName}
+                  style={[styles.input, { color: colors.foreground }]}
+                />
               </View>
             </View>
           </View>
 
           {/* Email */}
           <View style={{ marginBottom: 14 }}>
-            <Text style={[styles.inputLabel, { color: colors.foreground }]}>Email *</Text>
-            <View style={[styles.inputRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <IconSymbol name="paperplane.fill" size={18} color={colors.muted} />
-              <TextInput placeholder="votre@email.com" placeholderTextColor={colors.muted} value={email} onChangeText={setEmail}
-                autoCapitalize="none" keyboardType="email-address"
-                style={[styles.input, { color: colors.foreground }]} />
+            <Text style={[styles.inputLabel, { color: colors.foreground }]}>
+              Email *
+            </Text>
+            <View
+              style={[
+                styles.inputRow,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+            >
+              <IconSymbol
+                name="paperplane.fill"
+                size={18}
+                color={colors.muted}
+              />
+              <TextInput
+                placeholder="votre@email.com"
+                placeholderTextColor={colors.muted}
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                style={[styles.input, { color: colors.foreground }]}
+              />
             </View>
           </View>
 
           {/* Password */}
           <View style={{ marginBottom: 20 }}>
-            <Text style={[styles.inputLabel, { color: colors.foreground }]}>Mot de passe *</Text>
-            <View style={[styles.inputRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.inputLabel, { color: colors.foreground }]}>
+              Mot de passe *
+            </Text>
+            <View
+              style={[
+                styles.inputRow,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+            >
               <IconSymbol name="lock.fill" size={18} color={colors.muted} />
-              <TextInput placeholder="Min. 6 caractères" placeholderTextColor={colors.muted} value={password} onChangeText={setPassword}
-                secureTextEntry={!showPw} returnKeyType="done" onSubmitEditing={handleRegister}
-                style={[styles.input, { color: colors.foreground }]} />
+              <TextInput
+                placeholder="Min. 6 caractères"
+                placeholderTextColor={colors.muted}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPw}
+                returnKeyType="done"
+                onSubmitEditing={handleRegister}
+                style={[styles.input, { color: colors.foreground }]}
+              />
               <TouchableOpacity onPress={() => setShowPw(!showPw)}>
-                <IconSymbol name={showPw ? "eye.slash.fill" : "eye.fill"} size={20} color={colors.muted} />
+                <IconSymbol
+                  name={showPw ? "eye.slash.fill" : "eye.fill"}
+                  size={20}
+                  color={colors.muted}
+                />
               </TouchableOpacity>
             </View>
           </View>
 
           {/* Referral code (optional) */}
           <View style={{ marginBottom: 20 }}>
-            <Text style={[styles.inputLabel, { color: colors.foreground }]}>Code parrain (optionnel)</Text>
-            <View style={[styles.inputRow, { backgroundColor: colors.surface, borderColor: referralStatus?.valid ? colors.success : referralStatus === null ? colors.border : colors.error }]}>
+            <Text style={[styles.inputLabel, { color: colors.foreground }]}>
+              Code parrain (optionnel)
+            </Text>
+            <View
+              style={[
+                styles.inputRow,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: referralStatus?.valid
+                    ? colors.success
+                    : referralStatus === null
+                      ? colors.border
+                      : colors.error,
+                },
+              ]}
+            >
               <IconSymbol name="person.2.fill" size={18} color={colors.muted} />
-              <TextInput placeholder="TBL-XXXXXXXX" placeholderTextColor={colors.muted} value={referralCode} onChangeText={handleCheckReferral}
+              <TextInput
+                placeholder="TBL-XXXXXXXX"
+                placeholderTextColor={colors.muted}
+                value={referralCode}
+                onChangeText={handleCheckReferral}
                 autoCapitalize="characters"
-                style={[styles.input, { color: colors.foreground }]} />
-              {checkingReferral && <ActivityIndicator size="small" color={colors.primary} />}
+                style={[styles.input, { color: colors.foreground }]}
+              />
+              {checkingReferral && (
+                <ActivityIndicator size="small" color={colors.primary} />
+              )}
             </View>
             {referralStatus?.valid && (
-              <Text style={{ color: colors.success, fontSize: 12, marginTop: 4 }}>
-                Parrainé par {referralStatus.name} - vous recevrez 25 pts bonus !
+              <Text
+                style={{ color: colors.success, fontSize: 12, marginTop: 4 }}
+              >
+                Parrainé par {referralStatus.name} - vous recevrez 25 pts bonus
+                !
               </Text>
             )}
-            {referralStatus && !referralStatus.valid && referralCode.length >= 8 && (
-              <Text style={{ color: colors.error, fontSize: 12, marginTop: 4 }}>
-                Code invalide
-              </Text>
-            )}
+            {referralStatus &&
+              !referralStatus.valid &&
+              referralCode.length >= 8 && (
+                <Text
+                  style={{ color: colors.error, fontSize: 12, marginTop: 4 }}
+                >
+                  Code invalide
+                </Text>
+              )}
           </View>
 
           {/* Register button */}
-          <TouchableOpacity onPress={handleRegister} disabled={loading}
-            style={[styles.registerButton, { backgroundColor: colors.primary, opacity: loading ? 0.7 : 1 }]}>
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.registerButtonText}>Créer mon compte avec mon e-mail</Text>}
+          <TouchableOpacity
+            onPress={handleRegister}
+            disabled={loading}
+            style={[
+              styles.registerButton,
+              { backgroundColor: colors.primary, opacity: loading ? 0.7 : 1 },
+            ]}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.registerButtonText}>
+                Créer mon compte avec mon e-mail
+              </Text>
+            )}
           </TouchableOpacity>
 
           {/* Login link */}
           <View style={styles.loginRow}>
-            <Text style={{ color: colors.muted, fontSize: 14 }}>Déjà un compte ? </Text>
-            <TouchableOpacity onPress={() => router.push("/(auth)/login" as any)}>
-              <Text style={{ color: colors.primary, fontSize: 14, fontWeight: "600" }}>Se connecter</Text>
+            <Text style={{ color: colors.muted, fontSize: 14 }}>
+              Déjà un compte ?{" "}
+            </Text>
+            <TouchableOpacity
+              onPress={() => router.push("/(auth)/login" as any)}
+            >
+              <Text
+                style={{
+                  color: colors.primary,
+                  fontSize: 14,
+                  fontWeight: "600",
+                }}
+              >
+                Se connecter
+              </Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -214,6 +419,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
     marginBottom: 14,
+  },
+  divider: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 20,
+  },
+  dividerLine: { flex: 1, height: 1 },
+  dividerText: {
+    marginHorizontal: 12,
+    fontSize: 12,
+    fontFamily: "Raleway_600SemiBold",
   },
   inputLabel: {
     fontSize: 13,

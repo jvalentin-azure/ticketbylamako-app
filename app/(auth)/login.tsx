@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   Text,
   View,
@@ -17,52 +17,23 @@ import { useColors } from "@/hooks/use-colors";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useAuth } from "@/lib/auth-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import * as AppleAuthentication from "expo-apple-authentication";
-import {
-  socialLogin,
-  startAppleLogin,
-  startFacebookLogin,
-  startGoogleLogin,
-  type SocialCredential,
-  type SocialProvider,
-} from "@/lib/api/social-auth";
+import { SocialAuthButtons } from "@/components/auth/social-auth-buttons";
 import { requestPasswordReset } from "@/lib/api/auth";
+import { goBackOrFallback } from "@/lib/navigation";
 
 export default function LoginScreen() {
   const colors = useColors();
   const scheme = useColorScheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ returnTo?: string }>();
-  const { login, loginWithUser } = useAuth();
+  const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [socialLoading, setSocialLoading] = useState<SocialProvider | null>(
-    null,
-  );
   const [resetLoading, setResetLoading] = useState(false);
-  const [appleAvailable, setAppleAvailable] = useState(false);
   const [error, setError] = useState("");
   const [resetMessage, setResetMessage] = useState("");
-
-  useEffect(() => {
-    let mounted = true;
-    if (Platform.OS !== "ios") return undefined;
-
-    AppleAuthentication.isAvailableAsync()
-      .then((available) => {
-        if (mounted) setAppleAvailable(available);
-      })
-      .catch(() => {
-        if (mounted) setAppleAvailable(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -82,31 +53,6 @@ export default function LoginScreen() {
       setError(e.message || "Identifiants incorrects");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleSocialLogin = async (provider: SocialProvider) => {
-    setSocialLoading(provider);
-    setError("");
-    try {
-      let credential: SocialCredential | null;
-      if (provider === "google") credential = await startGoogleLogin();
-      else if (provider === "facebook") credential = await startFacebookLogin();
-      else credential = await startAppleLogin();
-      if (!credential) return;
-
-      const user = await socialLogin(provider, credential);
-
-      loginWithUser(user);
-      if (params.returnTo) {
-        router.replace(params.returnTo as any);
-      } else {
-        router.replace("/(tabs)/" as any);
-      }
-    } catch (e: any) {
-      setError(e.message || `Erreur de connexion ${provider}`);
-    } finally {
-      setSocialLoading(null);
     }
   };
 
@@ -148,7 +94,7 @@ export default function LoginScreen() {
         >
           {/* Back button */}
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={() => goBackOrFallback(router, "/(tabs)/")}
             accessibilityRole="button"
             accessibilityLabel="Retour"
             style={[styles.backButton, { backgroundColor: colors.surface }]}
@@ -184,95 +130,13 @@ export default function LoginScreen() {
             </Text>
           </View>
 
-          {/* Social Login Buttons */}
-          <View style={styles.socialContainer}>
-            {appleAvailable ? (
-              <View
-                style={styles.appleButtonWrap}
-                pointerEvents={socialLoading ? "none" : "auto"}
-              >
-                <AppleAuthentication.AppleAuthenticationButton
-                  buttonType={
-                    AppleAuthentication.AppleAuthenticationButtonType.CONTINUE
-                  }
-                  buttonStyle={
-                    AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
-                  }
-                  cornerRadius={12}
-                  style={styles.appleButton}
-                  onPress={() => handleSocialLogin("apple")}
-                />
-                {socialLoading === "apple" ? (
-                  <View style={styles.appleLoadingOverlay}>
-                    <ActivityIndicator size="small" color="#fff" />
-                  </View>
-                ) : null}
-              </View>
-            ) : null}
-
-            <View style={styles.socialButtonRow}>
-              <TouchableOpacity
-                onPress={() => handleSocialLogin("facebook")}
-                disabled={!!socialLoading}
-                accessibilityRole="button"
-                accessibilityLabel="Continuer avec Facebook"
-                accessibilityState={{
-                  disabled: !!socialLoading,
-                  busy: socialLoading === "facebook",
-                }}
-                style={[
-                  styles.socialButton,
-                  {
-                    backgroundColor: "#1877F2",
-                    opacity: socialLoading ? 0.7 : 1,
-                  },
-                ]}
-                activeOpacity={0.8}
-              >
-                {socialLoading === "facebook" ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <MaterialIcons name="facebook" size={22} color="#fff" />
-                )}
-                <Text style={styles.socialButtonText}>Facebook</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => handleSocialLogin("google")}
-                disabled={!!socialLoading}
-                accessibilityRole="button"
-                accessibilityLabel="Continuer avec Google"
-                accessibilityState={{
-                  disabled: !!socialLoading,
-                  busy: socialLoading === "google",
-                }}
-                style={[
-                  styles.socialButton,
-                  {
-                    backgroundColor: colors.surface,
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                    opacity: socialLoading ? 0.7 : 1,
-                  },
-                ]}
-                activeOpacity={0.8}
-              >
-                {socialLoading === "google" ? (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                ) : (
-                  <Text style={styles.googleMark}>G</Text>
-                )}
-                <Text
-                  style={[
-                    styles.socialButtonText,
-                    { color: colors.foreground },
-                  ]}
-                >
-                  Google
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+          <SocialAuthButtons
+            onError={setError}
+            onAuthenticated={() => {
+              if (params.returnTo) router.replace(params.returnTo as any);
+              else router.replace("/(tabs)/" as any);
+            }}
+          />
 
           <View style={styles.divider}>
             <View

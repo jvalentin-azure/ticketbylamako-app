@@ -198,6 +198,17 @@ a { display: inline-flex; align-items: center; justify-content: center; min-heig
 
   function isAllowedReturnUrl(url) {
     var allowExpoGo = <?php echo defined( 'LAMAKO_ALLOW_EXPO_GO_OAUTH_CALLBACKS' ) && LAMAKO_ALLOW_EXPO_GO_OAUTH_CALLBACKS ? 'true' : 'false'; ?>;
+    try {
+      var parsed = new URL(url, window.location.origin);
+      if (
+        parsed.origin === window.location.origin &&
+        /^\/mobile\/oauth\/(google|facebook)-callback\/?$/i.test(parsed.pathname)
+      ) {
+        return true;
+      }
+    } catch (e) {
+      return false;
+    }
     if (/^ticketbylamako:\/\/oauth\/(google|facebook)-callback\/?$/i.test(url)) {
       return true;
     }

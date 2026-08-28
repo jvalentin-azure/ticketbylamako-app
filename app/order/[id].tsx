@@ -7,6 +7,7 @@ import {
   StyleSheet,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { goBackOrFallback } from "@/lib/navigation";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -194,7 +195,7 @@ export default function OrderDetailScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             accessibilityRole="button"
-            onPress={() => router.back()}
+            onPress={() => goBackOrFallback(router, "/orders")}
             style={styles.backLink}
           >
             <Text style={[styles.backLinkText, { color: colors.primary }]}>
@@ -218,7 +219,10 @@ export default function OrderDetailScreen() {
     <ScreenContainer edges={["top", "left", "right"]}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity
+          onPress={() => goBackOrFallback(router, "/orders")}
+          style={styles.backBtn}
+        >
           <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>

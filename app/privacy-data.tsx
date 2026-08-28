@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { Alert } from "@/lib/platform-alert";
 import { useRouter } from "expo-router";
+import { goBackOrFallback } from "@/lib/navigation";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
@@ -140,7 +141,7 @@ export default function PrivacyDataScreen() {
     <ScreenContainer>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => goBackOrFallback(router, "/(tabs)/profile")}
           accessibilityRole="button"
           accessibilityLabel="Revenir à l'écran précédent"
           style={[styles.backButton, { backgroundColor: colors.surface }]}

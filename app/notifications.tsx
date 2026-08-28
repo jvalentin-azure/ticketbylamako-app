@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { Alert } from "@/lib/platform-alert";
 import { useRouter } from "expo-router";
+import { goBackOrFallback } from "@/lib/navigation";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -166,7 +167,10 @@ export default function NotificationsScreen() {
               <View style={[styles.unreadDot, { backgroundColor: accent }]} />
             ) : null}
           </View>
-          <Text style={[styles.notifBody, { color: colors.muted }]} numberOfLines={3}>
+          <Text
+            style={[styles.notifBody, { color: colors.muted }]}
+            numberOfLines={3}
+          >
             {item.body}
           </Text>
           <View style={styles.notifMetaRow}>
@@ -174,7 +178,9 @@ export default function NotificationsScreen() {
               {formatTime(item.receivedAt)}
             </Text>
             {action ? (
-              <Text style={[styles.notifAction, { color: accent }]}>{action}</Text>
+              <Text style={[styles.notifAction, { color: accent }]}>
+                {action}
+              </Text>
             ) : null}
           </View>
         </View>
@@ -195,12 +201,24 @@ export default function NotificationsScreen() {
 
   const listHeader = (
     <>
-      <View style={[styles.summary, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <View style={[styles.summaryIcon, { backgroundColor: colors.primary + "16" }]}>
+      <View
+        style={[
+          styles.summary,
+          { backgroundColor: colors.surface, borderColor: colors.border },
+        ]}
+      >
+        <View
+          style={[
+            styles.summaryIcon,
+            { backgroundColor: colors.primary + "16" },
+          ]}
+        >
           <IconSymbol name="bell.fill" size={24} color={colors.primary} />
         </View>
         <View style={styles.summaryCopy}>
-          <Text style={[styles.eyebrow, { color: colors.primary }]}>VOTRE ACTUALITÉ</Text>
+          <Text style={[styles.eyebrow, { color: colors.primary }]}>
+            VOTRE ACTUALITÉ
+          </Text>
           <Text style={[styles.summaryTitle, { color: colors.foreground }]}>
             {unreadCount > 0
               ? `${unreadCount} notification${unreadCount > 1 ? "s" : ""} à lire`
@@ -221,9 +239,17 @@ export default function NotificationsScreen() {
               accessibilityRole="tab"
               accessibilityState={{ selected }}
               onPress={() => setFilter(value)}
-              style={[styles.segment, selected && { backgroundColor: colors.primary }]}
+              style={[
+                styles.segment,
+                selected && { backgroundColor: colors.primary },
+              ]}
             >
-              <Text style={[styles.segmentText, { color: selected ? "#fff" : colors.muted }]}>
+              <Text
+                style={[
+                  styles.segmentText,
+                  { color: selected ? "#fff" : colors.muted },
+                ]}
+              >
                 {value === "all"
                   ? `Toutes (${notifications.length})`
                   : `Non lues (${unreadCount})`}
@@ -237,14 +263,29 @@ export default function NotificationsScreen() {
         <View style={styles.bulkActions}>
           {unreadCount > 0 ? (
             <TouchableOpacity onPress={markAllAsRead} style={styles.bulkButton}>
-              <IconSymbol name="checkmark.circle.fill" size={17} color={colors.success} />
-              <Text style={[styles.bulkText, { color: colors.success }]}>Tout marquer lu</Text>
+              <IconSymbol
+                name="checkmark.circle.fill"
+                size={17}
+                color={colors.success}
+              />
+              <Text style={[styles.bulkText, { color: colors.success }]}>
+                Tout marquer lu
+              </Text>
             </TouchableOpacity>
           ) : null}
           {readCount > 0 ? (
-            <TouchableOpacity onPress={confirmArchiveRead} style={styles.bulkButton}>
-              <IconSymbol name="archivebox.fill" size={17} color={colors.muted} />
-              <Text style={[styles.bulkText, { color: colors.muted }]}>Archiver les lues</Text>
+            <TouchableOpacity
+              onPress={confirmArchiveRead}
+              style={styles.bulkButton}
+            >
+              <IconSymbol
+                name="archivebox.fill"
+                size={17}
+                color={colors.muted}
+              />
+              <Text style={[styles.bulkText, { color: colors.muted }]}>
+                Archiver les lues
+              </Text>
             </TouchableOpacity>
           ) : null}
         </View>
@@ -258,14 +299,18 @@ export default function NotificationsScreen() {
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityLabel="Retour"
-          onPress={() => router.back()}
+          onPress={() => goBackOrFallback(router, "/(tabs)/")}
           style={styles.headerButton}
         >
           <IconSymbol name="chevron.left" size={22} color={colors.foreground} />
         </TouchableOpacity>
         <View style={styles.headerCopy}>
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Notifications</Text>
-          <Text style={[styles.headerSubtitle, { color: colors.muted }]}>Centre d'information</Text>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+            Notifications
+          </Text>
+          <Text style={[styles.headerSubtitle, { color: colors.muted }]}>
+            Centre d'information
+          </Text>
         </View>
         <TouchableOpacity
           accessibilityRole="button"
@@ -273,21 +318,37 @@ export default function NotificationsScreen() {
           onPress={() => router.push("/notification-settings" as any)}
           style={[styles.headerButton, { backgroundColor: colors.surface }]}
         >
-          <IconSymbol name="gearshape.fill" size={19} color={colors.foreground} />
+          <IconSymbol
+            name="gearshape.fill"
+            size={19}
+            color={colors.foreground}
+          />
         </TouchableOpacity>
       </View>
 
       {!isHydrated ? (
-        <View accessibilityLabel="Chargement des notifications" style={styles.center}>
+        <View
+          accessibilityLabel="Chargement des notifications"
+          style={styles.center}
+        >
           <ActivityIndicator size="small" color={colors.primary} />
-          <Text style={[styles.loadingText, { color: colors.muted }]}>Chargement de vos notifications...</Text>
+          <Text style={[styles.loadingText, { color: colors.muted }]}>
+            Chargement de vos notifications...
+          </Text>
         </View>
       ) : notifications.length === 0 ? (
         <View style={styles.center}>
-          <View style={[styles.emptyIcon, { backgroundColor: colors.primary + "12" }]}>
+          <View
+            style={[
+              styles.emptyIcon,
+              { backgroundColor: colors.primary + "12" },
+            ]}
+          >
             <IconSymbol name="bell.fill" size={38} color={colors.primary} />
           </View>
-          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Vous êtes à jour</Text>
+          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
+            Vous êtes à jour
+          </Text>
           <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
             Les confirmations de commande, billets et rappels apparaîtront ici.
           </Text>
@@ -306,13 +367,31 @@ export default function NotificationsScreen() {
           ListHeaderComponent={listHeader}
           ListEmptyComponent={
             <View style={styles.filteredEmpty}>
-              <IconSymbol name="checkmark.circle.fill" size={30} color={colors.success} />
-              <Text style={[styles.filteredEmptyTitle, { color: colors.foreground }]}>Aucune notification non lue</Text>
-              <Text style={[styles.filteredEmptyText, { color: colors.muted }]}>Tout est traité pour le moment.</Text>
+              <IconSymbol
+                name="checkmark.circle.fill"
+                size={30}
+                color={colors.success}
+              />
+              <Text
+                style={[
+                  styles.filteredEmptyTitle,
+                  { color: colors.foreground },
+                ]}
+              >
+                Aucune notification non lue
+              </Text>
+              <Text style={[styles.filteredEmptyText, { color: colors.muted }]}>
+                Tout est traité pour le moment.
+              </Text>
             </View>
           }
           renderSectionHeader={({ section }) => (
-            <Text style={[styles.sectionTitle, { color: colors.muted, backgroundColor: colors.background }]}>
+            <Text
+              style={[
+                styles.sectionTitle,
+                { color: colors.muted, backgroundColor: colors.background },
+              ]}
+            >
               {section.title}
             </Text>
           )}
@@ -326,45 +405,196 @@ export default function NotificationsScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: { minHeight: 68, flexDirection: "row", alignItems: "center", paddingHorizontal: 16, borderBottomWidth: 1, gap: 12 },
-  headerButton: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
+  header: {
+    minHeight: 68,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    gap: 12,
+  },
+  headerButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   headerCopy: { flex: 1 },
   headerTitle: { fontSize: 18, fontFamily: "Raleway_800ExtraBold" },
-  headerSubtitle: { marginTop: 2, fontSize: 12, fontFamily: "Raleway_500Medium" },
+  headerSubtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    fontFamily: "Raleway_500Medium",
+  },
   listContent: { paddingBottom: 28 },
-  summary: { margin: 16, marginBottom: 12, borderWidth: 1, borderRadius: 8, padding: 16, flexDirection: "row", alignItems: "center", gap: 13 },
-  summaryIcon: { width: 48, height: 48, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  summary: {
+    margin: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 13,
+  },
+  summaryIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   summaryCopy: { flex: 1 },
   eyebrow: { fontSize: 10, fontFamily: "Raleway_800ExtraBold" },
-  summaryTitle: { marginTop: 3, fontSize: 17, fontFamily: "Raleway_800ExtraBold" },
-  summarySubtitle: { marginTop: 4, fontSize: 12, lineHeight: 17, fontFamily: "Raleway_500Medium" },
-  segmented: { marginHorizontal: 16, padding: 4, borderRadius: 8, flexDirection: "row" },
-  segment: { flex: 1, minHeight: 40, borderRadius: 6, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
+  summaryTitle: {
+    marginTop: 3,
+    fontSize: 17,
+    fontFamily: "Raleway_800ExtraBold",
+  },
+  summarySubtitle: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: "Raleway_500Medium",
+  },
+  segmented: {
+    marginHorizontal: 16,
+    padding: 4,
+    borderRadius: 8,
+    flexDirection: "row",
+  },
+  segment: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
+  },
   segmentText: { fontSize: 12, fontFamily: "Raleway_700Bold" },
-  bulkActions: { minHeight: 48, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 14 },
-  bulkButton: { minHeight: 40, flexDirection: "row", alignItems: "center", gap: 6 },
+  bulkActions: {
+    minHeight: 48,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 14,
+  },
+  bulkButton: {
+    minHeight: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
   bulkText: { fontSize: 12, fontFamily: "Raleway_700Bold" },
-  sectionTitle: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8, fontSize: 11, fontFamily: "Raleway_800ExtraBold" },
-  notifItem: { marginHorizontal: 16, marginBottom: 8, minHeight: 102, borderWidth: 1, borderRadius: 8, padding: 13, paddingLeft: 16, flexDirection: "row", alignItems: "flex-start", gap: 11, overflow: "hidden" },
+  sectionTitle: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+    fontSize: 11,
+    fontFamily: "Raleway_800ExtraBold",
+  },
+  notifItem: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    minHeight: 102,
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 13,
+    paddingLeft: 16,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 11,
+    overflow: "hidden",
+  },
   notifAccent: { position: "absolute", left: 0, top: 0, bottom: 0, width: 3 },
-  notifIcon: { width: 40, height: 40, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  notifIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   notifContent: { flex: 1 },
   notifTitleRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
   notifTitle: { flex: 1, fontSize: 14, lineHeight: 19 },
-  notifBody: { marginTop: 4, fontSize: 12, lineHeight: 18, fontFamily: "Raleway_500Medium" },
-  notifMetaRow: { marginTop: 8, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  notifBody: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: "Raleway_500Medium",
+  },
+  notifMetaRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
   notifTime: { fontSize: 10, fontFamily: "Raleway_600SemiBold" },
   notifAction: { fontSize: 11, fontFamily: "Raleway_800ExtraBold" },
   unreadDot: { width: 7, height: 7, borderRadius: 4, marginTop: 5 },
-  archiveButton: { width: 38, height: 38, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32 },
+  archiveButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 32,
+  },
   loadingText: { marginTop: 12, fontSize: 13, fontFamily: "Raleway_500Medium" },
-  emptyIcon: { width: 72, height: 72, borderRadius: 8, alignItems: "center", justifyContent: "center", marginBottom: 18 },
-  emptyTitle: { fontSize: 20, fontFamily: "Raleway_800ExtraBold", marginBottom: 8 },
-  emptySubtitle: { maxWidth: 300, fontSize: 14, textAlign: "center", lineHeight: 20, fontFamily: "Raleway_500Medium" },
-  emptyAction: { minHeight: 48, marginTop: 20, paddingHorizontal: 20, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-  emptyActionText: { color: "#fff", fontSize: 14, fontFamily: "Raleway_800ExtraBold" },
-  filteredEmpty: { alignItems: "center", paddingHorizontal: 32, paddingVertical: 44 },
-  filteredEmptyTitle: { marginTop: 12, fontSize: 16, fontFamily: "Raleway_800ExtraBold" },
-  filteredEmptyText: { marginTop: 5, fontSize: 13, fontFamily: "Raleway_500Medium" },
+  emptyIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 18,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontFamily: "Raleway_800ExtraBold",
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    maxWidth: 300,
+    fontSize: 14,
+    textAlign: "center",
+    lineHeight: 20,
+    fontFamily: "Raleway_500Medium",
+  },
+  emptyAction: {
+    minHeight: 48,
+    marginTop: 20,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyActionText: {
+    color: "#fff",
+    fontSize: 14,
+    fontFamily: "Raleway_800ExtraBold",
+  },
+  filteredEmpty: {
+    alignItems: "center",
+    paddingHorizontal: 32,
+    paddingVertical: 44,
+  },
+  filteredEmptyTitle: {
+    marginTop: 12,
+    fontSize: 16,
+    fontFamily: "Raleway_800ExtraBold",
+  },
+  filteredEmptyText: {
+    marginTop: 5,
+    fontSize: 13,
+    fontFamily: "Raleway_500Medium",
+  },
 });

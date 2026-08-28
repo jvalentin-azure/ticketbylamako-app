@@ -52,13 +52,7 @@ export default function PaymentReturnScreen() {
           normalized: "1",
         },
       }) as const,
-    [
-      fallbackOrderId,
-      fallbackOrderNumber,
-      kindParam,
-      statusHint,
-      tokenParam,
-    ],
+    [fallbackOrderId, fallbackOrderNumber, kindParam, statusHint, tokenParam],
   );
 
   useEffect(() => {
@@ -169,10 +163,7 @@ function PaymentReturnResult({
     <ScreenContainer edges={["top", "bottom", "left", "right"]}>
       <Confetti active={celebrate && !reduceMotion} />
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity
-          onPress={returnHome}
-          style={styles.backBtn}
-        >
+        <TouchableOpacity onPress={returnHome} style={styles.backBtn}>
           <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>
@@ -182,23 +173,32 @@ function PaymentReturnResult({
       </View>
 
       <View style={styles.center}>
-        {phase === "verifying" ? (
-          <ActivityIndicator size="large" color={colors.primary} />
-        ) : (
-          <IconSymbol name={iconName} size={64} color={iconColor} />
-        )}
-        <Text style={[styles.title, { color: colors.foreground }]}>
-          {phase === "success"
-            ? "Paiement confirmé"
-            : phase === "cancelled"
-              ? "Paiement non abouti"
-              : phase === "pending"
-                ? "Paiement en attente"
-                : phase === "verifying"
-                  ? "Vérification"
-                  : "Paiement non abouti"}
-        </Text>
-        <Text style={[styles.message, { color: colors.muted }]}>{message}</Text>
+        <View
+          style={[
+            styles.statusCard,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
+        >
+          {phase === "verifying" ? (
+            <ActivityIndicator size="large" color={colors.primary} />
+          ) : (
+            <IconSymbol name={iconName} size={64} color={iconColor} />
+          )}
+          <Text style={[styles.title, { color: colors.foreground }]}>
+            {phase === "success"
+              ? "Paiement confirmé"
+              : phase === "cancelled"
+                ? "Paiement non abouti"
+                : phase === "pending"
+                  ? "Paiement en attente"
+                  : phase === "verifying"
+                    ? "Vérification"
+                    : "Paiement non abouti"}
+          </Text>
+          <Text style={[styles.message, { color: colors.muted }]}>
+            {message}
+          </Text>
+        </View>
 
         {orderReference ? (
           <View
@@ -262,10 +262,7 @@ function PaymentReturnResult({
             </Text>
           </TouchableOpacity>
         ) : null}
-        <TouchableOpacity
-          onPress={returnHome}
-          style={styles.secondaryButton}
-        >
+        <TouchableOpacity onPress={returnHome} style={styles.secondaryButton}>
           <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>
             Retour à l'accueil
           </Text>
@@ -288,7 +285,7 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: "center",
     fontSize: 17,
-    fontWeight: "700",
+    fontFamily: "Raleway_800ExtraBold",
   },
   center: {
     flex: 1,
@@ -296,20 +293,45 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 24,
   },
+  statusCard: {
+    width: "100%",
+    maxWidth: 380,
+    alignItems: "center",
+    borderWidth: 1,
+    borderRadius: 18,
+    paddingHorizontal: 22,
+    paddingVertical: 24,
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
+  },
   title: {
     marginTop: 16,
     fontSize: 22,
-    fontWeight: "800",
+    fontFamily: "Raleway_800ExtraBold",
     textAlign: "center",
   },
-  message: { marginTop: 10, fontSize: 14, lineHeight: 20, textAlign: "center" },
-  total: { marginTop: 14, fontSize: 24, fontWeight: "800" },
+  message: {
+    marginTop: 10,
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: "center",
+    fontFamily: "Raleway_500Medium",
+  },
+  total: {
+    marginTop: 16,
+    fontSize: 26,
+    fontFamily: "Raleway_800ExtraBold",
+    fontVariant: ["tabular-nums"],
+  },
   referenceCard: {
     width: "100%",
     maxWidth: 380,
     marginTop: 20,
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: 14,
     padding: 16,
     alignItems: "center",
   },
@@ -332,12 +354,16 @@ const styles = StyleSheet.create({
     maxWidth: 380,
     minHeight: 54,
     marginTop: 24,
-    borderRadius: 8,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 24,
   },
-  primaryButtonText: { color: "#fff", fontSize: 15, fontWeight: "800" },
+  primaryButtonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontFamily: "Raleway_800ExtraBold",
+  },
   secondaryButton: {
     minHeight: 44,
     marginTop: 8,
@@ -346,5 +372,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  secondaryButtonText: { fontSize: 14, fontWeight: "700" },
+  secondaryButtonText: { fontSize: 14, fontFamily: "Raleway_700Bold" },
 });

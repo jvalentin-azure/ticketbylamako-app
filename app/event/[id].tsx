@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { Alert } from "@/lib/platform-alert";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { goBackOrFallback } from "@/lib/navigation";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScreenContainer } from "@/components/screen-container";
 import { EventDetailSkeleton } from "@/components/event-detail-skeleton";
@@ -384,7 +385,7 @@ export default function EventDetailScreen() {
       <TouchableOpacity
         accessibilityRole="button"
         accessibilityLabel="Retour aux événements"
-        onPress={() => router.back()}
+        onPress={() => goBackOrFallback(router, "/(tabs)/events")}
         style={styles.persistentBackButton}
       >
         <IconSymbol name="chevron.left" size={22} color="#fff" />
@@ -1071,9 +1072,9 @@ export default function EventDetailScreen() {
                 ? "Billetterie fermée"
                 : isAuthLoading
                   ? "Vérification de la session..."
-                : seatingLoading
-                  ? "Chargement du plan..."
-                  : "Choisir mon siège"}
+                  : seatingLoading
+                    ? "Chargement du plan..."
+                    : "Choisir mon siège"}
             </Text>
           </TouchableOpacity>
         ) : (

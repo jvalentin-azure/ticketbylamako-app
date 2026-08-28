@@ -26,6 +26,7 @@ import { useColors } from "@/hooks/use-colors";
 import { useMobilePayment } from "@/hooks/use-mobile-payment";
 import { type MobilePaymentKind } from "@/lib/api/mobile";
 import { getPaymentMethodPresentation } from "@/lib/payment-method-presentation";
+import { goBackOrFallback } from "@/lib/navigation";
 
 function firstParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] || "" : value || "";
@@ -74,7 +75,10 @@ export default function PaymentScreen() {
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <PaymentHeader onBack={() => router.back()} colors={colors} />
+        <PaymentHeader
+          onBack={() => goBackOrFallback(router, "/(tabs)/cart")}
+          colors={colors}
+        />
         {remainingSeconds !== null ? (
           <ReservationTimer
             remainingSeconds={remainingSeconds}

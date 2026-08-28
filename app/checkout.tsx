@@ -29,6 +29,7 @@ import { estimatePointsForPrice, useRewards } from "@/lib/rewards-provider";
 import { useAuth } from "@/lib/auth-provider";
 import { formatAriary } from "@/lib/format";
 import { getBillingInfo, saveBillingInfo } from "@/lib/billing-store";
+import { goBackOrFallback } from "@/lib/navigation";
 
 type CheckoutPhase =
   | "address"
@@ -453,7 +454,7 @@ export default function CheckoutScreen() {
         onAddressChange={setShippingAddress}
         onCityChange={setShippingCity}
         onContinue={continueAfterPreCheckout}
-        onBack={() => router.back()}
+        onBack={() => goBackOrFallback(router, "/(tabs)/cart")}
       />
     );
   }
@@ -467,7 +468,7 @@ export default function CheckoutScreen() {
         loading={checkoutFieldsLoading}
         expiresAt={cartExpiresAt}
         onContinue={continueAfterPreCheckout}
-        onBack={() => router.back()}
+        onBack={() => goBackOrFallback(router, "/(tabs)/cart")}
       />
     );
   }
@@ -518,7 +519,7 @@ export default function CheckoutScreen() {
         }}
         onBack={() => {
           if (!hasPhysicalProducts && !canShowRedeem) {
-            router.back();
+            goBackOrFallback(router, "/(tabs)/cart");
             return;
           }
           setPhase(hasPhysicalProducts ? "address" : "confirm");
@@ -533,7 +534,7 @@ export default function CheckoutScreen() {
         title="Impossible de préparer la commande"
         message={errorMessage}
         expiresAt={cartExpiresAt}
-        onBack={() => router.back()}
+        onBack={() => goBackOrFallback(router, "/(tabs)/cart")}
         onRetry={() => {
           if (errorSource === "fields") {
             setErrorMessage("");
@@ -554,7 +555,7 @@ export default function CheckoutScreen() {
       message={`${items.length} article${items.length > 1 ? "s" : ""} · ${formatAriary(total)}`}
       loading
       expiresAt={cartExpiresAt}
-      onBack={() => router.back()}
+      onBack={() => goBackOrFallback(router, "/(tabs)/cart")}
     />
   );
 }

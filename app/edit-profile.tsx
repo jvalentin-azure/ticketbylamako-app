@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { Alert } from "@/lib/platform-alert";
 import { useRouter } from "expo-router";
+import { goBackOrFallback } from "@/lib/navigation";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/lib/auth-provider";
@@ -180,21 +181,54 @@ export default function EditProfileScreen() {
   if (!user) {
     return (
       <ScreenContainer edges={["top", "left", "right", "bottom"]}>
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <View
+          style={{
+            flex: 1,
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 24,
+          }}
+        >
           <IconSymbol name="person.fill" size={44} color={colors.muted} />
-          <Text style={{ color: colors.foreground, fontSize: 20, fontWeight: "700", marginTop: 16 }}>
+          <Text
+            style={{
+              color: colors.foreground,
+              fontSize: 20,
+              fontWeight: "700",
+              marginTop: 16,
+            }}
+          >
             Connexion requise
           </Text>
-          <Text style={{ color: colors.muted, fontSize: 14, lineHeight: 20, textAlign: "center", marginTop: 8 }}>
-            Connectez-vous pour consulter et modifier vos informations personnelles.
+          <Text
+            style={{
+              color: colors.muted,
+              fontSize: 14,
+              lineHeight: 20,
+              textAlign: "center",
+              marginTop: 8,
+            }}
+          >
+            Connectez-vous pour consulter et modifier vos informations
+            personnelles.
           </Text>
           <TouchableOpacity
             onPress={() => router.replace("/(auth)/login" as any)}
             accessibilityRole="button"
             accessibilityLabel="Se connecter"
-            style={{ backgroundColor: colors.primary, borderRadius: 12, minHeight: 48, paddingHorizontal: 28, alignItems: "center", justifyContent: "center", marginTop: 20 }}
+            style={{
+              backgroundColor: colors.primary,
+              borderRadius: 12,
+              minHeight: 48,
+              paddingHorizontal: 28,
+              alignItems: "center",
+              justifyContent: "center",
+              marginTop: 20,
+            }}
           >
-            <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>Se connecter</Text>
+            <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>
+              Se connecter
+            </Text>
           </TouchableOpacity>
         </View>
       </ScreenContainer>
@@ -217,7 +251,7 @@ export default function EditProfileScreen() {
           }}
         >
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={() => goBackOrFallback(router, "/(tabs)/profile")}
             style={{ marginRight: 12 }}
             accessibilityRole="button"
             accessibilityLabel="Retour"
@@ -444,7 +478,10 @@ export default function EditProfileScreen() {
               disabled={saving || loadingProfile}
               accessibilityRole="button"
               accessibilityLabel="Enregistrer mes informations"
-              accessibilityState={{ disabled: saving || loadingProfile, busy: saving }}
+              accessibilityState={{
+                disabled: saving || loadingProfile,
+                busy: saving,
+              }}
               style={{
                 backgroundColor: colors.primary,
                 borderRadius: 12,
@@ -458,7 +495,9 @@ export default function EditProfileScreen() {
               {saving || loadingProfile ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>
+                <Text
+                  style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}
+                >
                   Enregistrer mes informations
                 </Text>
               )}

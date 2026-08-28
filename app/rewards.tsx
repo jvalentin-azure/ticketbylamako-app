@@ -8,6 +8,7 @@ import {
   RefreshControl,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
+import { goBackOrFallback } from "@/lib/navigation";
 import { useCallback } from "react";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
@@ -59,7 +60,7 @@ export default function RewardsScreen() {
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => goBackOrFallback(router, "/(tabs)/profile")}
           style={[styles.backButton, { backgroundColor: colors.surface }]}
         >
           <IconSymbol name="chevron.left" size={20} color={colors.foreground} />

@@ -3,24 +3,35 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const login = readFileSync(resolve("app/(auth)/login.tsx"), "utf8");
+const social = readFileSync(
+  resolve("components/auth/social-auth-buttons.tsx"),
+  "utf8",
+);
 
 describe("mobile web login accessibility", () => {
   it("gives every critical action an explicit semantic role and name", () => {
+    for (const label of ["Retour", "Mot de passe oublié", "Se connecter"]) {
+      expect(login).toContain(`accessibilityLabel="${label}"`);
+    }
+
     for (const label of [
-      "Retour",
+      "Continuer avec Apple",
       "Continuer avec Facebook",
       "Continuer avec Google",
-      "Mot de passe oublié",
-      "Se connecter",
-      "Créer un compte",
-      "Politique de confidentialité",
     ]) {
+      expect(social).toContain(`accessibilityLabel="${label}"`);
+    }
+
+    for (const label of ["Créer un compte", "Politique de confidentialité"]) {
       expect(login).toContain(`accessibilityLabel="${label}"`);
     }
 
     expect(
       login.match(/accessibilityRole="button"/g)?.length,
-    ).toBeGreaterThanOrEqual(6);
+    ).toBeGreaterThanOrEqual(4);
+    expect(
+      social.match(/accessibilityRole="button"/g)?.length,
+    ).toBeGreaterThanOrEqual(3);
     expect(login.match(/accessibilityRole="link"/g)?.length).toBe(2);
     expect(login).toContain('accessibilityRole="alert"');
     expect(login).toContain('accessibilityLiveRegion="assertive"');

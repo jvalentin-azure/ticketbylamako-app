@@ -337,6 +337,7 @@ export default function EventsScreen() {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={styles.categoryScroller}
         contentContainerStyle={styles.chipsContainer}
       >
         <TouchableOpacity
@@ -661,6 +662,11 @@ const styles = StyleSheet.create({
     gap: 8,
     flexDirection: "row",
     alignItems: "center",
+  },
+  categoryScroller: {
+    height: 64,
+    flexGrow: 0,
+    flexShrink: 0,
   },
   chip: {
     height: 32,

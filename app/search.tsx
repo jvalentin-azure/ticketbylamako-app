@@ -9,6 +9,7 @@ import {
   Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { goBackOrFallback } from "@/lib/navigation";
 import { CatalogImage } from "@/components/catalog-image";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
@@ -231,7 +232,10 @@ export default function SearchScreen() {
     <ScreenContainer edges={["top", "left", "right"]}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity
+          onPress={() => goBackOrFallback(router, "/(tabs)/")}
+          style={styles.backBtn}
+        >
           <IconSymbol name="chevron.left" size={22} color={colors.foreground} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>

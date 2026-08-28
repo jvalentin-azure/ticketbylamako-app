@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { Alert } from "@/lib/platform-alert";
 import { useRouter } from "expo-router";
+import { goBackOrFallback } from "@/lib/navigation";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -78,7 +79,7 @@ export default function HelpScreen() {
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => goBackOrFallback(router, "/(tabs)/profile")}
           style={[styles.backButton, { backgroundColor: colors.surface }]}
         >
           <IconSymbol name="chevron.left" size={20} color={colors.foreground} />
