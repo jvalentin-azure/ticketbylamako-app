@@ -21,6 +21,7 @@ import { buildLamakoWhatsAppUrl } from "@/lib/contact";
 import { getAppVersionLabel } from "@/lib/app-version";
 import { useRewards } from "@/lib/rewards-provider";
 import { SITE_URL } from "@/lib/site-url";
+import { DRAWER_HOME_ORIGIN_PARAM } from "@/lib/navigation";
 
 interface DrawerContentProps {
   onClose?: () => void;
@@ -47,7 +48,14 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
       // Resetting the tab first makes the native back action return Home.
       router.replace("/(tabs)/" as any);
       if (path !== "/(tabs)/") {
-        setTimeout(() => router.push(path as any), 0);
+        setTimeout(
+          () =>
+            router.push({
+              pathname: path as any,
+              params: { [DRAWER_HOME_ORIGIN_PARAM]: "1" },
+            } as any),
+          0,
+        );
       }
     }, 200);
   };

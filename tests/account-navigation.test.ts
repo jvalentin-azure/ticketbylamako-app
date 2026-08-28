@@ -57,6 +57,14 @@ describe("account navigation and profile experience", () => {
     expect(tabs).toContain('title: "Événements"');
   });
 
+  it("returns drawer destinations to Home instead of the hidden Profile tab", () => {
+    expect(drawer).toContain("DRAWER_HOME_ORIGIN_PARAM");
+    expect(drawer).toContain(
+      'params: { [DRAWER_HOME_ORIGIN_PARAM]: "1" }',
+    );
+    expect(drawer).toContain('router.replace("/(tabs)/" as any)');
+  });
+
   it("centralizes legal documents and personal-data actions", () => {
     expect(drawer).toContain('label: "Centre légal et données"');
     expect(profile).toContain('label: "Centre légal et données"');

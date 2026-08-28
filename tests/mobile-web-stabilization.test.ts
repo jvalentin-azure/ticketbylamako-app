@@ -133,6 +133,20 @@ describe("mobile web stabilization", () => {
     goBackOrFallback(syntheticWebHistory as never, "/(tabs)/events", true);
     expect(syntheticWebHistory.back).not.toHaveBeenCalled();
     expect(syntheticWebHistory.replace).toHaveBeenCalledWith("/(tabs)/events");
+
+    const drawerDestination = {
+      canGoBack: vi.fn(() => true),
+      back: vi.fn(),
+      replace: vi.fn(),
+    };
+    goBackOrFallback(
+      drawerDestination as never,
+      "/(tabs)/profile",
+      true,
+      "?fromDrawer=1",
+    );
+    expect(drawerDestination.back).not.toHaveBeenCalled();
+    expect(drawerDestination.replace).toHaveBeenCalledWith("/(tabs)/");
   });
 
   it("renders a real Google Maps iframe on web", () => {
