@@ -149,6 +149,8 @@ export default function LoginScreen() {
           {/* Back button */}
           <TouchableOpacity
             onPress={() => router.back()}
+            accessibilityRole="button"
+            accessibilityLabel="Retour"
             style={[styles.backButton, { backgroundColor: colors.surface }]}
           >
             <IconSymbol
@@ -209,54 +211,66 @@ export default function LoginScreen() {
             ) : null}
 
             <View style={styles.socialButtonRow}>
-                <TouchableOpacity
-                  onPress={() => handleSocialLogin("facebook")}
-                  disabled={!!socialLoading}
-                  style={[
-                    styles.socialButton,
-                    {
-                      backgroundColor: "#1877F2",
-                      opacity: socialLoading ? 0.7 : 1,
-                    },
-                  ]}
-                  activeOpacity={0.8}
-                >
-                  {socialLoading === "facebook" ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <MaterialIcons name="facebook" size={22} color="#fff" />
-                  )}
-                  <Text style={styles.socialButtonText}>Facebook</Text>
-                </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => handleSocialLogin("facebook")}
+                disabled={!!socialLoading}
+                accessibilityRole="button"
+                accessibilityLabel="Continuer avec Facebook"
+                accessibilityState={{
+                  disabled: !!socialLoading,
+                  busy: socialLoading === "facebook",
+                }}
+                style={[
+                  styles.socialButton,
+                  {
+                    backgroundColor: "#1877F2",
+                    opacity: socialLoading ? 0.7 : 1,
+                  },
+                ]}
+                activeOpacity={0.8}
+              >
+                {socialLoading === "facebook" ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <MaterialIcons name="facebook" size={22} color="#fff" />
+                )}
+                <Text style={styles.socialButtonText}>Facebook</Text>
+              </TouchableOpacity>
 
-                <TouchableOpacity
-                  onPress={() => handleSocialLogin("google")}
-                  disabled={!!socialLoading}
+              <TouchableOpacity
+                onPress={() => handleSocialLogin("google")}
+                disabled={!!socialLoading}
+                accessibilityRole="button"
+                accessibilityLabel="Continuer avec Google"
+                accessibilityState={{
+                  disabled: !!socialLoading,
+                  busy: socialLoading === "google",
+                }}
+                style={[
+                  styles.socialButton,
+                  {
+                    backgroundColor: colors.surface,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    opacity: socialLoading ? 0.7 : 1,
+                  },
+                ]}
+                activeOpacity={0.8}
+              >
+                {socialLoading === "google" ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Text style={styles.googleMark}>G</Text>
+                )}
+                <Text
                   style={[
-                    styles.socialButton,
-                    {
-                      backgroundColor: colors.surface,
-                      borderWidth: 1,
-                      borderColor: colors.border,
-                      opacity: socialLoading ? 0.7 : 1,
-                    },
+                    styles.socialButtonText,
+                    { color: colors.foreground },
                   ]}
-                  activeOpacity={0.8}
                 >
-                  {socialLoading === "google" ? (
-                    <ActivityIndicator size="small" color={colors.primary} />
-                  ) : (
-                    <Text style={styles.googleMark}>G</Text>
-                  )}
-                  <Text
-                    style={[
-                      styles.socialButtonText,
-                      { color: colors.foreground },
-                    ]}
-                  >
-                    Google
-                  </Text>
-                </TouchableOpacity>
+                  Google
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -264,7 +278,9 @@ export default function LoginScreen() {
             <View
               style={[styles.dividerLine, { backgroundColor: colors.border }]}
             />
-            <Text style={[styles.dividerText, { color: colors.muted }]}>ou</Text>
+            <Text style={[styles.dividerText, { color: colors.muted }]}>
+              ou
+            </Text>
             <View
               style={[styles.dividerLine, { backgroundColor: colors.border }]}
             />
@@ -273,6 +289,8 @@ export default function LoginScreen() {
           {/* Error */}
           {error ? (
             <View
+              accessibilityRole="alert"
+              accessibilityLiveRegion="assertive"
               style={[
                 styles.errorBox,
                 { backgroundColor: colors.error + "15" },
@@ -298,6 +316,9 @@ export default function LoginScreen() {
 
           {resetMessage ? (
             <View
+              accessible
+              accessibilityLabel={resetMessage}
+              accessibilityLiveRegion="polite"
               style={[
                 styles.errorBox,
                 { backgroundColor: colors.success + "15" },
@@ -334,12 +355,15 @@ export default function LoginScreen() {
             >
               <IconSymbol name="person.fill" size={18} color={colors.muted} />
               <TextInput
+                accessibilityLabel="Email ou nom d'utilisateur"
                 placeholder="votre@email.com"
                 placeholderTextColor={colors.muted}
                 value={email}
                 onChangeText={setEmail}
                 autoCapitalize="none"
+                autoComplete="username"
                 keyboardType="email-address"
+                textContentType="username"
                 returnKeyType="next"
                 style={[styles.input, { color: colors.foreground }]}
               />
@@ -359,16 +383,29 @@ export default function LoginScreen() {
             >
               <IconSymbol name="lock.fill" size={18} color={colors.muted} />
               <TextInput
+                accessibilityLabel="Mot de passe"
                 placeholder="Votre mot de passe"
                 placeholderTextColor={colors.muted}
                 value={password}
                 onChangeText={setPassword}
+                autoComplete="current-password"
                 secureTextEntry={!showPw}
+                textContentType="password"
                 returnKeyType="done"
                 onSubmitEditing={handleLogin}
                 style={[styles.input, { color: colors.foreground }]}
               />
-              <TouchableOpacity onPress={() => setShowPw(!showPw)}>
+              <TouchableOpacity
+                onPress={() => setShowPw(!showPw)}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  showPw
+                    ? "Masquer le mot de passe"
+                    : "Afficher le mot de passe"
+                }
+                hitSlop={8}
+                style={styles.passwordToggle}
+              >
                 <IconSymbol
                   name={showPw ? "eye.slash.fill" : "eye.fill"}
                   size={20}
@@ -379,6 +416,12 @@ export default function LoginScreen() {
             <TouchableOpacity
               onPress={handlePasswordReset}
               disabled={resetLoading}
+              accessibilityRole="button"
+              accessibilityLabel="Mot de passe oublié"
+              accessibilityState={{
+                disabled: resetLoading,
+                busy: resetLoading,
+              }}
               style={styles.forgotPasswordButton}
             >
               {resetLoading ? (
@@ -397,6 +440,9 @@ export default function LoginScreen() {
           <TouchableOpacity
             onPress={handleLogin}
             disabled={loading}
+            accessibilityRole="button"
+            accessibilityLabel="Se connecter"
+            accessibilityState={{ disabled: loading, busy: loading }}
             style={[
               styles.loginButton,
               { backgroundColor: colors.primary, opacity: loading ? 0.7 : 1 },
@@ -416,6 +462,9 @@ export default function LoginScreen() {
             </Text>
             <TouchableOpacity
               onPress={() => router.push("/(auth)/register" as any)}
+              accessibilityRole="link"
+              accessibilityLabel="Créer un compte"
+              style={styles.inlineLink}
             >
               <Text
                 style={{
@@ -432,6 +481,8 @@ export default function LoginScreen() {
           {/* Privacy link */}
           <TouchableOpacity
             onPress={() => router.push("/privacy" as any)}
+            accessibilityRole="link"
+            accessibilityLabel="Politique de confidentialité"
             style={styles.privacyLink}
           >
             <Text
@@ -457,6 +508,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     paddingHorizontal: 12,
     paddingVertical: 8,
+    minHeight: 44,
     borderRadius: 10,
     marginBottom: 20,
   },
@@ -561,7 +613,7 @@ const styles = StyleSheet.create({
   },
   forgotPasswordButton: {
     alignSelf: "flex-end",
-    minHeight: 32,
+    minHeight: 44,
     justifyContent: "center",
     paddingTop: 8,
     paddingHorizontal: 2,
@@ -572,6 +624,7 @@ const styles = StyleSheet.create({
   },
   loginButton: {
     borderRadius: 14,
+    minHeight: 52,
     paddingVertical: 16,
     alignItems: "center",
   },
@@ -582,11 +635,25 @@ const styles = StyleSheet.create({
   },
   registerRow: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "center",
     marginTop: 20,
   },
+  inlineLink: {
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  passwordToggle: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: -8,
+  },
   privacyLink: {
     alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
     marginTop: 16,
     marginBottom: 20,
   },
