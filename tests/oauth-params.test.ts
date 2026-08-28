@@ -28,5 +28,13 @@ describe("OAuth callback parameters", () => {
 
     expect(params.get("state")).toBe("current");
   });
-});
 
+  it("recovers the query when Expo Router folds it behind the fragment", () => {
+    const params = getOAuthParams(
+      "https://staging.ticketbylamako.com/mobile/oauth/facebook-callback#access_token=facebook-token?state=signed-state",
+    );
+
+    expect(params.get("state")).toBe("signed-state");
+    expect(params.get("access_token")).toBe("facebook-token");
+  });
+});
