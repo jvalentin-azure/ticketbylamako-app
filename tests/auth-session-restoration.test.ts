@@ -33,4 +33,20 @@ describe("native session restoration", () => {
     expect(auth).not.toContain("AsyncStorage.setItem(TOKEN_KEY");
     expect(socialAuth).not.toContain("AsyncStorage.setItem(TOKEN_KEY");
   });
+
+  it("reconciles a browser cookie session when an external auth tab returns", () => {
+    const provider = read("lib/auth-provider.tsx");
+    const login = read("app/(auth)/login.tsx");
+
+    expect(provider).toContain(
+      'window.addEventListener("focus", reconcileExternalSession)',
+    );
+    expect(provider).toContain(
+      'window.addEventListener("pageshow", reconcileExternalSession)',
+    );
+    expect(provider).toContain('"visibilitychange"');
+    expect(provider).toContain("prepareForExternalAuth()");
+    expect(login).toContain("isAuthenticated");
+    expect(login).toContain('router.replace("/(tabs)/" as any)');
+  });
 });

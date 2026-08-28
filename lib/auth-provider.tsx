@@ -15,6 +15,7 @@ import {
   storeUser,
   validateToken,
   confirmAuthenticatedUser,
+  prepareForExternalAuth,
 } from "./api/auth";
 import { invalidateAllCaches } from "./api/cache";
 import { clearTicketDetailCache } from "./ticket-detail-cache";
@@ -144,6 +145,70 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (
+      typeof window === "undefined" ||
+      typeof document === "undefined" ||
+      state.isLoading ||
+      state.isAuthenticated
+    ) {
+      return;
+    }
+
+    let active = true;
+    let reconciling = false;
+
+    const reconcileExternalSession = () => {
+      if (
+        !active ||
+        reconciling ||
+        document.visibilityState === "hidden"
+      ) {
+        return;
+      }
+
+      reconciling = true;
+      prepareForExternalAuth();
+      void getStoredUser()
+        .then((returnedUser) => {
+          if (!active || !returnedUser) return;
+          setState({
+            user: returnedUser,
+            isLoading: false,
+            isAuthenticated: true,
+          });
+          syncPushTokenForAuthenticatedUser();
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          reconciling = false;
+        });
+    };
+
+    const reconcileVisibleExternalSession = () => {
+      if (document.visibilityState === "visible") {
+        reconcileExternalSession();
+      }
+    };
+
+    window.addEventListener("focus", reconcileExternalSession);
+    window.addEventListener("pageshow", reconcileExternalSession);
+    document.addEventListener(
+      "visibilitychange",
+      reconcileVisibleExternalSession,
+    );
+
+    return () => {
+      active = false;
+      window.removeEventListener("focus", reconcileExternalSession);
+      window.removeEventListener("pageshow", reconcileExternalSession);
+      document.removeEventListener(
+        "visibilitychange",
+        reconcileVisibleExternalSession,
+      );
+    };
+  }, [state.isAuthenticated, state.isLoading]);
 
   const login = useCallback(async (username: string, password: string) => {
     const user = await apiLogin(username, password);

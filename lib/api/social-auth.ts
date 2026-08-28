@@ -8,6 +8,7 @@ import {
   prepareForExternalAuth,
   type User,
 } from "./auth";
+import { getOAuthParams } from "@/lib/oauth-params";
 import { SITE_URL } from "@/lib/site-url";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -123,14 +124,6 @@ function getOAuthAppReturnUrl(provider: "google" | "facebook"): string {
   }
 
   return Linking.createURL(`oauth/${provider}-callback`);
-}
-
-function getOAuthParams(url: string): URLSearchParams {
-  const parsed = new URL(url);
-  const fragment = parsed.hash.startsWith("#")
-    ? parsed.hash.slice(1)
-    : parsed.hash;
-  return new URLSearchParams(fragment || parsed.search.replace(/^\?/, ""));
 }
 
 function parseOAuthState(value: string): OAuthStatePayload | null {

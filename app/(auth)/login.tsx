@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Text,
   View,
@@ -26,7 +26,7 @@ export default function LoginScreen() {
   const scheme = useColorScheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ returnTo?: string }>();
-  const { login } = useAuth();
+  const { login, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -34,6 +34,12 @@ export default function LoginScreen() {
   const [resetLoading, setResetLoading] = useState(false);
   const [error, setError] = useState("");
   const [resetMessage, setResetMessage] = useState("");
+
+  useEffect(() => {
+    if (isAuthLoading || !isAuthenticated) return;
+    if (params.returnTo) router.replace(params.returnTo as any);
+    else router.replace("/(tabs)/" as any);
+  }, [isAuthLoading, isAuthenticated, params.returnTo, router]);
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {

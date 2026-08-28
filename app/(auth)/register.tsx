@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Text,
   View,
@@ -25,7 +25,7 @@ export default function RegisterScreen() {
   const colors = useColors();
   const scheme = useColorScheme();
   const router = useRouter();
-  const { register } = useAuth();
+  const { register, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -39,6 +39,12 @@ export default function RegisterScreen() {
     name?: string;
   } | null>(null);
   const [checkingReferral, setCheckingReferral] = useState(false);
+
+  useEffect(() => {
+    if (!isAuthLoading && isAuthenticated) {
+      router.replace("/(tabs)/" as any);
+    }
+  }, [isAuthLoading, isAuthenticated, router]);
 
   const handleCheckReferral = async (code: string) => {
     setReferralCode(code);
