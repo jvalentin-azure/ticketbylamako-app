@@ -20,22 +20,44 @@ describe("mobile web stabilization", () => {
       WebNotifications.addNotificationReceivedListener(listener);
 
     const identifier = await WebNotifications.scheduleNotificationAsync({
+      identifier: "payment-confirmed-42",
       content: {
         title: "Paiement confirmé",
         body: "Commande #42",
-        data: { type: "order_update", orderId: 42 },
+        data: { type: "payment_confirmed", orderId: 42 },
       },
       trigger: null,
     });
     await vi.runAllTimersAsync();
 
-    expect(identifier).toMatch(/^web-notification-/);
+    expect(identifier).toBe("payment-confirmed-42");
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener.mock.calls[0][0].request.content.data).toEqual({
-      type: "order_update",
+      type: "payment_confirmed",
       orderId: 42,
     });
     subscription.remove();
+  });
+
+  it("shows new web notifications in an accessible foreground banner", () => {
+    const layout = source("app/_layout.tsx");
+    const banner = source("components/foreground-notification-banner.tsx");
+    const provider = source("lib/notifications-provider.tsx");
+    const paymentReturn = source("hooks/use-payment-return.ts");
+    const notifications = source("lib/notifications.ts");
+
+    expect(layout).toContain("<ForegroundNotificationBanner />");
+    expect(provider).toContain("setForegroundNotification(next)");
+    expect(banner).toContain('accessibilityLiveRegion="polite"');
+    expect(banner).toContain('document.addEventListener("visibilitychange"');
+    expect(banner).toContain("notificationDestinationForAuth");
+    expect(paymentReturn).toContain("notifyPaymentConfirmed(");
+    expect(notifications).toContain(
+      "identifier: `payment-confirmed-${orderId}`",
+    );
+    expect(notifications).toContain(
+      'data: { type: "payment_confirmed", orderId }',
+    );
   });
 
   it("cancels web reminders before delivery", async () => {

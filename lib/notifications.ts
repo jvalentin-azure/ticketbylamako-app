@@ -308,12 +308,13 @@ export async function notifyPaymentConfirmed(
     if (!prefs.orderUpdates) return;
 
     await Notifications.scheduleNotificationAsync({
+      identifier: `payment-confirmed-${orderId}`,
       content: {
         title: "Paiement confirmé ✅",
         body: amount
           ? `Votre commande #${orderId} (${amount}) a été payée avec succès.`
           : `Votre commande #${orderId} a été payée avec succès.`,
-        data: { type: "order_update", orderId },
+        data: { type: "payment_confirmed", orderId },
         ...(Platform.OS === "android" ? { channelId: "orders" } : {}),
       },
       trigger: null, // immediate

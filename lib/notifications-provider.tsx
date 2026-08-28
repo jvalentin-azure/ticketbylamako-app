@@ -24,6 +24,8 @@ interface NotificationsContextType {
   notifications: AppNotification[];
   unreadCount: number;
   isHydrated: boolean;
+  foregroundNotification: AppNotification | null;
+  dismissForegroundNotification: () => void;
   markAsRead: (id: string) => void;
   markAllAsRead: () => void;
   archiveNotification: (id: string) => void;
@@ -35,6 +37,8 @@ const NotificationsContext = createContext<NotificationsContextType>({
   notifications: [],
   unreadCount: 0,
   isHydrated: false,
+  foregroundNotification: null,
+  dismissForegroundNotification: () => {},
   markAsRead: () => {},
   markAllAsRead: () => {},
   archiveNotification: () => {},
@@ -54,6 +58,8 @@ export function NotificationsProvider({
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [isHydrated, setIsHydrated] = useState(false);
+  const [foregroundNotification, setForegroundNotification] =
+    useState<AppNotification | null>(null);
   const storageKey = useMemo(
     () => notificationStorageKey(user?.id),
     [user?.id],
@@ -64,6 +70,7 @@ export function NotificationsProvider({
     let mounted = true;
     setNotifications([]);
     setIsHydrated(false);
+    setForegroundNotification(null);
     void (async () => {
       try {
         const data = await AsyncStorage.getItem(storageKey);
@@ -103,6 +110,7 @@ export function NotificationsProvider({
         receivedAt: new Date().toISOString(),
         read,
       };
+      if (!read) setForegroundNotification(next);
       setNotifications((previous) => {
         const updated = mergeStoredNotification(previous, next);
         persist(updated);
@@ -143,6 +151,10 @@ export function NotificationsProvider({
     () => notifications.filter((notification) => !notification.read).length,
     [notifications],
   );
+
+  const dismissForegroundNotification = useCallback(() => {
+    setForegroundNotification(null);
+  }, []);
 
   const markAsRead = useCallback(
     (id: string) => {
@@ -195,6 +207,8 @@ export function NotificationsProvider({
         notifications,
         unreadCount,
         isHydrated,
+        foregroundNotification,
+        dismissForegroundNotification,
         markAsRead,
         markAllAsRead,
         archiveNotification,

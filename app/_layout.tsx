@@ -35,6 +35,7 @@ import {
 import { CustomSplash } from "@/components/splash-screen";
 import { LoadingScreen } from "@/components/loading-screen";
 import { RewardsPopup } from "@/components/rewards-popup";
+import { ForegroundNotificationBanner } from "@/components/foreground-notification-banner";
 import {
   setupNotificationHandler,
   setupAndroidChannel,
@@ -256,6 +257,7 @@ export default function RootLayout() {
       <trpc.Provider client={trpcClient} queryClient={queryClient}>
         <QueryClientProvider client={queryClient}>
           <NotificationNavigationHandler />
+          <ForegroundNotificationBanner />
           {/* Default to hiding native headers so raw route segments don't appear (e.g. "(tabs)", "products/[id]"). */}
           {/* If a screen needs the native header, explicitly enable it and set a human title via Stack.Screen options. */}
           {/* in order for ios apps tab switching to work properly, use presentation: "fullScreenModal" for login page, whenever you decide to use presentation: "modal*/}
