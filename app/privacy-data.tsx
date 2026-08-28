@@ -16,10 +16,9 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/lib/auth-provider";
 import { requestAccountDeletion } from "@/lib/api/auth";
+import { SITE_URL } from "@/lib/site-url";
 
-const WEB_BASE_URL = (
-  process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com"
-).replace(/\/$/, "");
+const WEB_BASE_URL = SITE_URL;
 const PRIVACY_EMAIL = "info@lamakoevents.mg";
 
 type LegalAction = {

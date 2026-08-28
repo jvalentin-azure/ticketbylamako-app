@@ -3,9 +3,7 @@ import {
   getWebSessionNonce,
   setWebSessionNonce,
 } from "./web-session.web";
-
-const SITE_URL =
-  process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
+import { SITE_URL } from "@/lib/site-url";
 const WEB_SESSION_TOKEN = "wordpress-cookie-session";
 const WEB_SESSION_CONFIRM_DELAYS_MS = [0, 120, 350];
 

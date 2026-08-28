@@ -6,8 +6,8 @@ import {
   isExplicitJwtServerRejection,
   isJwtLocallyUsable,
 } from "@/lib/jwt-session";
+import { SITE_URL } from "@/lib/site-url";
 
-const SITE_URL = process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
 const TOKEN_KEY = "jwt_token";
 const USER_KEY = "user_data";
 const NATIVE_STORAGE_RETRY_DELAYS_MS = [120, 300];

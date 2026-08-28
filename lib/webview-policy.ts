@@ -1,5 +1,4 @@
-const SITE_URL =
-  process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
+import { SITE_URL } from "@/lib/site-url";
 
 const DEFAULT_PAYMENT_HOSTS = [
   "secureacceptance.cybersource.com",

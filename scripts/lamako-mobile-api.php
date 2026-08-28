@@ -163,7 +163,7 @@ function lamako_mobile_maybe_serve_facebook_oauth_callback() {
     $mark         = $provider === 'Google' ? 'G' : 'f';
     $mark_color   = $provider === 'Google' ? '#ffffff' : '#1877f2';
     $mark_text    = $provider === 'Google' ? '#21160f' : '#ffffff';
-    $app_callback = $provider === 'Google' ? 'ticketbylamako://oauth/google-callback' : 'ticketbylamako://oauth/facebook-callback';
+    $web_callback = home_url( $provider === 'Google' ? '/mobile/oauth/google-callback' : '/mobile/oauth/facebook-callback' );
     ?>
 <!doctype html>
 <html lang="fr">
@@ -186,16 +186,18 @@ a { display: inline-flex; align-items: center; justify-content: center; min-heig
   <div class="box">
     <div class="mark"><?php echo esc_html( $mark ); ?></div>
     <h1>Retour a TicketByLamako</h1>
-    <p id="lamako-return-message">La connexion <?php echo esc_html( $provider ); ?> est terminee. Retour automatique vers l'application.</p>
-    <a id="lamako-open-app" href="<?php echo esc_attr( $app_callback ); ?>">Ouvrir l'application</a>
+    <p id="lamako-return-message">La connexion <?php echo esc_html( $provider ); ?> est terminee. Retour automatique vers TicketByLamako.</p>
+    <a id="lamako-open-app" href="<?php echo esc_url( $web_callback ); ?>">Continuer sur TicketByLamako</a>
   </div>
 </main>
 <script>
 (function() {
-  var defaultAppUrl = "<?php echo esc_js( $app_callback ); ?>";
+  var defaultWebUrl = <?php echo wp_json_encode( $web_callback ); ?>;
   var providerLabel = <?php echo wp_json_encode( $provider ); ?>;
-  var suffix = window.location.hash || window.location.search || "";
-  var appUrl = defaultAppUrl;
+  var query = window.location.search || "";
+  var fragment = window.location.hash || "";
+  var suffix = query + fragment;
+  var appUrl = defaultWebUrl;
 
   function isAllowedReturnUrl(url) {
     var allowExpoGo = <?php echo defined( 'LAMAKO_ALLOW_EXPO_GO_OAUTH_CALLBACKS' ) && LAMAKO_ALLOW_EXPO_GO_OAUTH_CALLBACKS ? 'true' : 'false'; ?>;
@@ -217,9 +219,9 @@ a { display: inline-flex; align-items: center; justify-content: center; min-heig
   }
 
   function getParam(name) {
-    var raw = suffix.charAt(0) === "#" || suffix.charAt(0) === "?" ? suffix.substring(1) : suffix;
-    var params = new URLSearchParams(raw);
-    return params.get(name);
+    var fragmentParams = new URLSearchParams(fragment.charAt(0) === "#" ? fragment.substring(1) : fragment);
+    var queryParams = new URLSearchParams(query.charAt(0) === "?" ? query.substring(1) : query);
+    return fragmentParams.get(name) || queryParams.get(name);
   }
 
   try {
@@ -231,7 +233,9 @@ a { display: inline-flex; align-items: center; justify-content: center; min-heig
       }
     }
   } catch (e) {
-    appUrl = defaultAppUrl;
+    // A malformed or missing OAuth state must stay in the browser. Native
+    // deep links are used only when an allowlisted returnUrl was recovered.
+    appUrl = defaultWebUrl;
   }
 
   var target = appUrl + suffix;
@@ -243,9 +247,13 @@ a { display: inline-flex; align-items: center; justify-content: center; min-heig
     if (isWebReturn) {
       if (message) message.textContent = "La connexion " + providerLabel + " est terminee. Retour automatique vers TicketByLamako.";
       if (link) link.textContent = "Continuer sur TicketByLamako";
+    } else {
+      if (message) message.textContent = "La connexion " + providerLabel + " est terminee. Retour automatique vers l'application.";
+      if (link) link.textContent = "Ouvrir l'application";
     }
   } catch (e) {
-    // Keep the native fallback copy when the target cannot be parsed.
+    appUrl = defaultWebUrl;
+    target = appUrl + suffix;
   }
   if (link) link.setAttribute("href", target);
   window.setTimeout(function() {

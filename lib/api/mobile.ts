@@ -5,9 +5,9 @@ import {
   getWebSessionNonce,
   refreshWebSessionNonce,
 } from "./web-session";
+import { SITE_URL } from "@/lib/site-url";
 
-export const SITE_URL =
-  process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
+export { SITE_URL };
 export const MOBILE_V2_SEATING_ENABLED =
   process.env.EXPO_PUBLIC_ENABLE_MOBILE_V2_SEATING !== "false";
 

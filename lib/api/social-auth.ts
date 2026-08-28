@@ -8,11 +8,10 @@ import {
   prepareForExternalAuth,
   type User,
 } from "./auth";
+import { SITE_URL } from "@/lib/site-url";
 
 WebBrowser.maybeCompleteAuthSession();
 
-const SITE_URL =
-  process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
 // OAuth client identifiers are public by design. These fallbacks match the
 // committed EAS profiles and keep a standalone web export functional.
 const GOOGLE_CLIENT_ID =

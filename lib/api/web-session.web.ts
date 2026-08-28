@@ -1,6 +1,6 @@
+import { SITE_URL } from "@/lib/site-url";
+
 const NONCE_STORAGE_KEY = "ticketbylamako_wp_rest_nonce";
-const SITE_URL =
-  process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
 
 let memoryNonce: string | null = null;
 let refreshRequest: Promise<string | null> | null = null;

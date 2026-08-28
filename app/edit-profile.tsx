@@ -21,9 +21,7 @@ import {
   updateMobileProfile,
 } from "@/lib/api/mobile";
 import { getBillingInfo, saveBillingInfo } from "@/lib/billing-store";
-
-const SITE_URL =
-  process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
+import { SITE_URL } from "@/lib/site-url";
 
 export default function EditProfileScreen() {
   const colors = useColors();

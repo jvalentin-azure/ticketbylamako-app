@@ -52,12 +52,23 @@ describe("social authentication security", () => {
     expect(socialAuth).not.toContain("const valid = await validateToken()");
   });
 
-  it("keeps the browser callback copy on the site instead of opening the app", () => {
+  it("uses the mobile website as the safe callback fallback", () => {
     expect(oauthCallbackPage).toContain("isWebReturn");
     expect(oauthCallbackPage).toContain("Continuer sur TicketByLamako");
     expect(oauthCallbackPage).toContain(
       "Retour automatique vers TicketByLamako.",
     );
+    expect(oauthCallbackPage).toContain("var appUrl = defaultWebUrl");
+    expect(oauthCallbackPage).toContain("appUrl = defaultWebUrl");
+    expect(oauthCallbackPage).not.toContain("var appUrl = defaultAppUrl");
+  });
+
+  it("recovers OAuth state from either the query or URL fragment", () => {
+    expect(oauthCallbackPage).toContain(
+      "var suffix = query + fragment",
+    );
+    expect(oauthCallbackPage).toContain("fragmentParams.get(name)");
+    expect(oauthCallbackPage).toContain("queryParams.get(name)");
   });
 
   it("does not call the retired Facebook Graph API v18", () => {

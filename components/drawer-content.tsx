@@ -20,9 +20,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { buildLamakoWhatsAppUrl } from "@/lib/contact";
 import { getAppVersionLabel } from "@/lib/app-version";
 import { useRewards } from "@/lib/rewards-provider";
-
-const SITE_URL =
-  process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
+import { SITE_URL } from "@/lib/site-url";
 
 interface DrawerContentProps {
   onClose?: () => void;

@@ -1,7 +1,6 @@
-export type NativeWalletResult = "added" | "cancelled";
+import { SITE_URL } from "@/lib/site-url";
 
-const SITE_URL =
-  process.env.EXPO_PUBLIC_SITE_URL || "https://www.ticketbylamako.com";
+export type NativeWalletResult = "added" | "cancelled";
 
 export async function addTicketToNativeWallet(
   signedWalletUrl: string,
