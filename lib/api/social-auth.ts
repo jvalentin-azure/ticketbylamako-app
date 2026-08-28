@@ -360,10 +360,21 @@ export async function startAppleLogin(): Promise<SocialCredential | null> {
 }
 
 export async function startFacebookLogin(): Promise<SocialCredential | null> {
+  if (Platform.OS === "web") {
+    // Complete the browser flow on WordPress so Safari receives the HttpOnly
+    // session cookie before returning to the React application. The native app
+    // keeps the provider-token flow below.
+    prepareForExternalAuth();
+    const startUrl = new URL(`${SITE_URL_BASE}/wp-admin/admin-post.php`);
+    startUrl.searchParams.set("action", "lamako_facebook_start");
+    startUrl.searchParams.set("redirect_to", `${SITE_URL_BASE}/mobile/`);
+    window.location.assign(startUrl.toString());
+    return null;
+  }
+
   if (!FACEBOOK_APP_ID) {
     throw new Error("Facebook App ID non configuré");
   }
-  if (Platform.OS === "web") prepareForExternalAuth();
 
   const appRedirectUri = getOAuthAppReturnUrl("facebook");
   const webRedirectUri = `${SITE_URL_BASE}/lamako-mobile/oauth/facebook-callback`;

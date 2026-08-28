@@ -38,6 +38,11 @@ if ( file_exists( $lamako_mobile_web_apple_auth_file ) ) {
     require_once $lamako_mobile_web_apple_auth_file;
 }
 
+$lamako_mobile_web_facebook_auth_file = __DIR__ . '/lamako-mobile-api/includes/web-facebook-auth.php';
+if ( file_exists( $lamako_mobile_web_facebook_auth_file ) ) {
+    require_once $lamako_mobile_web_facebook_auth_file;
+}
+
 // ============================================================
 // 0. ALLOW PAY-FOR-ORDER WITHOUT LOGIN (for mobile app checkout)
 // ============================================================

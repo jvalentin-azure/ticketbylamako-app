@@ -27,6 +27,13 @@ const oauthCallbackPage = fs.readFileSync(
   path.join(root, "scripts/lamako-mobile-api.php"),
   "utf8",
 );
+const facebookWebAuth = fs.readFileSync(
+  path.join(
+    root,
+    "scripts/lamako-mobile-api/includes/web-facebook-auth.php",
+  ),
+  "utf8",
+);
 
 describe("social authentication security", () => {
   it("keeps browser OAuth callbacks on the HTTPS mobile site", () => {
@@ -45,6 +52,25 @@ describe("social authentication security", () => {
     expect(appleStart.indexOf("prepareForExternalAuth()")).toBeLessThan(
       appleStart.indexOf("window.location.assign"),
     );
+  });
+
+  it("completes browser Facebook OAuth on WordPress", () => {
+    const facebookStart = socialAuth.slice(
+      socialAuth.indexOf("export async function startFacebookLogin"),
+    );
+    expect(facebookStart).toContain('action", "lamako_facebook_start"');
+    expect(facebookStart).toContain("prepareForExternalAuth()");
+    expect(facebookStart.indexOf("prepareForExternalAuth()"))
+      .toBeLessThan(facebookStart.indexOf("window.location.assign"));
+    expect(facebookWebAuth).toContain("response_type' => 'code'");
+    expect(facebookWebAuth).toContain("lamako_web_facebook_consume_session");
+    expect(facebookWebAuth).toContain("browser_nonce_hash");
+    expect(facebookWebAuth).toContain("'httponly' => true");
+    expect(facebookWebAuth).toContain("'samesite' => 'Lax'");
+    expect(facebookWebAuth).toContain("lamako_web_facebook_validate_redirect");
+    expect(facebookWebAuth).toContain("lamako_mobile_validate_facebook_identity");
+    expect(facebookWebAuth).toContain("wp_set_auth_cookie");
+    expect(facebookWebAuth).not.toContain("access_token=' .");
   });
 
   it("confirms the browser cookie session after social login", () => {
