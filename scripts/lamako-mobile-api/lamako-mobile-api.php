@@ -94,41 +94,8 @@ function lamako_mobile_override_return_url( $return_url, $order ) {
     return $order->get_checkout_order_received_url();
 }
 
-/**
- * Force ALL Tickera ticket products to be purchasable.
- * 
- * Tickera's WooCommerce Bridge marks ticket products as non-purchasable
- * to prevent direct purchase (it uses its own cart flow via seating charts).
- * However, this blocks:
- *   1. The seating chart AJAX (tc_woo_update_cart_seats) which calls WC()->cart->add_to_cart()
- *   2. Our custom checkout page (lamako_checkout) pay-for-order flow
- *   3. The standard WC pay-for-order page
- * 
- * Solution: Always return true for products that have a price set.
- * This is safe because the seating chart plugin controls availability
- * via its own seat reservation system (Firebase + cookies).
- */
-add_filter( 'woocommerce_is_purchasable', 'lamako_force_all_purchasable', 9999, 2 );
-
-function lamako_force_all_purchasable( $purchasable, $product ) {
-    // If the product has a price, make it purchasable
-    if ( $product && $product->get_price() !== '' && $product->get_price() !== null ) {
-        return true;
-    }
-    return $purchasable;
-}
-
-/**
- * Also force stock status to be in-stock for all products.
- * Tickera may mark products as out of stock when all seats are reserved,
- * but the seat reservation system handles availability separately.
- */
-add_filter( 'woocommerce_product_is_in_stock', 'lamako_force_all_in_stock', 9999, 2 );
-
-function lamako_force_all_in_stock( $in_stock, $product ) {
-    // Always return true - seat availability is managed by Tickera's own system
-    return true;
-}
+// Product availability must remain governed by WooCommerce and Tickera.
+// Any compatibility override below is scoped to the exact order being paid.
 
 // ============================================================
 // 1. SEATING CHART EMBED TEMPLATE (template_redirect hook)
@@ -1064,9 +1031,31 @@ function lamako_mobile_maybe_serve_checkout() {
         wp_die( 'Order not found', 'Error', [ 'response' => 404 ] );
     }
     
-    // Force products to be purchasable for this request
-    add_filter( 'woocommerce_is_purchasable', '__return_true', 99999 );
-    add_filter( 'woocommerce_product_is_in_stock', '__return_true', 99999 );
+    // Tickera may mark an already-reserved ticket as unavailable while its
+    // existing order is being paid. Limit the compatibility override to the
+    // products already bound to this verified order; never affect the catalog.
+    $lamako_checkout_product_ids = [];
+    foreach ( $order->get_items() as $order_item ) {
+        $lamako_checkout_product_ids[] = (int) $order_item->get_product_id();
+        $lamako_checkout_product_ids[] = (int) $order_item->get_variation_id();
+    }
+    $lamako_checkout_product_ids = array_values( array_unique( array_filter( $lamako_checkout_product_ids ) ) );
+
+    $lamako_allow_order_product = static function( $available, $product ) use ( $lamako_checkout_product_ids ) {
+        if ( ! $product || ! method_exists( $product, 'get_id' ) ) {
+            return $available;
+        }
+
+        $candidate_ids = [ (int) $product->get_id() ];
+        if ( method_exists( $product, 'get_parent_id' ) ) {
+            $candidate_ids[] = (int) $product->get_parent_id();
+        }
+
+        return array_intersect( $candidate_ids, $lamako_checkout_product_ids ) ? true : $available;
+    };
+
+    add_filter( 'woocommerce_is_purchasable', $lamako_allow_order_product, 99999, 2 );
+    add_filter( 'woocommerce_product_is_in_stock', $lamako_allow_order_product, 99999, 2 );
     
     // ============================================================
     // HANDLE POST: Process payment directly via gateway
@@ -1969,65 +1958,34 @@ add_action( 'rest_api_init', function () {
  * Called after successful payment to prevent old items from reappearing.
  */
 function lamako_mobile_clear_cart( $request ) {
-    // Clear WC cart if available
-    if ( function_exists( 'WC' ) && WC()->cart ) {
-        WC()->cart->empty_cart();
+    // Clear only state owned by the current WooCommerce/Tickera session. This
+    // endpoint must never mutate an order supplied by the caller or perform a
+    // wildcard deletion of reservations belonging to other customers.
+    if ( class_exists( 'TC_Seat_Chart' ) && method_exists( 'TC_Seat_Chart', 'set_seats_cookie' ) ) {
+        TC_Seat_Chart::set_seats_cookie( [] );
     }
-    
-    // Also clear any Tickera seating chart session data
-    if ( WC()->session ) {
-        WC()->session->set( 'tc_seat_cart_items', null );
-        WC()->session->set( 'tc_cart_seats', null );
-        WC()->session->set( 'chosen_payment_method', null );
-    }
-    
-    // Release Tickera seat reservations from transients
-    // Tickera uses multiple transient patterns for seat reservations
-    $order_id = $request->get_param( 'order_id' );
-    
-    // Method 1: Clear seats from a specific order
-    if ( $order_id ) {
-        $order = wc_get_order( (int) $order_id );
-        if ( $order && $order->get_status() !== 'completed' && $order->get_status() !== 'processing' ) {
-            foreach ( $order->get_items() as $item ) {
-                $seat_id = $item->get_meta( '_tc_seat_id' );
-                if ( $seat_id ) {
-                    delete_transient( 'tc_seat_' . $seat_id . '_reserved' );
-                    delete_transient( 'tc_seat_reserved_' . $seat_id );
-                    delete_transient( 'tc_cart_seat_' . $seat_id );
-                }
-            }
-            // Cancel the order so seats are fully released
-            if ( $order->get_status() === 'pending' ) {
-                $order->update_status( 'cancelled', 'Annulé depuis l\'app mobile (paiement non abouti).' );
-            }
+
+    if ( function_exists( 'WC' ) ) {
+        if ( WC()->cart ) {
+            WC()->cart->empty_cart( true );
+        }
+        if ( WC()->session ) {
+            WC()->session->set( 'tc_seat_cart_items', null );
+            WC()->session->set( 'tc_cart_seats', null );
+            WC()->session->set( 'chosen_payment_method', null );
         }
     }
-    
-    // Method 2: Clear ALL Tickera seat-related transients from the database
-    global $wpdb;
-    $wpdb->query(
-        "DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_tc_seat_%' OR option_name LIKE '_transient_timeout_tc_seat_%' OR option_name LIKE '_transient_tc_cart_seat_%' OR option_name LIKE '_transient_timeout_tc_cart_seat_%'"
-    );
-    
-    // === FIREBASE: Clear all in-cart seats for this session from Firebase ===
-    // Tickera stores Firebase data in the Realtime Database under /in-cart/{chart_id}/{seat_id}
-    // The tc_remove_expired_firebase_seats action handles cleanup, but we also need to
-    // clear the current session's seats. We do this by calling the same AJAX action internally.
-    $chart_id = $request->get_param( 'chart_id' );
-    if ( $chart_id && class_exists( 'TC_Seat_Chart_Firebase' ) ) {
-        // If Tickera's Firebase class is available, use it to clear seats
-        try {
-            do_action( 'tc_remove_expired_firebase_seats_action', $chart_id );
-        } catch ( \Exception $e ) {
-            // Non-critical - continue even if Firebase cleanup fails
-        }
+
+    if ( get_current_user_id() ) {
+        update_user_meta( get_current_user_id(), '_seatings_persistent_cart', [ 'seats_cart' => [] ] );
     }
-    
-    // Also clear Tickera's session-based cart cookies if available
+
+    // The cookie identifies one session-owned transient; no wildcard is used.
     if ( isset( $_COOKIE['tc_cart_cookie'] ) ) {
-        $cookie_id = sanitize_text_field( $_COOKIE['tc_cart_cookie'] );
-        delete_transient( 'tc_cart_' . $cookie_id );
+        $cookie_id = sanitize_key( wp_unslash( $_COOKIE['tc_cart_cookie'] ) );
+        if ( $cookie_id !== '' ) {
+            delete_transient( 'tc_cart_' . $cookie_id );
+        }
     }
     
     return new WP_REST_Response( [ 'success' => true, 'message' => 'Cart cleared' ], 200 );
@@ -2156,13 +2114,16 @@ function lamako_mobile_get_order_tickets( $request ) {
         $ticket_type_id = $variation_id > 0 ? $variation_id : $product_id;
         $instances = [];
         
-        // Method 1: Query by item_id meta
+        // Method 1: Query by the globally unique WooCommerce item ID and
+        // ticket type. Both values come from the requested order itself.
         $instances = get_posts( [
             'post_type'      => 'tc_tickets_instances',
             'post_status'    => 'any',
             'posts_per_page' => $qty + 5,
             'meta_query'     => [
+                'relation' => 'AND',
                 [ 'key' => 'item_id', 'value' => $item_id ],
+                [ 'key' => 'ticket_type_id', 'value' => $ticket_type_id ],
             ],
             'fields' => 'ids',
         ] );
@@ -2194,21 +2155,6 @@ function lamako_mobile_get_order_tickets( $request ) {
                     $instances = array_merge( $instances, $child );
                 }
             }
-        }
-        
-        // Method 3: Fallback by ticket_type_id (broader search)
-        if ( empty( $instances ) ) {
-            $instances = get_posts( [
-                'post_type'      => 'tc_tickets_instances',
-                'post_status'    => 'any',
-                'posts_per_page' => $qty,
-                'orderby'        => 'ID',
-                'order'          => 'DESC',
-                'meta_query'     => [
-                    [ 'key' => 'ticket_type_id', 'value' => $ticket_type_id ],
-                ],
-                'fields' => 'ids',
-            ] );
         }
         
         // Get event info
@@ -2316,13 +2262,6 @@ function lamako_mobile_create_order( $request ) {
         return new WP_Error( 'invalid_items', 'Items array is required', [ 'status' => 400 ] );
     }
     
-    // Temporarily force all products to be purchasable during order creation
-    // This is needed because Tickera ticket products may have restrictions
-    $force_purchasable = function( $purchasable ) { return true; };
-    $force_in_stock = function( $in_stock ) { return true; };
-    add_filter( 'woocommerce_is_purchasable', $force_purchasable, 99999 );
-    add_filter( 'woocommerce_product_is_in_stock', $force_in_stock, 99999 );
-    
     // Create the order
     $order = wc_create_order();
     
@@ -2355,8 +2294,8 @@ function lamako_mobile_create_order( $request ) {
         $quantity   = isset( $item['quantity'] ) ? (int) $item['quantity'] : 1;
         $variation_id = isset( $item['variation_id'] ) ? (int) $item['variation_id'] : 0;
         
-        if ( $product_id <= 0 ) {
-            $errors[] = 'Invalid product_id: ' . $product_id;
+        if ( $product_id <= 0 || $quantity <= 0 ) {
+            $errors[] = 'Invalid product or quantity: ' . $product_id;
             continue;
         }
         
@@ -2364,6 +2303,36 @@ function lamako_mobile_create_order( $request ) {
         if ( ! $product ) {
             $errors[] = 'Product not found: ' . $product_id;
             continue;
+        }
+
+        $base_product_id = $product->get_parent_id() > 0 ? (int) $product->get_parent_id() : (int) $product->get_id();
+        if ( $variation_id > 0 && $base_product_id !== $product_id ) {
+            $errors[] = 'Variation does not belong to product: ' . $product_id;
+            continue;
+        }
+        if ( get_post_status( $base_product_id ) !== 'publish' ) {
+            $errors[] = 'Product is not published: ' . $product_id;
+            continue;
+        }
+
+        $is_ticket = get_post_meta( $base_product_id, '_tc_is_ticket', true ) === 'yes';
+        if ( ! $is_ticket && ! $product->is_purchasable() ) {
+            $errors[] = 'Product is not purchasable: ' . $product_id;
+            continue;
+        }
+        if ( ! $product->is_in_stock() ) {
+            $errors[] = 'Product is out of stock: ' . $product_id;
+            continue;
+        }
+        if ( method_exists( $product, 'has_enough_stock' ) && ! $product->has_enough_stock( $quantity ) ) {
+            $errors[] = 'Not enough stock for product: ' . $product_id;
+            continue;
+        }
+        if ( $is_ticket && class_exists( '\\Tickera\\TC_Ticket' ) && method_exists( '\\Tickera\\TC_Ticket', 'is_sales_available' ) ) {
+            if ( ! \Tickera\TC_Ticket::is_sales_available( $base_product_id ) ) {
+                $errors[] = 'Ticket sales are closed: ' . $product_id;
+                continue;
+            }
         }
         
         $result = $order->add_product( $product, $quantity );
@@ -2396,10 +2365,6 @@ function lamako_mobile_create_order( $request ) {
     $order->update_meta_data( '_lamako_order_source', 'mobile_app' );
     
     $order->save();
-    
-    // Remove temporary purchasability overrides
-    remove_filter( 'woocommerce_is_purchasable', $force_purchasable, 99999 );
-    remove_filter( 'woocommerce_product_is_in_stock', $force_in_stock, 99999 );
     
     // Build the "pay for order" URL
     // Always construct manually to avoid WP nonce issues in mobile WebView
