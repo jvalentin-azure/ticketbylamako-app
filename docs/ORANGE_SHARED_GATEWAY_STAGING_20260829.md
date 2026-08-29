@@ -163,7 +163,32 @@ touched.
   postflight.
 
 This result is `GO` for the deployed staging fail-closed guard and shared-code
-integration. It is not a functional Orange payment E2E. Enabling staging still
-requires separate test credentials plus `TBL_ORANGE_PAYMENT_ENVIRONMENT=test`.
-Production promotion requires explicit authorization, a production environment
-gate, controlled real-payment E2E and reconciliation.
+integration. It is not a functional Orange payment E2E. No Orange test contract
+is currently available, so staging must remain fail-closed and must not reuse the
+production credentials.
+
+## Production-only secret configuration
+
+The guard supports `TBL_ORANGE_MERCHANT_KEY` and
+`TBL_ORANGE_CONSUMER_KEY` as server environment variables or PHP constants.
+Only these server-managed values are accepted by guard `1.2.0`; legacy
+WordPress option values are no longer used. The credential fields are removed
+from the WooCommerce administration page. A missing or partial external
+configuration fails closed.
+
+For the production host only:
+
+1. inject both production values through the hosting secret/environment
+   configuration, never through the repository, deployment manifest or shell
+   history;
+2. set `TBL_ORANGE_PAYMENT_ENVIRONMENT=production`;
+3. verify readiness without printing either value;
+4. snapshot and then remove only the two legacy credential keys from the
+   `woocommerce_papi_paiement_settings` option;
+5. perform one explicitly authorized, low-value real-payment E2E and reconcile
+   the Orange transaction, WooCommerce order, stock and ticket exactly once;
+6. retain a kill switch and rollback snapshot until reconciliation is complete.
+
+Production promotion and the one real-payment E2E require explicit
+authorization. No production secret or production state was changed during this
+staging qualification.

@@ -2,14 +2,14 @@
 /**
  * Plugin Name: TBL Orange Payment Guard
  * Description: Shared, capability-token authenticated Orange Money gateway for WooCommerce and Lamako Mobile v2.
- * Version: 1.1.0
+ * Version: 1.2.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'TBL_ORANGE_GUARD_VERSION', '1.1.0' );
+define( 'TBL_ORANGE_GUARD_VERSION', '1.2.0' );
 define( 'TBL_ORANGE_CALLBACK_TTL', 2 * HOUR_IN_SECONDS );
 
 function tbl_orange_payment_environment() {
@@ -30,6 +30,40 @@ function tbl_orange_environment_is_allowed() {
         return 'production' === $environment;
     }
     return false;
+}
+
+function tbl_orange_server_credential( $name ) {
+    $constant = 'merchant' === $name
+        ? 'TBL_ORANGE_MERCHANT_KEY'
+        : ( 'consumer' === $name ? 'TBL_ORANGE_CONSUMER_KEY' : '' );
+    if ( '' === $constant ) {
+        return '';
+    }
+
+    $value = defined( $constant )
+        ? constant( $constant )
+        : ( function_exists( 'getenv' ) ? getenv( $constant ) : false );
+    return is_scalar( $value ) ? trim( (string) $value ) : '';
+}
+
+function tbl_orange_server_credentials_state() {
+    $merchant = tbl_orange_server_credential( 'merchant' );
+    $consumer = tbl_orange_server_credential( 'consumer' );
+    if ( '' !== $merchant && '' !== $consumer ) {
+        return 'complete';
+    }
+    return '' !== $merchant || '' !== $consumer ? 'partial' : 'none';
+}
+
+function tbl_orange_credentials() {
+    $state = tbl_orange_server_credentials_state();
+    if ( 'complete' !== $state ) {
+        return [ 'merchant' => '', 'consumer' => '' ];
+    }
+    return [
+        'merchant' => tbl_orange_server_credential( 'merchant' ),
+        'consumer' => tbl_orange_server_credential( 'consumer' ),
+    ];
 }
 
 function tbl_orange_callback_request_id() {
@@ -461,8 +495,9 @@ function tbl_orange_secure_check_status( WP_REST_Request $request ) {
 
 trait TBL_Orange_Gateway_Security {
     public function tbl_security_ready() {
-        $merchant = trim( (string) $this->merchant_key );
-        $consumer = trim( (string) $this->consumer_key );
+        $credentials = tbl_orange_credentials();
+        $merchant    = $credentials['merchant'];
+        $consumer    = $credentials['consumer'];
         return tbl_orange_environment_is_allowed()
             && $merchant !== ''
             && strlen( $merchant ) <= 512
@@ -561,7 +596,7 @@ trait TBL_Orange_Gateway_Security {
                     ],
                     'body'               => wp_json_encode(
                         [
-                            'merchant_key' => (string) $this->merchant_key,
+                            'merchant_key' => tbl_orange_credentials()['merchant'],
                             'order_id'     => $request_reference,
                             'amount'       => tbl_orange_expected_amount( $order ),
                             'reference'    => 'Ticket_' . $order->get_id(),
@@ -637,7 +672,7 @@ trait TBL_Orange_Gateway_Security {
 
     private function tbl_token() {
         $endpoint = $this->tbl_endpoint( $this->api_token_url, '/oauth/' );
-        $consumer = trim( (string) $this->consumer_key );
+        $consumer = tbl_orange_credentials()['consumer'];
         if ( is_wp_error( $endpoint ) || $consumer === '' || strlen( $consumer ) > 2048 || preg_match( '/[\r\n]/', $consumer ) ) {
             return new WP_Error( 'orange_token_config_invalid', 'Orange authentication configuration is invalid' );
         }
@@ -681,6 +716,46 @@ trait TBL_Orange_Gateway_Security {
         return wp_http_validate_url( (string) $url )
             && 'https' === wp_parse_url( (string) $url, PHP_URL_SCHEME );
     }
+
+    public function init_form_fields() {
+        $credential_state  = tbl_orange_server_credentials_state();
+        $credential_description = 'complete' === $credential_state
+            ? __( 'Chargés depuis la configuration privée du serveur. Les valeurs ne sont pas envoyées au navigateur.', 'papi-pay' )
+            : __( 'Absents ou incomplets dans la configuration privée du serveur : le paiement reste désactivé.', 'papi-pay' );
+        $credential_fields = [
+            'credential_source' => [
+                'title'       => __( 'Identifiants Orange', 'papi-pay' ),
+                'type'        => 'title',
+                'description' => $credential_description,
+            ],
+        ];
+
+        $this->form_fields = array_merge(
+            [
+                'enabled'     => [
+                    'title'   => __( 'Enable/Disable', 'papi-pay' ),
+                    'type'    => 'checkbox',
+                    'label'   => __( 'Activer Orange Money', 'papi-pay' ),
+                    'default' => 'no',
+                ],
+                'title'       => [ 'title' => __( 'Titre', 'papi-pay' ), 'type' => 'text', 'default' => 'Orange Money' ],
+                'description' => [ 'title' => __( 'Description', 'papi-pay' ), 'type' => 'textarea', 'default' => '' ],
+            ],
+            $credential_fields,
+            [
+                'api_token_url'   => [
+                    'title'   => __( 'URL API Token', 'papi-pay' ),
+                    'type'    => 'text',
+                    'default' => 'https://api.orange.com/oauth/v3/token',
+                ],
+                'api_payment_url' => [
+                    'title'   => __( 'URL API Paiement', 'papi-pay' ),
+                    'type'    => 'text',
+                    'default' => 'https://api.orange.com/orange-money-webpay/mg/v1/webpayment',
+                ],
+            ]
+        );
+    }
 }
 
 add_action(
@@ -722,30 +797,6 @@ add_action(
                     add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, [ $this, 'process_admin_options' ] );
                 }
 
-                public function init_form_fields() {
-                    $this->form_fields = [
-                        'enabled'         => [
-                            'title'   => __( 'Enable/Disable', 'papi-pay' ),
-                            'type'    => 'checkbox',
-                            'label'   => __( 'Activer Orange Money', 'papi-pay' ),
-                            'default' => 'no',
-                        ],
-                        'title'           => [ 'title' => __( 'Titre', 'papi-pay' ), 'type' => 'text', 'default' => 'Orange Money' ],
-                        'description'     => [ 'title' => __( 'Description', 'papi-pay' ), 'type' => 'textarea', 'default' => '' ],
-                        'merchant_key'    => [ 'title' => __( 'Merchant Key', 'papi-pay' ), 'type' => 'text' ],
-                        'consumer_key'    => [ 'title' => __( 'Consumer Key', 'papi-pay' ), 'type' => 'password' ],
-                        'api_token_url'   => [
-                            'title'   => __( 'URL API Token', 'papi-pay' ),
-                            'type'    => 'text',
-                            'default' => 'https://api.orange.com/oauth/v3/token',
-                        ],
-                        'api_payment_url' => [
-                            'title'   => __( 'URL API Paiement', 'papi-pay' ),
-                            'type'    => 'text',
-                            'default' => 'https://api.orange.com/orange-money-webpay/mg/v1/webpayment',
-                        ],
-                    ];
-                }
             }
         }
     },

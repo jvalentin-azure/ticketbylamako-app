@@ -233,6 +233,26 @@ function assert_error( $value, string $code, int $status ): void {
     assert_true( (int) ( $value->get_error_data()['status'] ?? 0 ) === $status, 'unexpected HTTP status for ' . $code );
 }
 
+putenv( 'TBL_ORANGE_MERCHANT_KEY=test-merchant' );
+putenv( 'TBL_ORANGE_CONSUMER_KEY' );
+assert_true( 'partial' === tbl_orange_server_credentials_state(), 'a partial server secret configuration must be detected' );
+assert_true(
+    [ 'merchant' => '', 'consumer' => '' ] === tbl_orange_credentials(),
+    'partial server secrets must fail closed'
+);
+putenv( 'TBL_ORANGE_CONSUMER_KEY=test-consumer' );
+assert_true( 'complete' === tbl_orange_server_credentials_state(), 'both server secrets must be detected' );
+assert_true(
+    [ 'merchant' => 'test-merchant', 'consumer' => 'test-consumer' ] === tbl_orange_credentials(),
+    'complete server secrets must be available to the gateway'
+);
+putenv( 'TBL_ORANGE_MERCHANT_KEY' );
+putenv( 'TBL_ORANGE_CONSUMER_KEY' );
+assert_true(
+    [ 'merchant' => '', 'consumer' => '' ] === tbl_orange_credentials(),
+    'missing server secrets must fail closed without a WordPress option fallback'
+);
+
 function add_secured_order( int $id, string $token, int $expires_at, float $total = 1000 ): WC_Order {
     $order = new WC_Order( $id, $total );
     $order->update_meta_data( '_tbl_papi_notif_token_hash', tbl_orange_token_hash( $token ) );

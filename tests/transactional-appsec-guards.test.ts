@@ -127,6 +127,14 @@ describe("transactional AppSec guards", () => {
     expect(orangeGuard).toContain("function tbl_security_ready()");
     expect(orangeGuard).toContain("function tbl_orange_environment_is_allowed()");
     expect(orangeGuard).toContain("TBL_ORANGE_PAYMENT_ENVIRONMENT");
+    expect(orangeGuard).toContain("TBL_ORANGE_MERCHANT_KEY");
+    expect(orangeGuard).toContain("TBL_ORANGE_CONSUMER_KEY");
+    expect(orangeGuard).toContain("function tbl_orange_server_credentials_state()");
+    expect(orangeGuard).toContain("function tbl_orange_credentials(");
+    expect(orangeGuard).toContain("'complete' !== $state");
+    expect(orangeGuard).toContain("Les valeurs ne sont pas envoyées au navigateur");
+    expect(orangeGuard).not.toContain("'merchant_key' => [");
+    expect(orangeGuard).not.toContain("'consumer_key' => [");
     expect(orangeGuard).toContain("'staging.ticketbylamako.com' === $host");
     expect(orangeGuard).toContain("rest_url( 'papi/v1/webhook' )");
     expect(orangeGuard).toContain("_tbl_papi_notif_token_hash");
