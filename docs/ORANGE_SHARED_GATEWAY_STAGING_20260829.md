@@ -71,7 +71,7 @@ authorization and one controlled real-payment E2E with reconciliation.
 These are the hashes qualified and still active on staging. They must not be
 confused with the local v1.2.0 follow-up below.
 
-## Local v1.2.0 follow-up — not deployed
+## Staging v1.2.0 follow-up — deployed fail-closed
 
 - Server-secret implementation commit:
   `2b9cf61b15a56242d50ae6f15de55a9149d40152`.
@@ -95,6 +95,29 @@ the parent constructor before immediately blanking the two inherited credential
 properties. The old database values therefore remain a residual until the
 separately authorized production option purge, even though v1.2.0 neither uses
 nor renders them.
+
+The follow-up was promoted to staging as a guard-only replacement under owner
+`tbl-orange-guard-v12-92889cd` on `20260829T114944Z`:
+
+- active guard SHA-256:
+  `C2F47AF0C352FA093D878FDECB1E39F84E86FE88770C0BB0D3C4E8C9B977F69C`;
+- Mobile v2 remained:
+  `4417AA27E7A39A99769E667268B406354DEABE32BBBD05E28E5D9A27EE4F53FA`;
+- private manifest:
+  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/private_html/tbl-deploy/tbl-orange-guard-v12-20260829T114944Z-92889cd/`;
+- SHA-256 of `manifest.sha256`:
+  `53FE9769DB8341425265C13C0B2E79DF5B04BC744DA197AF74B19C40414CF146`;
+- fallback structural smoke: guard `1.2.0`, `readiness=fail-closed`,
+  `provider calls=0`, `writes=0`;
+- HPOS orders `1843 -> 1843`, legacy orders `715 -> 715`;
+- public root, `/mobile/`, home/shop Mobile v2 data and REST index all returned
+  HTTP 200;
+- Mobile main, Rewards and Breeze hashes remained unchanged;
+- no secret value or legacy option was read, displayed, modified or purged;
+- no provider call, business fixture, payment, ticket, stock/session/e-mail or
+  production action occurred;
+- rollback snapshot `guard-before.php` retains the v1.1.0 baseline, and the
+  mono-writer was independently verified absent after postflight.
 
 ## Exact staging targets and order
 
