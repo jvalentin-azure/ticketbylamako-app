@@ -8,6 +8,8 @@ const read = (relativePath: string) =>
 
 const rewards = read("scripts/lamako-rewards-api/lamako-rewards-api.php");
 const commerce = read("scripts/lamako-mobile-api/includes/v2-commerce.php");
+const orangeGuard = read("scripts/tbl-orange-callback-guard.php");
+const stagingOrangeQa = read("scripts/qa-staging-orange-security.php");
 const rewardsProvider = read("lib/rewards-provider.tsx");
 const stagingRewardsQa = read("scripts/qa-staging-rewards-security.php");
 
@@ -83,32 +85,57 @@ describe("transactional AppSec guards", () => {
     );
   });
 
-  it("fails Orange closed until authenticated provider verification exists", () => {
+  it("uses one hardened Orange gateway for WooCommerce and Mobile v2", () => {
     const availability = section(
       commerce,
       "function lamako_mobile_v2_orange_server_verification_available()",
-      "function lamako_mobile_v2_orange_token(",
+      "function lamako_mobile_v2_initiate_orange(",
+    );
+    const initiation = section(
+      commerce,
+      "function lamako_mobile_v2_initiate_orange(",
+      "function lamako_mobile_v2_json_response(",
     );
     const callback = section(
       commerce,
       "function lamako_mobile_v2_orange_callback(",
       "function lamako_mobile_v2_reconcile_pending_payments(",
     );
+    const secureCallback = section(
+      orangeGuard,
+      "function tbl_orange_secure_webhook(",
+      "function tbl_orange_check_status_permission(",
+    );
 
-    expect(availability).toContain("return false;");
+    expect(availability).toContain("tbl_orange_gateway_is_hardened");
+    expect(availability).toContain("lamako_mobile_v2_provider_gateway(");
     expect(commerce).toContain(
       "'papi_paiement' === $gateway_id && ! lamako_mobile_v2_orange_server_verification_available()",
     );
     expect(commerce).toContain("lamako_v2_orange_verification_unavailable");
-    expect(callback).toContain("hash_hmac(");
-    expect(callback).toContain("$previous_hash");
-    expect(callback).toContain("$amount_mismatch");
-    expect(callback).toContain("$currency_mismatch");
-    expect(callback).toContain("lamako_mobile_v2_mark_payment_for_review(");
+    expect(initiation).toContain("lamako_mobile_v2_invoke_gateway(");
+    expect(initiation).not.toContain("wp_remote_post(");
+    expect(initiation).not.toContain("_papi_notif_token");
+    expect(callback).toContain("tbl_orange_secure_webhook( $request )");
     expect(callback).not.toContain("payment_complete(");
     expect(callback).not.toContain("update_status(");
-    expect(callback).not.toContain("lamako_mobile_v2_provider_failure(");
-    expect(callback).not.toContain("lamako_mobile_v2_cancel_unpaid_payment(");
+
+    expect(orangeGuard).toContain("class TBL_Secure_Orange_Gateway");
+    expect(orangeGuard).toContain("function tbl_security_ready()");
+    expect(orangeGuard).toContain("rest_url( 'papi/v1/webhook' )");
+    expect(orangeGuard).toContain("_tbl_papi_notif_token_hash");
+    expect(orangeGuard).toContain("_tbl_orange_expected_amount");
+    expect(orangeGuard).toContain("_tbl_orange_expected_currency");
+    expect(orangeGuard).toContain("_tbl_orange_token_expires_at");
+    expect(orangeGuard).toContain("delete_meta_data( '_papi_notif_token' )");
+    expect(secureCallback).toContain("tbl_orange_callback_rate_limit(");
+    expect(secureCallback).toContain("tbl_orange_gateway_lock(");
+    expect(secureCallback).toContain("tbl_orange_validate_callback_snapshot(");
+    expect(secureCallback).toContain("[ 'cancelled', 'refunded', 'failed' ]");
+    expect(secureCallback).toContain("$order->payment_complete( $transaction_id )");
+    expect(secureCallback).toContain("idempotent_replay");
+    expect(secureCallback).not.toContain("update_status( 'completed'");
+    expect(secureCallback).not.toContain("wc_maybe_increase_stock_levels(");
   });
 
   it("keeps the staging Rewards smoke synthetic and self-cleaning", () => {
@@ -120,5 +147,20 @@ describe("transactional AppSec guards", () => {
     expect(stagingRewardsQa).toContain("403 === $other_user->get_status()");
     expect(stagingRewardsQa).toContain("delete_option( $idempotency_option )");
     expect(stagingRewardsQa).toContain("wp_delete_user( $user_id )");
+  });
+
+  it("keeps the staging Orange smoke payment-free and self-cleaning", () => {
+    expect(stagingOrangeQa).toContain(
+      "Refusing to run Orange QA outside TicketByLamako staging",
+    );
+    expect(stagingOrangeQa).toContain(
+      "TBL_QA_ALLOW_ORANGE_INITIATION",
+    );
+    expect(stagingOrangeQa).toContain("WC_Order_Item_Fee");
+    expect(stagingOrangeQa).toContain("! $order->is_paid()");
+    expect(stagingOrangeQa).toContain("_tbl_papi_notif_token_hash");
+    expect(stagingOrangeQa).toContain("'' === (string) $order->get_meta( '_papi_notif_token' )");
+    expect(stagingOrangeQa).toContain("$fixture->delete( true )");
+    expect(stagingOrangeQa).not.toContain("payment_complete(");
   });
 });

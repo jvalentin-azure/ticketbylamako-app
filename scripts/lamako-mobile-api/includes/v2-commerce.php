@@ -3167,178 +3167,26 @@ function lamako_mobile_v2_provider_gateway( $gateway_id ) {
     return $gateways[ $gateway_id ];
 }
 
-function lamako_mobile_v2_orange_endpoint( $gateway, $property, $fallback ) {
-    $url  = isset( $gateway->{$property} ) ? esc_url_raw( (string) $gateway->{$property} ) : '';
-    $url  = $url !== '' ? $url : $fallback;
-    $host = strtolower( (string) wp_parse_url( $url, PHP_URL_HOST ) );
-
-    if ( 'https' !== strtolower( (string) wp_parse_url( $url, PHP_URL_SCHEME ) ) || 'api.orange.com' !== $host ) {
-        return new WP_Error(
-            'lamako_v2_orange_config_invalid',
-            'Orange Money is temporarily unavailable.',
-            [ 'status' => 502 ]
-        );
-    }
-
-    return $url;
-}
-
-/**
- * Orange Web Payment does not expose an authenticated transaction-status
- * contract in the currently installed merchant integration. Until one is
- * implemented and amount/currency/reference are re-read from Orange, the
- * gateway must remain unavailable for new mobile transactions.
- */
 function lamako_mobile_v2_orange_server_verification_available() {
-    return false;
+    if ( ! function_exists( 'tbl_orange_gateway_is_hardened' ) ) {
+        return false;
+    }
+    $gateway = lamako_mobile_v2_provider_gateway( 'papi_paiement' );
+    return ! is_wp_error( $gateway ) && tbl_orange_gateway_is_hardened( $gateway );
 }
 
-function lamako_mobile_v2_orange_token( $gateway ) {
-    $endpoint = lamako_mobile_v2_orange_endpoint(
-        $gateway,
-        'api_token_url',
-        'https://api.orange.com/oauth/v3/token'
-    );
-    if ( is_wp_error( $endpoint ) ) {
-        return $endpoint;
-    }
-
-    $consumer_key = isset( $gateway->consumer_key ) ? trim( (string) $gateway->consumer_key ) : '';
-    if ( $consumer_key === '' ) {
-        return new WP_Error(
-            'lamako_v2_orange_config_invalid',
-            'Orange Money is temporarily unavailable.',
-            [ 'status' => 502 ]
-        );
-    }
-
-    $response = wp_remote_post( $endpoint, [
-        'headers' => [
-            'Authorization' => 'Basic ' . $consumer_key,
-            'Accept'        => 'application/json',
-            'Content-Type'  => 'application/x-www-form-urlencoded',
-        ],
-        'body'    => [ 'grant_type' => 'client_credentials' ],
-        'timeout' => 20,
-    ] );
-    $body = lamako_mobile_v2_json_response(
-        $response,
-        [ 200 ],
-        'lamako_v2_orange_token_failed',
-        'Orange Money is temporarily unavailable.'
-    );
-
-    if ( is_wp_error( $body ) || empty( $body['access_token'] ) ) {
-        return is_wp_error( $body )
-            ? $body
-            : new WP_Error(
-                'lamako_v2_orange_token_failed',
-                'Orange Money is temporarily unavailable.',
-                [ 'status' => 502 ]
-            );
-    }
-
-    return sanitize_text_field( $body['access_token'] );
-}
-
-function lamako_mobile_v2_initiate_orange( WC_Order $order, $gateway, $attempt_id, $token, $kind ) {
+function lamako_mobile_v2_initiate_orange( WC_Order $order, $attempt_id, $token, $kind ) {
     if ( ! lamako_mobile_v2_orange_server_verification_available() ) {
         return new WP_Error(
             'lamako_v2_orange_verification_unavailable',
-            'Orange Money is temporarily unavailable while provider verification is being secured.',
+            'Orange Money is temporarily unavailable while the secure gateway is inactive.',
             [ 'status' => 503 ]
         );
     }
 
-    $access_token = lamako_mobile_v2_orange_token( $gateway );
-    if ( is_wp_error( $access_token ) ) {
-        return $access_token;
-    }
-
-    $endpoint = lamako_mobile_v2_orange_endpoint(
-        $gateway,
-        'api_payment_url',
-        'https://api.orange.com/orange-money-webpay/mg/v1/webpayment'
-    );
-    if ( is_wp_error( $endpoint ) ) {
-        return $endpoint;
-    }
-
-    $merchant_key = isset( $gateway->merchant_key ) ? trim( (string) $gateway->merchant_key ) : '';
-    if ( $merchant_key === '' ) {
-        return new WP_Error(
-            'lamako_v2_orange_config_invalid',
-            'Orange Money is temporarily unavailable.',
-            [ 'status' => 502 ]
-        );
-    }
-
-    $return_url = lamako_mobile_v2_payment_page_url( $token, $kind, 'payment-return' );
-    $cancel_url = lamako_mobile_v2_payment_page_url( $token, $kind, 'payment-cancel', 'cancelled' );
-    $notif_url  = rest_url( 'lamako-mobile/v2/payments/orange/callback' );
-
-    $payload = [
-        'merchant_key' => $merchant_key,
-        'order_id'     => 'TBL' . $order->get_id() . gmdate( 'YmdHis' ),
-        'amount'       => (int) round( (float) $order->get_total() ),
-        'reference'    => 'Ticket_' . $order->get_id(),
-        'return_url'   => $return_url,
-        'cancel_url'   => $cancel_url,
-        'notif_url'    => $notif_url,
-        'lang'         => 'fr',
-        'currency'     => 'MGA',
-    ];
-    $response = wp_remote_post( $endpoint, [
-        'headers' => [
-            'Authorization' => 'Bearer ' . $access_token,
-            'Accept'        => 'application/json',
-            'Content-Type'  => 'application/json',
-        ],
-        'body'    => wp_json_encode( $payload ),
-        'timeout' => 25,
-    ] );
-    $body = lamako_mobile_v2_json_response(
-        $response,
-        [ 201 ],
-        'lamako_v2_orange_start_failed',
-        'Orange Money could not start the payment request.'
-    );
-    if ( is_wp_error( $body ) ) {
-        return $body;
-    }
-
-    $redirect_url = esc_url_raw( $body['payment_url'] ?? '' );
-    $pay_token    = sanitize_text_field( $body['pay_token'] ?? '' );
-    $notif_token  = sanitize_text_field( $body['notif_token'] ?? '' );
-    if (
-        $redirect_url === ''
-        || 'https' !== strtolower( (string) wp_parse_url( $redirect_url, PHP_URL_SCHEME ) )
-        || $pay_token === ''
-        || $notif_token === ''
-    ) {
-        return new WP_Error(
-            'lamako_v2_orange_start_failed',
-            'Orange Money could not start the payment request.',
-            [ 'status' => 502 ]
-        );
-    }
-
-    $order->update_meta_data( '_papi_pay_token', $pay_token );
-    $order->update_meta_data( '_papi_notif_token', $notif_token );
-    $order->update_meta_data( '_lamako_v2_provider_reference', $pay_token );
-    $order->update_meta_data( '_lamako_v2_provider_correlation', $notif_token );
-    $order->update_status( 'on-hold', 'Orange Money payment authorization started.' );
-    $result = lamako_mobile_v2_gateway_response(
-        $order,
-        'papi_paiement',
-        $attempt_id,
-        [ 'result' => 'success', 'redirect' => $redirect_url ]
-    );
-    $order->update_meta_data( '_lamako_v2_payment_attempt_status', 'redirect' );
-    $order->update_meta_data( '_lamako_v2_payment_result', wp_json_encode( $result ) );
-    $order->save();
-
-    return $result;
+    // The shared gateway owns initiation, token storage and the canonical
+    // callback. Mobile only supplies its already-authenticated order context.
+    return lamako_mobile_v2_invoke_gateway( $order, 'papi_paiement', $attempt_id, $token, $kind );
 }
 
 function lamako_mobile_v2_json_response( $response, array $success_codes, $error_code, $error_message ) {
@@ -3866,100 +3714,19 @@ function lamako_mobile_v2_mvola_callback( WP_REST_Request $request ) {
 }
 
 function lamako_mobile_v2_allow_orange_callback( WP_REST_Request $request ) {
-    $body        = $request->get_json_params();
-    $body        = is_array( $body ) ? $body : [];
-    $notif_token = sanitize_text_field( $body['notif_token'] ?? '' );
-    $status      = strtoupper( sanitize_text_field( $body['status'] ?? '' ) );
-
-    if ( strlen( $notif_token ) < 16 || ! in_array( $status, [ 'SUCCESS', 'COMPLETED', 'TS', 'FAILED', 'CANCELLED', 'INSUFFICIENT_BALANCE', 'PENDING', 'TIP' ], true ) ) {
-        return new WP_Error( 'lamako_v2_orange_callback_invalid', 'Invalid callback.', [ 'status' => 403 ] );
-    }
-
-    return true;
-}
-
-function lamako_mobile_v2_find_orange_order_by_notif_token( $notif_token ) {
-    $orders = wc_get_orders( [
-        'limit'          => 2,
-        'payment_method' => 'papi_paiement',
-        'meta_query'     => [
-            [
-                'key'     => '_papi_notif_token',
-                'value'   => sanitize_text_field( $notif_token ),
-                'compare' => '=',
-            ],
-        ],
-        'orderby'        => 'date',
-        'order'          => 'DESC',
-        'return'         => 'objects',
-    ] );
-
-    foreach ( $orders as $order ) {
-        if ( ! $order instanceof WC_Order || 'papi_paiement' !== $order->get_payment_method() ) {
-            continue;
-        }
-        $stored = (string) $order->get_meta( '_papi_notif_token' );
-        if ( $stored !== '' && hash_equals( $stored, (string) $notif_token ) ) {
-            return $order;
-        }
-    }
-
-    return false;
+    return function_exists( 'tbl_orange_gateway_is_hardened' ) && tbl_orange_gateway_is_hardened()
+        ? true
+        : new WP_Error( 'lamako_v2_orange_callback_unavailable', 'Secure Orange callback is unavailable.', [ 'status' => 503 ] );
 }
 
 function lamako_mobile_v2_orange_callback( WP_REST_Request $request ) {
-    $body          = $request->get_json_params();
-    $body          = is_array( $body ) ? $body : [];
-    $notif_token   = sanitize_text_field( $body['notif_token'] ?? '' );
-    $status        = strtoupper( sanitize_text_field( $body['status'] ?? '' ) );
-    $transaction_id = sanitize_text_field( $body['transaction_id'] ?? ( $body['txnid'] ?? '' ) );
-    $order         = lamako_mobile_v2_find_orange_order_by_notif_token( $notif_token );
-
-    if ( ! $order instanceof WC_Order ) {
-        return new WP_REST_Response( [ 'received' => false ], 404 );
+    if ( ! function_exists( 'tbl_orange_secure_webhook' ) ) {
+        return new WP_Error( 'lamako_v2_orange_callback_unavailable', 'Secure Orange callback is unavailable.', [ 'status' => 503 ] );
     }
 
-    if ( lamako_mobile_v2_payment_is_confirmed( $order ) ) {
-        return new WP_REST_Response( [ 'received' => true ], 200 );
-    }
-
-    $attempt_id = sanitize_text_field( $order->get_meta( '_lamako_v2_payment_attempt_id' ) );
-    if ( $attempt_id === '' ) {
-        return new WP_REST_Response( [ 'received' => false ], 409 );
-    }
-
-    // The callback contains no verifiable signature in the installed Orange
-    // contract. Treat every field as an untrusted hint and make replays a
-    // no-op. In particular, never complete, fail or cancel an order here.
-    $amount       = array_key_exists( 'amount', $body ) && is_numeric( $body['amount'] ) ? (float) $body['amount'] : null;
-    $currency     = strtoupper( sanitize_text_field( $body['currency'] ?? '' ) );
-    $payload_hash = hash_hmac(
-        'sha256',
-        implode( '|', [ $notif_token, $status, $transaction_id, null === $amount ? '' : (string) $amount, $currency ] ),
-        wp_salt( 'nonce' )
-    );
-    $previous_hash = (string) $order->get_meta( '_lamako_v2_orange_callback_payload_hash' );
-    if ( $previous_hash !== '' && hash_equals( $previous_hash, $payload_hash ) ) {
-        return new WP_REST_Response( [ 'received' => true ], 202 );
-    }
-
-    $amount_mismatch   = null !== $amount && abs( (float) $order->get_total() - $amount ) > 0.01;
-    $currency_mismatch = $currency !== '' && strtoupper( (string) $order->get_currency() ) !== $currency;
-    $order->update_meta_data( '_lamako_v2_orange_callback_payload_hash', $payload_hash );
-    $order->update_meta_data( '_lamako_v2_orange_callback_received_at', time() );
-    $order->update_meta_data( '_lamako_v2_orange_callback_hint', $status );
-    $order->update_meta_data( '_lamako_v2_orange_callback_amount_mismatch', $amount_mismatch ? 'yes' : 'no' );
-    $order->update_meta_data( '_lamako_v2_orange_callback_currency_mismatch', $currency_mismatch ? 'yes' : 'no' );
-    if ( $transaction_id !== '' ) {
-        $order->update_meta_data( '_lamako_v2_orange_callback_transaction_hash', hash( 'sha256', $transaction_id ) );
-    }
-    $order->save();
-
-    $review_message = ( $amount_mismatch || $currency_mismatch )
-        ? 'Orange callback data did not match the order. Authenticated provider verification is required.'
-        : 'Orange callback received. Authenticated provider verification is required before changing payment state.';
-    lamako_mobile_v2_mark_payment_for_review( $order, $review_message );
-    return new WP_REST_Response( [ 'received' => true ], 202 );
+    // Compatibility route for transactions started by an older Mobile v2
+    // build. New payment requests use the canonical /papi/v1/webhook route.
+    return tbl_orange_secure_webhook( $request );
 }
 
 function lamako_mobile_v2_reconcile_pending_payments() {
@@ -4158,11 +3925,7 @@ function lamako_mobile_v2_start_payment( WP_REST_Request $request ) {
     }
 
     if ( $gateway_id === 'papi_paiement' ) {
-        $gateway = lamako_mobile_v2_provider_gateway( $gateway_id );
-        if ( is_wp_error( $gateway ) ) {
-            return $gateway;
-        }
-        $response = lamako_mobile_v2_initiate_orange( $order, $gateway, $attempt_id, $token, $kind );
+        $response = lamako_mobile_v2_initiate_orange( $order, $attempt_id, $token, $kind );
         if ( is_wp_error( $response ) ) {
             $order->update_meta_data( '_lamako_v2_payment_attempt_status', 'failed' );
             $order->update_meta_data( '_lamako_v2_payment_error', $response->get_error_message() );
