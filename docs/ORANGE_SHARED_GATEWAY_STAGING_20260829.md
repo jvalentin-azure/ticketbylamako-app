@@ -130,5 +130,40 @@ synthetic provider payment URL is never opened and expires at Orange.
 
 ## Staging result
 
-Pending mono-writer availability and controlled qualification. Production has
-not been touched.
+Qualified on staging in fail-closed mode on 2026-08-29. Production was not
+touched.
+
+- Active guard SHA-256:
+  `BE007BB6D7073A491BFCA5353BA2B83552F1571ACD9A4276CB90B94B23C0A7CE`.
+- Active Mobile v2 SHA-256:
+  `4417AA27E7A39A99769E667268B406354DEABE32BBBD05E28E5D9A27EE4F53FA`.
+- Private manifest:
+  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/private_html/tbl-deploy/tbl-orange-shared-20260829T111411Z-3873fd3/`.
+- SHA-256 of `manifest.sha256`:
+  `7FC63278E750BB9C13F4DD26689C88E8BCCF5D012B01CE9C7D0C2FFCDCB8F5AB`.
+- Structural WP-CLI smoke passed guard `1.1.0`, hardened gateway class,
+  canonical callbacks and `readiness=fail-closed`; provider calls and
+  WordPress writes were both zero.
+- Staging consumer/merchant credentials were present but byte-identical to the
+  production configuration, the endpoints were the production
+  `api.orange.com` endpoints, and the credential environment was unconfigured.
+  Provider QA was therefore blocked and no transaction URL was requested.
+- Orange remained absent from Mobile v2 methods. The legacy Orange plugin
+  remained inactive.
+- HPOS orders stayed `1843 -> 1843`; legacy orders stayed `715 -> 715`.
+  Initiation markers created since deploy were `0` in both stores.
+- Public site, `/mobile/`, Mobile v2 home/shop data and REST index returned
+  HTTP 200.
+- Neighboring Mobile main, Rewards and Breeze guard hashes remained unchanged.
+- PHP lint passed and the recent relevant error-log window contained no Orange,
+  parse, uncaught or fatal entry.
+- Rollback snapshots `guard-before.php` and `v2-before.php` are retained in the
+  private manifest.
+- The mono-writer was removed and independently verified absent after
+  postflight.
+
+This result is `GO` for the deployed staging fail-closed guard and shared-code
+integration. It is not a functional Orange payment E2E. Enabling staging still
+requires separate test credentials plus `TBL_ORANGE_PAYMENT_ENVIRONMENT=test`.
+Production promotion requires explicit authorization, a production environment
+gate, controlled real-payment E2E and reconciliation.
