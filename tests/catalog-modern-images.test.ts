@@ -47,9 +47,9 @@ describe("catalogue modern image variants", () => {
   it("prefers WebP in the app and falls back to the original URL on error", () => {
     const image = read("components", "catalog-image.tsx");
     const catalog = read("lib", "api", "catalog.ts");
-    expect(image).toContain("optimizedUri || uri || null");
-    expect(image).toContain("if (uri && activeUri !== uri)");
-    expect(image).toContain("setActiveUri(uri)");
+    expect(image).toContain("resolveCatalogImageSources(");
+    expect(image).toContain("if (fallbackUri && activeUri !== fallbackUri)");
+    expect(image).toContain("setActiveUri(fallbackUri)");
     expect(catalog).toContain("normalizeCatalogImageVariants");
   });
 });

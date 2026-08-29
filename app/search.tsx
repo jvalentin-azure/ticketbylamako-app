@@ -20,11 +20,8 @@ import {
   type TCEvent,
   type WCProduct,
 } from "@/lib/api/catalog";
-import {
-  formatAriary,
-  decodeHtmlEntities,
-  formatDateShort,
-} from "@/lib/format";
+import { formatAriary, decodeHtmlEntities } from "@/lib/format";
+import { formatEventDateShort } from "@/lib/event-date";
 import { PointsBadge } from "@/components/points-badge";
 
 type TabType = "all" | "events" | "products";
@@ -108,9 +105,7 @@ export default function SearchScreen() {
             type: "event" as const,
             title: decodeHtmlEntities(e.title.rendered),
             image: e.featuredImage,
-            subtitle:
-              e.categoryNames?.join(", ") ||
-              formatDateShort(e.mobileFields?.event_date_time || e.date),
+            subtitle: e.categoryNames?.join(", ") || formatEventDateShort(e),
             lamakoRewardsEnabled: e.lamakoRewardsEnabled !== false,
             price: e.minPrice ? `Dès ${formatAriary(e.minPrice)}` : undefined,
           }))

@@ -9,7 +9,9 @@ const source = fs.readFileSync(
 
 describe("events catalogue behavior", () => {
   it("filters against the actual event date rather than the post date", () => {
-    expect(source).toContain("e.mobileFields?.event_date_time || e.date");
+    expect(source).toContain("getEventStartDate(e)");
+    expect(source).toContain("formatEventDateShort(item)");
+    expect(source).not.toContain("e.mobileFields?.event_date_time || e.date");
     expect(source).not.toContain("const eventDate = new Date(e.date)");
   });
 

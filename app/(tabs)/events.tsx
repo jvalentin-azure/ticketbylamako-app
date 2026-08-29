@@ -24,7 +24,8 @@ import {
 } from "@/lib/api/catalog";
 import { prefetchCatalogImages } from "@/lib/catalog-image-prefetch";
 import { useFavorites } from "@/lib/favorites-provider";
-import { formatDateShort, decodeHtmlEntities } from "@/lib/format";
+import { decodeHtmlEntities } from "@/lib/format";
+import { formatEventDateShort, getEventStartDate } from "@/lib/event-date";
 import {
   consumePendingCategory,
   subscribeToPendingCategory,
@@ -62,13 +63,12 @@ export default function EventsScreen() {
       const upcoming: TCEvent[] = [];
       const past: TCEvent[] = [];
       ev.forEach((e) => {
-        const dateStr = e.mobileFields?.event_date_time || e.date;
-        const eventDate = new Date(dateStr.replace(" ", "T"));
+        const eventDate = getEventStartDate(e);
         if (
           e.salesClosed === true ||
           e.isPastEvent === true ||
           e.ticketingStatus === "ended" ||
-          eventDate < now
+          (eventDate !== null && eventDate < now)
         ) {
           past.push(e);
         } else {
@@ -172,9 +172,8 @@ export default function EventsScreen() {
       const now = new Date();
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       result = result.filter((e) => {
-        const eventDate = new Date(
-          (e.mobileFields?.event_date_time || e.date).replace(" ", "T"),
-        );
+        const eventDate = getEventStartDate(e);
+        if (!eventDate) return false;
         switch (dateFilter) {
           case "today":
             return (
@@ -504,9 +503,7 @@ export default function EventsScreen() {
                                 marginTop: 4,
                               }}
                             >
-                              {formatDateShort(
-                                item.mobileFields?.event_date_time || item.date,
-                              )}
+                              {formatEventDateShort(item)}
                             </Text>
                           </View>
                         </TouchableOpacity>

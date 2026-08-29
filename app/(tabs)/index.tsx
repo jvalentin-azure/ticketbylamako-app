@@ -28,11 +28,8 @@ import { useAuth } from "@/lib/auth-provider";
 import { prefetchCatalogImages } from "@/lib/catalog-image-prefetch";
 import { useFavorites } from "@/lib/favorites-provider";
 import { setPendingCategory } from "@/lib/filter-state";
-import {
-  decodeHtmlEntities,
-  formatAriary,
-  formatDateShort,
-} from "@/lib/format";
+import { decodeHtmlEntities, formatAriary } from "@/lib/format";
+import { formatEventDateShort, getEventStartDate } from "@/lib/event-date";
 import { notifyNewEvent } from "@/lib/notifications";
 import { useRewards } from "@/lib/rewards-provider";
 
@@ -45,11 +42,8 @@ function isUpcoming(event: TCEvent): boolean {
     event.ticketingStatus === "ended"
   )
     return false;
-  const value = event.mobileFields?.event_date_time;
-  if (!value) {
-    return (new Date(event.date).getTime() - Date.now()) / 86_400_000 > -7;
-  }
-  return new Date(value.replace(" ", "T")).getTime() > Date.now();
+  const date = getEventStartDate(event);
+  return date ? date.getTime() > Date.now() : true;
 }
 
 export default function HomeScreen() {
@@ -425,11 +419,7 @@ function Hero({
           </Text>
           <View style={styles.heroMeta}>
             <IconSymbol name="clock" size={14} color="#E7B64A" />
-            <Text style={styles.heroDate}>
-              {formatDateShort(
-                event.mobileFields?.event_date_time || event.date,
-              )}
-            </Text>
+            <Text style={styles.heroDate}>{formatEventDateShort(event)}</Text>
             {event.minPrice != null ? (
               <Text style={styles.heroPrice}>
                 {event.minPrice === event.maxPrice
@@ -542,7 +532,7 @@ function PastEvent({
           {title}
         </Text>
         <Text style={[styles.pastDate, { color: colors.muted }]}>
-          {formatDateShort(event.mobileFields?.event_date_time || event.date)}
+          {formatEventDateShort(event)}
         </Text>
       </View>
     </Pressable>

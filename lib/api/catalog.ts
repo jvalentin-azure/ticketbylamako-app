@@ -19,6 +19,7 @@ import type {
   WCProduct,
 } from "@/lib/types/commerce";
 import { normalizeRewardsEnabled } from "@/lib/rewards-eligibility";
+import { getEventEndDateValue, getEventStartDateValue } from "@/lib/event-date";
 
 export { SITE_URL };
 
@@ -158,6 +159,21 @@ function normalizeTicket(raw: any, eventId: number | string): TicketType {
   };
 }
 
+function normalizeEventMobileFields(raw: any): MobileFields | undefined {
+  const fields = raw?.mobileFields || raw?.lamako_mobile || {};
+  const eventStart = getEventStartDateValue(raw || {});
+  const eventEnd = getEventEndDateValue(raw || {});
+  if (!eventStart && !eventEnd && Object.keys(fields).length === 0) {
+    return undefined;
+  }
+
+  return {
+    ...fields,
+    event_date_time: eventStart,
+    event_end_date_time: eventEnd,
+  } as MobileFields;
+}
+
 function normalizeEvent(raw: any): TCEvent {
   const eventId = Number(raw?.id || 0);
   return {
@@ -175,7 +191,7 @@ function normalizeEvent(raw: any): TCEvent {
       raw?.featuredImageVariants,
     ),
     categoryNames: raw?.categoryNames || [],
-    mobileFields: raw?.mobileFields || undefined,
+    mobileFields: normalizeEventMobileFields(raw),
     tickets: (raw?.tickets || []).map((ticket: any) =>
       normalizeTicket(ticket, eventId),
     ),

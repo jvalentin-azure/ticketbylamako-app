@@ -4,8 +4,10 @@ import { Image } from "expo-image";
 
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
-
-const CATALOG_IMAGE_PLACEHOLDER = "|rF?hV%2WCj[ayj[a|j[azj[ayj[";
+import {
+  CATALOG_IMAGE_PLACEHOLDER,
+  resolveCatalogImageSources,
+} from "@/lib/catalog-image-state";
 
 interface CatalogImageProps {
   uri?: string | null;
@@ -25,14 +27,17 @@ export function CatalogImage({
   recyclingKey,
 }: CatalogImageProps) {
   const colors = useColors();
-  const preferredUri = optimizedUri || uri || null;
+  const { preferredUri, fallbackUri } = resolveCatalogImageSources(
+    optimizedUri,
+    uri,
+  );
   const [activeUri, setActiveUri] = useState(preferredUri);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     setActiveUri(preferredUri);
     setFailed(false);
-  }, [preferredUri, uri]);
+  }, [fallbackUri, preferredUri]);
 
   return (
     <View
@@ -51,8 +56,8 @@ export function CatalogImage({
           transition={{ duration: 160, effect: "cross-dissolve" }}
           recyclingKey={recyclingKey || activeUri}
           onError={() => {
-            if (uri && activeUri !== uri) {
-              setActiveUri(uri);
+            if (fallbackUri && activeUri !== fallbackUri) {
+              setActiveUri(fallbackUri);
               return;
             }
             setFailed(true);

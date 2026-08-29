@@ -10,11 +10,8 @@ import { CatalogImage } from "@/components/catalog-image";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import type { TCEvent } from "@/lib/api/catalog";
-import {
-  decodeHtmlEntities,
-  formatAriary,
-  formatDateShort,
-} from "@/lib/format";
+import { decodeHtmlEntities, formatAriary } from "@/lib/format";
+import { formatEventDateShort } from "@/lib/event-date";
 
 interface EventPosterCardProps {
   event: TCEvent;
@@ -35,13 +32,12 @@ export function EventPosterCard({
   const title = decodeHtmlEntities(event.title.rendered);
   const category = decodeHtmlEntities(event.categoryNames?.[0] || "Événement");
   const location = event.mobileFields?.event_location?.trim();
-  const date = event.mobileFields?.event_date_time || event.date;
 
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${title}, ${formatDateShort(date)}${location ? `, ${location}` : ""}`}
+      accessibilityLabel={`${title}, ${formatEventDateShort(event)}${location ? `, ${location}` : ""}`}
       style={({ pressed }) => [
         styles.card,
         {
@@ -103,7 +99,7 @@ export function EventPosterCard({
 
       <View style={styles.body}>
         <Text style={[styles.date, { color: colors.primary }]}>
-          {formatDateShort(date)}
+          {formatEventDateShort(event)}
         </Text>
         <Text
           style={[styles.title, { color: colors.foreground }]}

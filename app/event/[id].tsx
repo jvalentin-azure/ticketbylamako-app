@@ -29,12 +29,8 @@ import {
 } from "@/lib/api/catalog";
 import { useAuth } from "@/lib/auth-provider";
 import { useFavorites } from "@/lib/favorites-provider";
-import {
-  formatAriary,
-  formatDate,
-  stripHtml,
-  decodeHtmlEntities,
-} from "@/lib/format";
+import { formatAriary, stripHtml, decodeHtmlEntities } from "@/lib/format";
+import { formatEventDate, getEventStartDate } from "@/lib/event-date";
 import { PointsBadge } from "@/components/points-badge";
 import { CartToast } from "@/components/cart-toast";
 import { SeatPurchaseFlow } from "@/components/seating/SeatPurchaseFlow";
@@ -133,9 +129,9 @@ export default function EventDetailScreen() {
         allEvents
           .filter((item) => {
             if (item.id === eventId) return false;
-            const date = item.mobileFields?.event_date_time;
+            const date = getEventStartDate(item);
             if (!date) return true;
-            return new Date(date.replace(" ", "T")).getTime() > now;
+            return date.getTime() > now;
           })
           .slice(0, 8),
       );
@@ -163,9 +159,9 @@ export default function EventDetailScreen() {
   // Countdown timer (updates every second)
   useEffect(() => {
     if (!event) return;
-    const dateStr = event.mobileFields?.event_date_time;
-    if (!dateStr) return;
-    const eventTime = new Date(dateStr.replace(" ", "T")).getTime();
+    const eventDate = getEventStartDate(event);
+    if (!eventDate) return;
+    const eventTime = eventDate.getTime();
     if (eventTime <= Date.now()) {
       setCountdown(null);
       return;
@@ -562,7 +558,7 @@ export default function EventDetailScreen() {
                   Date
                 </Text>
                 <Text style={[styles.infoValue, { color: colors.foreground }]}>
-                  {formatDate(event.date)}
+                  {formatEventDate(event)}
                 </Text>
               </View>
             </View>
