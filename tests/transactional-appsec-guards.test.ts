@@ -49,6 +49,8 @@ describe("transactional AppSec guards", () => {
     expect(redemption).toContain("SELECT GET_LOCK(%s, %d)");
     expect(redemption).toContain("START TRANSACTION");
     expect(redemption).toContain("FOR UPDATE");
+    expect(redemption).toContain("lr_rewards_redemption_value");
+    expect(redemption).toContain("lr_rewards_minimum_redeem_points");
     expect(redemption).toContain("add_option( $context['option_name']");
     expect(rewards).toContain("idempotency_record_invalid");
     expect(redemption).toContain("set_email_restrictions");

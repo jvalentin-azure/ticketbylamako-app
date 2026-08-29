@@ -254,8 +254,14 @@ function lr_redeem_points_for_user( $user_id, $points, $raw_idempotency_key ) {
 
     $user_id = (int) $user_id;
     $points  = (int) $points;
-    $values  = array( 500 => 10000, 1000 => 20000, 2000 => 40000, 5000 => 100000 );
-    if ( $user_id <= 0 || ! isset( $values[ $points ] ) ) {
+    if ( $user_id <= 0 || $points <= 0 ) {
+        return new WP_Error( 'invalid_points', 'Invalid rewards redemption tier.', array( 'status' => 400 ) );
+    }
+
+    $discount_value = function_exists( 'lr_rewards_redemption_value' )
+        ? (int) lr_rewards_redemption_value( $points )
+        : (int) ( array( 500 => 10000, 1000 => 20000, 2000 => 40000, 5000 => 100000 )[ $points ] ?? 0 );
+    if ( $discount_value <= 0 ) {
         return new WP_Error( 'invalid_points', 'Invalid rewards redemption tier.', array( 'status' => 400 ) );
     }
 
@@ -296,14 +302,22 @@ function lr_redeem_points_for_user( $user_id, $points, $raw_idempotency_key ) {
         ) );
         wp_cache_delete( $user_id, 'user_meta' );
 
+        $minimum_redeem_points = function_exists( 'lr_rewards_minimum_redeem_points' )
+            ? (int) lr_rewards_minimum_redeem_points()
+            : (int) LR_REDEMPTION_MIN_LIFETIME;
         $total_earned = lr_get_total_earned( $user_id );
-        if ( $total_earned < LR_REDEMPTION_MIN_LIFETIME ) {
+        if ( $total_earned < $minimum_redeem_points ) {
             $wpdb->query( 'ROLLBACK' );
             $transaction_started = false;
             return new WP_Error( 'tier_too_low', 'Rewards redemption is not unlocked for this account.', array( 'status' => 403 ) );
         }
 
         $balance = (float) mycred_get_users_balance( $user_id );
+        if ( $balance < $minimum_redeem_points ) {
+            $wpdb->query( 'ROLLBACK' );
+            $transaction_started = false;
+            return new WP_Error( 'minimum_balance_required', 'Rewards redemption is not unlocked for this balance.', array( 'status' => 403 ) );
+        }
         if ( $balance < $points ) {
             $wpdb->query( 'ROLLBACK' );
             $transaction_started = false;
@@ -324,7 +338,6 @@ function lr_redeem_points_for_user( $user_id, $points, $raw_idempotency_key ) {
             throw new RuntimeException( 'Rewards user has no valid email.' );
         }
 
-        $discount_value = $values[ $points ];
         $expires_at     = strtotime( '+30 days' );
         $coupon_code    = 'LR-' . strtoupper( wp_generate_password( 12, false ) );
         $coupon         = new WC_Coupon();
