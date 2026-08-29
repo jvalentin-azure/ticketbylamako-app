@@ -181,8 +181,44 @@ Puis purger le cache WordPress/edge. Les téléphones reviennent alors au WordPr
 
 Si l'API web-session est en cause, restaurer les sauvegardes de `v2-commerce.php` et `mobile-web-router.php`, vérifier la syntaxe PHP, purger le cache, puis retester WordPress desktop, login et les callbacks. Si le bundle seul est en cause, restaurer atomiquement le répertoire `/mobile` précédent sans toucher à l'API.
 
-## Décision actuelle
+## Décision staging au 28 août 2026
 
 - `GO` pour la release directe staging `/mobile` avec le flag désactivé et pour le parcours de succès CyberSource sandbox ;
 - `NO GO` pour activer le routage automatique staging ou promouvoir cette expérience web mobile en production tant que les moyens de paiement mobile ne disposent pas d'un sandbox vérifiable et que leur matrice de paiement n'a pas été exécutée ;
 - `NO GO` également pour un passage à 100 % sans contrôle Safari iOS et Chrome Android sur appareils physiques.
+
+## Candidat local de production du 29 août 2026
+
+Le candidat web mobile a été reconstruit localement à partir du commit source
+`caa4a47992bda75bffed2534164924b923af8044`, avec
+`EXPO_PUBLIC_SITE_URL=https://www.ticketbylamako.com` et la base `/mobile`.
+Il reste volontairement non installable : aucun manifest PWA ni service worker
+n'est livré.
+
+- archive : `tbl-mobile-web-prod-caa4a47.zip` ;
+- SHA-256 de l'archive : `fc3dcd54d6b63bc16e3ef25df0819376ae2675c2cd0757af2d1bc53ec70a3223` ;
+- SHA-256 du JavaScript : `3fa887a379c9727aa696850af940d5eca69c355b364972c13b7bd5e8e39fd680` ;
+- SHA-256 du CSS : `48de778e76153243fea5677ee14e5ae7d7d2ad28f2bb8a8590b8e45940358890` ;
+- SHA-256 de `index.html` : `c825296a63f9b6b860698a6adc5c519713ba12505ed742ce0e93be9770e277a6` ;
+- SHA-256 de `.htaccess` : `e2476bec6968f6f1486c51ab46cba9338eae09ebe278a882ceb6a80046a2744e` ;
+- SHA-256 du manifeste de release : `23d86be19aee7864b5a9f8dc4a1b7c5fa2d90c3e62b87767a25e248ce8c6ba96`.
+
+Les validations `check:mobile-secrets`, TypeScript, lint et tests sont réussies
+(67 fichiers et 353 tests réussis). Une QA WebKit au format iPhone 15, avec
+API simulée et sans transaction, a validé l'onboarding, les quatre onglets,
+le panier, le retour depuis le menu vers l'accueil, l'absence de débordement
+horizontal et une console sans erreur.
+
+La publication production reste en `NO-GO`. Les deux accès HTTPS stricts
+`ticketbylamako.com` et `www.ticketbylamako.com` échouent avec cURL 60,
+`SEC_E_WRONG_PRINCIPAL`. Le certificat servi est émis pour
+`*.cloudwaysapps.com` et `cloudwaysapps.com`, sans SAN couvrant TicketByLamako.
+Les navigateurs bloquent donc l'accueil et les API avant l'exécution de
+l'application.
+
+Le bundle est figé localement et n'a pas été publié. Aucun contournement TLS
+et aucun domaine de substitution ne sont autorisés. Après installation par
+Cloudways d'un certificat SAN couvrant l'apex et `www`, le postflight devra
+rejouer cURL et WebKit en validation stricte sur l'accueil, les API réelles
+non mutatives, les redirections et les callbacks, puis recontrôler l'absence
+de référence staging et de secret avant toute décision de promotion.
