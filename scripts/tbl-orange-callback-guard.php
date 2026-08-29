@@ -13,10 +13,13 @@ define( 'TBL_ORANGE_GUARD_VERSION', '1.2.0' );
 define( 'TBL_ORANGE_CALLBACK_TTL', 2 * HOUR_IN_SECONDS );
 
 function tbl_orange_payment_environment() {
-    if ( ! defined( 'TBL_ORANGE_PAYMENT_ENVIRONMENT' ) ) {
+    $value = defined( 'TBL_ORANGE_PAYMENT_ENVIRONMENT' )
+        ? constant( 'TBL_ORANGE_PAYMENT_ENVIRONMENT' )
+        : ( function_exists( 'getenv' ) ? getenv( 'TBL_ORANGE_PAYMENT_ENVIRONMENT' ) : false );
+    if ( ! is_scalar( $value ) ) {
         return '';
     }
-    $environment = sanitize_key( (string) TBL_ORANGE_PAYMENT_ENVIRONMENT );
+    $environment = strtolower( trim( (string) $value ) );
     return in_array( $environment, [ 'test', 'production' ], true ) ? $environment : '';
 }
 
@@ -768,6 +771,12 @@ add_action(
         if ( class_exists( 'WC_papi_pay_Gateway' ) ) {
             class TBL_Secure_Orange_Gateway extends WC_papi_pay_Gateway {
                 use TBL_Orange_Gateway_Security;
+
+                public function __construct() {
+                    parent::__construct();
+                    $this->merchant_key = '';
+                    $this->consumer_key = '';
+                }
             }
         } else {
             class TBL_Secure_Orange_Gateway extends WC_Payment_Gateway {
@@ -790,8 +799,8 @@ add_action(
                     $this->enabled         = $this->get_option( 'enabled', 'no' );
                     $this->title           = $this->get_option( 'title', 'Orange Money' );
                     $this->description     = $this->get_option( 'description', '' );
-                    $this->merchant_key    = $this->get_option( 'merchant_key', '' );
-                    $this->consumer_key    = $this->get_option( 'consumer_key', '' );
+                    $this->merchant_key    = '';
+                    $this->consumer_key    = '';
                     $this->api_token_url   = $this->get_option( 'api_token_url', 'https://api.orange.com/oauth/v3/token' );
                     $this->api_payment_url = $this->get_option( 'api_payment_url', 'https://api.orange.com/orange-money-webpay/mg/v1/webpayment' );
                     add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, [ $this, 'process_admin_options' ] );

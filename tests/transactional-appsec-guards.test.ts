@@ -9,6 +9,7 @@ const read = (relativePath: string) =>
 const rewards = read("scripts/lamako-rewards-api/lamako-rewards-api.php");
 const commerce = read("scripts/lamako-mobile-api/includes/v2-commerce.php");
 const orangeGuard = read("scripts/tbl-orange-callback-guard.php");
+const orangeGatewayHarness = read("tests/php/orange-gateway-guard-harness.php");
 const stagingOrangeQa = read("scripts/qa-staging-orange-security.php");
 const stagingOrangeStructuralQa = read(
   "scripts/qa-staging-orange-structural.php",
@@ -127,6 +128,7 @@ describe("transactional AppSec guards", () => {
     expect(orangeGuard).toContain("function tbl_security_ready()");
     expect(orangeGuard).toContain("function tbl_orange_environment_is_allowed()");
     expect(orangeGuard).toContain("TBL_ORANGE_PAYMENT_ENVIRONMENT");
+    expect(orangeGuard).toContain("getenv( 'TBL_ORANGE_PAYMENT_ENVIRONMENT' )");
     expect(orangeGuard).toContain("TBL_ORANGE_MERCHANT_KEY");
     expect(orangeGuard).toContain("TBL_ORANGE_CONSUMER_KEY");
     expect(orangeGuard).toContain("function tbl_orange_server_credentials_state()");
@@ -135,6 +137,15 @@ describe("transactional AppSec guards", () => {
     expect(orangeGuard).toContain("Les valeurs ne sont pas envoyées au navigateur");
     expect(orangeGuard).not.toContain("'merchant_key' => [");
     expect(orangeGuard).not.toContain("'consumer_key' => [");
+    expect(orangeGuard).not.toContain("$this->get_option( 'merchant_key'");
+    expect(orangeGuard).not.toContain("$this->get_option( 'consumer_key'");
+    expect(orangeGatewayHarness).toContain("Orange gateway guard harness: PASS; provider calls=0");
+    expect(orangeGatewayHarness).toContain("an absent payment environment must fail closed");
+    expect(orangeGatewayHarness).toContain("an invalid payment environment must fail closed");
+    expect(orangeGatewayHarness).toContain("the test environment must be accepted exactly");
+    expect(orangeGatewayHarness).toContain("the production environment must be accepted exactly");
+    expect(orangeGatewayHarness).toContain("a partial server secret configuration must fail closed");
+    expect(orangeGatewayHarness).toContain("legacy merchant option must not be loaded into the gateway");
     expect(orangeGuard).toContain("'staging.ticketbylamako.com' === $host");
     expect(orangeGuard).toContain("rest_url( 'papi/v1/webhook' )");
     expect(orangeGuard).toContain("_tbl_papi_notif_token_hash");
