@@ -125,6 +125,9 @@ describe("transactional AppSec guards", () => {
 
     expect(orangeGuard).toContain("class TBL_Secure_Orange_Gateway");
     expect(orangeGuard).toContain("function tbl_security_ready()");
+    expect(orangeGuard).toContain("function tbl_orange_environment_is_allowed()");
+    expect(orangeGuard).toContain("TBL_ORANGE_PAYMENT_ENVIRONMENT");
+    expect(orangeGuard).toContain("'staging.ticketbylamako.com' === $host");
     expect(orangeGuard).toContain("rest_url( 'papi/v1/webhook' )");
     expect(orangeGuard).toContain("_tbl_papi_notif_token_hash");
     expect(orangeGuard).toContain("_tbl_orange_expected_amount");
@@ -160,6 +163,7 @@ describe("transactional AppSec guards", () => {
       "TBL_QA_ALLOW_ORANGE_INITIATION",
     );
     expect(stagingOrangeQa).toContain("TBL_QA_ORANGE_CREDENTIAL_ENV");
+    expect(stagingOrangeQa).toContain("TBL_ORANGE_PAYMENT_ENVIRONMENT");
     expect(stagingOrangeQa).toContain(
       "independently confirmed non-production/test",
     );
@@ -184,6 +188,12 @@ describe("transactional AppSec guards", () => {
     );
     expect(stagingOrangeStructuralQa).toContain(
       "provider calls=0, writes=0",
+    );
+    expect(stagingOrangeStructuralQa).toContain(
+      "TBL_QA_EXPECT_ORANGE_READY",
+    );
+    expect(stagingOrangeStructuralQa).toContain(
+      "Mobile v2 exposes Orange while the credential gate is closed",
     );
     expect(stagingOrangeStructuralQa).not.toContain("process_payment(");
     expect(stagingOrangeStructuralQa).not.toContain("wc_create_order(");

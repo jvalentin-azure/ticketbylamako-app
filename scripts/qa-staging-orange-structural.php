@@ -35,8 +35,10 @@ try {
     $gateways = WC()->payment_gateways()->payment_gateways();
     $gateway  = $gateways['papi_paiement'] ?? null;
     tblqa_orange_structural_assert( $gateway instanceof TBL_Secure_Orange_Gateway, 'WooCommerce is not using the hardened Orange class.' );
-    tblqa_orange_structural_assert( tbl_orange_gateway_is_hardened( $gateway ), 'Orange credentials/endpoints are not ready.' );
-    tblqa_orange_structural_assert( lamako_mobile_v2_orange_server_verification_available(), 'Mobile v2 still fails Orange closed.' );
+    $expect_ready = '1' === (string) getenv( 'TBL_QA_EXPECT_ORANGE_READY' );
+    $is_ready     = tbl_orange_gateway_is_hardened( $gateway );
+    $mobile_ready = lamako_mobile_v2_orange_server_verification_available();
+    tblqa_orange_structural_assert( $is_ready === $mobile_ready, 'WooCommerce and Mobile v2 readiness disagree.' );
 
     $methods    = function_exists( 'lamako_mobile_v2_enabled_payment_gateways' )
         ? lamako_mobile_v2_enabled_payment_gateways()
@@ -44,7 +46,13 @@ try {
     $method_ids = array_values( array_filter( array_map( static function( $method ) {
         return is_array( $method ) ? sanitize_key( $method['id'] ?? '' ) : '';
     }, (array) $methods ) ) );
-    tblqa_orange_structural_assert( in_array( 'papi_paiement', $method_ids, true ), 'Mobile v2 does not expose the hardened Orange method.' );
+    if ( $expect_ready ) {
+        tblqa_orange_structural_assert( $is_ready, 'Orange is expected ready but credentials/endpoints/environment are not ready.' );
+        tblqa_orange_structural_assert( in_array( 'papi_paiement', $method_ids, true ), 'Mobile v2 does not expose the hardened Orange method.' );
+    } else {
+        tblqa_orange_structural_assert( ! $is_ready, 'Orange unexpectedly became ready without the staging test-credential gate.' );
+        tblqa_orange_structural_assert( ! in_array( 'papi_paiement', $method_ids, true ), 'Mobile v2 exposes Orange while the credential gate is closed.' );
+    }
 
     $routes = rest_get_server()->get_routes();
     tblqa_orange_structural_assert( ! empty( $routes['/papi/v1/webhook'] ), 'Canonical Orange webhook route is missing.' );
@@ -62,8 +70,9 @@ try {
 
     WP_CLI::success(
         sprintf(
-            'Orange structural QA passed: guard %s, hardened gateway, canonical callback and Mobile v2 method active; provider calls=0, writes=0.',
-            TBL_ORANGE_GUARD_VERSION
+            'Orange structural QA passed: guard %s, hardened gateway, canonical callbacks, readiness=%s; provider calls=0, writes=0.',
+            TBL_ORANGE_GUARD_VERSION,
+            $is_ready ? 'active' : 'fail-closed'
         )
     );
 } catch ( Throwable $error ) {

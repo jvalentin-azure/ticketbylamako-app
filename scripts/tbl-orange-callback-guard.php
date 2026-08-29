@@ -12,6 +12,26 @@ if ( ! defined( 'ABSPATH' ) ) {
 define( 'TBL_ORANGE_GUARD_VERSION', '1.1.0' );
 define( 'TBL_ORANGE_CALLBACK_TTL', 2 * HOUR_IN_SECONDS );
 
+function tbl_orange_payment_environment() {
+    if ( ! defined( 'TBL_ORANGE_PAYMENT_ENVIRONMENT' ) ) {
+        return '';
+    }
+    $environment = sanitize_key( (string) TBL_ORANGE_PAYMENT_ENVIRONMENT );
+    return in_array( $environment, [ 'test', 'production' ], true ) ? $environment : '';
+}
+
+function tbl_orange_environment_is_allowed() {
+    $host        = strtolower( (string) wp_parse_url( home_url(), PHP_URL_HOST ) );
+    $environment = tbl_orange_payment_environment();
+    if ( 'staging.ticketbylamako.com' === $host ) {
+        return 'test' === $environment;
+    }
+    if ( in_array( $host, [ 'ticketbylamako.com', 'www.ticketbylamako.com' ], true ) ) {
+        return 'production' === $environment;
+    }
+    return false;
+}
+
 function tbl_orange_callback_request_id() {
     static $request_id = '';
     if ( $request_id !== '' ) {
@@ -443,7 +463,8 @@ trait TBL_Orange_Gateway_Security {
     public function tbl_security_ready() {
         $merchant = trim( (string) $this->merchant_key );
         $consumer = trim( (string) $this->consumer_key );
-        return $merchant !== ''
+        return tbl_orange_environment_is_allowed()
+            && $merchant !== ''
             && strlen( $merchant ) <= 512
             && ! preg_match( '/[\r\n]/', $merchant )
             && $consumer !== ''

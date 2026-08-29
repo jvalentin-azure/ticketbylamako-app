@@ -28,6 +28,9 @@ if ( '1' !== (string) getenv( 'TBL_QA_ALLOW_ORANGE_INITIATION' ) ) {
 if ( 'test' !== strtolower( (string) getenv( 'TBL_QA_ORANGE_CREDENTIAL_ENV' ) ) ) {
     WP_CLI::error( 'Refusing provider initiation until Orange credentials are independently confirmed non-production/test.' );
 }
+if ( ! function_exists( 'tbl_orange_payment_environment' ) || 'test' !== tbl_orange_payment_environment() ) {
+    WP_CLI::error( 'Refusing provider initiation until TBL_ORANGE_PAYMENT_ENVIRONMENT is configured as test on staging.' );
+}
 if ( ! function_exists( 'tbl_orange_gateway_is_hardened' ) || ! function_exists( 'WC' ) || ! WC()->payment_gateways() ) {
     WP_CLI::error( 'The shared Orange gateway is unavailable.' );
 }
