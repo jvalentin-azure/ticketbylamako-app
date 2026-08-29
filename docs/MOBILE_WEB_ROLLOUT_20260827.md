@@ -209,7 +209,8 @@ API simulée et sans transaction, a validé l'onboarding, les quatre onglets,
 le panier, le retour depuis le menu vers l'accueil, l'absence de débordement
 horizontal et une console sans erreur.
 
-La publication production reste en `NO-GO`. Les deux accès HTTPS stricts
+Au moment de la création du candidat, la publication production restait en
+`NO-GO`. Les deux accès HTTPS stricts
 `ticketbylamako.com` et `www.ticketbylamako.com` échouent avec cURL 60,
 `SEC_E_WRONG_PRINCIPAL`. Le certificat servi est émis pour
 `*.cloudwaysapps.com` et `cloudwaysapps.com`, sans SAN couvrant TicketByLamako.
@@ -222,3 +223,45 @@ Cloudways d'un certificat SAN couvrant l'apex et `www`, le postflight devra
 rejouer cURL et WebKit en validation stricte sur l'accueil, les API réelles
 non mutatives, les redirections et les callbacks, puis recontrôler l'absence
 de référence staging et de secret avant toute décision de promotion.
+
+## Postflight TLS et QA API réelle du 29 août 2026
+
+Le blocage TLS est levé. L'apex et `www` passent désormais cURL strict et
+SslStream en TLS 1.3. Le certificat actif couvre `*.ticketbylamako.com` et
+`ticketbylamako.com`, avec le SHA-256
+`c8e6a7a5c7bbf1767e0229f52fe2002fa2704b102974f3e14c4f64ac6bc2e531`.
+
+Le bundle immuable `caa4a47992bda75bffed2534164924b923af8044` a ensuite
+été rejoué sous l'URL de production avec WebKit/iPhone 15. Ses fichiers
+statiques venaient de l'archive locale vérifiée ; les requêtes publiques
+partaient réellement vers `www.ticketbylamako.com`. Le test est resté
+strictement anonyme et non mutatif : 80 requêtes GET, aucune méthode
+mutative, aucun panier modifié, aucune commande et aucun paiement.
+
+Résultats réussis :
+
+- les 12 appels API publics observés répondent en HTTP 200 ;
+- accueil, événements, boutique, panier vide, fiche événement et fiche
+  produit s'affichent sans débordement horizontal ;
+- le retour `Menu > Aide & Support > Retour` aboutit à `/mobile/` ;
+- aucun JWT ni nom de clé sensible n'est présent dans le stockage navigateur ;
+- le rafraîchissement d'une fiche événement profonde restaure son contenu.
+
+Trois défauts bloquent toutefois ce candidat :
+
+1. La fiche de l'événement `13771` affiche le 6 juin 2026, date de publication
+   WordPress, alors que `mobileFields.event_date_time`, la liste et l'affiche
+   indiquent le 27 juin 2026. Le rendu utilise encore `event.date` dans
+   `app/event/[id].tsx`.
+2. Les routes REST publiques testées démarrent une session anonyme avec
+   `PHPSESSID` sans attributs `Secure`, `HttpOnly` ni `SameSite` explicite.
+   La valeur du cookie a été masquée dans toutes les preuves.
+3. Le BlurHash brut de `components/catalog-image.tsx` est interprété comme une
+   URL relative. Neuf requêtes image répondent en 404 et polluent la console.
+
+Le rapport immuable `real-api-qa-report.json` a le SHA-256
+`384dfb806a2959cba213ef999f00ee377f14469cde53bda618d248bc8b57fb0c`.
+Le statut courant est `BLOCKED_REAL_API_QA` et la production reste en
+`NO-GO`, désormais à cause de ces défauts applicatifs et non du TLS. Le
+candidat `caa4a47` ne doit pas être modifié : les correctifs doivent produire
+un nouveau commit et un nouvel artefact immuable, puis rejouer la même QA.
