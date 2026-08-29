@@ -9,6 +9,7 @@ const read = (relativePath: string) =>
 const rewards = read("scripts/lamako-rewards-api/lamako-rewards-api.php");
 const commerce = read("scripts/lamako-mobile-api/includes/v2-commerce.php");
 const rewardsProvider = read("lib/rewards-provider.tsx");
+const stagingRewardsQa = read("scripts/qa-staging-rewards-security.php");
 
 function section(source: string, start: string, end: string): string {
   const startIndex = source.indexOf(start);
@@ -108,5 +109,16 @@ describe("transactional AppSec guards", () => {
     expect(callback).not.toContain("update_status(");
     expect(callback).not.toContain("lamako_mobile_v2_provider_failure(");
     expect(callback).not.toContain("lamako_mobile_v2_cancel_unpaid_payment(");
+  });
+
+  it("keeps the staging Rewards smoke synthetic and self-cleaning", () => {
+    expect(stagingRewardsQa).toContain(
+      "Refusing to run Rewards QA outside TicketByLamako staging",
+    );
+    expect(stagingRewardsQa).toContain("idempotent_replay");
+    expect(stagingRewardsQa).toContain("409 === $conflict->get_status()");
+    expect(stagingRewardsQa).toContain("403 === $other_user->get_status()");
+    expect(stagingRewardsQa).toContain("delete_option( $idempotency_option )");
+    expect(stagingRewardsQa).toContain("wp_delete_user( $user_id )");
   });
 });
