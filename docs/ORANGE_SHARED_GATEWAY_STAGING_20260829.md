@@ -1,8 +1,9 @@
-# Orange Money shared gateway — staging 2026-08-29
+# Orange Money shared gateway — staging v1.1 and local follow-up v1.2
 
 ## Scope
 
-- Code candidate: `9f980a60b7772aeb33adc5de7feb076f076a0f5d`.
+- Staging-deployed v1.1.0 code candidate:
+  `9f980a60b7772aeb33adc5de7feb076f076a0f5d`.
 - Branch: `feat/client-mobile-web-20260827`.
 - Environment: `https://staging.ticketbylamako.com` only.
 - Production is excluded.
@@ -57,7 +58,7 @@ provides HMAC signatures or authenticated status lookup should be added as a
 second verification factor. Production promotion still requires explicit user
 authorization and one controlled real-payment E2E with reconciliation.
 
-## Candidate artifacts
+## Deployed v1.1.0 artifacts
 
 | File | SHA-256 |
 |---|---|
@@ -66,6 +67,34 @@ authorization and one controlled real-payment E2E with reconciliation.
 | `scripts/qa-staging-orange-security.php` | `794D89413D625A74402125641429012B5CDC2C36D95960FE31406566B4F4778C` |
 | `scripts/qa-staging-orange-structural.php` | `8C80ABDF75B2D16D1F426A0FBB1003C16D0649EE6A50E4B58FB47F41608DC792` |
 | `tests/php/orange-callback-guard-harness.php` | `486FB981C00D295F04C0407625EA910E25BB78527C58433F7631686F55379361` |
+
+These are the hashes qualified and still active on staging. They must not be
+confused with the local v1.2.0 follow-up below.
+
+## Local v1.2.0 follow-up — not deployed
+
+- Server-secret implementation commit:
+  `2b9cf61b15a56242d50ae6f15de55a9149d40152`.
+- Reviewed corrective code commit:
+  `995d3c2cde767b56f7324e7025f5f3a926f1a6c1`.
+- Local guard SHA-256:
+  `C2F47AF0C352FA093D878FDECB1E39F84E86FE88770C0BB0D3C4E8C9B977F69C`.
+- Behavioral gateway harness SHA-256:
+  `D1F9A4A36D8BDC2DDE2F01A6A7058653156127450021D6C51D89A3A671B0D7B6`.
+
+The follow-up accepts `TBL_ORANGE_PAYMENT_ENVIRONMENT` from either an exact PHP
+constant or the same-named server environment variable. Only `test` and
+`production` are accepted. Absent or invalid values fail closed. Its behavioral
+harness constructs the fallback gateway and verifies test/production host
+binding, absent/invalid environment, missing/partial/complete secrets, invalid
+endpoints, admin-field removal, legacy-option rejection and zero provider calls.
+
+The fallback gateway no longer reads the legacy credential options. When the
+original Orange gateway class exists, its compatibility subclass must still run
+the parent constructor before immediately blanking the two inherited credential
+properties. The old database values therefore remain a residual until the
+separately authorized production option purge, even though v1.2.0 neither uses
+nor renders them.
 
 ## Exact staging targets and order
 
@@ -169,8 +198,9 @@ production credentials.
 
 ## Production-only secret configuration
 
-The guard supports `TBL_ORANGE_MERCHANT_KEY` and
-`TBL_ORANGE_CONSUMER_KEY` as server environment variables or PHP constants.
+The local v1.2.0 guard supports `TBL_ORANGE_MERCHANT_KEY`,
+`TBL_ORANGE_CONSUMER_KEY` and `TBL_ORANGE_PAYMENT_ENVIRONMENT` as server
+environment variables or PHP constants.
 Only these server-managed values are accepted by guard `1.2.0`; legacy
 WordPress option values are no longer used. The credential fields are removed
 from the WooCommerce administration page. A missing or partial external
@@ -181,7 +211,9 @@ For the production host only:
 1. inject both production values through the hosting secret/environment
    configuration, never through the repository, deployment manifest or shell
    history;
-2. set `TBL_ORANGE_PAYMENT_ENVIRONMENT=production`;
+2. provide the environment through either the hosting environment variable
+   `TBL_ORANGE_PAYMENT_ENVIRONMENT=production` or the PHP configuration
+   `define( 'TBL_ORANGE_PAYMENT_ENVIRONMENT', 'production' );`;
 3. verify readiness without printing either value;
 4. snapshot and then remove only the two legacy credential keys from the
    `woocommerce_papi_paiement_settings` option;
