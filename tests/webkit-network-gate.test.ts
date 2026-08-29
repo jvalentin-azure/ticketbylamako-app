@@ -23,8 +23,26 @@ describe("WebKit network release gate", () => {
         failureStep: "deep-refresh",
       }),
     ).toEqual({
-      surface: "api-staging",
+      surface: "api-target",
       failureClass: "navigation-abort",
+      blocking: false,
+    });
+  });
+
+  it("classifies the configured production API host as the target origin", () => {
+    expect(
+      classifyWebKitNetworkObservation({
+        method: "GET",
+        url: "https://www.ticketbylamako.com/wp-json/lamako-mobile/v2/public/events/13459",
+        expectedHost: "www.ticketbylamako.com",
+        resourceType: "fetch",
+        status: 200,
+        errorText: null,
+        failureStep: null,
+      }),
+    ).toEqual({
+      surface: "api-target",
+      failureClass: "none",
       blocking: false,
     });
   });
@@ -147,7 +165,9 @@ describe("WebKit network release gate", () => {
 
 describe("WebKit evidence persistence", () => {
   it("writes the latest report in finally before propagating a gate failure", async () => {
-    const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "tbl-webkit-evidence-"));
+    const temporaryDirectory = await mkdtemp(
+      path.join(os.tmpdir(), "tbl-webkit-evidence-"),
+    );
     const reportPath = path.join(temporaryDirectory, "qa-report.json");
     try {
       await expect(

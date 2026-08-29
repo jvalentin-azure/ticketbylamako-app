@@ -4,6 +4,7 @@ import path from "node:path";
 export type WebKitNetworkObservation = {
   method: string;
   url: string;
+  expectedHost?: string;
   resourceType: string;
   status: number | null;
   errorText: string | null;
@@ -13,10 +14,10 @@ export type WebKitNetworkObservation = {
 export type WebKitNetworkClassification = {
   surface:
     | "app-static"
-    | "api-staging"
+    | "api-target"
     | "image"
     | "third-party"
-    | "staging-other"
+    | "target-other"
     | "unknown";
   failureClass:
     | "none"
@@ -28,9 +29,12 @@ export type WebKitNetworkClassification = {
   blocking: boolean;
 };
 
-const stagingHost = "staging.ticketbylamako.com";
+const defaultTargetHost = "staging.ticketbylamako.com";
 const readOnlyMethods = new Set(["GET", "HEAD", "OPTIONS"]);
-const expectedCancellationSteps = new Set(["initial-navigation", "deep-refresh"]);
+const expectedCancellationSteps = new Set([
+  "initial-navigation",
+  "deep-refresh",
+]);
 
 function classifySurface(
   observation: WebKitNetworkObservation,
@@ -41,13 +45,17 @@ function classifySurface(
   } catch {
     return "unknown";
   }
-  if (url.hostname !== stagingHost) return "third-party";
+  const targetHost = observation.expectedHost ?? defaultTargetHost;
+  if (url.hostname !== targetHost) return "third-party";
   if (url.pathname.startsWith("/mobile/")) return "app-static";
-  if (url.pathname.startsWith("/wp-json/") || url.pathname.startsWith("/lamako-catalog/")) {
-    return "api-staging";
+  if (
+    url.pathname.startsWith("/wp-json/") ||
+    url.pathname.startsWith("/lamako-catalog/")
+  ) {
+    return "api-target";
   }
   if (observation.resourceType === "image") return "image";
-  return "staging-other";
+  return "target-other";
 }
 
 export function classifyWebKitNetworkObservation(
@@ -105,7 +113,8 @@ export function evaluateWebKitScenarioGate(metrics: WebKitScenarioMetrics): {
 } {
   const reasons: string[] = [];
   if (!metrics.stabilized) reasons.push("scenario_not_stabilized");
-  if (metrics.blockingNetworkFailures !== 0) reasons.push("blocking_network_failure");
+  if (metrics.blockingNetworkFailures !== 0)
+    reasons.push("blocking_network_failure");
   if (metrics.httpErrors !== 0) reasons.push("http_error");
   if (metrics.mutations !== 0) reasons.push("mutation");
   if (metrics.hashRequests !== 0) reasons.push("blurhash_request");
@@ -114,7 +123,8 @@ export function evaluateWebKitScenarioGate(metrics: WebKitScenarioMetrics): {
   if (metrics.invalidApiResponses !== 0) reasons.push("invalid_api_response");
   if (metrics.horizontalOverflow) reasons.push("horizontal_overflow");
   if (!metrics.date27JunePresent) reasons.push("contract_date_missing");
-  if (metrics.publicationDate3MayPresent) reasons.push("publication_date_rendered");
+  if (metrics.publicationDate3MayPresent)
+    reasons.push("publication_date_rendered");
   if (!metrics.deepRefreshPass) reasons.push("deep_refresh_failed");
   return { pass: reasons.length === 0, reasons };
 }
