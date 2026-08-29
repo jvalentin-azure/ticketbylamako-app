@@ -10,6 +10,9 @@ const rewards = read("scripts/lamako-rewards-api/lamako-rewards-api.php");
 const commerce = read("scripts/lamako-mobile-api/includes/v2-commerce.php");
 const orangeGuard = read("scripts/tbl-orange-callback-guard.php");
 const stagingOrangeQa = read("scripts/qa-staging-orange-security.php");
+const stagingOrangeStructuralQa = read(
+  "scripts/qa-staging-orange-structural.php",
+);
 const rewardsProvider = read("lib/rewards-provider.tsx");
 const stagingRewardsQa = read("scripts/qa-staging-rewards-security.php");
 
@@ -167,5 +170,23 @@ describe("transactional AppSec guards", () => {
     expect(stagingOrangeQa).toContain("$fixture->delete( true )");
     expect(stagingOrangeQa).toContain("$orders_after !== $orders_before");
     expect(stagingOrangeQa).not.toContain("payment_complete(");
+  });
+
+  it("keeps an Orange staging smoke strictly read-only", () => {
+    expect(stagingOrangeStructuralQa).toContain(
+      "Refusing to run Orange structural QA outside TicketByLamako staging",
+    );
+    expect(stagingOrangeStructuralQa).toContain(
+      "tbl_orange_gateway_is_hardened( $gateway )",
+    );
+    expect(stagingOrangeStructuralQa).toContain(
+      "lamako_mobile_v2_orange_server_verification_available()",
+    );
+    expect(stagingOrangeStructuralQa).toContain(
+      "provider calls=0, writes=0",
+    );
+    expect(stagingOrangeStructuralQa).not.toContain("process_payment(");
+    expect(stagingOrangeStructuralQa).not.toContain("wc_create_order(");
+    expect(stagingOrangeStructuralQa).not.toContain("wp_remote_");
   });
 });

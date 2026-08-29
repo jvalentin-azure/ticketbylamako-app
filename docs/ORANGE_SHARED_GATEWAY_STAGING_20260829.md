@@ -62,6 +62,7 @@ authorization and one controlled real-payment E2E with reconciliation.
 | `scripts/tbl-orange-callback-guard.php` | `DC3060C82822E818C426CA2020EE6A6A9F8506F839338AB3A548D63AD284D3FE` |
 | `scripts/lamako-mobile-api/includes/v2-commerce.php` | `4417AA27E7A39A99769E667268B406354DEABE32BBBD05E28E5D9A27EE4F53FA` |
 | `scripts/qa-staging-orange-security.php` | `3137E57A994787BE7CE358C5C6012755340CAF525DD4A5899741CEBF55EAE0C1` |
+| `scripts/qa-staging-orange-structural.php` | `BCEFBD1E8A9E26E2DDAE1070D8BA4CECA6BD6AF8F9DD9F777559461D970EC95B` |
 | `tests/php/orange-callback-guard-harness.php` | `486FB981C00D295F04C0407625EA910E25BB78527C58433F7631686F55379361` |
 
 ## Exact staging targets and order
@@ -91,6 +92,9 @@ Blocking QA:
   credentials are test/non-production and set both one-shot QA environment
   gates; if that cannot be proven, do not call Orange and keep the provider
   initiation test blocked;
+- always run the separate structural WP-CLI smoke, which verifies the active
+  class, configuration readiness, canonical routes and Mobile v2 exposure with
+  zero provider calls and zero WordPress writes;
 - MU-plugin version is `1.1.0` and the active gateway class is
   `TBL_Secure_Orange_Gateway`;
 - gateway configuration readiness passes without displaying credentials;
