@@ -1,0 +1,126 @@
+# Orange Money shared gateway — staging 2026-08-29
+
+## Scope
+
+- Code candidate: `a65e29aa546a285c0427f867bc38da03cfc6e5f5`.
+- Branch: `feat/client-mobile-web-20260827`.
+- Environment: `https://staging.ticketbylamako.com` only.
+- Production is excluded.
+- No OTP, payment submission, paid order, ticket issuance or stock mutation is
+  permitted during this qualification.
+
+The WordPress web checkout and Lamako Mobile v2 now use the same Orange gateway.
+Mobile v2 no longer owns an independent Orange API client or stores raw
+`pay_token`/`notif_token` values. It invokes the shared WooCommerce gateway and
+uses the canonical `/wp-json/papi/v1/webhook` callback.
+
+## Security model
+
+The installed Orange merchant contract returns a high-entropy `notif_token`
+during a server-authenticated transaction initiation. The callback is therefore
+authenticated as a bearer capability tied to exactly one order. The guard adds:
+
+- HMAC storage for notification and payment tokens; raw values are removed;
+- an immutable initiation snapshot for amount, currency and request reference;
+- a two-hour maximum callback window;
+- per-token and global callback rate limits;
+- a cross-process MySQL named lock around each order transition;
+- callback fingerprinting and idempotent replay responses;
+- rejection of amount, currency, reference and current-order mismatches;
+- rejection of any downgrade after payment;
+- rejection of late success after failed/cancelled/refunded states, avoiding
+  ticket issuance after stock restoration;
+- a stable initiation reference after uncertain HTTP outcomes, avoiding two
+  provider transactions for one WooCommerce order;
+- generic logs with request/order identifiers and no token or provider payload;
+- WooCommerce `payment_complete()` as the sole successful transition, without
+  forcing `completed` and without manually restoring stock twice.
+
+Compatibility with already-started legacy orders is restricted to orders less
+than two hours old. Their raw notification token is HMACed and deleted on first
+accepted callback.
+
+## Residual risk and decision boundary
+
+The public Orange material available for this integration does not document a
+separate callback signature or a transaction-status read API. When callback
+payloads omit amount/currency/reference, those values cannot be re-read from the
+provider; the proof is possession of the transaction-specific notification
+token returned by the authenticated initiation.
+
+This is materially safer than the production v3.2 plugin because new tokens are
+not logged, written to order notes or retained in raw order metadata, and because
+replay, expiry and order invariants are enforced. A future Orange contract that
+provides HMAC signatures or authenticated status lookup should be added as a
+second verification factor. Production promotion still requires explicit user
+authorization and one controlled real-payment E2E with reconciliation.
+
+## Candidate artifacts
+
+| File | SHA-256 |
+|---|---|
+| `scripts/tbl-orange-callback-guard.php` | `DC3060C82822E818C426CA2020EE6A6A9F8506F839338AB3A548D63AD284D3FE` |
+| `scripts/lamako-mobile-api/includes/v2-commerce.php` | `4417AA27E7A39A99769E667268B406354DEABE32BBBD05E28E5D9A27EE4F53FA` |
+| `scripts/qa-staging-orange-security.php` | `3137E57A994787BE7CE358C5C6012755340CAF525DD4A5899741CEBF55EAE0C1` |
+| `tests/php/orange-callback-guard-harness.php` | `486FB981C00D295F04C0407625EA910E25BB78527C58433F7631686F55379361` |
+
+## Exact staging targets and order
+
+1. `/home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/mu-plugins/tbl-orange-callback-guard.php`
+2. `/home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/v2-commerce.php`
+
+The guard must be deployed first. Until both files are active and the hardened
+gateway configuration passes, Mobile v2 hides Orange and rejects initiation.
+The QA script is copied only into the private deployment manifest and executed
+with WP-CLI; it is never a public application file.
+
+## Staging qualification
+
+Before write:
+
+1. verify the shared mono-writer directory is absent;
+2. acquire it atomically as `tbl-orange-shared-a65e29a`;
+3. recompute both active target hashes under the lock;
+4. snapshot the targets in a timestamped private manifest;
+5. upload private temporary candidates, verify SHA-256 and PHP lint;
+6. atomically replace the guard, then Mobile v2.
+
+Blocking QA:
+
+- before any provider initiation, independently confirm that the staging
+  credentials are test/non-production and set both one-shot QA environment
+  gates; if that cannot be proven, do not call Orange and keep the provider
+  initiation test blocked;
+- MU-plugin version is `1.1.0` and the active gateway class is
+  `TBL_Secure_Orange_Gateway`;
+- gateway configuration readiness passes without displaying credentials;
+- Mobile v2 lists Orange only while that hardened gateway is active;
+- legacy Mobile v2 callback delegates to the canonical secure callback;
+- a fee-only synthetic order receives an HTTPS payment URL without opening it;
+- the synthetic order contains only token hashes, expected amount `100`,
+  currency `MGA`, request reference and expiry; it remains unpaid;
+- the synthetic order is permanently removed in `finally`;
+- total WooCommerce order count returns to its exact pre-test value;
+- no product line, stock, ticket, seat, user, coupon or real payment is created;
+- public site and Mobile v2 method/status routes have no new 5xx;
+- active hashes equal the candidate and the mono-writer is absent postflight.
+
+Rollback restores both private snapshots in reverse order, lints them, verifies
+their original hashes and re-runs the read-only route/gateway checks. The
+synthetic provider payment URL is never opened and expires at Orange.
+
+## Local validation
+
+- PHP lint: shared guard, Mobile v2, staging QA and callback harness passed.
+- Callback behavior harness: success, idempotent success replay, paid downgrade,
+  amount mismatch, expiry, failed-to-success resurrection, legacy migration and
+  unknown token passed.
+- TypeScript: `pnpm check` passed.
+- Expo lint: `pnpm lint` passed.
+- Vitest: 351 passed, 4 intentionally skipped before adding the final Orange QA
+  static assertion; focused transactional suite then passed 6/6.
+
+## Staging result
+
+Pending mono-writer availability and controlled qualification. Production has
+not been touched.

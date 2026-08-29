@@ -156,11 +156,16 @@ describe("transactional AppSec guards", () => {
     expect(stagingOrangeQa).toContain(
       "TBL_QA_ALLOW_ORANGE_INITIATION",
     );
+    expect(stagingOrangeQa).toContain("TBL_QA_ORANGE_CREDENTIAL_ENV");
+    expect(stagingOrangeQa).toContain(
+      "independently confirmed non-production/test",
+    );
     expect(stagingOrangeQa).toContain("WC_Order_Item_Fee");
     expect(stagingOrangeQa).toContain("! $order->is_paid()");
     expect(stagingOrangeQa).toContain("_tbl_papi_notif_token_hash");
     expect(stagingOrangeQa).toContain("'' === (string) $order->get_meta( '_papi_notif_token' )");
     expect(stagingOrangeQa).toContain("$fixture->delete( true )");
+    expect(stagingOrangeQa).toContain("$orders_after !== $orders_before");
     expect(stagingOrangeQa).not.toContain("payment_complete(");
   });
 });

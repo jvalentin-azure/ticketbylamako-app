@@ -9,7 +9,8 @@
  * touch product stock.
  *
  * Run with an explicit one-shot acknowledgement:
- *   TBL_QA_ALLOW_ORANGE_INITIATION=1 wp eval-file scripts/qa-staging-orange-security.php
+ *   TBL_QA_ALLOW_ORANGE_INITIATION=1 TBL_QA_ORANGE_CREDENTIAL_ENV=test \
+ *     wp eval-file scripts/qa-staging-orange-security.php
  */
 
 if ( ! defined( 'WP_CLI' ) || ! WP_CLI ) {
@@ -24,6 +25,9 @@ if ( 'staging.ticketbylamako.com' !== $site_host ) {
 if ( '1' !== (string) getenv( 'TBL_QA_ALLOW_ORANGE_INITIATION' ) ) {
     WP_CLI::error( 'Set TBL_QA_ALLOW_ORANGE_INITIATION=1 to authorize one provider initiation without payment.' );
 }
+if ( 'test' !== strtolower( (string) getenv( 'TBL_QA_ORANGE_CREDENTIAL_ENV' ) ) ) {
+    WP_CLI::error( 'Refusing provider initiation until Orange credentials are independently confirmed non-production/test.' );
+}
 if ( ! function_exists( 'tbl_orange_gateway_is_hardened' ) || ! function_exists( 'WC' ) || ! WC()->payment_gateways() ) {
     WP_CLI::error( 'The shared Orange gateway is unavailable.' );
 }
@@ -34,6 +38,18 @@ function tblqa_orange_assert( $condition, $message ) {
     }
 }
 
+function tblqa_orange_order_count() {
+    $page = wc_get_orders(
+        [
+            'limit'    => 1,
+            'paginate' => true,
+            'return'   => 'ids',
+            'status'   => array_keys( wc_get_order_statuses() ),
+        ]
+    );
+    return is_object( $page ) && isset( $page->total ) ? (int) $page->total : -1;
+}
+
 // Do not send a customer or administrator email for the synthetic order.
 add_filter( 'woocommerce_email_enabled_new_order', '__return_false', PHP_INT_MAX );
 add_filter( 'woocommerce_email_enabled_customer_on_hold_order', '__return_false', PHP_INT_MAX );
@@ -41,6 +57,8 @@ add_filter( 'woocommerce_email_enabled_failed_order', '__return_false', PHP_INT_
 
 $order_id = 0;
 $failure  = null;
+$orders_before = tblqa_orange_order_count();
+tblqa_orange_assert( $orders_before >= 0, 'Unable to record the baseline WooCommerce order count.' );
 
 try {
     $gateways = WC()->payment_gateways()->payment_gateways();
@@ -100,10 +118,20 @@ try {
     if ( $order_id > 0 && wc_get_order( $order_id ) && ! $failure ) {
         $failure = new RuntimeException( 'Synthetic Orange order cleanup failed.' );
     }
+    $orders_after = tblqa_orange_order_count();
+    if ( $orders_after !== $orders_before && ! $failure ) {
+        $failure = new RuntimeException( 'WooCommerce order count did not return to its exact baseline.' );
+    }
 }
 
 if ( $failure ) {
     WP_CLI::error( 'Orange initiation smoke failed safely: ' . $failure->getMessage() );
 }
 
-WP_CLI::success( 'Synthetic Orange order removed; no payment, ticket or stock item was created.' );
+WP_CLI::success(
+    sprintf(
+        'Synthetic Orange order removed; order count %d -> %d, no payment, ticket or stock item created.',
+        $orders_before,
+        $orders_after
+    )
+);
