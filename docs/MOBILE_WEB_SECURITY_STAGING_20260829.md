@@ -73,7 +73,10 @@ specific state change.
 4. Copy all active targets and the current `/mobile` directory into a private,
    timestamped manifest directory.
 5. Upload to private temporary paths, verify hashes and PHP syntax, then use
-   same-filesystem atomic renames for each public target.
+   same-filesystem atomic renames for each PHP target. The legacy `/mobile`
+   directory cannot be moved across `public_html` and `private_html` because it
+   belongs to the former Cloudways account, so the verified replacement is
+   staged under a hidden sibling in `public_html` and swapped there.
 6. Disable the Orange staging plugin and record its previous state.
 7. Run public/API smokes, the Rewards security smoke and browser QA.
 8. On any fatal, 5xx, cleanup failure, unexpected payment gateway or artifact
@@ -82,7 +85,8 @@ specific state change.
 
 Rollback restores the three backed-up PHP files and previous `/mobile`
 directory atomically, reactivates Orange only if it was active before this lot,
-runs PHP lint and non-destructive smokes, then purges only staging caches.
+then runs PHP lint and non-destructive smokes. This deployment did not flush or
+mutate a staging cache.
 
 ## Blocking staging tests
 
@@ -112,9 +116,45 @@ runs PHP lint and non-destructive smokes, then purges only staging caches.
   candidates: passed.
 - Staging web export: passed.
 
+## Staging qualification result
+
+The candidate was deployed and qualified on staging on 2026-08-29. Production
+was not touched.
+
+- Manifest:
+  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/private_html/tbl-deploy/tbl-web-security-20260829T090225Z-11bf464/`
+- SHA-256 of `manifest.sha256`:
+  `900810855A70FE3E3E22BFFB5ABB7EF6C4B049281E0D7F41DEB98129D207C048`
+- Active Mobile main SHA-256:
+  `8A1C84F37EE33F667A977F1155D5FD32AC95021F2386C3B982A4E7FC70C8FBE1`
+- Active Mobile v2 SHA-256:
+  `05EC456384A6CDE0634F88980CA3248F57CFC271CFF2845B58E4F84FFC91DF92`
+- Active Rewards SHA-256:
+  `DD504984290B78587FE7ECC00EE3B15B87F3B31C8860260FB2809886FE538351`
+- Active web entry SHA-256:
+  `5380D5853D9E82BA7DCB941B51069FFEDD18C31DDEE53C71D1A87F9409EF1EF9`
+- The independently deployed performance guard remained unchanged at
+  `CC36AB93F3E1ECFEC608D2ED8629778E41025491A873F64BFDAE9301A6F7D3FE`.
+- Mobile and Rewards plugins remained active. The legacy Orange plugin is
+  inactive, server verification reports `false`, and `papi_paiement` is absent
+  from the enabled mobile gateways.
+- Public site, mobile shell, immutable entry, home, event, shop, Rewards config
+  and Rewards tiers returned HTTP 200. Anonymous orders and balance routes
+  returned HTTP 401.
+- The Rewards staging smoke passed JWT ownership, one-time debit, coupon
+  ownership, idempotent replay and conflicting-replay checks. Synthetic user
+  and myCred-log counts were zero before and after cleanup.
+- Browser QA at 390 x 844 passed with no horizontal body overflow and no
+  console warning or error.
+- The previous web bundle is retained at
+  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/.tbl-mobile-before-11bf464`
+  and returns HTTP 403. A second complete copy is stored in the private
+  manifest. Its legacy ownership prevents relocation by the staging app user.
+- The mono-writer was verified absent after postflight.
+
 ## Current decision
 
-`GO under conditions` for a controlled staging deployment after the performance
-lot releases the mono-writer. `NO-GO` for production and for re-enabling Orange
-until the provider supplies an authenticated status-verification contract with
+`GO` for continued staging qualification: the candidate is active and the
+mono-writer is released. `NO-GO` for production and for re-enabling Orange until
+the provider supplies an authenticated status-verification contract with
 amount, currency, order-reference and replay validation.
