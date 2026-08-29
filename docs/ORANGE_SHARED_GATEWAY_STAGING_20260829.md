@@ -2,7 +2,7 @@
 
 ## Scope
 
-- Code candidate: `a65e29aa546a285c0427f867bc38da03cfc6e5f5`.
+- Code candidate: `9f980a60b7772aeb33adc5de7feb076f076a0f5d`.
 - Branch: `feat/client-mobile-web-20260827`.
 - Environment: `https://staging.ticketbylamako.com` only.
 - Production is excluded.
@@ -33,6 +33,8 @@ authenticated as a bearer capability tied to exactly one order. The guard adds:
 - a stable initiation reference after uncertain HTTP outcomes, avoiding two
   provider transactions for one WooCommerce order;
 - generic logs with request/order identifiers and no token or provider payload;
+- a host/credential-environment gate: staging requires the explicit `test`
+  credential class and the public production domains require `production`;
 - WooCommerce `payment_complete()` as the sole successful transition, without
   forcing `completed` and without manually restoring stock twice.
 
@@ -59,10 +61,10 @@ authorization and one controlled real-payment E2E with reconciliation.
 
 | File | SHA-256 |
 |---|---|
-| `scripts/tbl-orange-callback-guard.php` | `DC3060C82822E818C426CA2020EE6A6A9F8506F839338AB3A548D63AD284D3FE` |
+| `scripts/tbl-orange-callback-guard.php` | `BE007BB6D7073A491BFCA5353BA2B83552F1571ACD9A4276CB90B94B23C0A7CE` |
 | `scripts/lamako-mobile-api/includes/v2-commerce.php` | `4417AA27E7A39A99769E667268B406354DEABE32BBBD05E28E5D9A27EE4F53FA` |
-| `scripts/qa-staging-orange-security.php` | `3137E57A994787BE7CE358C5C6012755340CAF525DD4A5899741CEBF55EAE0C1` |
-| `scripts/qa-staging-orange-structural.php` | `BCEFBD1E8A9E26E2DDAE1070D8BA4CECA6BD6AF8F9DD9F777559461D970EC95B` |
+| `scripts/qa-staging-orange-security.php` | `794D89413D625A74402125641429012B5CDC2C36D95960FE31406566B4F4778C` |
+| `scripts/qa-staging-orange-structural.php` | `8C80ABDF75B2D16D1F426A0FBB1003C16D0649EE6A50E4B58FB47F41608DC792` |
 | `tests/php/orange-callback-guard-harness.php` | `486FB981C00D295F04C0407625EA910E25BB78527C58433F7631686F55379361` |
 
 ## Exact staging targets and order
@@ -80,7 +82,7 @@ with WP-CLI; it is never a public application file.
 Before write:
 
 1. verify the shared mono-writer directory is absent;
-2. acquire it atomically as `tbl-orange-shared-a65e29a`;
+2. acquire it atomically as `tbl-orange-shared-9f980a6`;
 3. recompute both active target hashes under the lock;
 4. snapshot the targets in a timestamped private manifest;
 5. upload private temporary candidates, verify SHA-256 and PHP lint;
@@ -95,6 +97,8 @@ Blocking QA:
 - always run the separate structural WP-CLI smoke, which verifies the active
   class, configuration readiness, canonical routes and Mobile v2 exposure with
   zero provider calls and zero WordPress writes;
+- with no independently confirmed test credentials, the expected staging result
+  is `fail-closed`: Orange absent from Mobile v2 and `process_payment()` blocked;
 - MU-plugin version is `1.1.0` and the active gateway class is
   `TBL_Secure_Orange_Gateway`;
 - gateway configuration readiness passes without displaying credentials;
