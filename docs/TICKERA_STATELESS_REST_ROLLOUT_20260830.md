@@ -78,12 +78,13 @@ does not alter REST CORS or JWT filters.
 
 ## Required future staging protocol
 
-A future separately authorized staging window must:
+A future separately authorized staging window first performs the common code
+phase:
 
 1. inventory active plugin slugs/versions and hashes, including whether the
    duplicate `tickera-event-ticketing-system` package is inactive;
-2. verify the active Tickera callback object and exact priority 10 without
-   invoking it;
+2. verify the active Tickera 3.6.0.2 callback object and exact priority 10
+   without invoking it;
 3. rehash the active REST security MU guard and Mobile v2 neighbors;
 4. acquire the shared staging mono-writer atomically with a fresh owner and
    private manifest;
@@ -91,19 +92,86 @@ A future separately authorized staging window must:
    new, absent `wp-content/mu-plugins/tbl-tickera-stateless-rest.php`;
 6. upload a fresh private/HTTP-inaccessible next, rehash and PHP-lint it, then
    install it atomically with the normal MU owner/group/mode;
-7. run the local behavioral harness against the exact deployed bytes;
-8. execute fresh-process GET/HEAD/OPTIONS probes for every allowlisted route in
-   both URL forms where applicable, with expected HTTP, JSON, CORS and JWT
-   behavior;
-9. prove `session_status() === PHP_SESSION_NONE` before and after, no
-   `Set-Cookie: PHPSESSID`, and zero PHP session-handler open/write/destroy;
-10. separately distinguish permitted warm catalogue reads from a cold-cache
-    `set_transient()`; do not label catalogue cache activity as a PHP-session
-    write;
-11. run positive regressions for Tickera standalone cart/add/update/coupon,
-    WooCommerce cart/checkout, payment page/callback and Seating/Firebase;
-12. seal hashes, reports, neighbor state and business counters before
-    owner-verified lock release and independent absence verification.
+7. run the behavioral harness against the exact deployed bytes.
+
+### Phase S — stateless session qualification only
+
+Phase S is an independently reported, read-only gate. It must not be combined
+with any commerce regression or cache warm-up:
+
+- **do not run the front-controller probe against an ordinary writable
+  staging runtime.** Before bootstrap, the runner requires a fresh private
+  mode-`0600` isolation proof: database writes denied independently of
+  WordPress, object-cache writes blocked/isolated, direct network egress
+  denied, production credentials unavailable, active-plugin fingerprint and
+  a one-hour-or-shorter expiry. A missing gate is `STOP`;
+- the runner is hard-bound to the exact staging root
+  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html` and requires the
+  sealed `wp-config.php` hash before including WordPress. It cannot be pointed
+  at production or an arbitrary `--wp-root`;
+- use one fresh process per GET and the private no-persist runner
+  `scripts/qa-tickera-stateless-rest-runtime.php`. It installs and reinforces
+  the complete session handler before Tickera and before the REST callback,
+  counts `open/read/write/destroy/close/gc/createSid/validateId/updateTimestamp`,
+  and uses `session_abort()` only after recording the terminal status. Its
+  reporter object is created before plugin objects so destruction follows
+  registered shutdown callbacks; an absent report, abnormal process exit or
+  incomplete sequence is `STOP`;
+- the WordPress `query` and `pre_http_request` filters throw/block and count,
+  but their declared coverage is only `WPDB_QUERY_FILTER_ONLY` and
+  `WP_HTTP_API_ONLY`. They do not prove anything about direct mysqli/PDO,
+  Redis, cURL, streams or later filters; the independent DB/cache/egress gates
+  above remain mandatory;
+- independently validate its JSON evidence with
+  `scripts/validate-tickera-stateless-rest-runtime.php`; the validator refuses
+  even a component pass for absent/synthetic WordPress/Tickera runtime,
+  missing isolation evidence, wrong script/config/plugin hashes or incomplete
+  hook sequence;
+- require the exact Tickera and shim hashes, hook priority `10` before and no
+  hook after, `session_status() === PHP_SESSION_NONE` at every checkpoint and
+  zero calls to every session-handler operation;
+- catalogue transient keys must already be warm and independently proven
+  `HIT` before the window. Do not issue a priming request. If any key is cold,
+  expired or uncertain, STOP Phase S and do not call that route. The runner
+  re-reads the exact key and stops before the callback on `MISS`;
+- require cache `HIT` again in the measured response, zero `set_transient`
+  attempt, zero WordPress HTTP attempt, zero non-read `$wpdb` query and zero
+  business hook. Do not relabel these counters as global `provider_calls=0` or
+  `writes=0`;
+- CLI does not reliably expose CORS, `Set-Cookie` or final web-server status.
+  Its successful verdict is therefore only
+  `COMPONENT_PASS_EXTERNAL_REQUIRED`, never a Phase S release PASS. Execute a
+  separate real HTTPS/FPM GET/HEAD/OPTIONS matrix for every allowlisted route
+  and both URL forms, proving JSON/CORS/JWT semantics and no `PHPSESSID`;
+- do not call or simulate cart add/update, coupon, checkout, order creation,
+  payment pages or callbacks, Seating/Firebase, provider APIs, cache purge or
+  cache prime in Phase S.
+
+The committed runner is intentionally not a local-runtime substitute. With no
+real WordPress root it exits `STOP real_wordpress_runtime_required`; unit
+fixtures validate only the gate shape and cannot be used as runtime or release
+evidence. Phase S is PASS only when the isolated CLI component, real HTTPS/FPM
+matrix, pre/post hashes, cache inventory and business counters are all sealed
+without divergence.
+
+### Phase C — commerce compatibility, separately authorized
+
+Phase C starts only after Phase S is sealed PASS, its mono-writer is released,
+and a new explicit GO, owner, lock, manifest and rollback are announced. It is
+the only phase allowed to exercise Tickera cart add/update/coupon,
+WooCommerce cart/checkout, payment callback logic or Seating/Firebase.
+
+Use dedicated QA identities and fixtures, snapshot exact cart/session/order,
+ticket, stock and transient state, forbid real provider authorization/capture
+unless separately approved, and delete or restore every exact fixture before
+postflight. Counts, hashes and relevant rows must match the declared expected
+delta and return to baseline after cleanup. Any uncertain cleanup, unexpected
+e-mail/provider call, order, ticket, stock or session delta is a STOP and
+rollback, not a reason to continue Phase C.
+
+Only after both phases are independently sealed may the operator preserve the
+new MU file, seal neighbor hashes and business counters, release the lock after
+owner verification and prove lock absence through an independent connection.
 
 Unknown hook priority, active-plugin drift, any mutative method bypass,
 missing/invalid JSON, CORS/JWT regression, `PHPSESSID` on an allowlisted fresh

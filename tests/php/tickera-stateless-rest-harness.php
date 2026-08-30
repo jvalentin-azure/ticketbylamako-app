@@ -211,6 +211,7 @@ namespace {
         'wrong-hook-priority' => [ 'GET', '/wp-json/lamako-mobile/v2/public/home-data', [], 11, false ],
         'wrong-tickera-version' => [ 'GET', '/wp-json/lamako-mobile/v2/public/home-data', [], 10, false, null, false, '3.6.0.3' ],
         'remove-failure' => [ 'GET', '/wp-json/lamako-mobile/v2/public/home-data', [], 10, true ],
+        'remove-success-hook-remains' => [ 'GET', '/wp-json/lamako-mobile/v2/public/home-data', [], 10, false, null, false, '3.6.0.2', true ],
     ];
 
     $scenario = (string) $argv[1];
@@ -225,6 +226,7 @@ namespace {
     $tickera_version   = isset( $scenarios[ $scenario ][7] )
         ? (string) $scenarios[ $scenario ][7]
         : '3.6.0.2';
+    $remove_leaves_hook = ! empty( $scenarios[ $scenario ][8] );
 
     define( 'ABSPATH', __DIR__ . DIRECTORY_SEPARATOR );
     $_SERVER['REQUEST_METHOD'] = $method;
@@ -241,6 +243,8 @@ namespace {
     $GLOBALS['tbl_tickera_test_provider_calls'] = 0;
     $GLOBALS['tbl_tickera_test_writes'] = 0;
     $GLOBALS['tbl_tickera_test_remove_fails'] = $remove_fails;
+    $GLOBALS['tbl_tickera_test_remove_leaves_hook'] = $remove_leaves_hook;
+    $GLOBALS['tbl_tickera_test_restore_calls'] = 0;
 
     function tbl_tickera_test_callback_id( $callback ): string {
         if ( is_string( $callback ) ) {
@@ -257,6 +261,14 @@ namespace {
 
     function add_action( $hook, $callback, $priority = 10, $accepted_args = 1 ): bool {
         $id = tbl_tickera_test_callback_id( $callback );
+        if (
+            $GLOBALS['tbl_tickera_test_remove_leaves_hook']
+            && isset( $GLOBALS['tbl_tickera_test_hooks'][ $hook ][ (int) $priority ][ $id ] )
+            && is_array( $callback )
+            && ( $callback[1] ?? null ) === 'update_cart'
+        ) {
+            $GLOBALS['tbl_tickera_test_restore_calls']++;
+        }
         $GLOBALS['tbl_tickera_test_hooks'][ $hook ][ (int) $priority ][ $id ] = [
             'callback'      => $callback,
             'accepted_args' => (int) $accepted_args,
@@ -293,6 +305,10 @@ namespace {
         $id = tbl_tickera_test_callback_id( $callback );
         if ( ! isset( $GLOBALS['tbl_tickera_test_hooks'][ $hook ][ (int) $priority ][ $id ] ) ) {
             return false;
+        }
+
+        if ( $GLOBALS['tbl_tickera_test_remove_leaves_hook'] ) {
+            return true;
         }
 
         unset( $GLOBALS['tbl_tickera_test_hooks'][ $hook ][ (int) $priority ][ $id ] );
@@ -386,6 +402,7 @@ namespace {
             'jwtPriority' => has_action( 'authenticate', 'tbl_tickera_test_jwt_filter' ),
             'providerCalls' => $GLOBALS['tbl_tickera_test_provider_calls'],
             'writes' => $GLOBALS['tbl_tickera_test_writes'],
+            'restoreCalls' => $GLOBALS['tbl_tickera_test_restore_calls'],
         ],
         JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     );

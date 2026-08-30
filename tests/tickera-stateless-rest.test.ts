@@ -18,6 +18,7 @@ type HarnessResult = {
   jwtPriority: number;
   providerCalls: number;
   writes: number;
+  restoreCalls: number;
 };
 
 const harness = resolve("tests/php/tickera-stateless-rest-harness.php");
@@ -122,6 +123,16 @@ describe("Tickera stateless REST MU shim", () => {
     expect(result.allowlisted).toBe(true);
     expect(result.wpLoadedPriorityAfter).toBe(10);
     expect(result.sessionStartCalls).toBe(1);
+    expectNeighborHooksUntouched(result);
+  });
+
+  it("restores the baseline when remove_action reports success but the hook remains", () => {
+    const result = runScenario("remove-success-hook-remains");
+
+    expect(result.allowlisted).toBe(true);
+    expect(result.wpLoadedPriorityAfter).toBe(10);
+    expect(result.sessionStartCalls).toBe(1);
+    expect(result.restoreCalls).toBe(1);
     expectNeighborHooksUntouched(result);
   });
 
