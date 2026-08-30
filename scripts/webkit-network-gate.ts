@@ -200,6 +200,7 @@ export type WebKitNamedRouteControlEvidence = {
   initialUrl: string;
   finalUrl: string;
   userAgentClass: "iphone";
+  userAgentRaw: string;
   viewportWidth: number;
   initialRouterMarkerCount: number;
   httpStatus: number;
@@ -276,6 +277,13 @@ export function evaluateWebKitNamedRouteControl(
 
   if (evidence.userAgentClass !== "iphone") {
     reasons.push("route_control_user_agent_mismatch");
+  }
+  if (
+    !/iphone/i.test(evidence.userAgentRaw) ||
+    !/applewebkit/i.test(evidence.userAgentRaw) ||
+    !/mobile/i.test(evidence.userAgentRaw)
+  ) {
+    reasons.push("route_control_raw_user_agent_mismatch");
   }
   if (evidence.viewportWidth !== 393) {
     reasons.push("route_control_viewport_mismatch");

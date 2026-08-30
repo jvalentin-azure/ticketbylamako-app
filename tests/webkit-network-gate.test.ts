@@ -669,6 +669,8 @@ describe("named mobile router controls", () => {
     initialUrl: `${expectedOrigin}${initialPaths[controlId]}`,
     finalUrl: `${expectedOrigin}${paths[controlId]}`,
     userAgentClass: "iphone",
+    userAgentRaw:
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148",
     viewportWidth: 393,
     initialRouterMarkerCount: controlId.startsWith("iphone-") ? 1 : 0,
     httpStatus: 200,
@@ -757,6 +759,20 @@ describe("named mobile router controls", () => {
       reasons: expect.arrayContaining([
         "route_control_initial_path_mismatch",
         "route_control_initial_query_mismatch",
+      ]),
+    });
+  });
+
+  it("rejects a mislabeled raw user agent", () => {
+    expect(
+      evaluateWebKitNamedRouteControl({
+        ...createControl("iphone-root"),
+        userAgentRaw: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+      }),
+    ).toMatchObject({
+      pass: false,
+      reasons: expect.arrayContaining([
+        "route_control_raw_user_agent_mismatch",
       ]),
     });
   });
@@ -977,6 +993,8 @@ describe("composed mobile router release gate", () => {
       initialUrl: `https://staging.ticketbylamako.com${routeInitialPaths[controlId]}`,
       finalUrl: `https://staging.ticketbylamako.com${routePaths[controlId]}`,
       userAgentClass: "iphone",
+      userAgentRaw:
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148",
       viewportWidth: 393,
       initialRouterMarkerCount: controlId.startsWith("iphone-") ? 1 : 0,
       httpStatus: 200,
