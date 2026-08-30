@@ -10,6 +10,7 @@ import {
   classifyWebKitNetworkObservation,
   diagnoseWebKitContentBootstrap,
   evaluateWebKitClassicControl,
+  evaluateWebKitNamedRouteControl,
   evaluateWebKitOnboardingSlide,
   evaluateWebKitRouterReleaseGate,
   evaluateWebKitScenarioGate,
@@ -18,6 +19,8 @@ import {
   runWithWebKitEvidence,
   WEBKIT_ROUTER_EVENT_FIXTURE,
   WEBKIT_ROUTER_ONBOARDING_FIXTURE,
+  WEBKIT_REQUIRED_ROUTE_CONTROL_IDS,
+  type WebKitNamedRouteControlEvidence,
   type WebKitScenarioMetrics,
 } from "../scripts/webkit-network-gate";
 
@@ -630,6 +633,104 @@ describe("mobile router classic controls", () => {
   });
 });
 
+describe("named mobile router controls", () => {
+  const expectedOrigin = "https://staging.ticketbylamako.com";
+  const paths = {
+    "iphone-root": "/mobile/",
+    "iphone-events": "/mobile/events",
+    "iphone-shop": "/mobile/shop",
+    "iphone-product": "/mobile/product/13845",
+    "direct-mobile": "/mobile/",
+    "admin-exclusion": "/wp-admin/",
+    "login-exclusion": "/wp-login.php",
+    "checkout-exclusion": "/cart/",
+    "callback-exclusion": "/wp-json/lamako-mobile/v2/payments/orange/callback",
+    "encoded-exclusion": "/%2570aiement/",
+  } as const;
+
+  const createControl = (
+    controlId: (typeof WEBKIT_REQUIRED_ROUTE_CONTROL_IDS)[number],
+  ): WebKitNamedRouteControlEvidence => ({
+    controlId,
+    finalUrl: `${expectedOrigin}${paths[controlId]}`,
+    expectedOrigin,
+    httpStatus: 200,
+    routerReplacementAttempts: controlId.startsWith("iphone-") ? 1 : 0,
+    mutationAttempts: 0,
+    transmittedMutations: 0,
+    consoleErrors: 0,
+    pageErrors: 0,
+    serviceWorkerRegistrations: 0,
+  });
+
+  it("passes the complete expected route contract one control at a time", () => {
+    for (const controlId of WEBKIT_REQUIRED_ROUTE_CONTROL_IDS) {
+      expect(evaluateWebKitNamedRouteControl(createControl(controlId))).toEqual(
+        { pass: true, reasons: [] },
+      );
+    }
+  });
+
+  it.each([
+    ["httpStatus", 403, "route_control_http_error"],
+    ["mutationAttempts", 1, "route_control_mutation_attempt"],
+    ["transmittedMutations", 1, "route_control_mutation_transmitted"],
+    ["consoleErrors", 1, "route_control_console_error"],
+    ["pageErrors", 1, "route_control_page_error"],
+    ["serviceWorkerRegistrations", 1, "route_control_service_worker"],
+  ] as const)("blocks a non-zero %s", (field, value, reason) => {
+    expect(
+      evaluateWebKitNamedRouteControl({
+        ...createControl("direct-mobile"),
+        [field]: value,
+      }),
+    ).toMatchObject({ pass: false, reasons: expect.arrayContaining([reason]) });
+  });
+
+  it("blocks off-origin, path drift and invalid replacement evidence", () => {
+    expect(
+      evaluateWebKitNamedRouteControl({
+        ...createControl("iphone-events"),
+        finalUrl: "https://www.ticketbylamako.com/mobile/shop",
+        routerReplacementAttempts: 0,
+      }),
+    ).toMatchObject({
+      pass: false,
+      reasons: expect.arrayContaining([
+        "route_control_origin_mismatch",
+        "mobile_route_contract_mismatch",
+        "mobile_route_replacement_mismatch",
+      ]),
+    });
+  });
+
+  it("blocks replacement attempts on every excluded or direct route", () => {
+    expect(
+      evaluateWebKitNamedRouteControl({
+        ...createControl("checkout-exclusion"),
+        routerReplacementAttempts: 1,
+      }),
+    ).toMatchObject({
+      pass: false,
+      reasons: expect.arrayContaining([
+        "excluded_route_replacement_unexpected",
+      ]),
+    });
+  });
+
+  it("fails closed for unknown runtime identities", () => {
+    expect(
+      evaluateWebKitNamedRouteControl({
+        ...createControl("direct-mobile"),
+        controlId: "unknown" as never,
+      }),
+    ).toMatchObject({
+      pass: false,
+      reasons: expect.arrayContaining(["route_control_identity_unknown"]),
+    });
+  });
+});
+
 describe("WordPress control environment gate", () => {
   const clean = {
     cafeAsset403: 0,
@@ -638,6 +739,7 @@ describe("WordPress control environment gate", () => {
     pageErrors: 0,
     mutationAttempts: 0,
     transmittedMutations: 0,
+    serviceWorkerRegistrations: 0,
   };
 
   it("passes only a clean WordPress control surface", () => {
@@ -654,6 +756,7 @@ describe("WordPress control environment gate", () => {
     ["pageErrors", "wordpress_page_error"],
     ["mutationAttempts", "wordpress_mutation_attempt"],
     ["transmittedMutations", "wordpress_mutation_transmitted"],
+    ["serviceWorkerRegistrations", "wordpress_service_worker_registered"],
   ] as const)("keeps %s release-blocking", (field, reason) => {
     expect(
       evaluateWebKitWordPressControlDebt({ ...clean, [field]: 1 }),
@@ -667,6 +770,8 @@ describe("composed mobile router release gate", () => {
     blockingNetworkFailures: 0,
     httpErrors: 0,
     mutations: 0,
+    transmittedMutations: 0,
+    serviceWorkerRegistrations: 0,
     hashRequests: 0,
     consoleErrors: 0,
     pageErrors: 0,
@@ -711,6 +816,32 @@ describe("composed mobile router release gate", () => {
       routerReplacementAttempts: 0,
     },
   ];
+  const routePaths = {
+    "iphone-root": "/mobile/",
+    "iphone-events": "/mobile/events",
+    "iphone-shop": "/mobile/shop",
+    "iphone-product": "/mobile/product/13845",
+    "direct-mobile": "/mobile/",
+    "admin-exclusion": "/wp-admin/",
+    "login-exclusion": "/wp-login.php",
+    "checkout-exclusion": "/cart/",
+    "callback-exclusion": "/wp-json/lamako-mobile/v2/payments/orange/callback",
+    "encoded-exclusion": "/%2570aiement/",
+  } as const;
+  const routeControls = WEBKIT_REQUIRED_ROUTE_CONTROL_IDS.map(
+    (controlId): WebKitNamedRouteControlEvidence => ({
+      controlId,
+      finalUrl: `https://staging.ticketbylamako.com${routePaths[controlId]}`,
+      expectedOrigin: "https://staging.ticketbylamako.com",
+      httpStatus: 200,
+      routerReplacementAttempts: controlId.startsWith("iphone-") ? 1 : 0,
+      mutationAttempts: 0,
+      transmittedMutations: 0,
+      consoleErrors: 0,
+      pageErrors: 0,
+      serviceWorkerRegistrations: 0,
+    }),
+  );
   const evidence = {
     contentScenario: cleanContent,
     onboardingSlides: [
@@ -728,6 +859,7 @@ describe("composed mobile router release gate", () => {
       },
     ],
     classicControls: controls,
+    routeControls,
     wordpressControl: {
       cafeAsset403: 0,
       otherHttpErrors: 0,
@@ -735,6 +867,7 @@ describe("composed mobile router release gate", () => {
       pageErrors: 0,
       mutationAttempts: 0,
       transmittedMutations: 0,
+      serviceWorkerRegistrations: 0,
     },
   };
 
@@ -751,12 +884,14 @@ describe("composed mobile router release gate", () => {
         ...evidence,
         onboardingSlides: evidence.onboardingSlides.slice(0, 1),
         classicControls: evidence.classicControls.slice(0, 2),
+        routeControls: evidence.routeControls.slice(0, 9),
       }),
     ).toMatchObject({
       pass: false,
       reasons: expect.arrayContaining([
         "onboarding:2:evidence_count_invalid",
         "classic:payment-return:evidence_count_invalid",
+        "route:encoded-exclusion:evidence_count_invalid",
       ]),
     });
   });
@@ -809,6 +944,10 @@ describe("composed mobile router release gate", () => {
             finalUrl: "https://staging.ticketbylamako.com/mobile/",
           },
         ],
+        routeControls: [
+          ...evidence.routeControls,
+          { ...evidence.routeControls[0], controlId: "unknown" as never },
+        ],
       }),
     ).toMatchObject({
       pass: false,
@@ -817,6 +956,8 @@ describe("composed mobile router release gate", () => {
         "onboarding:identity_unknown",
         "classic:evidence_set_invalid",
         "classic:identity_unknown",
+        "route:evidence_set_invalid",
+        "route:identity_unknown",
       ]),
     });
   });
@@ -841,6 +982,11 @@ describe("composed mobile router release gate", () => {
           ...evidence.wordpressControl,
           cafeAsset403: 2,
         },
+        routeControls: evidence.routeControls.map((control) =>
+          control.controlId === "checkout-exclusion"
+            ? { ...control, routerReplacementAttempts: 1 }
+            : control,
+        ),
       }),
     ).toMatchObject({
       pass: false,
@@ -849,6 +995,7 @@ describe("composed mobile router release gate", () => {
         "onboarding:1:slide_identity_mismatch",
         "classic:payment-return:classic_control_routed_to_mobile",
         "wordpress:cafe_events_carousel_403",
+        "route:checkout-exclusion:excluded_route_replacement_unexpected",
       ]),
     });
   });
@@ -889,6 +1036,8 @@ describe("stabilized WebKit scenario gate", () => {
     blockingNetworkFailures: 0,
     httpErrors: 0,
     mutations: 0,
+    transmittedMutations: 0,
+    serviceWorkerRegistrations: 0,
     hashRequests: 0,
     consoleErrors: 0,
     pageErrors: 0,
@@ -911,6 +1060,8 @@ describe("stabilized WebKit scenario gate", () => {
     ["blockingNetworkFailures", 1, "blocking_network_failure"],
     ["httpErrors", 1, "http_error"],
     ["mutations", 1, "mutation"],
+    ["transmittedMutations", 1, "mutation_transmitted"],
+    ["serviceWorkerRegistrations", 1, "service_worker_registered"],
     ["hashRequests", 1, "blurhash_request"],
     ["consoleErrors", 1, "console_error"],
     ["pageErrors", 1, "page_error"],

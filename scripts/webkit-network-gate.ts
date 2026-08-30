@@ -183,6 +183,158 @@ function decodePathFailClosed(pathname: string): string | null {
   return path.startsWith("/") ? path.replace(/\/{2,}/g, "/") : null;
 }
 
+export type WebKitNamedRouteControlId =
+  | "iphone-root"
+  | "iphone-events"
+  | "iphone-shop"
+  | "iphone-product"
+  | "direct-mobile"
+  | "admin-exclusion"
+  | "login-exclusion"
+  | "checkout-exclusion"
+  | "callback-exclusion"
+  | "encoded-exclusion";
+
+export type WebKitNamedRouteControlEvidence = {
+  controlId: WebKitNamedRouteControlId;
+  finalUrl: string;
+  expectedOrigin: string;
+  httpStatus: number;
+  routerReplacementAttempts: number;
+  mutationAttempts: number;
+  transmittedMutations: number;
+  consoleErrors: number;
+  pageErrors: number;
+  serviceWorkerRegistrations: number;
+};
+
+export const WEBKIT_REQUIRED_ROUTE_CONTROL_IDS = Object.freeze([
+  "iphone-root",
+  "iphone-events",
+  "iphone-shop",
+  "iphone-product",
+  "direct-mobile",
+  "admin-exclusion",
+  "login-exclusion",
+  "checkout-exclusion",
+  "callback-exclusion",
+  "encoded-exclusion",
+] as const);
+
+export function evaluateWebKitNamedRouteControl(
+  evidence: WebKitNamedRouteControlEvidence,
+): { pass: boolean; reasons: string[] } {
+  const reasons: string[] = [];
+  if (!WEBKIT_REQUIRED_ROUTE_CONTROL_IDS.includes(evidence.controlId)) {
+    reasons.push("route_control_identity_unknown");
+  }
+
+  let url: URL | null = null;
+  let origin: URL | null = null;
+  try {
+    url = new URL(evidence.finalUrl);
+    origin = new URL(evidence.expectedOrigin);
+  } catch {
+    reasons.push("route_control_url_invalid");
+  }
+
+  let path: string | null = null;
+  if (url && origin) {
+    if (
+      url.origin !== origin.origin ||
+      !["http:", "https:"].includes(url.protocol)
+    ) {
+      reasons.push("route_control_origin_mismatch");
+    }
+    path = decodePathFailClosed(url.pathname);
+    if (path === null) reasons.push("route_control_path_invalid");
+  }
+
+  const exactMobilePaths: Partial<Record<WebKitNamedRouteControlId, string>> = {
+    "iphone-root": "/mobile/",
+    "iphone-events": "/mobile/events",
+    "iphone-shop": "/mobile/shop",
+    "iphone-product": "/mobile/product/13845",
+    "direct-mobile": "/mobile/",
+  };
+  const expectedMobilePath = exactMobilePaths[evidence.controlId];
+  if (path && expectedMobilePath && path !== expectedMobilePath) {
+    reasons.push("mobile_route_contract_mismatch");
+  }
+  if (
+    path &&
+    evidence.controlId === "admin-exclusion" &&
+    !(path.startsWith("/wp-admin") || path === "/wp-login.php")
+  ) {
+    reasons.push("admin_exclusion_contract_mismatch");
+  }
+  if (
+    path &&
+    evidence.controlId === "login-exclusion" &&
+    path !== "/wp-login.php"
+  ) {
+    reasons.push("login_exclusion_contract_mismatch");
+  }
+  if (
+    path &&
+    evidence.controlId === "checkout-exclusion" &&
+    !["/checkout", "/checkout-2", "/cart", "/panier"].some(
+      (prefix) => path === prefix || path.startsWith(`${prefix}/`),
+    )
+  ) {
+    reasons.push("checkout_exclusion_contract_mismatch");
+  }
+  if (
+    path &&
+    evidence.controlId === "callback-exclusion" &&
+    !(
+      path.startsWith("/wc-api/") ||
+      path.startsWith("/lamako-mobile/") ||
+      (path.startsWith("/wp-json/") && path.includes("callback"))
+    )
+  ) {
+    reasons.push("callback_exclusion_contract_mismatch");
+  }
+  if (
+    path &&
+    evidence.controlId === "encoded-exclusion" &&
+    !["/paiement", "/checkout", "/checkout-2", "/cart", "/panier"].some(
+      (prefix) => path === prefix || path.startsWith(`${prefix}/`),
+    )
+  ) {
+    reasons.push("encoded_exclusion_contract_mismatch");
+  }
+
+  if (
+    !Number.isInteger(evidence.httpStatus) ||
+    evidence.httpStatus < 200 ||
+    evidence.httpStatus >= 400
+  ) {
+    reasons.push("route_control_http_error");
+  }
+  const zeroMetrics = [
+    ["route_control_mutation_attempt", evidence.mutationAttempts],
+    ["route_control_mutation_transmitted", evidence.transmittedMutations],
+    ["route_control_console_error", evidence.consoleErrors],
+    ["route_control_page_error", evidence.pageErrors],
+    ["route_control_service_worker", evidence.serviceWorkerRegistrations],
+  ] as const;
+  for (const [reason, value] of zeroMetrics) {
+    if (!Number.isInteger(value) || value !== 0) reasons.push(reason);
+  }
+  if (!Number.isInteger(evidence.routerReplacementAttempts)) {
+    reasons.push("route_control_replacement_invalid");
+  } else if (evidence.controlId.startsWith("iphone-")) {
+    if (evidence.routerReplacementAttempts !== 1) {
+      reasons.push("mobile_route_replacement_mismatch");
+    }
+  } else if (evidence.routerReplacementAttempts !== 0) {
+    reasons.push("excluded_route_replacement_unexpected");
+  }
+
+  return { pass: reasons.length === 0, reasons };
+}
+
 /**
  * The router marker is cache-safe and may legitimately be present in desktop
  * HTML. A classic control passes when it does not navigate to the mobile app;
@@ -272,6 +424,7 @@ export type WebKitWordPressControlDebt = {
   pageErrors: number;
   mutationAttempts: number;
   transmittedMutations: number;
+  serviceWorkerRegistrations: number;
 };
 
 /**
@@ -290,6 +443,8 @@ export function evaluateWebKitWordPressControlDebt(
   if (debt.mutationAttempts !== 0) reasons.push("wordpress_mutation_attempt");
   if (debt.transmittedMutations !== 0)
     reasons.push("wordpress_mutation_transmitted");
+  if (debt.serviceWorkerRegistrations !== 0)
+    reasons.push("wordpress_service_worker_registered");
   return { pass: reasons.length === 0, reasons };
 }
 
@@ -440,6 +595,8 @@ export type WebKitScenarioMetrics = {
   blockingNetworkFailures: number;
   httpErrors: number;
   mutations: number;
+  transmittedMutations: number;
+  serviceWorkerRegistrations: number;
   hashRequests: number;
   consoleErrors: number;
   pageErrors: number;
@@ -460,6 +617,9 @@ export function evaluateWebKitScenarioGate(metrics: WebKitScenarioMetrics): {
     reasons.push("blocking_network_failure");
   if (metrics.httpErrors !== 0) reasons.push("http_error");
   if (metrics.mutations !== 0) reasons.push("mutation");
+  if (metrics.transmittedMutations !== 0) reasons.push("mutation_transmitted");
+  if (metrics.serviceWorkerRegistrations !== 0)
+    reasons.push("service_worker_registered");
   if (metrics.hashRequests !== 0) reasons.push("blurhash_request");
   if (metrics.consoleErrors !== 0) reasons.push("console_error");
   if (metrics.pageErrors !== 0) reasons.push("page_error");
@@ -476,6 +636,7 @@ export type WebKitRouterReleaseEvidence = {
   contentScenario: WebKitScenarioMetrics;
   onboardingSlides: WebKitOnboardingSlideEvidence[];
   classicControls: WebKitClassicControlEvidence[];
+  routeControls: WebKitNamedRouteControlEvidence[];
   wordpressControl: WebKitWordPressControlDebt;
 };
 
@@ -552,6 +713,35 @@ export function evaluateWebKitRouterReleaseGate(
     reasons.push(
       ...evaluateWebKitClassicControl(matchingControls[0]).reasons.map(
         (reason) => `classic:${controlId}:${reason}`,
+      ),
+    );
+  }
+
+  const routeControls = Array.isArray(evidence.routeControls)
+    ? evidence.routeControls
+    : [];
+  if (routeControls.length !== WEBKIT_REQUIRED_ROUTE_CONTROL_IDS.length) {
+    reasons.push("route:evidence_set_invalid");
+  }
+  if (
+    routeControls.some(
+      (control) =>
+        !WEBKIT_REQUIRED_ROUTE_CONTROL_IDS.includes(control.controlId),
+    )
+  ) {
+    reasons.push("route:identity_unknown");
+  }
+  for (const controlId of WEBKIT_REQUIRED_ROUTE_CONTROL_IDS) {
+    const matchingControls = routeControls.filter(
+      (control) => control.controlId === controlId,
+    );
+    if (matchingControls.length !== 1) {
+      reasons.push(`route:${controlId}:evidence_count_invalid`);
+      continue;
+    }
+    reasons.push(
+      ...evaluateWebKitNamedRouteControl(matchingControls[0]).reasons.map(
+        (reason) => `route:${controlId}:${reason}`,
       ),
     );
   }
