@@ -101,22 +101,28 @@ with any commerce regression or cache warm-up:
 
 - **do not run the front-controller probe against an ordinary writable
   staging runtime.** Before bootstrap, the runner requires a fresh private
-  mode-`0600` isolation proof: database writes denied independently of
-  WordPress, object-cache writes blocked/isolated, direct network egress
-  denied, production credentials unavailable, active-plugin fingerprint and
-  a one-hour-or-shorter expiry. A missing gate is `STOP`;
-- the runner is hard-bound to the exact staging root
-  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html` and requires the
-  sealed `wp-config.php` hash before including WordPress. It cannot be pointed
-  at production or an arbitrary `--wp-root`;
-- use one fresh process per GET and the private no-persist runner
+  mode-`0600` isolation proof bound to the invocation, exact request,
+  clone root/config, runner and validator hashes. It requires an independently
+  rejected DB canary write plus a redacted DB-target fingerprint, isolated or
+  write-denied cache plus its target fingerprint, process-boundary egress
+  deny, read-only/ephemeral filesystem, absent production credentials,
+  disabled workers/mail/callbacks and a one-hour-or-shorter expiry. A missing
+  or mismatched gate is `STOP`;
+- the runner accepts only a sealed isolated-clone `--wp-root`, forbids the
+  source staging root `/home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html`,
+  and verifies the exact clone `wp-config.php` hash before including
+  WordPress. The proof's non-production clone hostname and root must match;
+- use `php -d session.use_strict_mode=1` and one fresh process per method,
+  URL form and route with the private no-persist runner
   `scripts/qa-tickera-stateless-rest-runtime.php`. It installs and reinforces
   the complete session handler before Tickera and before the REST callback,
   counts `open/read/write/destroy/close/gc/createSid/validateId/updateTimestamp`,
-  and uses `session_abort()` only after recording the terminal status. Its
-  reporter object is created before plugin objects so destruction follows
-  registered shutdown callbacks; an absent report, abnormal process exit or
-  incomplete sequence is `STOP`;
+  records handler module, `auto_start`, strict mode and status checkpoints,
+  and never calls `session_write_close()`. If a session is unexpectedly active,
+  it may use `session_abort()` only in the late reporter after WordPress
+  `shutdown`. The reporter requires literal marker `wp_shutdown_seen`, emits
+  exactly one report from destruction, and exits nonzero on every incomplete
+  sequence;
 - the WordPress `query` and `pre_http_request` filters throw/block and count,
   but their declared coverage is only `WPDB_QUERY_FILTER_ONLY` and
   `WP_HTTP_API_ONLY`. They do not prove anything about direct mysqli/PDO,
@@ -125,8 +131,9 @@ with any commerce regression or cache warm-up:
 - independently validate its JSON evidence with
   `scripts/validate-tickera-stateless-rest-runtime.php`; the validator refuses
   even a component pass for absent/synthetic WordPress/Tickera runtime,
-  missing isolation evidence, wrong script/config/plugin hashes or incomplete
-  hook sequence;
+  missing isolation evidence, wrong script/config/plugin/invocation hashes,
+  lost instrumentation, zero observed queries or an incomplete hook/shutdown
+  sequence;
 - require the exact Tickera and shim hashes, hook priority `10` before and no
   hook after, `session_status() === PHP_SESSION_NONE` at every checkpoint and
   zero calls to every session-handler operation;
@@ -140,9 +147,11 @@ with any commerce regression or cache warm-up:
   `writes=0`;
 - CLI does not reliably expose CORS, `Set-Cookie` or final web-server status.
   Its successful verdict is therefore only
-  `COMPONENT_PASS_EXTERNAL_REQUIRED`, never a Phase S release PASS. Execute a
-  separate real HTTPS/FPM GET/HEAD/OPTIONS matrix for every allowlisted route
-  and both URL forms, proving JSON/CORS/JWT semantics and no `PHPSESSID`;
+  `COMPONENT_PASS_EXTERNAL_REQUIRED`, never a Phase S release PASS. CLI covers
+  anonymous `/web-session` component semantics only. Execute a separate real
+  HTTPS/FPM GET/HEAD/OPTIONS matrix for every allowlisted route and both pretty
+  and literal `?rest_route=` forms, with anonymous and authenticated
+  `/web-session` clients, proving JSON/CORS/JWT semantics and no `PHPSESSID`;
 - do not call or simulate cart add/update, coupon, checkout, order creation,
   payment pages or callbacks, Seating/Firebase, provider APIs, cache purge or
   cache prime in Phase S.

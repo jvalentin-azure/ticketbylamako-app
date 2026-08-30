@@ -23,22 +23,53 @@ const libraryHarness = path.join(
   "php",
   "tickera-stateless-rest-runtime-library-harness.php",
 );
+const shutdownHarness = path.join(
+  root,
+  "tests",
+  "php",
+  "tickera-stateless-rest-runtime-shutdown-harness.php",
+);
+const invocationHash = "a".repeat(64);
 
 function fileSha256(file: string) {
   return createHash("sha256").update(readFileSync(file)).digest("hex");
 }
 
-function validReport() {
+function validReport(
+  method: "GET" | "HEAD" | "OPTIONS" = "GET",
+  route = "/lamako-mobile/v2/public/home-data",
+  urlForm: "PRETTY" | "REST_ROUTE" = "PRETTY",
+) {
+  const catalogRoute = route.startsWith("/lamako-mobile/v2/public/");
+  const webSession = route === "/lamako-mobile/v2/web-session";
+  const callbackRuns = method !== "OPTIONS";
+  const sequence = [
+    "wp_loaded_before",
+    "wp_loaded_reinforce",
+    "wp_loaded_after",
+    "rest_pre_dispatch",
+  ];
+  if (callbackRuns) sequence.push("rest_before_callbacks");
+  sequence.push(
+    "rest_post_dispatch",
+    "wp_shutdown",
+    "reporter_destruct",
+  );
+
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     phase: "S",
     runtime: {
       executed: true,
-      synthetic: false,
+      syntheticRequest: true,
+      realWordPressRuntime: true,
       freshProcess: true,
-      executionKind: "CLI_FRONT_CONTROLLER",
+      executionKind: "CLI_SYNTHETIC_REQUEST_REAL_BOOTSTRAP",
       wordpressLoaded: true,
-      hostIsStaging: true,
+      hostIsIsolatedClone: true,
+      wpEnvironmentType: "staging",
+      wpRoot: "/srv/tbl-phase-s-clone/current",
+      cloneHost: "phase-s-clone.invalid",
       tickeraLoaded: true,
       tickeraVersion: "3.6.0.2",
       tickeraSourceSha256:
@@ -50,52 +81,134 @@ function validReport() {
       fatalError: false,
       runnerSha256: fileSha256(runner),
       validatorSha256: fileSha256(validator),
-      invocationNonceSha256: "0".repeat(64),
-      wpConfigSha256: "1".repeat(64),
-      isolationProofSha256: "2".repeat(64),
+      invocationIdSha256: invocationHash,
+      requestFingerprintSha256: "b".repeat(64),
+      wpConfigSha256: "c".repeat(64),
+      isolationProofSha256: "d".repeat(64),
+      httpEvidenceIncluded: false,
     },
     instrumentation: {
       preinitializedBeforeBootstrap: true,
-      queryFilterLiveAtWpLoaded: true,
-      wpHttpFilterLiveAtWpLoaded: true,
+      prebootstrapQualification: {
+        proofValidated: true,
+        environmentQualified: true,
+        rootQualified: true,
+        databaseQualified: true,
+        cacheQualified: true,
+        networkQualified: true,
+        filesystemQualified: true,
+      },
+      filterHealthAtWpLoaded: {
+        queryEarly: true,
+        queryFinal: true,
+        httpEarly: true,
+        httpFinal: true,
+      },
+      filterHealthAtWpShutdown: {
+        queryEarly: true,
+        queryFinal: true,
+        httpEarly: true,
+        httpFinal: true,
+      },
+      filterHealthAtReporter: {
+        queryEarly: true,
+        queryFinal: true,
+        httpEarly: true,
+        httpFinal: true,
+      },
+      restPreDispatchObserved: true,
+      restCallbackObserved: callbackRuns,
       restPostDispatchObserved: true,
+      wp_shutdown_seen: true,
+      reporterAfterWpShutdown: true,
     },
     isolation: {
+      assertionSource: "EXTERNAL_SEALED_PROVISIONING",
+      runnerVerificationScope: "MANIFEST_SHAPE_HASH_AND_BINDING_ONLY",
+      environment: "isolated-clone",
+      cloneOnly: true,
       databaseReadOnlyEnforced: true,
+      databaseCanaryWriteRejected: true,
+      databaseControl: "CLONE_SELECT_ONLY_CREDENTIAL",
+      databaseTargetFingerprintSha256: "e".repeat(64),
       objectCacheWritesBlocked: true,
+      objectCacheControl: "CLONE_EPHEMERAL_OR_WRITE_DENIED",
+      objectCacheTargetFingerprintSha256: "f".repeat(64),
       directNetworkEgressBlocked: true,
+      networkControl: "PROCESS_EGRESS_DENY",
+      filesystemWritesDeniedOrEphemeral: true,
+      filesystemControl: "READ_ONLY_ROOT_EPHEMERAL_TMP",
       productionCredentialsUnavailable: true,
-      activePluginFingerprintSha256: "3".repeat(64),
-      evidenceManifestSha256: "4".repeat(64),
+      cronDisabled: true,
+      queueWorkersDisabled: true,
+      mailDeliveryDisabled: true,
+      providerCallbacksDisabled: true,
+      publicAccessRestricted: true,
+      activePluginFingerprintSha256: "1".repeat(64),
+      evidenceManifestSha256: "2".repeat(64),
     },
     request: {
-      method: "GET",
-      route: "/lamako-mobile/v2/public/home-data",
+      method,
+      route,
+      urlForm,
+      webSessionMode: webSession ? "ANONYMOUS_CLI" : "NOT_APPLICABLE",
+      requestFingerprintSha256: "b".repeat(64),
     },
     hook: {
       before: 10 as number | false,
       after: false as number | false,
+      atWpShutdown: false as number | false,
+      atReporter: false as number | false,
       guardPriorityIsMin: true,
-      sequence: [
-        "wp_loaded_before",
-        "wp_loaded_reinforce",
-        "wp_loaded_after",
-        "rest_before_callbacks",
-        "rest_post_dispatch",
-        "shutdown",
+      beforeInventory: [
+        {
+          class: "Tickera\\TC",
+          method: "update_cart",
+          priority: 10,
+          isGlobalTc: true,
+          sourceSha256:
+            "beb244415bf3e874925bd76a88f9bbf19c246121251877723dc6a3db41caac52",
+        },
       ],
+      afterInventory: [] as Array<Record<string, unknown>>,
+      shutdownInventory: [] as Array<Record<string, unknown>>,
+      reporterInventory: [] as Array<Record<string, unknown>>,
+      sequence,
     },
     session: {
       handlerInstalledBeforeBootstrap: true,
       handlerReinforcedAtWpLoaded: true,
-      handlerReinforcedBeforeRestCallback: true,
+      handlerReinforcedBeforeRestCallback: callbackRuns,
+      autoStartBefore: "0",
+      autoStartAtWpShutdown: "0",
+      headersSentBefore: false,
+      strictModeBefore: "1",
+      strictModeAtWpLoaded: "1",
       statusBefore: 1,
+      moduleBefore: "files",
+      moduleAfterInstall: "user",
       statusAtWpLoadedBefore: 1,
+      moduleAtWpLoadedBefore: "user",
       statusAtWpLoadedReinforce: 1,
+      moduleAtWpLoadedReinforce: "user",
+      moduleAfterWpLoadedReinforce: "user",
       statusAtWpLoadedAfter: 1,
-      statusBeforeRestCallback: 1,
-      statusAtShutdownBeforeCleanup: 1,
-      statusAtShutdownAfterCleanup: 1,
+      moduleAtWpLoadedAfter: "user",
+      statusAtRestPreDispatch: 1,
+      moduleAtRestPreDispatch: "user",
+      statusBeforeRestCallback: callbackRuns ? 1 : null,
+      moduleBeforeRestCallback: callbackRuns ? "user" : null,
+      moduleAfterRestReinforce: callbackRuns ? "user" : null,
+      statusAtWpShutdown: 1,
+      moduleAtWpShutdown: "user",
+      statusAtReporterBeforeCleanup: 1,
+      moduleAtReporterBeforeCleanup: "user",
+      statusAtReporterAfterCleanup: 1,
+      moduleAtReporterAfterCleanup: "user",
+      cleanupMethod: "NONE",
+      cleanupSucceeded: true,
+      firstEvent: null as string | null,
+      firstEventStack: [] as Array<Record<string, unknown>>,
       open: 0,
       read: 0,
       write: 0,
@@ -113,6 +226,7 @@ function validReport() {
       externalEgressProofRequired: true,
       wpHttpAttempts: 0,
       blockedWpHttpAttempts: 0,
+      finalBlockCalls: 0,
     },
     database: {
       guardScope: "WPDB_QUERY_FILTER_ONLY",
@@ -120,13 +234,17 @@ function validReport() {
       externalReadOnlyProofRequired: true,
       totalQueries: 3,
       readOnlyQueries: 3,
+      finalQueries: 3,
+      finalReadOnlyQueries: 3,
       nonReadAttempts: 0,
       blockedNonReadAttempts: 0,
+      lateNonReadAttempts: 0,
+      blockedOperations: [] as string[],
     },
     cache: {
-      declaredPreflightState: "HIT",
-      observedPreflightState: "HIT",
-      responseState: "HIT",
+      declaredPreflightState: catalogRoute ? "HIT" : "NOT_APPLICABLE",
+      observedPreflightState: catalogRoute ? "HIT" : "NOT_APPLICABLE",
+      responseState: catalogRoute ? "HIT" : "NOT_APPLICABLE",
       setTransientAttempts: 0,
       writeBlockInstalled: true,
     },
@@ -138,20 +256,40 @@ function validReport() {
       headersObservable: false,
       externalHttpRequired: true,
     },
+    externalHttpContract: {
+      required: true,
+      freshProcessPerCase: true,
+      methods: ["GET", "HEAD", "OPTIONS"],
+      urlForms: ["PRETTY", "REST_ROUTE"],
+      webSessionModes: ["ANONYMOUS", "AUTHENTICATED"],
+      corsJwtStatusRequired: true,
+      phpSessionCookieForbidden: true,
+    },
+    report: {
+      attempts: 1,
+      emitted: true,
+      intendedExitCode: 0,
+    },
+    reportEmitted: true,
+    decision: "COMPONENT_PASS_EXTERNAL_REQUIRED",
   };
 }
 
 type RuntimeReport = ReturnType<typeof validReport>;
 
-function validate(report: RuntimeReport) {
+function validate(report: RuntimeReport, expectedInvocation = invocationHash) {
   const directory = mkdtempSync(path.join(os.tmpdir(), "tbl-runtime-gate-"));
   const reportPath = path.join(directory, "runtime-report.json");
   writeFileSync(reportPath, JSON.stringify(report), "utf8");
   try {
-    return spawnSync("php", [validator, reportPath], {
-      cwd: root,
-      encoding: "utf8",
-    });
+    return spawnSync(
+      "php",
+      [validator, reportPath, expectedInvocation],
+      {
+        cwd: root,
+        encoding: "utf8",
+      },
+    );
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -168,11 +306,27 @@ function runLibraryScenario(scenario: string) {
 }
 
 describe("Tickera runtime qualification gate", () => {
-  it("accepts a complete CLI component report while requiring external HTTP evidence", () => {
-    const result = validate(validReport());
+  it.each([
+    ["GET", "PRETTY"],
+    ["HEAD", "REST_ROUTE"],
+    ["OPTIONS", "REST_ROUTE"],
+  ] as const)(
+    "accepts a complete %s/%s CLI component report while requiring HTTP evidence",
+    (method, urlForm) => {
+      const result = validate(validReport(method, undefined, urlForm));
+
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(result.stdout).toContain("COMPONENT_PASS_EXTERNAL_REQUIRED");
+    },
+  );
+
+  it("accepts anonymous CLI web-session semantics without claiming authenticated HTTP evidence", () => {
+    const result = validate(
+      validReport("GET", "/lamako-mobile/v2/web-session", "PRETTY"),
+    );
 
     expect(result.status).toBe(0);
-    expect(result.stderr).toBe("");
     expect(result.stdout).toContain("COMPONENT_PASS_EXTERNAL_REQUIRED");
   });
 
@@ -183,9 +337,9 @@ describe("Tickera runtime qualification gate", () => {
       "runtime_not_executed",
     ],
     [
-      "synthetic evidence",
-      (report: RuntimeReport) => (report.runtime.synthetic = true),
-      "synthetic_runtime",
+      "claimed real HTTP evidence",
+      (report: RuntimeReport) => (report.runtime.httpEvidenceIncluded = true),
+      "cli_http_evidence_claim",
     ],
     [
       "wrong Tickera hash",
@@ -194,9 +348,44 @@ describe("Tickera runtime qualification gate", () => {
       "tickera_hash",
     ],
     [
-      "hook not removed",
-      (report: RuntimeReport) => (report.hook.after = 10),
-      "tickera_hook_after",
+      "missing prebootstrap database qualification",
+      (report: RuntimeReport) =>
+        (report.instrumentation.prebootstrapQualification.databaseQualified =
+          false),
+      "prebootstrap_qualification",
+    ],
+    [
+      "lost query hook",
+      (report: RuntimeReport) =>
+        (report.instrumentation.filterHealthAtReporter.queryFinal = false),
+      "filterHealthAtReporter",
+    ],
+    [
+      "missing WordPress shutdown marker",
+      (report: RuntimeReport) =>
+        (report.instrumentation.wp_shutdown_seen = false),
+      "wp_shutdown_not_seen",
+    ],
+    [
+      "report emitted before WordPress shutdown",
+      (report: RuntimeReport) =>
+        (report.instrumentation.reporterAfterWpShutdown = false),
+      "reporter_not_after_wp_shutdown",
+    ],
+    [
+      "extra Tickera callback",
+      (report: RuntimeReport) =>
+        report.hook.beforeInventory.push({
+          ...report.hook.beforeInventory[0],
+          priority: 11,
+        }),
+      "tickera_inventory_before",
+    ],
+    [
+      "Tickera callback restored during shutdown",
+      (report: RuntimeReport) =>
+        report.hook.reporterInventory.push(report.hook.beforeInventory[0]),
+      "tickera_reporterInventory",
     ],
     [
       "session opened",
@@ -204,9 +393,9 @@ describe("Tickera runtime qualification gate", () => {
       "session_open",
     ],
     [
-      "session written",
-      (report: RuntimeReport) => (report.session.write = 1),
-      "session_write",
+      "session event captured",
+      (report: RuntimeReport) => (report.session.firstEvent = "write"),
+      "session_first_event",
     ],
     [
       "provider attempted",
@@ -219,29 +408,47 @@ describe("Tickera runtime qualification gate", () => {
       "sql_non_read",
     ],
     [
+      "no query observed",
+      (report: RuntimeReport) => {
+        report.database.totalQueries = 0;
+        report.database.readOnlyQueries = 0;
+        report.database.finalQueries = 0;
+        report.database.finalReadOnlyQueries = 0;
+      },
+      "query_total",
+    ],
+    [
+      "late query telemetry mismatch",
+      (report: RuntimeReport) => (report.database.finalQueries = 2),
+      "final_query_count",
+    ],
+    [
+      "missing DB target binding",
+      (report: RuntimeReport) =>
+        (report.isolation.databaseTargetFingerprintSha256 = ""),
+      "isolation_databaseTargetFingerprintSha256",
+    ],
+    [
+      "missing external egress gate",
+      (report: RuntimeReport) =>
+        (report.isolation.directNetworkEgressBlocked = false),
+      "isolation_directNetworkEgressBlocked",
+    ],
+    [
       "cold cache",
-      (report: RuntimeReport) => (report.cache.observedPreflightState = "MISS"),
+      (report: RuntimeReport) =>
+        (report.cache.observedPreflightState = "MISS"),
       "cache_not_hot_before",
     ],
     [
-      "transient attempted",
-      (report: RuntimeReport) => (report.cache.setTransientAttempts = 1),
-      "cache_write",
+      "duplicate report",
+      (report: RuntimeReport) => (report.report.attempts = 2),
+      "report_attempts",
     ],
     [
       "business hook fired",
       (report: RuntimeReport) => (report.mutations.businessHooks = 1),
       "business_mutation_hook",
-    ],
-    [
-      "missing external HTTP gate",
-      (report: RuntimeReport) => (report.response.externalHttpRequired = false),
-      "external_http_gate_missing",
-    ],
-    [
-      "invalid JSON",
-      (report: RuntimeReport) => (report.response.jsonValid = false),
-      "invalid_json",
     ],
   ])("fails closed for %s", (_label, mutate, failure) => {
     const report = validReport();
@@ -253,7 +460,14 @@ describe("Tickera runtime qualification gate", () => {
     expect(result.stderr).toContain(failure);
   });
 
-  it("refuses to run without a real WordPress root", () => {
+  it("binds validation to the independently supplied invocation hash", () => {
+    const result = validate(validReport(), "0".repeat(64));
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("invocation_hash");
+  });
+
+  it("refuses to run without a real isolated WordPress clone root", () => {
     const result = spawnSync("php", [runner], {
       cwd: root,
       encoding: "utf8",
@@ -262,6 +476,33 @@ describe("Tickera runtime qualification gate", () => {
     expect(result.status).toBe(1);
     expect(result.stdout).toBe("");
     expect(result.stderr).toBe("STOP real_wordpress_runtime_required\n");
+  });
+
+  it("emits exactly one late STOP report and exits nonzero after shutdown", () => {
+    const result = spawnSync("php", [shutdownHarness], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    const reportLines = result.stderr
+      .trim()
+      .split(/\r?\n/)
+      .filter((line) => line.startsWith("TBL_TICKERA_RUNTIME_REPORT "));
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(reportLines).toHaveLength(1);
+    const report = JSON.parse(
+      reportLines[0].slice("TBL_TICKERA_RUNTIME_REPORT ".length),
+    );
+    expect(report.instrumentation.wp_shutdown_seen).toBe(true);
+    expect(report.instrumentation.reporterAfterWpShutdown).toBe(true);
+    expect(report.hook.sequence).toEqual([
+      "wp_shutdown",
+      "reporter_destruct",
+    ]);
+    expect(report.report.attempts).toBe(1);
+    expect(report.report.intendedExitCode).toBe(1);
+    expect(report.decision).toBe("STOP");
   });
 
   it.each([
@@ -277,24 +518,85 @@ describe("Tickera runtime qualification gate", () => {
     expect(runLibraryScenario(scenario)).toEqual({ operation, readOnly });
   });
 
-  it("accepts only the private runner's exact public read URI form", () => {
-    expect(runLibraryScenario("uri-allowed")).toEqual({
+  it("accepts exact GET, HEAD, OPTIONS, rest_route, and web-session request forms", () => {
+    expect(runLibraryScenario("request-pretty-get")).toMatchObject({
+      method: "GET",
       route: "/lamako-mobile/v2/public/home-data",
+      urlForm: "PRETTY",
       get: { summary: "1", events_limit: "12", products_limit: "8" },
     });
+    expect(runLibraryScenario("request-rest-route-head")).toMatchObject({
+      method: "HEAD",
+      route: "/lamako-mobile/v2/public/events/42",
+      urlForm: "REST_ROUTE",
+    });
+    expect(runLibraryScenario("request-rest-route-options")).toMatchObject({
+      method: "OPTIONS",
+      route: "/lamako-mobile/v2/rewards/config",
+      urlForm: "REST_ROUTE",
+    });
+    expect(runLibraryScenario("request-web-session")).toMatchObject({
+      method: "GET",
+      route: "/lamako-mobile/v2/web-session",
+    });
+  });
+
+  it("rejects mutative, ambiguous, encoded, and unknown requests", () => {
     for (const scenario of [
-      "uri-mutative-query",
-      "uri-encoded-path",
-      "uri-unknown-route",
+      "request-post",
+      "request-duplicate-rest-route",
+      "request-mutative-query",
+      "request-encoded-path",
+      "request-unknown-route",
     ]) {
       expect(runLibraryScenario(scenario)).toBeNull();
     }
   });
 
-  it("requires independently asserted DB, cache, egress, and credential isolation", () => {
+  it("requires independently bound DB, cache, egress, filesystem, and clone isolation", () => {
     expect(runLibraryScenario("isolation-valid")).toEqual([]);
     expect(runLibraryScenario("isolation-cache-unblocked")).toContain(
       "objectCacheWritesBlocked",
     );
+    expect(runLibraryScenario("isolation-database-unbound")).toContain(
+      "databaseTargetFingerprintSha256",
+    );
+    expect(runLibraryScenario("isolation-cache-unbound")).toContain(
+      "objectCacheTargetFingerprintSha256",
+    );
+    expect(runLibraryScenario("isolation-source-staging-root")).toContain(
+      "source_staging_root_forbidden",
+    );
+  });
+
+  it("implements the complete PHP session handler extension contracts", () => {
+    expect(runLibraryScenario("handler-contract")).toEqual({
+      sessionHandler: true,
+      sessionId: true,
+      sessionUpdateTimestamp: true,
+      hasCreateSid: true,
+      hasValidateId: true,
+      hasUpdateTimestamp: true,
+    });
+  });
+
+  it("captures a location-only stack without handler arguments or PII", () => {
+    const evidence = runLibraryScenario("handler-safe-stack");
+    const serialized = JSON.stringify(evidence);
+
+    expect(evidence.firstEvent).toBe("write");
+    expect(evidence.firstEventStack.length).toBeGreaterThan(0);
+    expect(serialized).not.toContain("PII-session-id-never-report");
+    expect(serialized).not.toContain("PII-session-data-never-report");
+    expect(serialized).not.toMatch(/"args"/);
+    expect(serialized).toContain("<PROBE_ROOT>");
+  });
+
+  it("never closes or writes a session as part of reporter cleanup", () => {
+    const source = readFileSync(runner, "utf8");
+
+    expect(source).not.toContain("session_write_close");
+    expect(source).toContain("session_abort");
+    expect(source).toContain("DEBUG_BACKTRACE_IGNORE_ARGS");
   });
 });

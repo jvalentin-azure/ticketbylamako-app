@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-const TBL_TICKERA_STATELESS_REST_RUNTIME_SCHEMA = 2;
+const TBL_TICKERA_STATELESS_REST_RUNTIME_SCHEMA = 3;
 const TBL_TICKERA_STATELESS_REST_SHA256 = '9ee50c7fc73bbe4f2cebcd17ca8aac93aface21f7620e85d83cf2babe3ec1ddf';
 const TBL_TICKERA_3602_SHA256 = 'beb244415bf3e874925bd76a88f9bbf19c246121251877723dc6a3db41caac52';
 
@@ -70,11 +70,18 @@ function tbl_tickera_runtime_is_catalog_route(string $route): bool {
     );
 }
 
+function tbl_tickera_runtime_clone_host_is_safe(string $host): bool {
+    $host = strtolower($host);
+    return (bool) preg_match('/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/D', $host)
+        && ! in_array($host, ['ticketbylamako.com', 'www.ticketbylamako.com', 'staging.ticketbylamako.com'], true)
+        && ! str_ends_with($host, '.ticketbylamako.com');
+}
+
 /**
  * @param array<string, mixed> $report
  * @return list<string>
  */
-function tbl_tickera_runtime_validate_report(array $report): array {
+function tbl_tickera_runtime_validate_report(array $report, string $expected_invocation_sha256 = ''): array {
     $failures = [];
     $expect   = static function (bool $condition, string $code) use (&$failures): void {
         if (! $condition) {
@@ -85,14 +92,25 @@ function tbl_tickera_runtime_validate_report(array $report): array {
     $expect(tbl_tickera_runtime_value($report, 'schemaVersion') === TBL_TICKERA_STATELESS_REST_RUNTIME_SCHEMA, 'schema');
     $expect(tbl_tickera_runtime_value($report, 'phase') === 'S', 'phase_not_session_only');
     $expect(tbl_tickera_runtime_value($report, 'runtime.executed') === true, 'runtime_not_executed');
-    $expect(tbl_tickera_runtime_value($report, 'runtime.synthetic') === false, 'synthetic_runtime');
+    $expect(tbl_tickera_runtime_value($report, 'runtime.syntheticRequest') === true, 'synthetic_request_not_declared');
+    $expect(tbl_tickera_runtime_value($report, 'runtime.realWordPressRuntime') === true, 'real_wordpress_runtime_missing');
     $expect(tbl_tickera_runtime_value($report, 'runtime.freshProcess') === true, 'process_not_fresh');
     $expect(
-        tbl_tickera_runtime_value($report, 'runtime.executionKind') === 'CLI_FRONT_CONTROLLER',
+        tbl_tickera_runtime_value($report, 'runtime.executionKind') === 'CLI_SYNTHETIC_REQUEST_REAL_BOOTSTRAP',
         'execution_kind'
     );
     $expect(tbl_tickera_runtime_value($report, 'runtime.wordpressLoaded') === true, 'wordpress_not_loaded');
-    $expect(tbl_tickera_runtime_value($report, 'runtime.hostIsStaging') === true, 'not_staging');
+    $expect(tbl_tickera_runtime_value($report, 'runtime.hostIsIsolatedClone') === true, 'not_isolated_clone');
+    $expect(tbl_tickera_runtime_value($report, 'runtime.wpEnvironmentType') === 'staging', 'wp_environment_type');
+    $wp_root = tbl_tickera_runtime_value($report, 'runtime.wpRoot');
+    $expect(
+        is_string($wp_root)
+            && $wp_root !== ''
+            && $wp_root !== '/home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html',
+        'wp_root'
+    );
+    $clone_host = tbl_tickera_runtime_value($report, 'runtime.cloneHost');
+    $expect(is_string($clone_host) && tbl_tickera_runtime_clone_host_is_safe($clone_host), 'clone_host');
     $expect(tbl_tickera_runtime_value($report, 'runtime.tickeraLoaded') === true, 'tickera_not_loaded');
     $expect(tbl_tickera_runtime_value($report, 'runtime.tickeraVersion') === '3.6.0.2', 'tickera_version');
     $expect(
@@ -106,7 +124,16 @@ function tbl_tickera_runtime_validate_report(array $report): array {
     );
     $expect(tbl_tickera_runtime_value($report, 'runtime.requestAllowlisted') === true, 'request_not_allowlisted');
     $expect(tbl_tickera_runtime_value($report, 'runtime.fatalError') === false, 'runtime_error');
-    foreach (['runnerSha256', 'validatorSha256', 'invocationNonceSha256', 'wpConfigSha256', 'isolationProofSha256'] as $runtime_hash) {
+    foreach (
+        [
+            'runnerSha256',
+            'validatorSha256',
+            'invocationIdSha256',
+            'requestFingerprintSha256',
+            'wpConfigSha256',
+            'isolationProofSha256',
+        ] as $runtime_hash
+    ) {
         $value = tbl_tickera_runtime_value($report, 'runtime.' . $runtime_hash);
         $expect(is_string($value) && (bool) preg_match('/^[a-f0-9]{64}$/D', $value), 'runtime_' . $runtime_hash);
     }
@@ -116,29 +143,77 @@ function tbl_tickera_runtime_validate_report(array $report): array {
     $validator_hash = strtolower((string) hash_file('sha256', __FILE__));
     $expect(tbl_tickera_runtime_value($report, 'runtime.runnerSha256') === $runner_hash, 'runner_hash');
     $expect(tbl_tickera_runtime_value($report, 'runtime.validatorSha256') === $validator_hash, 'validator_hash');
+    $expect(
+        preg_match('/^[a-f0-9]{64}$/D', $expected_invocation_sha256) === 1
+            && tbl_tickera_runtime_value($report, 'runtime.invocationIdSha256') === $expected_invocation_sha256,
+        'invocation_hash'
+    );
+    $expect(tbl_tickera_runtime_value($report, 'runtime.httpEvidenceIncluded') === false, 'cli_http_evidence_claim');
 
     $expect(
         tbl_tickera_runtime_value($report, 'instrumentation.preinitializedBeforeBootstrap') === true,
         'instrumentation_not_early'
     );
     $expect(
-        tbl_tickera_runtime_value($report, 'instrumentation.queryFilterLiveAtWpLoaded') === true,
-        'query_filter_not_live'
+        tbl_tickera_runtime_value($report, 'instrumentation.prebootstrapQualification') === [
+            'proofValidated'       => true,
+            'environmentQualified' => true,
+            'rootQualified'        => true,
+            'databaseQualified'    => true,
+            'cacheQualified'       => true,
+            'networkQualified'     => true,
+            'filesystemQualified'  => true,
+        ],
+        'prebootstrap_qualification'
     );
+    foreach (['filterHealthAtWpLoaded', 'filterHealthAtWpShutdown', 'filterHealthAtReporter'] as $checkpoint) {
+        $expect(
+            tbl_tickera_runtime_value($report, 'instrumentation.' . $checkpoint) === [
+                'queryEarly' => true,
+                'queryFinal' => true,
+                'httpEarly'  => true,
+                'httpFinal'  => true,
+            ],
+            $checkpoint
+        );
+    }
     $expect(
-        tbl_tickera_runtime_value($report, 'instrumentation.wpHttpFilterLiveAtWpLoaded') === true,
-        'http_filter_not_live'
+        tbl_tickera_runtime_value($report, 'instrumentation.restPreDispatchObserved') === true,
+        'rest_pre_dispatch_not_observed'
     );
     $expect(
         tbl_tickera_runtime_value($report, 'instrumentation.restPostDispatchObserved') === true,
         'rest_dispatch_not_observed'
     );
+    $expect(tbl_tickera_runtime_value($report, 'instrumentation.wp_shutdown_seen') === true, 'wp_shutdown_not_seen');
+    $expect(
+        tbl_tickera_runtime_value($report, 'instrumentation.reporterAfterWpShutdown') === true,
+        'reporter_not_after_wp_shutdown'
+    );
+    $expect(
+        tbl_tickera_runtime_value($report, 'isolation.assertionSource') === 'EXTERNAL_SEALED_PROVISIONING',
+        'isolation_assertion_source'
+    );
+    $expect(
+        tbl_tickera_runtime_value($report, 'isolation.runnerVerificationScope')
+            === 'MANIFEST_SHAPE_HASH_AND_BINDING_ONLY',
+        'isolation_runner_scope'
+    );
+    $expect(tbl_tickera_runtime_value($report, 'isolation.environment') === 'isolated-clone', 'isolation_environment');
+    $expect(tbl_tickera_runtime_value($report, 'isolation.cloneOnly') === true, 'isolation_clone_only');
     foreach (
         [
             'databaseReadOnlyEnforced',
+            'databaseCanaryWriteRejected',
             'objectCacheWritesBlocked',
             'directNetworkEgressBlocked',
+            'filesystemWritesDeniedOrEphemeral',
             'productionCredentialsUnavailable',
+            'cronDisabled',
+            'queueWorkersDisabled',
+            'mailDeliveryDisabled',
+            'providerCallbacksDisabled',
+            'publicAccessRestricted',
         ] as $isolation_gate
     ) {
         $expect(
@@ -146,28 +221,86 @@ function tbl_tickera_runtime_validate_report(array $report): array {
             'isolation_' . $isolation_gate
         );
     }
-    foreach (['activePluginFingerprintSha256', 'evidenceManifestSha256'] as $isolation_hash) {
+    foreach (
+        [
+            'databaseTargetFingerprintSha256',
+            'objectCacheTargetFingerprintSha256',
+            'activePluginFingerprintSha256',
+            'evidenceManifestSha256',
+        ] as $isolation_hash
+    ) {
         $value = tbl_tickera_runtime_value($report, 'isolation.' . $isolation_hash);
         $expect(is_string($value) && (bool) preg_match('/^[a-f0-9]{64}$/D', $value), 'isolation_' . $isolation_hash);
     }
+    $expect(
+        tbl_tickera_runtime_value($report, 'isolation.databaseControl') === 'CLONE_SELECT_ONLY_CREDENTIAL',
+        'isolation_database_control'
+    );
+    $expect(
+        tbl_tickera_runtime_value($report, 'isolation.objectCacheControl') === 'CLONE_EPHEMERAL_OR_WRITE_DENIED',
+        'isolation_object_cache_control'
+    );
+    $expect(
+        tbl_tickera_runtime_value($report, 'isolation.networkControl') === 'PROCESS_EGRESS_DENY',
+        'isolation_network_control'
+    );
+    $expect(
+        tbl_tickera_runtime_value($report, 'isolation.filesystemControl') === 'READ_ONLY_ROOT_EPHEMERAL_TMP',
+        'isolation_filesystem_control'
+    );
 
     $method = tbl_tickera_runtime_value($report, 'request.method');
     $route  = tbl_tickera_runtime_value($report, 'request.route');
-    $expect($method === 'GET', 'method_not_get');
+    $expect(in_array($method, ['GET', 'HEAD', 'OPTIONS'], true), 'method_not_safe');
     $expect(is_string($route) && $route !== '', 'route_missing');
+    $url_form = tbl_tickera_runtime_value($report, 'request.urlForm');
+    $expect(in_array($url_form, ['PRETTY', 'REST_ROUTE'], true), 'url_form');
+    $web_session_mode = tbl_tickera_runtime_value($report, 'request.webSessionMode');
+    $expect(
+        ($route === '/lamako-mobile/v2/web-session' && $web_session_mode === 'ANONYMOUS_CLI')
+            || ($route !== '/lamako-mobile/v2/web-session' && $web_session_mode === 'NOT_APPLICABLE'),
+        'web_session_mode'
+    );
+    $expect(
+        tbl_tickera_runtime_value($report, 'instrumentation.restCallbackObserved') === ($method !== 'OPTIONS'),
+        'rest_callback_observation'
+    );
+    $expect(
+        tbl_tickera_runtime_value($report, 'request.requestFingerprintSha256')
+            === tbl_tickera_runtime_value($report, 'runtime.requestFingerprintSha256'),
+        'request_fingerprint'
+    );
 
     $expect(tbl_tickera_runtime_value($report, 'hook.before') === 10, 'tickera_hook_before');
     $expect(tbl_tickera_runtime_value($report, 'hook.after') === false, 'tickera_hook_after');
+    $expect(tbl_tickera_runtime_value($report, 'hook.atWpShutdown') === false, 'tickera_hook_at_wp_shutdown');
+    $expect(tbl_tickera_runtime_value($report, 'hook.atReporter') === false, 'tickera_hook_at_reporter');
     $expect(tbl_tickera_runtime_value($report, 'hook.guardPriorityIsMin') === true, 'guard_priority');
+    $expected_inventory = [[
+        'class'        => 'Tickera\\TC',
+        'method'       => 'update_cart',
+        'priority'     => 10,
+        'isGlobalTc'   => true,
+        'sourceSha256' => TBL_TICKERA_3602_SHA256,
+    ]];
+    $expect(tbl_tickera_runtime_value($report, 'hook.beforeInventory') === $expected_inventory, 'tickera_inventory_before');
+    foreach (['afterInventory', 'shutdownInventory', 'reporterInventory'] as $inventory) {
+        $expect(tbl_tickera_runtime_value($report, 'hook.' . $inventory) === [], 'tickera_' . $inventory);
+    }
+    $expected_sequence = [
+        'wp_loaded_before',
+        'wp_loaded_reinforce',
+        'wp_loaded_after',
+        'rest_pre_dispatch',
+    ];
+    if ($method !== 'OPTIONS') {
+        $expected_sequence[] = 'rest_before_callbacks';
+    }
+    $expected_sequence[] = 'rest_post_dispatch';
+    $expected_sequence[] = 'wp_shutdown';
+    $expected_sequence[] = 'reporter_destruct';
     $expect(
-        tbl_tickera_runtime_value($report, 'hook.sequence') === [
-            'wp_loaded_before',
-            'wp_loaded_reinforce',
-            'wp_loaded_after',
-            'rest_before_callbacks',
-            'rest_post_dispatch',
-            'shutdown',
-        ],
+        tbl_tickera_runtime_value($report, 'hook.sequence') === $expected_sequence,
         'hook_sequence'
     );
 
@@ -180,8 +313,18 @@ function tbl_tickera_runtime_validate_report(array $report): array {
         'session_handler_not_reinforced'
     );
     $expect(
-        tbl_tickera_runtime_value($report, 'session.handlerReinforcedBeforeRestCallback') === true,
-        'session_handler_not_reinforced_for_rest'
+        tbl_tickera_runtime_value($report, 'session.handlerReinforcedBeforeRestCallback') === ($method !== 'OPTIONS'),
+        'session_handler_rest_reinforcement'
+    );
+    $expect(tbl_tickera_runtime_value($report, 'session.autoStartBefore') === '0', 'session_auto_start_before');
+    $expect(tbl_tickera_runtime_value($report, 'session.autoStartAtWpShutdown') === '0', 'session_auto_start_shutdown');
+    $expect(tbl_tickera_runtime_value($report, 'session.headersSentBefore') === false, 'session_headers_sent_before');
+    $expect(tbl_tickera_runtime_value($report, 'session.strictModeBefore') === '1', 'session_strict_mode_before');
+    $expect(tbl_tickera_runtime_value($report, 'session.strictModeAtWpLoaded') === '1', 'session_strict_mode');
+    $module_before = tbl_tickera_runtime_value($report, 'session.moduleBefore');
+    $expect(
+        is_string($module_before) && $module_before !== '' && $module_before !== 'user',
+        'session_module_before'
     );
     foreach (
         [
@@ -189,13 +332,45 @@ function tbl_tickera_runtime_validate_report(array $report): array {
             'statusAtWpLoadedBefore',
             'statusAtWpLoadedReinforce',
             'statusAtWpLoadedAfter',
-            'statusBeforeRestCallback',
-            'statusAtShutdownBeforeCleanup',
-            'statusAtShutdownAfterCleanup',
+            'statusAtRestPreDispatch',
+            'statusAtWpShutdown',
+            'statusAtReporterBeforeCleanup',
+            'statusAtReporterAfterCleanup',
         ] as $status
     ) {
         $expect(tbl_tickera_runtime_value($report, 'session.' . $status) === PHP_SESSION_NONE, 'session_' . $status);
     }
+    foreach (
+        [
+            'moduleAfterInstall',
+            'moduleAtWpLoadedBefore',
+            'moduleAtWpLoadedReinforce',
+            'moduleAfterWpLoadedReinforce',
+            'moduleAtWpLoadedAfter',
+            'moduleAtRestPreDispatch',
+            'moduleAtWpShutdown',
+            'moduleAtReporterBeforeCleanup',
+            'moduleAtReporterAfterCleanup',
+        ] as $module
+    ) {
+        $expect(tbl_tickera_runtime_value($report, 'session.' . $module) === 'user', 'session_' . $module);
+    }
+    if ($method !== 'OPTIONS') {
+        $expect(
+            tbl_tickera_runtime_value($report, 'session.statusBeforeRestCallback') === PHP_SESSION_NONE,
+            'session_statusBeforeRestCallback'
+        );
+        foreach (['moduleBeforeRestCallback', 'moduleAfterRestReinforce'] as $module) {
+            $expect(tbl_tickera_runtime_value($report, 'session.' . $module) === 'user', 'session_' . $module);
+        }
+    } else {
+        $expect(tbl_tickera_runtime_value($report, 'session.statusBeforeRestCallback') === null, 'options_callback_status');
+        $expect(tbl_tickera_runtime_value($report, 'session.moduleBeforeRestCallback') === null, 'options_callback_module');
+    }
+    $expect(tbl_tickera_runtime_value($report, 'session.cleanupMethod') === 'NONE', 'session_cleanup_method');
+    $expect(tbl_tickera_runtime_value($report, 'session.cleanupSucceeded') === true, 'session_cleanup');
+    $expect(tbl_tickera_runtime_value($report, 'session.firstEvent') === null, 'session_first_event');
+    $expect(tbl_tickera_runtime_value($report, 'session.firstEventStack') === [], 'session_first_event_stack');
     foreach (
         ['open', 'read', 'write', 'destroy', 'close', 'gc', 'createSid', 'validateId', 'updateTimestamp'] as $operation
     ) {
@@ -217,12 +392,15 @@ function tbl_tickera_runtime_validate_report(array $report): array {
     );
     $expect(tbl_tickera_runtime_value($report, 'network.wpHttpAttempts') === 0, 'provider_http_attempt');
     $expect(tbl_tickera_runtime_value($report, 'network.blockedWpHttpAttempts') === 0, 'provider_http_blocked');
+    $expect(tbl_tickera_runtime_value($report, 'network.finalBlockCalls') === 0, 'provider_http_final_blocked');
 
     $query_total = tbl_tickera_runtime_value($report, 'database.totalQueries');
     $query_reads = tbl_tickera_runtime_value($report, 'database.readOnlyQueries');
     $expect(is_int($query_total) && $query_total > 0, 'query_total');
     $expect(is_int($query_reads) && $query_reads >= 0, 'query_reads');
     $expect($query_total === $query_reads, 'query_count_mismatch');
+    $expect(tbl_tickera_runtime_value($report, 'database.finalQueries') === $query_total, 'final_query_count');
+    $expect(tbl_tickera_runtime_value($report, 'database.finalReadOnlyQueries') === $query_total, 'final_read_query_count');
     $expect(
         tbl_tickera_runtime_value($report, 'database.guardScope') === 'WPDB_QUERY_FILTER_ONLY',
         'database_guard_scope'
@@ -237,12 +415,27 @@ function tbl_tickera_runtime_validate_report(array $report): array {
     );
     $expect(tbl_tickera_runtime_value($report, 'database.nonReadAttempts') === 0, 'sql_non_read');
     $expect(tbl_tickera_runtime_value($report, 'database.blockedNonReadAttempts') === 0, 'sql_non_read_blocked');
+    $expect(tbl_tickera_runtime_value($report, 'database.lateNonReadAttempts') === 0, 'sql_late_non_read');
 
     $expect(tbl_tickera_runtime_value($report, 'cache.setTransientAttempts') === 0, 'cache_write');
     if (is_string($route) && tbl_tickera_runtime_is_catalog_route($route)) {
         $expect(tbl_tickera_runtime_value($report, 'cache.declaredPreflightState') === 'HIT', 'cache_not_declared_hot');
         $expect(tbl_tickera_runtime_value($report, 'cache.observedPreflightState') === 'HIT', 'cache_not_hot_before');
         $expect(tbl_tickera_runtime_value($report, 'cache.responseState') === 'HIT', 'cache_not_hot_during');
+        $expect(tbl_tickera_runtime_value($report, 'cache.writeBlockInstalled') === true, 'cache_write_block_missing');
+    } else {
+        $expect(
+            tbl_tickera_runtime_value($report, 'cache.declaredPreflightState') === 'NOT_APPLICABLE',
+            'cache_preflight_non_catalog'
+        );
+        $expect(
+            tbl_tickera_runtime_value($report, 'cache.observedPreflightState') === 'NOT_APPLICABLE',
+            'cache_observed_non_catalog'
+        );
+        $expect(
+            tbl_tickera_runtime_value($report, 'cache.responseState') === 'NOT_APPLICABLE',
+            'cache_response_non_catalog'
+        );
         $expect(tbl_tickera_runtime_value($report, 'cache.writeBlockInstalled') === true, 'cache_write_block_missing');
     }
 
@@ -252,14 +445,37 @@ function tbl_tickera_runtime_validate_report(array $report): array {
     $expect(tbl_tickera_runtime_value($report, 'response.authSemanticsValid') === true, 'auth_semantics');
     $expect(tbl_tickera_runtime_value($report, 'response.headersObservable') === false, 'cli_headers_claim_invalid');
     $expect(tbl_tickera_runtime_value($report, 'response.externalHttpRequired') === true, 'external_http_gate_missing');
+    $expect(tbl_tickera_runtime_value($report, 'externalHttpContract') === [
+        'required'                  => true,
+        'freshProcessPerCase'       => true,
+        'methods'                   => ['GET', 'HEAD', 'OPTIONS'],
+        'urlForms'                  => ['PRETTY', 'REST_ROUTE'],
+        'webSessionModes'           => ['ANONYMOUS', 'AUTHENTICATED'],
+        'corsJwtStatusRequired'     => true,
+        'phpSessionCookieForbidden' => true,
+    ], 'external_http_contract');
+    $expect(tbl_tickera_runtime_value($report, 'report.attempts') === 1, 'report_attempts');
+    $expect(tbl_tickera_runtime_value($report, 'report.emitted') === true, 'report_not_emitted');
+    $expect(tbl_tickera_runtime_value($report, 'report.intendedExitCode') === 0, 'report_exit_code');
+    $expect(tbl_tickera_runtime_value($report, 'reportEmitted') === true, 'report_flag');
+    $expect(tbl_tickera_runtime_value($report, 'decision') === 'COMPONENT_PASS_EXTERNAL_REQUIRED', 'decision');
 
     return array_values(array_unique($failures));
 }
 
 function tbl_tickera_runtime_validator_main(array $arguments): int {
-    if (count($arguments) !== 2) {
-        fwrite(STDERR, "Usage: php validate-tickera-stateless-rest-runtime.php <runtime-report.json>\n");
+    if (count($arguments) !== 3) {
+        fwrite(
+            STDERR,
+            "Usage: php validate-tickera-stateless-rest-runtime.php <runtime-report.json> <expected-invocation-sha256>\n"
+        );
         return 2;
+    }
+
+    $expected_invocation_sha256 = strtolower((string) $arguments[2]);
+    if (! preg_match('/^[a-f0-9]{64}$/D', $expected_invocation_sha256)) {
+        fwrite(STDERR, "STOP expected_invocation_hash_invalid\n");
+        return 1;
     }
 
     $json = @file_get_contents($arguments[1]);
@@ -279,7 +495,7 @@ function tbl_tickera_runtime_validator_main(array $arguments): int {
         return 1;
     }
 
-    $failures = tbl_tickera_runtime_validate_report($report);
+    $failures = tbl_tickera_runtime_validate_report($report, $expected_invocation_sha256);
     if ($failures !== []) {
         fwrite(STDERR, 'STOP ' . implode(',', $failures) . "\n");
         return 1;
