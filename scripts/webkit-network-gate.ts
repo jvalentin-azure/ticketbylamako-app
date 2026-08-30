@@ -421,7 +421,9 @@ export function evaluateWebKitPaymentNoFollow(
     const locationPath = decodePathFailClosed(location.pathname);
     if (
       location.origin !== WEBKIT_ROUTER_STAGING_ORIGIN ||
-      !["/cart/", "/panier/"].includes(locationPath ?? "")
+      !["/cart/", "/panier/"].includes(locationPath ?? "") ||
+      location.search !== "" ||
+      location.hash !== ""
     ) {
       reasons.push("payment_location_mismatch");
     }

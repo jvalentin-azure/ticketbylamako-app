@@ -824,6 +824,18 @@ describe("payment no-follow control", () => {
       reasons: expect.arrayContaining(["payment_location_mismatch"]),
     });
   });
+
+  it("blocks a cart Location carrying query or fragment data", () => {
+    expect(
+      evaluateWebKitPaymentNoFollow({
+        ...clean,
+        location: "/cart/?continue=1#mobile",
+      }),
+    ).toMatchObject({
+      pass: false,
+      reasons: expect.arrayContaining(["payment_location_mismatch"]),
+    });
+  });
 });
 
 describe("WordPress control environment gate", () => {
