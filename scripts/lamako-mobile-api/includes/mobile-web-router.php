@@ -123,9 +123,6 @@ function lamako_mobile_web_target_path() {
     if ( preg_match( '#^(boutique|shop)(/|$)#', $path ) ) {
         return '/mobile/shop';
     }
-    if ( preg_match( '#^(panier|cart)(/|$)#', $path ) ) {
-        return '/mobile/cart';
-    }
     if ( preg_match( '#^(mes-commandes|my-account/orders)(/|$)#', $path ) ) {
         return '/mobile/orders';
     }

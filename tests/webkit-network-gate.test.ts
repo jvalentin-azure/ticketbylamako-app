@@ -12,6 +12,7 @@ import {
   evaluateWebKitClassicControl,
   evaluateWebKitNamedRouteControl,
   evaluateWebKitOnboardingSlide,
+  evaluateWebKitPaymentNoFollow,
   evaluateWebKitRouterReleaseGate,
   evaluateWebKitScenarioGate,
   evaluateWebKitWordPressControlDebt,
@@ -21,6 +22,7 @@ import {
   WEBKIT_ROUTER_ONBOARDING_FIXTURE,
   WEBKIT_REQUIRED_ROUTE_CONTROL_IDS,
   type WebKitNamedRouteControlEvidence,
+  type WebKitPaymentNoFollowEvidence,
   type WebKitScenarioMetrics,
 } from "../scripts/webkit-network-gate";
 
@@ -647,13 +649,28 @@ describe("named mobile router controls", () => {
     "callback-exclusion": "/wp-json/lamako-mobile/v2/payments/orange/callback",
     "encoded-exclusion": "/%2570aiement/",
   } as const;
+  const initialPaths = {
+    "iphone-root": "/",
+    "iphone-events": "/events/",
+    "iphone-shop": "/shop/",
+    "iphone-product": "/product/qa-product-13845/",
+    "direct-mobile": "/mobile/",
+    "admin-exclusion": "/wp-admin/",
+    "login-exclusion": "/wp-login.php",
+    "checkout-exclusion": "/cart/",
+    "callback-exclusion": "/wp-json/lamako-mobile/v2/payments/orange/callback",
+    "encoded-exclusion": "/%2570aiement/",
+  } as const;
 
   const createControl = (
     controlId: (typeof WEBKIT_REQUIRED_ROUTE_CONTROL_IDS)[number],
   ): WebKitNamedRouteControlEvidence => ({
     controlId,
+    initialUrl: `${expectedOrigin}${initialPaths[controlId]}`,
     finalUrl: `${expectedOrigin}${paths[controlId]}`,
-    expectedOrigin,
+    userAgentClass: "iphone",
+    viewportWidth: 393,
+    initialRouterMarkerCount: controlId.startsWith("iphone-") ? 1 : 0,
     httpStatus: 200,
     routerReplacementAttempts: controlId.startsWith("iphone-") ? 1 : 0,
     mutationAttempts: 0,
@@ -704,6 +721,39 @@ describe("named mobile router controls", () => {
     });
   });
 
+  it("requires the exact double-encoded exclusion fixture", () => {
+    expect(
+      evaluateWebKitNamedRouteControl({
+        ...createControl("encoded-exclusion"),
+        initialUrl: `${expectedOrigin}/cart/`,
+        finalUrl: `${expectedOrigin}/cart/`,
+      }),
+    ).toMatchObject({
+      pass: false,
+      reasons: expect.arrayContaining([
+        "encoded_exclusion_contract_mismatch",
+        "route_control_initial_path_mismatch",
+      ]),
+    });
+  });
+
+  it.each([
+    ["admin boundary", "admin-exclusion", "/wp-admin-evil/"],
+    [
+      "callback boundary",
+      "callback-exclusion",
+      "/wp-json/not-a-callback-placeholder/",
+    ],
+  ] as const)("rejects a broad %s match", (_name, controlId, path) => {
+    expect(
+      evaluateWebKitNamedRouteControl({
+        ...createControl(controlId),
+        initialUrl: `${expectedOrigin}${path}`,
+        finalUrl: `${expectedOrigin}${path}`,
+      }).pass,
+    ).toBe(false);
+  });
+
   it("blocks replacement attempts on every excluded or direct route", () => {
     expect(
       evaluateWebKitNamedRouteControl({
@@ -727,6 +777,51 @@ describe("named mobile router controls", () => {
     ).toMatchObject({
       pass: false,
       reasons: expect.arrayContaining(["route_control_identity_unknown"]),
+    });
+  });
+});
+
+describe("payment no-follow control", () => {
+  const clean: WebKitPaymentNoFollowEvidence = {
+    requestedUrl: "https://staging.ticketbylamako.com/paiement/",
+    method: "GET",
+    status: 302,
+    location: "/cart/",
+    responseBodyBytes: 0,
+    responseBodyContainsRouter: false,
+    routerMarkerCount: 0,
+    mutationAttempts: 0,
+    transmittedMutations: 0,
+  };
+
+  it("passes only the exact empty-cart redirect without router evidence", () => {
+    expect(evaluateWebKitPaymentNoFollow(clean)).toEqual({
+      pass: true,
+      reasons: [],
+    });
+  });
+
+  it.each([
+    ["status", 200, "payment_status_mismatch"],
+    ["responseBodyContainsRouter", true, "payment_body_contains_router"],
+    ["routerMarkerCount", 1, "payment_router_marker_present"],
+    ["mutationAttempts", 1, "payment_mutation_attempt"],
+    ["transmittedMutations", 1, "payment_mutation_transmitted"],
+  ] as const)("blocks invalid %s", (field, value, reason) => {
+    expect(evaluateWebKitPaymentNoFollow({ ...clean, [field]: value })).toEqual(
+      { pass: false, reasons: [reason] },
+    );
+  });
+
+  it("blocks off-origin and non-cart redirect locations", () => {
+    expect(
+      evaluateWebKitPaymentNoFollow({
+        ...clean,
+        location: "https://www.ticketbylamako.com/mobile/",
+      }),
+    ).toMatchObject({
+      pass: false,
+      reasons: expect.arrayContaining(["payment_location_mismatch"]),
     });
   });
 });
@@ -828,11 +923,26 @@ describe("composed mobile router release gate", () => {
     "callback-exclusion": "/wp-json/lamako-mobile/v2/payments/orange/callback",
     "encoded-exclusion": "/%2570aiement/",
   } as const;
+  const routeInitialPaths = {
+    "iphone-root": "/",
+    "iphone-events": "/events/",
+    "iphone-shop": "/shop/",
+    "iphone-product": "/product/qa-product-13845/",
+    "direct-mobile": "/mobile/",
+    "admin-exclusion": "/wp-admin/",
+    "login-exclusion": "/wp-login.php",
+    "checkout-exclusion": "/cart/",
+    "callback-exclusion": "/wp-json/lamako-mobile/v2/payments/orange/callback",
+    "encoded-exclusion": "/%2570aiement/",
+  } as const;
   const routeControls = WEBKIT_REQUIRED_ROUTE_CONTROL_IDS.map(
     (controlId): WebKitNamedRouteControlEvidence => ({
       controlId,
+      initialUrl: `https://staging.ticketbylamako.com${routeInitialPaths[controlId]}`,
       finalUrl: `https://staging.ticketbylamako.com${routePaths[controlId]}`,
-      expectedOrigin: "https://staging.ticketbylamako.com",
+      userAgentClass: "iphone",
+      viewportWidth: 393,
+      initialRouterMarkerCount: controlId.startsWith("iphone-") ? 1 : 0,
       httpStatus: 200,
       routerReplacementAttempts: controlId.startsWith("iphone-") ? 1 : 0,
       mutationAttempts: 0,
@@ -860,6 +970,17 @@ describe("composed mobile router release gate", () => {
     ],
     classicControls: controls,
     routeControls,
+    paymentNoFollow: {
+      requestedUrl: "https://staging.ticketbylamako.com/paiement/",
+      method: "GET" as const,
+      status: 302,
+      location: "/cart/",
+      responseBodyBytes: 0,
+      responseBodyContainsRouter: false,
+      routerMarkerCount: 0,
+      mutationAttempts: 0,
+      transmittedMutations: 0,
+    },
     wordpressControl: {
       cafeAsset403: 0,
       otherHttpErrors: 0,
@@ -892,6 +1013,20 @@ describe("composed mobile router release gate", () => {
         "onboarding:2:evidence_count_invalid",
         "classic:payment-return:evidence_count_invalid",
         "route:encoded-exclusion:evidence_count_invalid",
+      ]),
+    });
+  });
+
+  it("fails closed when the payment no-follow proof is invalid", () => {
+    expect(
+      evaluateWebKitRouterReleaseGate({
+        ...evidence,
+        paymentNoFollow: { ...evidence.paymentNoFollow, status: 200 },
+      }),
+    ).toMatchObject({
+      pass: false,
+      reasons: expect.arrayContaining([
+        "payment-no-follow:payment_status_mismatch",
       ]),
     });
   });

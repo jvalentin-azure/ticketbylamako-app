@@ -148,7 +148,6 @@ describe("mobile web router behavior", () => {
     expect(renderRouter("/").target).toBe("/mobile/");
     expect(renderRouter("/evenements/").target).toBe("/mobile/events");
     expect(renderRouter("/boutique/").target).toBe("/mobile/shop");
-    expect(renderRouter("/panier/").target).toBe("/mobile/cart");
     expect(renderRouter("/mon-compte/").target).toBe("/mobile/profile");
     expect(renderRouter("/concert/", 100, "tc_events", 13771).target).toBe(
       "/mobile/event/13771",

@@ -197,8 +197,11 @@ export type WebKitNamedRouteControlId =
 
 export type WebKitNamedRouteControlEvidence = {
   controlId: WebKitNamedRouteControlId;
+  initialUrl: string;
   finalUrl: string;
-  expectedOrigin: string;
+  userAgentClass: "iphone";
+  viewportWidth: number;
+  initialRouterMarkerCount: number;
   httpStatus: number;
   routerReplacementAttempts: number;
   mutationAttempts: number;
@@ -207,6 +210,21 @@ export type WebKitNamedRouteControlEvidence = {
   pageErrors: number;
   serviceWorkerRegistrations: number;
 };
+
+export type WebKitPaymentNoFollowEvidence = {
+  requestedUrl: string;
+  method: "GET";
+  status: number;
+  location: string;
+  responseBodyBytes: number;
+  responseBodyContainsRouter: boolean;
+  routerMarkerCount: number;
+  mutationAttempts: number;
+  transmittedMutations: number;
+};
+
+export const WEBKIT_ROUTER_STAGING_ORIGIN =
+  "https://staging.ticketbylamako.com";
 
 export const WEBKIT_REQUIRED_ROUTE_CONTROL_IDS = Object.freeze([
   "iphone-root",
@@ -229,25 +247,38 @@ export function evaluateWebKitNamedRouteControl(
     reasons.push("route_control_identity_unknown");
   }
 
+  let initialUrl: URL | null = null;
   let url: URL | null = null;
-  let origin: URL | null = null;
   try {
+    initialUrl = new URL(evidence.initialUrl);
     url = new URL(evidence.finalUrl);
-    origin = new URL(evidence.expectedOrigin);
   } catch {
     reasons.push("route_control_url_invalid");
   }
 
   let path: string | null = null;
-  if (url && origin) {
+  let initialPath: string | null = null;
+  if (url && initialUrl) {
     if (
-      url.origin !== origin.origin ||
-      !["http:", "https:"].includes(url.protocol)
+      url.origin !== WEBKIT_ROUTER_STAGING_ORIGIN ||
+      initialUrl.origin !== WEBKIT_ROUTER_STAGING_ORIGIN ||
+      url.protocol !== "https:" ||
+      initialUrl.protocol !== "https:"
     ) {
       reasons.push("route_control_origin_mismatch");
     }
     path = decodePathFailClosed(url.pathname);
+    initialPath = decodePathFailClosed(initialUrl.pathname);
     if (path === null) reasons.push("route_control_path_invalid");
+    if (initialPath === null)
+      reasons.push("route_control_initial_path_invalid");
+  }
+
+  if (evidence.userAgentClass !== "iphone") {
+    reasons.push("route_control_user_agent_mismatch");
+  }
+  if (evidence.viewportWidth !== 393) {
+    reasons.push("route_control_viewport_mismatch");
   }
 
   const exactMobilePaths: Partial<Record<WebKitNamedRouteControlId, string>> = {
@@ -264,7 +295,7 @@ export function evaluateWebKitNamedRouteControl(
   if (
     path &&
     evidence.controlId === "admin-exclusion" &&
-    !(path.startsWith("/wp-admin") || path === "/wp-login.php")
+    !(path === "/wp-admin" || path.startsWith("/wp-admin/"))
   ) {
     reasons.push("admin_exclusion_contract_mismatch");
   }
@@ -287,22 +318,47 @@ export function evaluateWebKitNamedRouteControl(
   if (
     path &&
     evidence.controlId === "callback-exclusion" &&
-    !(
-      path.startsWith("/wc-api/") ||
-      path.startsWith("/lamako-mobile/") ||
-      (path.startsWith("/wp-json/") && path.includes("callback"))
-    )
+    path.replace(/\/+$/, "") !==
+      "/wp-json/lamako-mobile/v2/payments/orange/callback"
   ) {
     reasons.push("callback_exclusion_contract_mismatch");
   }
   if (
     path &&
     evidence.controlId === "encoded-exclusion" &&
-    !["/paiement", "/checkout", "/checkout-2", "/cart", "/panier"].some(
-      (prefix) => path === prefix || path.startsWith(`${prefix}/`),
-    )
+    (url?.pathname.toLowerCase() !== "/%2570aiement/" || path !== "/paiement/")
   ) {
     reasons.push("encoded_exclusion_contract_mismatch");
+  }
+
+  if (initialPath) {
+    const initialPathWithoutTrailingSlash =
+      initialPath === "/" ? initialPath : initialPath.replace(/\/+$/, "");
+    const initialContracts: Partial<
+      Record<WebKitNamedRouteControlId, (candidate: string) => boolean>
+    > = {
+      "iphone-root": (candidate) => candidate === "/",
+      "iphone-events": (candidate) =>
+        candidate === "/events" || candidate === "/evenements",
+      "iphone-shop": (candidate) =>
+        candidate === "/shop" || candidate === "/boutique",
+      "iphone-product": (candidate) =>
+        /^\/(?:product|produit)\/[^/]+$/.test(candidate),
+      "direct-mobile": (candidate) => candidate === "/mobile",
+      "admin-exclusion": (candidate) => candidate === "/wp-admin",
+      "login-exclusion": (candidate) => candidate === "/wp-login.php",
+      "checkout-exclusion": (candidate) => candidate === "/cart",
+      "callback-exclusion": (candidate) =>
+        candidate === "/wp-json/lamako-mobile/v2/payments/orange/callback",
+    };
+    const initialContract = initialContracts[evidence.controlId];
+    if (
+      evidence.controlId === "encoded-exclusion"
+        ? initialUrl?.pathname.toLowerCase() !== "/%2570aiement/"
+        : initialContract && !initialContract(initialPathWithoutTrailingSlash)
+    ) {
+      reasons.push("route_control_initial_path_mismatch");
+    }
   }
 
   if (
@@ -331,7 +387,58 @@ export function evaluateWebKitNamedRouteControl(
   } else if (evidence.routerReplacementAttempts !== 0) {
     reasons.push("excluded_route_replacement_unexpected");
   }
+  const expectedMarkerCount = evidence.controlId.startsWith("iphone-") ? 1 : 0;
+  if (evidence.initialRouterMarkerCount !== expectedMarkerCount) {
+    reasons.push("route_control_marker_mismatch");
+  }
 
+  return { pass: reasons.length === 0, reasons };
+}
+
+export function evaluateWebKitPaymentNoFollow(
+  evidence: WebKitPaymentNoFollowEvidence,
+): { pass: boolean; reasons: string[] } {
+  const reasons: string[] = [];
+  let requestedUrl: URL | null = null;
+  let location: URL | null = null;
+  try {
+    requestedUrl = new URL(evidence.requestedUrl);
+    location = new URL(evidence.location, requestedUrl);
+  } catch {
+    reasons.push("payment_redirect_url_invalid");
+  }
+  if (
+    !requestedUrl ||
+    requestedUrl.origin !== WEBKIT_ROUTER_STAGING_ORIGIN ||
+    requestedUrl.pathname !== "/paiement/" ||
+    requestedUrl.search !== ""
+  ) {
+    reasons.push("payment_request_contract_mismatch");
+  }
+  if (evidence.method !== "GET") reasons.push("payment_method_mismatch");
+  if (evidence.status !== 302) reasons.push("payment_status_mismatch");
+  if (location) {
+    const locationPath = decodePathFailClosed(location.pathname);
+    if (
+      location.origin !== WEBKIT_ROUTER_STAGING_ORIGIN ||
+      !["/cart/", "/panier/"].includes(locationPath ?? "")
+    ) {
+      reasons.push("payment_location_mismatch");
+    }
+  }
+  if (
+    !Number.isInteger(evidence.responseBodyBytes) ||
+    evidence.responseBodyBytes < 0
+  ) {
+    reasons.push("payment_body_size_invalid");
+  }
+  if (evidence.responseBodyContainsRouter !== false)
+    reasons.push("payment_body_contains_router");
+  if (evidence.routerMarkerCount !== 0)
+    reasons.push("payment_router_marker_present");
+  if (evidence.mutationAttempts !== 0) reasons.push("payment_mutation_attempt");
+  if (evidence.transmittedMutations !== 0)
+    reasons.push("payment_mutation_transmitted");
   return { pass: reasons.length === 0, reasons };
 }
 
@@ -637,6 +744,7 @@ export type WebKitRouterReleaseEvidence = {
   onboardingSlides: WebKitOnboardingSlideEvidence[];
   classicControls: WebKitClassicControlEvidence[];
   routeControls: WebKitNamedRouteControlEvidence[];
+  paymentNoFollow: WebKitPaymentNoFollowEvidence;
   wordpressControl: WebKitWordPressControlDebt;
 };
 
@@ -745,6 +853,12 @@ export function evaluateWebKitRouterReleaseGate(
       ),
     );
   }
+
+  reasons.push(
+    ...evaluateWebKitPaymentNoFollow(evidence.paymentNoFollow).reasons.map(
+      (reason) => `payment-no-follow:${reason}`,
+    ),
+  );
 
   reasons.push(
     ...evaluateWebKitWordPressControlDebt(
