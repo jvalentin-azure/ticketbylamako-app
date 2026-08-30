@@ -77,21 +77,21 @@ cache object is in scope.
 
 ## Expected baseline to revalidate
 
-| Surface                       | Expected SHA-256                                                   | Expected owner/mode              |
-| ----------------------------- | ------------------------------------------------------------------ | -------------------------------- |
-| Router                        | `5733800c463340be519e9661c6851e447ef617983df861b0a1d398dda7f92232` | `master_nqpwygdfqp:www-data:644` |
-| `wp-config.php`               | `3e1b6e68874f3784e35df8944a9e96eef82f318736eaa3c4ad010e3290f46227` | `master_nqpwygdfqp:www-data:664` |
-| Root Breeze cache             | `d96488e62537b1ec9465610ab8a6f1cfcee68b06a527da9546865f8f1b15a750` | `wvvtwdcenn:www-data:664`        |
-| Mobile v2 commerce neighbor   | `4417aa27e7a39a99769e667268b406354deabe32bbbd05e28e5d9a27ee4f53fa` | revalidate without modification  |
-| Mobile API bootstrap neighbor | `0613564f2be9037af5d48020045ae9167fed278c3f76131d7d79ef229bf46a11` | revalidate without modification  |
-| REST/cookie MU guard neighbor | `ebed8d97dd9336dc6332844fc43ef417db1eb929f344d1f15c950f559a32d06e` | revalidate without modification  |
+| Surface                                                                                             | Expected SHA-256                                                   | Expected owner/mode              |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | -------------------------------- |
+| Router                                                                                              | `5733800c463340be519e9661c6851e447ef617983df861b0a1d398dda7f92232` | `master_nqpwygdfqp:www-data:644` |
+| `wp-config.php`                                                                                     | `3e1b6e68874f3784e35df8944a9e96eef82f318736eaa3c4ad010e3290f46227` | `master_nqpwygdfqp:www-data:664` |
+| Root Breeze cache                                                                                   | `d96488e62537b1ec9465610ab8a6f1cfcee68b06a527da9546865f8f1b15a750` | `wvvtwdcenn:www-data:664`        |
+| Mobile v2 commerce neighbor                                                                         | `4417aa27e7a39a99769e667268b406354deabe32bbbd05e28e5d9a27ee4f53fa` | revalidate without modification  |
+| Active Mobile API bootstrap neighbor (`wp-content/plugins/lamako-mobile-api/lamako-mobile-api.php`) | `0613564f2be9037af5d48020045ae9167fed278c3f76131d7d79ef229bf46a11` | revalidate without modification  |
+| REST/cookie MU guard neighbor                                                                       | `ebed8d97dd9336dc6332844fc43ef417db1eb929f344d1f15c950f559a32d06e` | revalidate without modification  |
 
 Both mobile routing flags must still be absent before R2. The expected
 candidate configuration adds only:
 
 ```php
 define( 'LAMAKO_MOBILE_WEB_ENABLED', true );
-define( 'LAMAKO_MOBILE_WEB_ROLLOUT', 100 );
+define( 'LAMAKO_MOBILE_WEB_ROLLOUT_PERCENT', 100 );
 ```
 
 Expected business invariants are orders `715 / max 13357`, HPOS
@@ -150,8 +150,9 @@ Only after that distinct GO:
    hash is still the expected value. Preserve the exact rollback copy first.
    Regenerate it through the permitted read-only root request; do not touch any
    other cache entry.
-6. Rehash both active files, prove flags `true/100`, rerun lint and the router
-   harness, then start the GET-only smoke and WebKit matrix.
+6. Rehash both active files, prove `LAMAKO_MOBILE_WEB_ENABLED=true` and
+   `LAMAKO_MOBILE_WEB_ROLLOUT_PERCENT=100`, rerun lint and the router harness,
+   then start the GET-only smoke and WebKit matrix.
 
 Rollback order is configuration, exact root cache, then router. Each restored
 file must match its private snapshot SHA-256, owner and mode before the lock is
