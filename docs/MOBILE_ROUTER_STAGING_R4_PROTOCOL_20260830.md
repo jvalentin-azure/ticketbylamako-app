@@ -10,16 +10,17 @@ explicit GO after its postflight. Production is excluded.
 
 ## Frozen local candidates
 
-- router and release-gate candidate commit:
-  `c1d7b569446603a5dfc57bc914bf6e4824ce6f9d` (descendant of router hardening
-  `c8fbf9a7ccdad4f7df7796e00846d68c76922c21` and matrix tooling
-  `17b6d128b869198490df2cfc3e165545c7254613`);
+- frozen candidate HEAD:
+  `44a4f8fcdc59ced0becf6255ec3ccf1f0b14c632`;
+- router implementation commit:
+  `c1d7b569446603a5dfc57bc914bf6e4824ce6f9d` (descendant of hardening
+  `c8fbf9a7ccdad4f7df7796e00846d68c76922c21`);
 - session-source attribution commit:
   `8da20ee4b7c1371edbaaf82834100d819abfc253`;
 - router SHA-256:
   `61AA044680527CFB0158C09227BE91EC8573AAFC07B66D74117D61BAD95F64C1`;
 - WebKit gate SHA-256:
-  `59F9796649BB6C8707323ABFA6D996D72094EBD2B04DA991A04ADBC4ECF9224C`;
+  `E0F34C8416BA5FCA0102AAF4C91EF92B6F00E3948F12F4666E406DD450C3E671`;
 - expected configuration candidate derived from the restored baseline with only
   the two rollout flags:
   `58ef28151966c341a2bdd58642a0230088d79c52bb17285bd4b0c9b477cd21fd`.
@@ -45,21 +46,21 @@ revalidated rather than assumed:
 
 These paths are definitions only and have not been created:
 
-- owner: `tbl-mobile-router-staging-c1d7b56-r4`;
+- owner: `tbl-mobile-router-staging-44a4f8f-r4`;
 - manifest:
-  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/private_html/tbl-deploy/tbl-mobile-router-staging-20260830T182600Z-c1d7b56-r4/`;
+  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/private_html/tbl-deploy/tbl-mobile-router-staging-20260830T184100Z-44a4f8f-r4/`;
 - lock:
   `/home/1525593.cloudwaysapps.com/wvvtwdcenn/private_html/tbl-deploy/.mono-writer.lock/`;
 - router next:
-  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/.mobile-web-router-next-c1d7b56-r4.php`;
+  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/.mobile-web-router-next-44a4f8f-r4.php`;
 - router rollback-next:
-  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/.mobile-web-router-rollback-next-c1d7b56-r4.php`;
+  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/.mobile-web-router-rollback-next-44a4f8f-r4.php`;
 - configuration sentinel:
-  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/.tbl-config-sentinel-c1d7b56-r4.txt`;
+  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/.tbl-config-sentinel-44a4f8f-r4.txt`;
 - configuration next:
-  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/.wp-config-next-c1d7b56-r4.php`;
+  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/.wp-config-next-44a4f8f-r4.php`;
 - configuration rollback-next:
-  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/.wp-config-rollback-next-c1d7b56-r4.php`;
+  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/.wp-config-rollback-next-44a4f8f-r4.php`;
 - all snapshots and rollback material live only inside the private manifest,
   mode `0600` where supported.
 
@@ -123,7 +124,10 @@ Only a later explicit acquisition GO may authorize this order:
    inventory and snapshots. Unknown cache structures, an unqualified edge
    cache or any hash drift stops and rolls back;
 10. atomically swap configuration last, then verify flags, owners, modes and
-    first-hit plus warm-hit behavior for every qualified URL;
+    rebuild the complete cache inventory immediately. Delete only a
+    pre-activation variant whose hash is in the sealed inventory; retain only
+    a newly generated candidate-marker variant. Any unknown or mixed variant
+    stops and rolls back before first-hit plus warm-hit qualification;
 11. execute the read-only smokes and WebKit matrix below;
 12. on PASS, seal all evidence and retain the private rollback; on any failure,
     rollback immediately in the reverse safety order:
@@ -169,10 +173,11 @@ Required evidence exactly once:
 The no-follow payment evidence is a mandatory typed component of the single
 release verdict: exact staging `/paiement/`, method GET, HTTP 302, same-origin
 Location `/cart/` or `/panier/`, non-negative body size, no router marker/body,
-and zero attempted or transmitted mutation. Each named route also seals its
-exact initial URL contract, fixed staging origin, iPhone UA class, 393 px
-viewport and expected initial marker count; the encoded case must use the exact
-raw `/%2570aiement/` fixture.
+empty query/fragment, and zero attempted or transmitted mutation. Each named
+route also seals its exact initial URL contract, fixed staging origin, iPhone
+UA class plus raw iPhone/AppleWebKit/Mobile UA, 393 px viewport and expected
+initial marker count. Product qualification starts from the pinned
+`/?p=13845`; the encoded case must use the exact raw `/%2570aiement/` fixture.
 
 Every URL must be absolute, same-origin, normalized and decoded twice by the
 gate. Unknown/extra/missing slide or control identities, string booleans,
