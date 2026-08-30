@@ -5,9 +5,12 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  attributeWebKitRouterEvidence,
   classifyWebKitNetworkObservation,
   evaluateWebKitScenarioGate,
+  inspectWebKitEventContractText,
   runWithWebKitEvidence,
+  WEBKIT_ROUTER_EVENT_FIXTURE,
   type WebKitScenarioMetrics,
 } from "../scripts/webkit-network-gate";
 
@@ -146,6 +149,29 @@ describe("WebKit network release gate", () => {
     },
   );
 
+  it("accepts a read-only cancellation only during an explicit navigation transition", () => {
+    const observation = {
+      method: "GET",
+      url: "https://staging.ticketbylamako.com/mobile/event/13459",
+      resourceType: "image",
+      status: null,
+      errorText: "Load request cancelled",
+    };
+
+    expect(
+      classifyWebKitNetworkObservation({
+        ...observation,
+        failureStep: "navigation-transition",
+      }).blocking,
+    ).toBe(false);
+    expect(
+      classifyWebKitNetworkObservation({
+        ...observation,
+        failureStep: "event-detail",
+      }).blocking,
+    ).toBe(true);
+  });
+
   it.each(["DNS lookup failed", "Connection reset", "Connection refused"])(
     "blocks transport failure: %s",
     (errorText) => {
@@ -161,6 +187,113 @@ describe("WebKit network release gate", () => {
       ).toMatchObject({ failureClass: "network", blocking: true });
     },
   );
+});
+
+describe("mobile router evidence attribution", () => {
+  const forbiddenWordPressAsset = {
+    method: "GET",
+    url: "https://staging.ticketbylamako.com/wp-content/plugins/cafe-events-carousel/assets/front.js",
+    resourceType: "script",
+    status: 403,
+    errorText: null,
+    failureStep: "desktop-control",
+  };
+
+  it("keeps a WordPress control-page 403 visible without blaming the candidate", () => {
+    expect(
+      attributeWebKitRouterEvidence(
+        forbiddenWordPressAsset,
+        "wordpress-control",
+      ),
+    ).toMatchObject({
+      releaseImpact: "wordpress-control-debt",
+      classification: { failureClass: "HTTP", blocking: true },
+    });
+  });
+
+  it("blocks the same 403 when it belongs to the mobile app scenario", () => {
+    expect(
+      attributeWebKitRouterEvidence(forbiddenWordPressAsset, "mobile-app"),
+    ).toMatchObject({ releaseImpact: "candidate-blocker" });
+  });
+
+  it("attributes intercepted mutations to the page surface that attempted them", () => {
+    const mutation = {
+      method: "POST",
+      url: "https://staging.ticketbylamako.com/",
+      resourceType: "xhr",
+      status: null,
+      errorText: "Blocked by Web Inspector",
+      failureStep: "desktop-control",
+    };
+
+    expect(
+      attributeWebKitRouterEvidence(mutation, "wordpress-control"),
+    ).toMatchObject({ releaseImpact: "wordpress-control-debt" });
+    expect(attributeWebKitRouterEvidence(mutation, "mobile-app")).toMatchObject(
+      { releaseImpact: "candidate-blocker" },
+    );
+  });
+
+  it("reports correlated navigation cancellations without hiding real failures", () => {
+    expect(
+      attributeWebKitRouterEvidence(
+        {
+          method: "GET",
+          url: "https://staging.ticketbylamako.com/mobile/app.js",
+          resourceType: "script",
+          status: null,
+          errorText: "Load request cancelled",
+          failureStep: "navigation-transition",
+        },
+        "mobile-app",
+      ),
+    ).toMatchObject({ releaseImpact: "expected-navigation" });
+  });
+});
+
+describe("mobile router event fixture", () => {
+  it("pins the event contract that previously passed the exact bundle QA", () => {
+    expect(WEBKIT_ROUTER_EVENT_FIXTURE).toEqual({
+      id: 13459,
+      path: "/mobile/event/13459",
+      title: "Lamako Acoustique #2 – Olombelo Ricky",
+    });
+    expect(
+      inspectWebKitEventContractText(
+        "Lamako Acoustique #2 – Olombelo Ricky Date 27 juin 2026",
+      ),
+    ).toEqual({
+      titlePresent: true,
+      date27JunePresent: true,
+      publicationDate3MayPresent: false,
+      pass: true,
+    });
+  });
+
+  it.each([
+    ["wrong event", "Another event Date 27 juin 2026"],
+    [
+      "publication date",
+      "Lamako Acoustique #2 – Olombelo Ricky Date 27 juin 2026 Publié le 3 mai 2026",
+    ],
+    ["missing date", "Lamako Acoustique #2 – Olombelo Ricky"],
+  ])("fails closed for %s", (_name, text) => {
+    expect(inspectWebKitEventContractText(text).pass).toBe(false);
+  });
+
+  it("does not confuse 13 May or 127 June with the gated dates", () => {
+    expect(
+      inspectWebKitEventContractText(
+        "Lamako Acoustique #2 – Olombelo Ricky Date 127 juin 2026, publié le 13 mai 2026",
+      ),
+    ).toEqual({
+      titlePresent: true,
+      date27JunePresent: false,
+      publicationDate3MayPresent: false,
+      pass: false,
+    });
+  });
 });
 
 describe("WebKit evidence persistence", () => {

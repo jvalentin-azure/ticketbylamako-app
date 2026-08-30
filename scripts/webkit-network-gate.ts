@@ -34,7 +34,25 @@ const readOnlyMethods = new Set(["GET", "HEAD", "OPTIONS"]);
 const expectedCancellationSteps = new Set([
   "initial-navigation",
   "deep-refresh",
+  "navigation-transition",
 ]);
+
+export const WEBKIT_ROUTER_EVENT_FIXTURE = Object.freeze({
+  id: 13459,
+  path: "/mobile/event/13459",
+  title: "Lamako Acoustique #2 – Olombelo Ricky",
+});
+
+export type WebKitRouterScenarioSurface = "mobile-app" | "wordpress-control";
+
+export type WebKitRouterEvidenceAttribution = {
+  classification: WebKitNetworkClassification;
+  releaseImpact:
+    | "candidate-blocker"
+    | "wordpress-control-debt"
+    | "expected-navigation"
+    | "none";
+};
 
 function classifySurface(
   observation: WebKitNetworkObservation,
@@ -90,6 +108,58 @@ export function classifyWebKitNetworkObservation(
     return { surface, failureClass: "network", blocking: true };
   }
   return { surface, failureClass: "none", blocking: false };
+}
+
+/**
+ * Separates failures owned by the mobile candidate from issues observed on
+ * WordPress control pages. This does not relax the strict scenario gate: it
+ * only prevents an unrelated baseline issue from being attributed to the
+ * router or mobile bundle.
+ */
+export function attributeWebKitRouterEvidence(
+  observation: WebKitNetworkObservation,
+  scenarioSurface: WebKitRouterScenarioSurface,
+): WebKitRouterEvidenceAttribution {
+  const classification = classifyWebKitNetworkObservation(observation);
+  const isMutation = !readOnlyMethods.has(observation.method.toUpperCase());
+
+  if (isMutation || classification.blocking) {
+    return {
+      classification,
+      releaseImpact:
+        scenarioSurface === "mobile-app"
+          ? "candidate-blocker"
+          : "wordpress-control-debt",
+    };
+  }
+
+  if (classification.failureClass === "navigation-abort") {
+    return { classification, releaseImpact: "expected-navigation" };
+  }
+
+  return { classification, releaseImpact: "none" };
+}
+
+export type WebKitEventContractEvidence = {
+  titlePresent: boolean;
+  date27JunePresent: boolean;
+  publicationDate3MayPresent: boolean;
+  pass: boolean;
+};
+
+export function inspectWebKitEventContractText(
+  text: string,
+): WebKitEventContractEvidence {
+  const titlePresent = text.includes(WEBKIT_ROUTER_EVENT_FIXTURE.title);
+  const date27JunePresent = /(?:^|\D)27\s+juin(?:\s+2026)?(?:\D|$)/i.test(text);
+  const publicationDate3MayPresent =
+    /(?:^|\D)3\s+mai(?:\s+2026)?(?:\D|$)/i.test(text);
+  return {
+    titlePresent,
+    date27JunePresent,
+    publicationDate3MayPresent,
+    pass: titlePresent && date27JunePresent && !publicationDate3MayPresent,
+  };
 }
 
 export type WebKitScenarioMetrics = {
