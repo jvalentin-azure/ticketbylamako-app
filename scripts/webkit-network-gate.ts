@@ -43,6 +43,43 @@ export const WEBKIT_ROUTER_EVENT_FIXTURE = Object.freeze({
   title: "Lamako Acoustique #2 – Olombelo Ricky",
 });
 
+/**
+ * Content assertions run after the first-use flow. A fresh browser context
+ * without this state renders the onboarding shell instead of mounting the
+ * requested Expo route, so no event API request is expected yet.
+ *
+ * The first-use/onboarding journey remains a separate scenario and must not
+ * use this seed.
+ */
+export const WEBKIT_ROUTER_ONBOARDING_FIXTURE = Object.freeze({
+  storageKey: "@ticketbylamako/onboarding-version",
+  version: "2",
+  skipLabel: "Passer",
+});
+
+export type WebKitContentBootstrapEvidence = {
+  onboardingAssetRequests: number;
+  eventApiRequests: number;
+  eventContractReached: boolean;
+};
+
+export type WebKitContentBootstrapDiagnosis =
+  | "ready"
+  | "blocked-by-onboarding"
+  | "api-not-started"
+  | "event-contract-failure";
+
+export function diagnoseWebKitContentBootstrap(
+  evidence: WebKitContentBootstrapEvidence,
+): WebKitContentBootstrapDiagnosis {
+  if (evidence.onboardingAssetRequests > 0 && evidence.eventApiRequests === 0) {
+    return "blocked-by-onboarding";
+  }
+  if (evidence.eventApiRequests === 0) return "api-not-started";
+  if (evidence.eventContractReached) return "ready";
+  return "event-contract-failure";
+}
+
 export type WebKitRouterScenarioSurface = "mobile-app" | "wordpress-control";
 
 export type WebKitRouterEvidenceAttribution = {

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -7,10 +8,12 @@ import { describe, expect, it } from "vitest";
 import {
   attributeWebKitRouterEvidence,
   classifyWebKitNetworkObservation,
+  diagnoseWebKitContentBootstrap,
   evaluateWebKitScenarioGate,
   inspectWebKitEventContractText,
   runWithWebKitEvidence,
   WEBKIT_ROUTER_EVENT_FIXTURE,
+  WEBKIT_ROUTER_ONBOARDING_FIXTURE,
   type WebKitScenarioMetrics,
 } from "../scripts/webkit-network-gate";
 
@@ -148,6 +151,19 @@ describe("WebKit network release gate", () => {
       ).toBe(true);
     },
   );
+
+  it("keeps a cancellation blocking after an HTTP response was observed", () => {
+    expect(
+      classifyWebKitNetworkObservation({
+        method: "GET",
+        url: "https://staging.ticketbylamako.com/mobile/event/13459",
+        resourceType: "document",
+        status: 200,
+        errorText: "Load request cancelled",
+        failureStep: "initial-navigation",
+      }),
+    ).toMatchObject({ failureClass: "navigation-abort", blocking: true });
+  });
 
   it("accepts a read-only cancellation only during an explicit navigation transition", () => {
     const observation = {
@@ -293,6 +309,70 @@ describe("mobile router event fixture", () => {
       publicationDate3MayPresent: false,
       pass: false,
     });
+  });
+});
+
+describe("mobile router content bootstrap", () => {
+  it("pins the same onboarding state as the application bundle", () => {
+    expect(WEBKIT_ROUTER_ONBOARDING_FIXTURE).toEqual({
+      storageKey: "@ticketbylamako/onboarding-version",
+      version: "2",
+      skipLabel: "Passer",
+    });
+
+    const layout = readFileSync(path.resolve("app/_layout.tsx"), "utf8");
+    expect(layout).toContain('"@ticketbylamako/onboarding-version"');
+    expect(layout).toContain('const ONBOARDING_VERSION = "2"');
+  });
+
+  it.each([
+    [
+      "ready",
+      {
+        onboardingAssetRequests: 0,
+        eventApiRequests: 2,
+        eventContractReached: true,
+      },
+      "ready",
+    ],
+    [
+      "fresh context stopped on onboarding",
+      {
+        onboardingAssetRequests: 2,
+        eventApiRequests: 0,
+        eventContractReached: false,
+      },
+      "blocked-by-onboarding",
+    ],
+    [
+      "application mounted without starting an API",
+      {
+        onboardingAssetRequests: 0,
+        eventApiRequests: 0,
+        eventContractReached: false,
+      },
+      "api-not-started",
+    ],
+    [
+      "API returned but the contract did not render",
+      {
+        onboardingAssetRequests: 0,
+        eventApiRequests: 2,
+        eventContractReached: false,
+      },
+      "event-contract-failure",
+    ],
+    [
+      "inconsistent cached text without an event API",
+      {
+        onboardingAssetRequests: 0,
+        eventApiRequests: 0,
+        eventContractReached: true,
+      },
+      "api-not-started",
+    ],
+  ] as const)("diagnoses %s", (_name, evidence, expected) => {
+    expect(diagnoseWebKitContentBootstrap(evidence)).toBe(expected);
   });
 });
 
