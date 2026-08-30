@@ -47,13 +47,13 @@ Current candidate-owned source hashes:
 The prior authorized read-only staging inventory recorded these direct calls
 in the deployed snapshot:
 
-| Owner | Direct `session_start()` locations |
-| --- | --- |
-| Tickera | `tickera/includes/classes/class.session.php:115`; `tickera/includes/general-functions.php:376`; `tickera/includes/classes/class.payment_gateways.php:151` |
-| Duplicate Tickera package | the same three relative locations under `tickera-event-ticketing-system/` |
-| Seating Charts | `seating-charts/includes/classes/class.shortcodes.php:40`; `seating-charts/includes/class.tc_firebase.php:64,135,328,367`; `seating-charts/seating-charts.php:1845,2370` |
-| Breeze | `breeze/inc/functions.php:418`, conditional currency session |
-| MailPoet | `mailpoet/mailpoet_initializer.php:60`, debugger path |
+| Owner                     | Direct `session_start()` locations                                                                                                                                       |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Tickera                   | `tickera/includes/classes/class.session.php:115`; `tickera/includes/general-functions.php:376`; `tickera/includes/classes/class.payment_gateways.php:151`                |
+| Duplicate Tickera package | the same three relative locations under `tickera-event-ticketing-system/`                                                                                                |
+| Seating Charts            | `seating-charts/includes/classes/class.shortcodes.php:40`; `seating-charts/includes/class.tc_firebase.php:64,135,328,367`; `seating-charts/seating-charts.php:1845,2370` |
+| Breeze                    | `breeze/inc/functions.php:418`, conditional currency session                                                                                                             |
+| MailPoet                  | `mailpoet/mailpoet_initializer.php:60`, debugger path                                                                                                                    |
 
 Because `PHPSESSID` was observed on unrelated public REST routes, a global
 frontend bootstrap path is the source class. Tickera's session bootstrap is the
