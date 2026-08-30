@@ -10,16 +10,16 @@ explicit GO after its postflight. Production is excluded.
 
 ## Frozen local candidates
 
-- application/router commit:
-  `c8fbf9a7ccdad4f7df7796e00846d68c76922c21`;
-- WebKit release-gate tooling commit:
-  `17b6d128b869198490df2cfc3e165545c7254613`;
+- router and release-gate candidate commit:
+  `c1d7b569446603a5dfc57bc914bf6e4824ce6f9d` (descendant of router hardening
+  `c8fbf9a7ccdad4f7df7796e00846d68c76922c21` and matrix tooling
+  `17b6d128b869198490df2cfc3e165545c7254613`);
 - session-source attribution commit:
   `8da20ee4b7c1371edbaaf82834100d819abfc253`;
 - router SHA-256:
-  `B9EB558295DE85D3870791B61FEC5077C25BA165B8AC8CE24B9D72870C717B66`;
+  `61AA044680527CFB0158C09227BE91EC8573AAFC07B66D74117D61BAD95F64C1`;
 - WebKit gate SHA-256:
-  `5845D9C2953A7C3C65B67301673814EDC1A529DAD6B2F6BDE2579E9BC5C09AC0`;
+  `59F9796649BB6C8707323ABFA6D996D72094EBD2B04DA991A04ADBC4ECF9224C`;
 - expected configuration candidate derived from the restored baseline with only
   the two rollout flags:
   `58ef28151966c341a2bdd58642a0230088d79c52bb17285bd4b0c9b477cd21fd`.
@@ -45,21 +45,21 @@ revalidated rather than assumed:
 
 These paths are definitions only and have not been created:
 
-- owner: `tbl-mobile-router-staging-c8fbf9a-17b6d12-r4`;
+- owner: `tbl-mobile-router-staging-c1d7b56-r4`;
 - manifest:
-  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/private_html/tbl-deploy/tbl-mobile-router-staging-20260830T181600Z-c8fbf9a-17b6d12-r4/`;
+  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/private_html/tbl-deploy/tbl-mobile-router-staging-20260830T182600Z-c1d7b56-r4/`;
 - lock:
   `/home/1525593.cloudwaysapps.com/wvvtwdcenn/private_html/tbl-deploy/.mono-writer.lock/`;
 - router next:
-  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/.mobile-web-router-next-c8fbf9a-17b6d12-r4.php`;
+  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/.mobile-web-router-next-c1d7b56-r4.php`;
 - router rollback-next:
-  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/.mobile-web-router-rollback-next-c8fbf9a-17b6d12-r4.php`;
+  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/wp-content/plugins/lamako-mobile-api/lamako-mobile-api/includes/.mobile-web-router-rollback-next-c1d7b56-r4.php`;
 - configuration sentinel:
-  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/.tbl-config-sentinel-c8fbf9a-17b6d12-r4.txt`;
+  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/.tbl-config-sentinel-c1d7b56-r4.txt`;
 - configuration next:
-  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/.wp-config-next-c8fbf9a-17b6d12-r4.php`;
+  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/.wp-config-next-c1d7b56-r4.php`;
 - configuration rollback-next:
-  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/.wp-config-rollback-next-c8fbf9a-17b6d12-r4.php`;
+  `/home/1525593.cloudwaysapps.com/wvvtwdcenn/public_html/.wp-config-rollback-next-c1d7b56-r4.php`;
 - all snapshots and rollback material live only inside the private manifest,
   mode `0600` where supported.
 
@@ -101,12 +101,13 @@ Only a later explicit acquisition GO may authorize this order:
    cleanup if `mkdir` reports an existing lock;
 4. create and rehash complete private snapshots for the active router,
    `wp-config.php` and every cache file selected by the pre-lock inventory,
-   after revalidating each exact hash under lock;
+   after rebuilding and comparing the complete sorted cache inventory under
+   lock. Any added, removed or modified variant stops before swap;
 5. create the harmless public sentinel first and prove GET and HEAD both return
    403 before any secret configuration sibling exists;
 6. create/revalidate the router next and router rollback-next, PHP lint both,
-   run the behavior harness and
-   prove its owner/group/mode before swap;
+   run the behavior harness, prove their owner/group/mode and prove GET/HEAD
+   return 403 for both before swap;
 7. atomically swap the router **while both rollout flags are still absent**,
    then rehash, lint and prove OPcache/workers converge to the candidate;
 8. through the master transport only, copy the secret configuration into a
@@ -127,6 +128,11 @@ Only a later explicit acquisition GO may authorize this order:
 12. on PASS, seal all evidence and retain the private rollback; on any failure,
     rollback immediately in the reverse safety order:
     `wp-config.php` -> every exact cache file -> router.
+
+Immediately before a configuration rollback swap, the sealed rollback-next
+must receive the same baseline owner/group and mode `0664` transition as the
+forward candidate, then be rehashed. A `0600` file is never swapped into the
+live configuration path.
 
 No public secret sibling may exist before the sentinel test. The application
 SFTP account may manage only the lock, exact owner record, non-secret manifest,
@@ -159,6 +165,14 @@ Required evidence exactly once:
 - exactly ten named route controls: iPhone root, events, shop and product
   (exactly one replacement each); direct `/mobile/`; admin; login; checkout;
   callback; and double-encoded exclusion (zero replacements each).
+
+The no-follow payment evidence is a mandatory typed component of the single
+release verdict: exact staging `/paiement/`, method GET, HTTP 302, same-origin
+Location `/cart/` or `/panier/`, non-negative body size, no router marker/body,
+and zero attempted or transmitted mutation. Each named route also seals its
+exact initial URL contract, fixed staging origin, iPhone UA class, 393 px
+viewport and expected initial marker count; the encoded case must use the exact
+raw `/%2570aiement/` fixture.
 
 Every URL must be absolute, same-origin, normalized and decoded twice by the
 gate. Unknown/extra/missing slide or control identities, string booleans,
