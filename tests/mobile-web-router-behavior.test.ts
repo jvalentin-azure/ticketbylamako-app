@@ -166,6 +166,7 @@ describe("mobile web router behavior", () => {
     "/paiement/",
     "/paiement/order-pay/42/",
     "/checkout/",
+    "/checkout-2/order-pay/42/",
     "/wp-admin/",
     "/wp-json/lamako-mobile/v2/public/home-data",
     "/order-pay/42/",

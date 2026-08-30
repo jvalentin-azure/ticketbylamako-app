@@ -74,6 +74,7 @@ function lamako_mobile_web_is_excluded_request() {
         '/wp-login.php',
         '/wp-json',
         '/checkout',
+        '/checkout-2',
         '/paiement',
         '/commande',
         '/commande-recue',
