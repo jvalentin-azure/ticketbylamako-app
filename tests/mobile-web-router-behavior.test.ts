@@ -38,6 +38,7 @@ function renderRouter(
   id = 0,
   enabled = true,
   requestState = "none",
+  requestMethod = "GET",
 ): HarnessResult {
   return JSON.parse(
     execFileSync(
@@ -50,6 +51,7 @@ function renderRouter(
         String(id),
         enabled ? "1" : "0",
         requestState,
+        requestMethod,
       ],
       { encoding: "utf8" },
     ),
@@ -165,6 +167,10 @@ describe("mobile web router behavior", () => {
   it.each([
     "/paiement/",
     "/paiement/order-pay/42/",
+    "/cart/",
+    "/cart/?removed_item=1",
+    "/panier/",
+    "/panier/remove-item/abc123/",
     "/checkout/",
     "/checkout-2/order-pay/42/",
     "/wp-admin/",
@@ -184,9 +190,16 @@ describe("mobile web router behavior", () => {
     "/?pay_for_order=true&key=test-order-key",
     "/?wc-api=WC_Gateway_Test",
     "/?wc_api=WC_Gateway_Test",
+    "/?wc-ajax=get_refreshed_fragments",
+    "/?add-to-cart=13845",
+    "/?remove_item=abc123",
+    "/?apply_coupon=SAVE10",
+    "/?update_cart=Update",
     "/?LAMAKO_CHECKOUT=1",
     "/%70aiement/order-pay/42/",
     "/%2570aiement/order-pay/42/",
+    "/%63art/",
+    "/%2570anier/",
     "/checkout%2Forder-pay/42/",
   ])("fails closed for transactional or infrastructure path %s", (path) => {
     const result = renderRouter(path);
@@ -204,6 +217,15 @@ describe("mobile web router behavior", () => {
       const result = renderRouter("/", 100, "none", 0, true, requestState);
       expect(result.excluded).toBe(true);
       expect(result.rendered).toBe("");
+    },
+  );
+
+  it.each(["POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"])(
+    "does not inject the browser router into a %s response",
+    (method) => {
+      expect(
+        renderRouter("/", 100, "none", 0, true, "none", method).rendered,
+      ).toBe("");
     },
   );
 
@@ -364,6 +386,9 @@ describe("mobile web router behavior", () => {
       "utf8",
     );
     expect(source).toContain("'/paiement'");
+    expect(source).toContain("'/cart'");
+    expect(source).toContain("'/panier'");
+    expect(source).toContain("$request_method !== 'GET'");
     expect(source).toContain("if (rolloutPercent < 100)");
     expect(source).toContain("/^(?:0|[1-9]\\d?)$/");
     expect(source).toContain("Number.isInteger(bucket)");

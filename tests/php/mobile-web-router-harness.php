@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-if ( $argc < 6 || $argc > 7 ) {
-    fwrite( STDERR, "Usage: php mobile-web-router-harness.php <path> <rollout> <singular|none> <id> <enabled> [request-state]\n" );
+if ( $argc < 6 || $argc > 8 ) {
+    fwrite( STDERR, "Usage: php mobile-web-router-harness.php <path> <rollout> <singular|none> <id> <enabled> [request-state] [request-method]\n" );
     exit( 2 );
 }
 
@@ -12,6 +12,7 @@ define( 'LAMAKO_MOBILE_WEB_ENABLED', $argv[5] === '1' );
 define( 'LAMAKO_MOBILE_WEB_ROLLOUT_PERCENT', $argv[2] );
 
 $_SERVER['REQUEST_URI'] = (string) $argv[1];
+$_SERVER['REQUEST_METHOD'] = strtoupper( (string) ( $argv[7] ?? 'GET' ) );
 $GLOBALS['tbl_router_singular'] = (string) $argv[3];
 $GLOBALS['tbl_router_object_id'] = (int) $argv[4];
 $GLOBALS['tbl_router_actions'] = [];

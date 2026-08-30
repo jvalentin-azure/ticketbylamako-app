@@ -57,6 +57,242 @@ export const WEBKIT_ROUTER_ONBOARDING_FIXTURE = Object.freeze({
   skipLabel: "Passer",
 });
 
+export type WebKitViewportImageEvidence = {
+  elementPresent: boolean;
+  complete: boolean;
+  naturalWidth: number;
+  naturalHeight: number;
+  visibleWidth: number;
+  visibleHeight: number;
+  intersectionRatio: number;
+};
+
+export type WebKitOnboardingSlideId = "1" | "2";
+
+export type WebKitOnboardingSlideEvidence = {
+  slideId: WebKitOnboardingSlideId;
+  activeSlideIndex: number;
+  renderedText: string;
+  image: WebKitViewportImageEvidence;
+};
+
+const onboardingSlideContracts = Object.freeze({
+  "1": Object.freeze({
+    activeSlideIndex: 0,
+    title: "Prenez place. Vivez grand.",
+    action: "Suivant",
+  }),
+  "2": Object.freeze({
+    activeSlideIndex: 1,
+    title: "Votre prochain souvenir commence ici.",
+    action: "Découvrir",
+  }),
+});
+
+function normalizeRenderedText(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Gates an onboarding slide on what WebKit actually rendered in the viewport.
+ * Asset filenames are intentionally not part of the contract: Expo may hash,
+ * preload or satisfy an image from memory without issuing a request containing
+ * the source filename. Network failures remain covered by the independent
+ * network gate.
+ */
+export function evaluateWebKitOnboardingSlide(
+  evidence: WebKitOnboardingSlideEvidence,
+): { pass: boolean; reasons: string[] } {
+  const reasons: string[] = [];
+  const contract = (
+    onboardingSlideContracts as Readonly<
+      Record<
+        string,
+        { activeSlideIndex: number; title: string; action: string } | undefined
+      >
+    >
+  )[evidence.slideId];
+  if (!contract) {
+    return { pass: false, reasons: ["slide_identity_unknown"] };
+  }
+  if (
+    !Number.isInteger(evidence.activeSlideIndex) ||
+    evidence.activeSlideIndex !== contract.activeSlideIndex
+  ) {
+    reasons.push("slide_identity_mismatch");
+  }
+  const renderedText = normalizeRenderedText(evidence.renderedText);
+  if (!renderedText.includes(contract.title)) {
+    reasons.push("slide_title_not_visible");
+  }
+  if (!renderedText.includes(contract.action)) {
+    reasons.push("slide_action_not_visible");
+  }
+  if (evidence.image.elementPresent !== true)
+    reasons.push("slide_image_missing");
+  const imageNumbers = [
+    evidence.image.naturalWidth,
+    evidence.image.naturalHeight,
+    evidence.image.visibleWidth,
+    evidence.image.visibleHeight,
+    evidence.image.intersectionRatio,
+  ];
+  const validImageNumbers = imageNumbers.every(Number.isFinite);
+  if (
+    evidence.image.elementPresent === true &&
+    (!validImageNumbers ||
+      evidence.image.complete !== true ||
+      evidence.image.naturalWidth <= 0 ||
+      evidence.image.naturalHeight <= 0)
+  ) {
+    reasons.push("slide_image_not_loaded");
+  }
+  if (
+    evidence.image.elementPresent === true &&
+    (!validImageNumbers ||
+      evidence.image.visibleWidth <= 0 ||
+      evidence.image.visibleHeight <= 0 ||
+      evidence.image.intersectionRatio <= 0 ||
+      evidence.image.intersectionRatio > 1)
+  ) {
+    reasons.push("slide_image_not_in_viewport");
+  }
+  return { pass: reasons.length === 0, reasons };
+}
+
+export type WebKitClassicControlEvidence = {
+  controlId: "desktop-root" | "explicit-classic" | "payment-return";
+  finalUrl: string;
+  expectedOrigin: string;
+  markerCount: number;
+  mobileDocumentRequests: number;
+  routerReplacementAttempts: number;
+};
+
+function decodePathFailClosed(pathname: string): string | null {
+  let path = pathname.toLowerCase();
+  try {
+    for (let pass = 0; pass < 2; pass += 1) {
+      const decoded = decodeURIComponent(path).toLowerCase();
+      if (decoded === path) break;
+      path = decoded;
+    }
+  } catch {
+    return null;
+  }
+  return path.startsWith("/") ? path.replace(/\/{2,}/g, "/") : null;
+}
+
+/**
+ * The router marker is cache-safe and may legitimately be present in desktop
+ * HTML. A classic control passes when it does not navigate to the mobile app;
+ * requiring markerCount=0 incorrectly fails the intended architecture.
+ */
+export function evaluateWebKitClassicControl(
+  evidence: WebKitClassicControlEvidence,
+): { pass: boolean; reasons: string[]; markerCount: number } {
+  const reasons: string[] = [];
+  if (
+    !["desktop-root", "explicit-classic", "payment-return"].includes(
+      evidence.controlId,
+    )
+  ) {
+    reasons.push("classic_control_identity_unknown");
+  }
+  let finalUrl: URL | null = null;
+  let expectedOrigin: URL | null = null;
+  try {
+    finalUrl = new URL(evidence.finalUrl);
+    expectedOrigin = new URL(evidence.expectedOrigin);
+  } catch {
+    reasons.push("classic_control_url_invalid");
+  }
+  if (
+    finalUrl &&
+    expectedOrigin &&
+    (finalUrl.origin !== expectedOrigin.origin ||
+      !["http:", "https:"].includes(finalUrl.protocol))
+  ) {
+    reasons.push("classic_control_origin_mismatch");
+  }
+  if (finalUrl) {
+    const finalPath = decodePathFailClosed(finalUrl.pathname);
+    if (finalPath === null) {
+      reasons.push("classic_control_path_invalid");
+    } else if (finalPath === "/mobile" || finalPath.startsWith("/mobile/")) {
+      reasons.push("classic_control_routed_to_mobile");
+    } else if (
+      evidence.controlId === "desktop-root" &&
+      (finalPath !== "/" || finalUrl.search !== "")
+    ) {
+      reasons.push("desktop_root_contract_mismatch");
+    } else if (
+      evidence.controlId === "explicit-classic" &&
+      (finalPath !== "/" || finalUrl.searchParams.get("desktop") !== "1")
+    ) {
+      reasons.push("explicit_classic_contract_mismatch");
+    } else if (
+      evidence.controlId === "payment-return" &&
+      !["/paiement", "/cart", "/panier"].some(
+        (prefix) => finalPath === prefix || finalPath.startsWith(`${prefix}/`),
+      )
+    ) {
+      reasons.push("payment_return_contract_mismatch");
+    }
+  }
+  const counters = [
+    evidence.markerCount,
+    evidence.mobileDocumentRequests,
+    evidence.routerReplacementAttempts,
+  ];
+  if (!counters.every((value) => Number.isInteger(value) && value >= 0)) {
+    reasons.push("classic_control_metrics_invalid");
+  }
+  const expectedMarkerCount = evidence.controlId === "payment-return" ? 0 : 1;
+  if (evidence.markerCount !== expectedMarkerCount) {
+    reasons.push("classic_control_marker_mismatch");
+  }
+  if (evidence.mobileDocumentRequests !== 0) {
+    reasons.push("mobile_document_requested");
+  }
+  if (evidence.routerReplacementAttempts !== 0) {
+    reasons.push("router_replacement_attempted");
+  }
+  return {
+    pass: reasons.length === 0,
+    reasons,
+    markerCount: evidence.markerCount,
+  };
+}
+
+export type WebKitWordPressControlDebt = {
+  cafeAsset403: number;
+  otherHttpErrors: number;
+  consoleIssues: number;
+  pageErrors: number;
+  mutationAttempts: number;
+  transmittedMutations: number;
+};
+
+/**
+ * WordPress-control debt is attributed separately from the mobile candidate,
+ * but it remains release-blocking. This function deliberately provides no
+ * waiver for known cafe-events-carousel failures or deprecation noise.
+ */
+export function evaluateWebKitWordPressControlDebt(
+  debt: WebKitWordPressControlDebt,
+): { pass: boolean; reasons: string[] } {
+  const reasons: string[] = [];
+  if (debt.cafeAsset403 !== 0) reasons.push("cafe_events_carousel_403");
+  if (debt.otherHttpErrors !== 0) reasons.push("wordpress_http_error");
+  if (debt.consoleIssues !== 0) reasons.push("wordpress_console_issue");
+  if (debt.pageErrors !== 0) reasons.push("wordpress_page_error");
+  if (debt.mutationAttempts !== 0) reasons.push("wordpress_mutation_attempt");
+  if (debt.transmittedMutations !== 0)
+    reasons.push("wordpress_mutation_transmitted");
+  return { pass: reasons.length === 0, reasons };
+}
+
 export type WebKitContentBootstrapEvidence = {
   onboardingAssetRequests: number;
   eventApiRequests: number;
@@ -219,7 +455,7 @@ export function evaluateWebKitScenarioGate(metrics: WebKitScenarioMetrics): {
   reasons: string[];
 } {
   const reasons: string[] = [];
-  if (!metrics.stabilized) reasons.push("scenario_not_stabilized");
+  if (metrics.stabilized !== true) reasons.push("scenario_not_stabilized");
   if (metrics.blockingNetworkFailures !== 0)
     reasons.push("blocking_network_failure");
   if (metrics.httpErrors !== 0) reasons.push("http_error");
@@ -228,11 +464,104 @@ export function evaluateWebKitScenarioGate(metrics: WebKitScenarioMetrics): {
   if (metrics.consoleErrors !== 0) reasons.push("console_error");
   if (metrics.pageErrors !== 0) reasons.push("page_error");
   if (metrics.invalidApiResponses !== 0) reasons.push("invalid_api_response");
-  if (metrics.horizontalOverflow) reasons.push("horizontal_overflow");
-  if (!metrics.date27JunePresent) reasons.push("contract_date_missing");
-  if (metrics.publicationDate3MayPresent)
+  if (metrics.horizontalOverflow !== false) reasons.push("horizontal_overflow");
+  if (metrics.date27JunePresent !== true) reasons.push("contract_date_missing");
+  if (metrics.publicationDate3MayPresent !== false)
     reasons.push("publication_date_rendered");
-  if (!metrics.deepRefreshPass) reasons.push("deep_refresh_failed");
+  if (metrics.deepRefreshPass !== true) reasons.push("deep_refresh_failed");
+  return { pass: reasons.length === 0, reasons };
+}
+
+export type WebKitRouterReleaseEvidence = {
+  contentScenario: WebKitScenarioMetrics;
+  onboardingSlides: WebKitOnboardingSlideEvidence[];
+  classicControls: WebKitClassicControlEvidence[];
+  wordpressControl: WebKitWordPressControlDebt;
+};
+
+/**
+ * Single fail-closed verdict consumed by the future WebKit runner. Keeping the
+ * component gates separate is useful for diagnostics; composing them here
+ * prevents a runner from accidentally qualifying only the content scenario.
+ */
+export function evaluateWebKitRouterReleaseGate(
+  evidence: WebKitRouterReleaseEvidence,
+): { pass: boolean; reasons: string[] } {
+  const reasons = evaluateWebKitScenarioGate(
+    evidence.contentScenario,
+  ).reasons.map((reason) => `content:${reason}`);
+
+  const onboardingSlides = Array.isArray(evidence.onboardingSlides)
+    ? evidence.onboardingSlides
+    : [];
+  if (onboardingSlides.length !== 2) {
+    reasons.push("onboarding:evidence_set_invalid");
+  }
+  if (
+    onboardingSlides.some(
+      (slide) => slide.slideId !== "1" && slide.slideId !== "2",
+    )
+  ) {
+    reasons.push("onboarding:identity_unknown");
+  }
+
+  for (const slideId of ["1", "2"] as const) {
+    const matchingSlides = onboardingSlides.filter(
+      (slide) => slide.slideId === slideId,
+    );
+    if (matchingSlides.length !== 1) {
+      reasons.push(`onboarding:${slideId}:evidence_count_invalid`);
+      continue;
+    }
+    reasons.push(
+      ...evaluateWebKitOnboardingSlide(matchingSlides[0]).reasons.map(
+        (reason) => `onboarding:${slideId}:${reason}`,
+      ),
+    );
+  }
+
+  const classicControls = Array.isArray(evidence.classicControls)
+    ? evidence.classicControls
+    : [];
+  if (classicControls.length !== 3) {
+    reasons.push("classic:evidence_set_invalid");
+  }
+  if (
+    classicControls.some(
+      (control) =>
+        control.controlId !== "desktop-root" &&
+        control.controlId !== "explicit-classic" &&
+        control.controlId !== "payment-return",
+    )
+  ) {
+    reasons.push("classic:identity_unknown");
+  }
+
+  for (const controlId of [
+    "desktop-root",
+    "explicit-classic",
+    "payment-return",
+  ] as const) {
+    const matchingControls = classicControls.filter(
+      (control) => control.controlId === controlId,
+    );
+    if (matchingControls.length !== 1) {
+      reasons.push(`classic:${controlId}:evidence_count_invalid`);
+      continue;
+    }
+    reasons.push(
+      ...evaluateWebKitClassicControl(matchingControls[0]).reasons.map(
+        (reason) => `classic:${controlId}:${reason}`,
+      ),
+    );
+  }
+
+  reasons.push(
+    ...evaluateWebKitWordPressControlDebt(
+      evidence.wordpressControl,
+    ).reasons.map((reason) => `wordpress:${reason}`),
+  );
+
   return { pass: reasons.length === 0, reasons };
 }
 

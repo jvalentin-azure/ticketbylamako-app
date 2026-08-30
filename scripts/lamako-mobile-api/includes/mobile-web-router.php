@@ -41,13 +41,22 @@ function lamako_mobile_web_has_transaction_query() {
             'pay_for_order',
             'wc-api',
             'wc_api',
+            'wc-ajax',
+            'add-to-cart',
+            'remove_item',
+            'apply_coupon',
+            'update_cart',
         ]
     );
 }
 
 function lamako_mobile_web_is_excluded_request() {
+    $request_method = isset( $_SERVER['REQUEST_METHOD'] )
+        ? strtoupper( (string) $_SERVER['REQUEST_METHOD'] )
+        : 'GET';
     if (
-        is_admin()
+        $request_method !== 'GET'
+        || is_admin()
         || wp_doing_ajax()
         || ( defined( 'REST_REQUEST' ) && REST_REQUEST )
         || is_feed()
@@ -76,6 +85,8 @@ function lamako_mobile_web_is_excluded_request() {
         '/checkout',
         '/checkout-2',
         '/paiement',
+        '/cart',
+        '/panier',
         '/commande',
         '/commande-recue',
         '/order-pay',

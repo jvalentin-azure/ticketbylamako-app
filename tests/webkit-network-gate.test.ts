@@ -9,7 +9,11 @@ import {
   attributeWebKitRouterEvidence,
   classifyWebKitNetworkObservation,
   diagnoseWebKitContentBootstrap,
+  evaluateWebKitClassicControl,
+  evaluateWebKitOnboardingSlide,
+  evaluateWebKitRouterReleaseGate,
   evaluateWebKitScenarioGate,
+  evaluateWebKitWordPressControlDebt,
   inspectWebKitEventContractText,
   runWithWebKitEvidence,
   WEBKIT_ROUTER_EVENT_FIXTURE,
@@ -373,6 +377,480 @@ describe("mobile router content bootstrap", () => {
     ],
   ] as const)("diagnoses %s", (_name, evidence, expected) => {
     expect(diagnoseWebKitContentBootstrap(evidence)).toBe(expected);
+  });
+});
+
+describe("mobile router onboarding evidence", () => {
+  const renderedImage = {
+    elementPresent: true,
+    complete: true,
+    naturalWidth: 1170,
+    naturalHeight: 2532,
+    visibleWidth: 393,
+    visibleHeight: 852,
+    intersectionRatio: 1,
+  };
+
+  const slide1 = {
+    slideId: "1" as const,
+    activeSlideIndex: 0,
+    renderedText: "Prenez place. Vivez grand. Suivant",
+    image: renderedImage,
+  };
+
+  it("accepts a slide only when its text, action and viewport image are rendered", () => {
+    expect(
+      evaluateWebKitOnboardingSlide({
+        ...slide1,
+        renderedText: "  Prenez place.\nVivez grand.   Suivant ",
+      }),
+    ).toEqual({
+      pass: true,
+      reasons: [],
+    });
+  });
+
+  it("fails closed for an unknown runtime slide identity", () => {
+    expect(
+      evaluateWebKitOnboardingSlide({
+        ...slide1,
+        slideId: "3" as never,
+      }),
+    ).toEqual({ pass: false, reasons: ["slide_identity_unknown"] });
+  });
+
+  it.each([
+    [
+      "missing title",
+      { ...slide1, renderedText: "Suivant" },
+      "slide_title_not_visible",
+    ],
+    [
+      "missing action",
+      { ...slide1, renderedText: "Prenez place. Vivez grand." },
+      "slide_action_not_visible",
+    ],
+    [
+      "wrong active slide",
+      { ...slide1, activeSlideIndex: 1 },
+      "slide_identity_mismatch",
+    ],
+    [
+      "missing image element",
+      {
+        ...slide1,
+        image: { ...renderedImage, elementPresent: false },
+      },
+      "slide_image_missing",
+    ],
+    [
+      "image not loaded",
+      {
+        ...slide1,
+        image: { ...renderedImage, complete: false, naturalWidth: 0 },
+      },
+      "slide_image_not_loaded",
+    ],
+    [
+      "image outside viewport",
+      {
+        ...slide1,
+        image: { ...renderedImage, intersectionRatio: 0 },
+      },
+      "slide_image_not_in_viewport",
+    ],
+    [
+      "non-finite dimensions",
+      {
+        ...slide1,
+        image: { ...renderedImage, naturalWidth: Number.NaN },
+      },
+      "slide_image_not_loaded",
+    ],
+    [
+      "string false element flag",
+      {
+        ...slide1,
+        image: { ...renderedImage, elementPresent: "false" as never },
+      },
+      "slide_image_missing",
+    ],
+    [
+      "string false complete flag",
+      {
+        ...slide1,
+        image: { ...renderedImage, complete: "false" as never },
+      },
+      "slide_image_not_loaded",
+    ],
+  ] as const)("fails closed for %s", (_name, evidence, expectedReason) => {
+    expect(evaluateWebKitOnboardingSlide(evidence)).toMatchObject({
+      pass: false,
+      reasons: expect.arrayContaining([expectedReason]),
+    });
+  });
+});
+
+describe("mobile router classic controls", () => {
+  const classicRoot = {
+    controlId: "desktop-root" as const,
+    finalUrl: "https://staging.ticketbylamako.com/",
+    expectedOrigin: "https://staging.ticketbylamako.com",
+    markerCount: 1,
+    mobileDocumentRequests: 0,
+    routerReplacementAttempts: 0,
+  };
+
+  it("allows the cache-safe marker when desktop stays on WordPress", () => {
+    expect(evaluateWebKitClassicControl(classicRoot)).toEqual({
+      pass: true,
+      reasons: [],
+      markerCount: 1,
+    });
+  });
+
+  it("accepts the classic empty-cart redirect without routing to mobile", () => {
+    expect(
+      evaluateWebKitClassicControl({
+        ...classicRoot,
+        controlId: "payment-return",
+        finalUrl: "https://staging.ticketbylamako.com/cart/",
+        markerCount: 0,
+      }),
+    ).toEqual({ pass: true, reasons: [], markerCount: 0 });
+  });
+
+  it.each([
+    ["mobile path", "https://staging.ticketbylamako.com/mobile/cart", 0, 0],
+    [
+      "encoded mobile path",
+      "https://staging.ticketbylamako.com/%6dobile/cart",
+      0,
+      0,
+    ],
+    [
+      "double-encoded mobile path",
+      "https://staging.ticketbylamako.com/%256dobile/cart",
+      0,
+      0,
+    ],
+    [
+      "encoded slash mobile path",
+      "https://staging.ticketbylamako.com/%2fmobile/cart",
+      0,
+      0,
+    ],
+    ["mobile document", "https://staging.ticketbylamako.com/cart/", 1, 0],
+    ["replacement attempt", "https://staging.ticketbylamako.com/cart/", 0, 1],
+  ])(
+    "fails closed for %s",
+    (_name, finalPath, mobileDocuments, replacements) => {
+      expect(
+        evaluateWebKitClassicControl({
+          ...classicRoot,
+          finalUrl: finalPath,
+          markerCount: 1,
+          mobileDocumentRequests: mobileDocuments,
+          routerReplacementAttempts: replacements,
+        }).pass,
+      ).toBe(false);
+    },
+  );
+
+  it.each([
+    ["empty URL", "", "https://staging.ticketbylamako.com"],
+    ["malformed URL", "not a URL", "https://staging.ticketbylamako.com"],
+    [
+      "off-origin URL",
+      "https://www.ticketbylamako.com/",
+      "https://staging.ticketbylamako.com",
+    ],
+  ])("fails closed for %s", (_name, finalUrl, expectedOrigin) => {
+    expect(
+      evaluateWebKitClassicControl({
+        ...classicRoot,
+        finalUrl,
+        expectedOrigin,
+      }).pass,
+    ).toBe(false);
+  });
+
+  it("fails closed for malformed counters", () => {
+    expect(
+      evaluateWebKitClassicControl({
+        ...classicRoot,
+        mobileDocumentRequests: Number.NaN,
+      }),
+    ).toMatchObject({
+      pass: false,
+      reasons: expect.arrayContaining(["classic_control_metrics_invalid"]),
+    });
+  });
+
+  it("fails closed for an unknown runtime control identity", () => {
+    expect(
+      evaluateWebKitClassicControl({
+        ...classicRoot,
+        controlId: "unknown" as never,
+      }),
+    ).toMatchObject({
+      pass: false,
+      reasons: expect.arrayContaining(["classic_control_identity_unknown"]),
+    });
+  });
+
+  it.each([
+    [
+      "desktop path drift",
+      {
+        ...classicRoot,
+        finalUrl: "https://staging.ticketbylamako.com/events/",
+      },
+    ],
+    [
+      "explicit classic query missing",
+      {
+        ...classicRoot,
+        controlId: "explicit-classic" as const,
+        finalUrl: "https://staging.ticketbylamako.com/",
+      },
+    ],
+    [
+      "payment return path drift",
+      {
+        ...classicRoot,
+        controlId: "payment-return" as const,
+        finalUrl: "https://staging.ticketbylamako.com/events/",
+        markerCount: 0,
+      },
+    ],
+    ["duplicate desktop marker", { ...classicRoot, markerCount: 2 }],
+  ])("fails closed for %s", (_name, control) => {
+    expect(evaluateWebKitClassicControl(control).pass).toBe(false);
+  });
+});
+
+describe("WordPress control environment gate", () => {
+  const clean = {
+    cafeAsset403: 0,
+    otherHttpErrors: 0,
+    consoleIssues: 0,
+    pageErrors: 0,
+    mutationAttempts: 0,
+    transmittedMutations: 0,
+  };
+
+  it("passes only a clean WordPress control surface", () => {
+    expect(evaluateWebKitWordPressControlDebt(clean)).toEqual({
+      pass: true,
+      reasons: [],
+    });
+  });
+
+  it.each([
+    ["cafeAsset403", "cafe_events_carousel_403"],
+    ["otherHttpErrors", "wordpress_http_error"],
+    ["consoleIssues", "wordpress_console_issue"],
+    ["pageErrors", "wordpress_page_error"],
+    ["mutationAttempts", "wordpress_mutation_attempt"],
+    ["transmittedMutations", "wordpress_mutation_transmitted"],
+  ] as const)("keeps %s release-blocking", (field, reason) => {
+    expect(
+      evaluateWebKitWordPressControlDebt({ ...clean, [field]: 1 }),
+    ).toEqual({ pass: false, reasons: [reason] });
+  });
+});
+
+describe("composed mobile router release gate", () => {
+  const cleanContent = {
+    stabilized: true,
+    blockingNetworkFailures: 0,
+    httpErrors: 0,
+    mutations: 0,
+    hashRequests: 0,
+    consoleErrors: 0,
+    pageErrors: 0,
+    invalidApiResponses: 0,
+    horizontalOverflow: false,
+    date27JunePresent: true,
+    publicationDate3MayPresent: false,
+    deepRefreshPass: true,
+  };
+  const image = {
+    elementPresent: true,
+    complete: true,
+    naturalWidth: 1170,
+    naturalHeight: 2532,
+    visibleWidth: 393,
+    visibleHeight: 852,
+    intersectionRatio: 1,
+  };
+  const controls = [
+    {
+      controlId: "desktop-root" as const,
+      finalUrl: "https://staging.ticketbylamako.com/",
+      expectedOrigin: "https://staging.ticketbylamako.com",
+      markerCount: 1,
+      mobileDocumentRequests: 0,
+      routerReplacementAttempts: 0,
+    },
+    {
+      controlId: "explicit-classic" as const,
+      finalUrl: "https://staging.ticketbylamako.com/?desktop=1",
+      expectedOrigin: "https://staging.ticketbylamako.com",
+      markerCount: 1,
+      mobileDocumentRequests: 0,
+      routerReplacementAttempts: 0,
+    },
+    {
+      controlId: "payment-return" as const,
+      finalUrl: "https://staging.ticketbylamako.com/cart/",
+      expectedOrigin: "https://staging.ticketbylamako.com",
+      markerCount: 0,
+      mobileDocumentRequests: 0,
+      routerReplacementAttempts: 0,
+    },
+  ];
+  const evidence = {
+    contentScenario: cleanContent,
+    onboardingSlides: [
+      {
+        slideId: "1" as const,
+        activeSlideIndex: 0,
+        renderedText: "Prenez place. Vivez grand. Suivant",
+        image,
+      },
+      {
+        slideId: "2" as const,
+        activeSlideIndex: 1,
+        renderedText: "Votre prochain souvenir commence ici. Découvrir",
+        image,
+      },
+    ],
+    classicControls: controls,
+    wordpressControl: {
+      cafeAsset403: 0,
+      otherHttpErrors: 0,
+      consoleIssues: 0,
+      pageErrors: 0,
+      mutationAttempts: 0,
+      transmittedMutations: 0,
+    },
+  };
+
+  it("passes only when content, both slides, all classic controls and WordPress are clean", () => {
+    expect(evaluateWebKitRouterReleaseGate(evidence)).toEqual({
+      pass: true,
+      reasons: [],
+    });
+  });
+
+  it("fails closed when a required evidence set is absent", () => {
+    expect(
+      evaluateWebKitRouterReleaseGate({
+        ...evidence,
+        onboardingSlides: evidence.onboardingSlides.slice(0, 1),
+        classicControls: evidence.classicControls.slice(0, 2),
+      }),
+    ).toMatchObject({
+      pass: false,
+      reasons: expect.arrayContaining([
+        "onboarding:2:evidence_count_invalid",
+        "classic:payment-return:evidence_count_invalid",
+      ]),
+    });
+  });
+
+  it("fails closed for string boolean values from runtime evidence", () => {
+    expect(
+      evaluateWebKitRouterReleaseGate({
+        ...evidence,
+        contentScenario: {
+          ...cleanContent,
+          stabilized: "false" as never,
+          date27JunePresent: "false" as never,
+          deepRefreshPass: "false" as never,
+        },
+        onboardingSlides: [
+          {
+            ...evidence.onboardingSlides[0],
+            image: {
+              ...evidence.onboardingSlides[0].image,
+              complete: "false" as never,
+            },
+          },
+          evidence.onboardingSlides[1],
+        ],
+      }),
+    ).toMatchObject({
+      pass: false,
+      reasons: expect.arrayContaining([
+        "content:scenario_not_stabilized",
+        "content:contract_date_missing",
+        "content:deep_refresh_failed",
+        "onboarding:1:slide_image_not_loaded",
+      ]),
+    });
+  });
+
+  it("rejects valid evidence sets padded with unknown runtime identities", () => {
+    expect(
+      evaluateWebKitRouterReleaseGate({
+        ...evidence,
+        onboardingSlides: [
+          ...evidence.onboardingSlides,
+          { ...evidence.onboardingSlides[0], slideId: "3" as never },
+        ],
+        classicControls: [
+          ...evidence.classicControls,
+          {
+            ...evidence.classicControls[0],
+            controlId: "unknown" as never,
+            finalUrl: "https://staging.ticketbylamako.com/mobile/",
+          },
+        ],
+      }),
+    ).toMatchObject({
+      pass: false,
+      reasons: expect.arrayContaining([
+        "onboarding:evidence_set_invalid",
+        "onboarding:identity_unknown",
+        "classic:evidence_set_invalid",
+        "classic:identity_unknown",
+      ]),
+    });
+  });
+
+  it("composes every component failure into the final verdict", () => {
+    expect(
+      evaluateWebKitRouterReleaseGate({
+        ...evidence,
+        contentScenario: { ...cleanContent, httpErrors: 1 },
+        onboardingSlides: [
+          { ...evidence.onboardingSlides[0], activeSlideIndex: 1 },
+          evidence.onboardingSlides[1],
+        ],
+        classicControls: [
+          ...controls.slice(0, 2),
+          {
+            ...controls[2],
+            finalUrl: "https://staging.ticketbylamako.com/mobile/cart",
+          },
+        ],
+        wordpressControl: {
+          ...evidence.wordpressControl,
+          cafeAsset403: 2,
+        },
+      }),
+    ).toMatchObject({
+      pass: false,
+      reasons: expect.arrayContaining([
+        "content:http_error",
+        "onboarding:1:slide_identity_mismatch",
+        "classic:payment-return:classic_control_routed_to_mobile",
+        "wordpress:cafe_events_carousel_403",
+      ]),
+    });
   });
 });
 
