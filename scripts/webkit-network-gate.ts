@@ -342,8 +342,7 @@ export function evaluateWebKitNamedRouteControl(
         candidate === "/events" || candidate === "/evenements",
       "iphone-shop": (candidate) =>
         candidate === "/shop" || candidate === "/boutique",
-      "iphone-product": (candidate) =>
-        /^\/(?:product|produit)\/[^/]+$/.test(candidate),
+      "iphone-product": (candidate) => candidate === "/",
       "direct-mobile": (candidate) => candidate === "/mobile",
       "admin-exclusion": (candidate) => candidate === "/wp-admin",
       "login-exclusion": (candidate) => candidate === "/wp-login.php",
@@ -358,6 +357,17 @@ export function evaluateWebKitNamedRouteControl(
         : initialContract && !initialContract(initialPathWithoutTrailingSlash)
     ) {
       reasons.push("route_control_initial_path_mismatch");
+    }
+    const exactProductQuery =
+      evidence.controlId === "iphone-product" &&
+      initialUrl?.search === "?p=13845";
+    const requiresEmptyQuery = evidence.controlId !== "iphone-product";
+    if (
+      initialUrl?.hash !== "" ||
+      (requiresEmptyQuery && initialUrl?.search !== "") ||
+      (evidence.controlId === "iphone-product" && !exactProductQuery)
+    ) {
+      reasons.push("route_control_initial_query_mismatch");
     }
   }
 

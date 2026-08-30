@@ -653,7 +653,7 @@ describe("named mobile router controls", () => {
     "iphone-root": "/",
     "iphone-events": "/events/",
     "iphone-shop": "/shop/",
-    "iphone-product": "/product/qa-product-13845/",
+    "iphone-product": "/?p=13845",
     "direct-mobile": "/mobile/",
     "admin-exclusion": "/wp-admin/",
     "login-exclusion": "/wp-login.php",
@@ -733,6 +733,30 @@ describe("named mobile router controls", () => {
       reasons: expect.arrayContaining([
         "encoded_exclusion_contract_mismatch",
         "route_control_initial_path_mismatch",
+      ]),
+    });
+  });
+
+  it("rejects desktop opt-out and an unpinned product request", () => {
+    expect(
+      evaluateWebKitNamedRouteControl({
+        ...createControl("iphone-root"),
+        initialUrl: `${expectedOrigin}/?desktop=1`,
+      }),
+    ).toMatchObject({
+      pass: false,
+      reasons: expect.arrayContaining(["route_control_initial_query_mismatch"]),
+    });
+    expect(
+      evaluateWebKitNamedRouteControl({
+        ...createControl("iphone-product"),
+        initialUrl: `${expectedOrigin}/product/not-the-qa-product/`,
+      }),
+    ).toMatchObject({
+      pass: false,
+      reasons: expect.arrayContaining([
+        "route_control_initial_path_mismatch",
+        "route_control_initial_query_mismatch",
       ]),
     });
   });
@@ -939,7 +963,7 @@ describe("composed mobile router release gate", () => {
     "iphone-root": "/",
     "iphone-events": "/events/",
     "iphone-shop": "/shop/",
-    "iphone-product": "/product/qa-product-13845/",
+    "iphone-product": "/?p=13845",
     "direct-mobile": "/mobile/",
     "admin-exclusion": "/wp-admin/",
     "login-exclusion": "/wp-login.php",
