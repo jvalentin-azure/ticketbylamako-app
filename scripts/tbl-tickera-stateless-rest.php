@@ -1,8 +1,8 @@
 <?php
 /**
- * Plugin Name: TicketByLamako Tickera Stateless REST Guard
- * Description: Prevents Tickera's global cart bootstrap from opening PHP sessions on explicitly stateless Mobile v2 reads.
- * Version: 0.1.0
+ * Plugin Name: TicketByLamako Tickera Stateless Public Guard
+ * Description: Prevents Tickera's global cart bootstrap from opening PHP sessions on explicitly stateless public reads.
+ * Version: 0.2.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -16,6 +16,86 @@ if ( ! function_exists( 'tbl_tickera_stateless_rest_method_is_safe' ) ) {
             : '';
 
         return in_array( $method, [ 'GET', 'HEAD', 'OPTIONS' ], true );
+    }
+}
+
+if ( ! function_exists( 'tbl_tickera_stateless_public_home_has_stateful_context' ) ) {
+    /**
+     * Treat every authentication, PHP-session or commerce cookie as stateful.
+     * Unrelated consent/analytics cookies do not need to force Tickera's PHP
+     * session open on an otherwise passive homepage request.
+     */
+    function tbl_tickera_stateless_public_home_has_stateful_context() {
+        $session_cookie = function_exists( 'session_name' ) ? (string) session_name() : 'PHPSESSID';
+        if (
+            $session_cookie === ''
+            || ! preg_match( '/^[A-Za-z0-9_-]+$/D', $session_cookie )
+        ) {
+            return true;
+        }
+
+        foreach ( (array) $_COOKIE as $key => $value ) {
+            if ( ! is_string( $key ) || is_array( $value ) ) {
+                return true;
+            }
+
+            $normalized = strtolower( $key );
+            if (
+                $key === $session_cookie
+                || strpos( $normalized, 'wordpress_' ) === 0
+                || strpos( $normalized, 'wp_woocommerce_session_' ) === 0
+                || in_array(
+                    $normalized,
+                    [ 'woocommerce_items_in_cart', 'woocommerce_cart_hash' ],
+                    true
+                )
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}
+
+if ( ! function_exists( 'tbl_tickera_stateless_public_home_request_is_allowlisted' ) ) {
+    /**
+     * The only non-REST request eligible for the bypass is a truly passive,
+     * anonymous canonical homepage GET/HEAD. Every alternate path, query,
+     * body, upload, authorization header or stateful cookie fails closed.
+     */
+    function tbl_tickera_stateless_public_home_request_is_allowlisted() {
+        $method = isset( $_SERVER['REQUEST_METHOD'] ) && is_string( $_SERVER['REQUEST_METHOD'] )
+            ? $_SERVER['REQUEST_METHOD']
+            : '';
+        if ( ! in_array( $method, [ 'GET', 'HEAD' ], true ) ) {
+            return false;
+        }
+
+        if (
+            array_key_exists( 'HTTP_X_HTTP_METHOD_OVERRIDE', $_SERVER )
+            || array_key_exists( 'HTTP_AUTHORIZATION', $_SERVER )
+            || array_key_exists( 'REDIRECT_HTTP_AUTHORIZATION', $_SERVER )
+            || array_key_exists( 'CONTENT_LENGTH', $_SERVER )
+            || array_key_exists( 'CONTENT_TYPE', $_SERVER )
+            || array_key_exists( 'HTTP_TRANSFER_ENCODING', $_SERVER )
+        ) {
+            return false;
+        }
+
+        $request_uri = isset( $_SERVER['REQUEST_URI'] ) && is_string( $_SERVER['REQUEST_URI'] )
+            ? (string) wp_unslash( $_SERVER['REQUEST_URI'] )
+            : '';
+        $query_string = isset( $_SERVER['QUERY_STRING'] ) && is_string( $_SERVER['QUERY_STRING'] )
+            ? (string) $_SERVER['QUERY_STRING']
+            : '';
+
+        return $request_uri === '/'
+            && $query_string === ''
+            && empty( $_GET )
+            && empty( $_POST )
+            && empty( $_FILES )
+            && ! tbl_tickera_stateless_public_home_has_stateful_context();
     }
 }
 
@@ -296,13 +376,20 @@ if ( ! function_exists( 'tbl_tickera_stateless_rest_request_is_allowlisted' ) ) 
     }
 }
 
+if ( ! function_exists( 'tbl_tickera_stateless_request_is_allowlisted' ) ) {
+    function tbl_tickera_stateless_request_is_allowlisted() {
+        return tbl_tickera_stateless_rest_request_is_allowlisted()
+            || tbl_tickera_stateless_public_home_request_is_allowlisted();
+    }
+}
+
 if ( ! function_exists( 'tbl_tickera_stateless_rest_disable_global_cart_bootstrap' ) ) {
     /**
      * Remove only Tickera's unconditional wp_loaded cart bootstrap. Tickera's
      * admin-post, payment, cart, checkout and Seating hooks remain untouched.
      */
     function tbl_tickera_stateless_rest_disable_global_cart_bootstrap() {
-        if ( ! tbl_tickera_stateless_rest_request_is_allowlisted() ) {
+        if ( ! tbl_tickera_stateless_request_is_allowlisted() ) {
             return false;
         }
 

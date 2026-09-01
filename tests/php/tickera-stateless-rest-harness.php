@@ -24,6 +24,55 @@ namespace {
     }
 
     $scenarios = [
+        'public-home-get' => [ 'GET', '/', [], 10, false ],
+        'public-home-head' => [ 'HEAD', '/', [], 10, false ],
+        'public-home-options' => [ 'OPTIONS', '/', [], 10, false ],
+        'public-home-query' => [ 'GET', '/?utm_source=test', [ 'utm_source' => 'test' ], 10, false ],
+        'public-home-empty-query-marker' => [ 'GET', '/?', [], 10, false ],
+        'public-home-index' => [ 'GET', '/index.php', [], 10, false ],
+        'public-home-session-cookie' => [
+            'GET', '/', [], 10, false, null, false, '3.6.0.2', false,
+            [ 'PHPSESSID' => 'existing-session' ],
+        ],
+        'public-home-woocommerce-session' => [
+            'GET', '/', [], 10, false, null, false, '3.6.0.2', false,
+            [ 'wp_woocommerce_session_deadbeef' => 'existing-session' ],
+        ],
+        'public-home-woocommerce-cart' => [
+            'GET', '/', [], 10, false, null, false, '3.6.0.2', false,
+            [ 'woocommerce_items_in_cart' => '1' ],
+        ],
+        'public-home-auth-cookie' => [
+            'GET', '/', [], 10, false, null, false, '3.6.0.2', false,
+            [ 'wordpress_logged_in_deadbeef' => 'authenticated' ],
+        ],
+        'public-home-post-data' => [
+            'GET', '/', [], 10, false, null, false, '3.6.0.2', false, [],
+            [ 'cart_action' => 'update_cart' ],
+        ],
+        'public-home-authorization' => [
+            'GET', '/', [], 10, false, null, false, '3.6.0.2', false, [], [],
+            'Bearer test-token',
+        ],
+        'public-home-upload' => [
+            'GET', '/', [], 10, false, null, false, '3.6.0.2', false, [], [], null,
+            [ 'ticket' => [ 'name' => 'fixture.txt' ] ],
+        ],
+        'public-home-content-length' => [
+            'GET', '/', [], 10, false, null, false, '3.6.0.2', false, [], [], null, [],
+            [ 'CONTENT_LENGTH' => '1' ],
+        ],
+        'public-home-content-type' => [
+            'GET', '/', [], 10, false, null, false, '3.6.0.2', false, [], [], null, [],
+            [ 'CONTENT_TYPE' => 'application/json' ],
+        ],
+        'public-home-transfer-encoding' => [
+            'GET', '/', [], 10, false, null, false, '3.6.0.2', false, [], [], null, [],
+            [ 'HTTP_TRANSFER_ENCODING' => 'chunked' ],
+        ],
+        'cart-get' => [ 'GET', '/cart/', [], 10, false ],
+        'checkout-get' => [ 'GET', '/checkout/', [], 10, false ],
+        'payment-get' => [ 'GET', '/paiement/', [], 10, false ],
         'pretty-get-home' => [ 'GET', '/wp-json/lamako-mobile/v2/public/home-data', [], 10, false ],
         'pretty-head-event' => [ 'HEAD', '/wp-json/lamako-mobile/v2/public/events/13459', [], 10, false ],
         'pretty-options-product' => [ 'OPTIONS', '/wp-json/lamako-mobile/v2/public/products/13845', [], 10, false ],
@@ -227,15 +276,39 @@ namespace {
         ? (string) $scenarios[ $scenario ][7]
         : '3.6.0.2';
     $remove_leaves_hook = ! empty( $scenarios[ $scenario ][8] );
+    $cookies             = isset( $scenarios[ $scenario ][9] ) && is_array( $scenarios[ $scenario ][9] )
+        ? $scenarios[ $scenario ][9]
+        : [];
+    $post_data           = isset( $scenarios[ $scenario ][10] ) && is_array( $scenarios[ $scenario ][10] )
+        ? $scenarios[ $scenario ][10]
+        : ( $scenario === 'cart-post' ? [ 'cart_action' => 'update_cart' ] : [] );
+    $authorization       = isset( $scenarios[ $scenario ][11] ) && is_string( $scenarios[ $scenario ][11] )
+        ? $scenarios[ $scenario ][11]
+        : null;
+    $files               = isset( $scenarios[ $scenario ][12] ) && is_array( $scenarios[ $scenario ][12] )
+        ? $scenarios[ $scenario ][12]
+        : [];
+    $server_overrides    = isset( $scenarios[ $scenario ][13] ) && is_array( $scenarios[ $scenario ][13] )
+        ? $scenarios[ $scenario ][13]
+        : [];
 
     define( 'ABSPATH', __DIR__ . DIRECTORY_SEPARATOR );
     $_SERVER['REQUEST_METHOD'] = $method;
     $_SERVER['REQUEST_URI'] = $uri;
+    $_SERVER['QUERY_STRING'] = (string) ( parse_url( $uri, PHP_URL_QUERY ) ?? '' );
     if ( $method_override !== null ) {
         $_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE'] = $method_override;
     }
+    if ( $authorization !== null ) {
+        $_SERVER['HTTP_AUTHORIZATION'] = $authorization;
+    }
+    foreach ( $server_overrides as $server_key => $server_value ) {
+        $_SERVER[ $server_key ] = $server_value;
+    }
     $_GET = $get;
-    $_POST = $scenario === 'cart-post' ? [ 'cart_action' => 'update_cart' ] : [];
+    $_POST = $post_data;
+    $_COOKIE = $cookies;
+    $_FILES = $files;
 
     $GLOBALS['tbl_tickera_test_hooks'] = [];
     $GLOBALS['tbl_tickera_test_session_start_calls'] = 0;
@@ -382,7 +455,9 @@ namespace {
         'tbl_tickera_stateless_rest_disable_global_cart_bootstrap'
     );
     do_action( 'plugins_loaded' );
-    $allowlisted = tbl_tickera_stateless_rest_request_is_allowlisted();
+    $rest_allowlisted = tbl_tickera_stateless_rest_request_is_allowlisted();
+    $home_allowlisted = tbl_tickera_stateless_public_home_request_is_allowlisted();
+    $allowlisted = tbl_tickera_stateless_request_is_allowlisted();
     $wp_loaded_priority_before = has_action( 'wp_loaded', [ $tc, 'update_cart' ] );
     do_action( 'wp_loaded' );
     $wp_loaded_priority_after = has_action( 'wp_loaded', [ $tc, 'update_cart' ] );
@@ -391,6 +466,8 @@ namespace {
         [
             'scenario' => $scenario,
             'allowlisted' => $allowlisted,
+            'restAllowlisted' => $rest_allowlisted,
+            'publicHomeAllowlisted' => $home_allowlisted,
             'guardRunsFirst' => $guard_priority === PHP_INT_MIN,
             'wpLoadedPriorityBefore' => $wp_loaded_priority_before,
             'wpLoadedPriorityAfter' => $wp_loaded_priority_after,

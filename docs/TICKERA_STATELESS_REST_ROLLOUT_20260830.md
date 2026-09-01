@@ -1,4 +1,4 @@
-# Tickera stateless Mobile v2 REST guard — rollout and rollback
+# Tickera stateless public-read guard — rollout and rollback
 
 ## Status and scope
 
@@ -7,8 +7,8 @@
 The candidate `scripts/tbl-tickera-stateless-rest.php` is a separate,
 reversible MU shim. It prevents only Tickera's unconditional `update_cart`
 callback on `wp_loaded` from opening a PHP session for an exact stateless
-Mobile v2 read allowlist. It does not start or destroy a session and does not
-delete `PHPSESSID` from a response.
+Mobile v2 read allowlist and the passive anonymous canonical homepage. It does
+not start or destroy a session and does not delete `PHPSESSID` from a response.
 
 No staging or production access, lock, upload, option, database, cache,
 session, order, payment, ticket, stock or provider operation was performed for
@@ -49,6 +49,16 @@ encoded/double-encoded separators, percent-bearing route values, backslashes,
 repeated slashes, controls and dot segments. Checkout fields, profile,
 authentication mutations, checkouts, payments, callbacks, seating, orders and
 WooCommerce Store API routes are not allowlisted.
+
+The only non-REST request eligible is exact `GET /` or `HEAD /`, with an empty
+raw query, `$_GET`, `$_POST` and `$_FILES`, no method override or Authorization
+header, no content-length/type/transfer-encoding body marker, and no PHP-session,
+WordPress authentication or WooCommerce
+session/cart cookie. `/index.php`, any query string (including analytics),
+OPTIONS, authenticated visits, existing carts, `/cart/`, `/checkout/` and
+`/paiement/` remain stateful. The guard does not claim that a later homepage
+component cannot legitimately start a session; runtime qualification must
+prove that the deployed canonical homepage has no such component path.
 
 Any `_method` query override, `X-HTTP-Method-Override` header, normalized query
 alias, semicolon separator or non-exact method token is rejected so the shim
@@ -155,6 +165,14 @@ with any commerce regression or cache warm-up:
 - do not call or simulate cart add/update, coupon, checkout, order creation,
   payment pages or callbacks, Seating/Firebase, provider APIs, cache purge or
   cache prime in Phase S.
+
+The public-home component is qualified in its own fresh anonymous processes:
+exact `GET /` and `HEAD /` must show zero session-handler operations and no
+`PHPSESSID`; negative controls with a PHP/Woo/auth cookie, a query, `/cart/`,
+`/checkout/` and `/paiement/` must keep Tickera's priority-10 callback. The
+real HTTPS homepage must remain HTTP 200 with the same cache/body contract,
+while the cart/checkout/payment controls retain their expected stateful
+behavior. This is additive to, not a substitute for, the REST matrix.
 
 The committed runner is intentionally not a local-runtime substitute. With no
 real WordPress root it exits `STOP real_wordpress_runtime_required`; unit

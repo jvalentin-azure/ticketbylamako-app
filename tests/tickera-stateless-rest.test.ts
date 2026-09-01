@@ -7,6 +7,8 @@ import { describe, expect, it } from "vitest";
 type HarnessResult = {
   scenario: string;
   allowlisted: boolean;
+  restAllowlisted: boolean;
+  publicHomeAllowlisted: boolean;
   guardRunsFirst: boolean;
   wpLoadedPriorityBefore: number | false;
   wpLoadedPriorityAfter: number | false;
@@ -43,6 +45,8 @@ function expectNeighborHooksUntouched(result: HarnessResult) {
 
 describe("Tickera stateless REST MU shim", () => {
   it.each([
+    "public-home-get",
+    "public-home-head",
     "pretty-get-home",
     "pretty-head-event",
     "pretty-options-product",
@@ -67,7 +71,51 @@ describe("Tickera stateless REST MU shim", () => {
     expectNeighborHooksUntouched(result);
   });
 
+  it.each(["public-home-get", "public-home-head"])(
+    "classifies only the passive anonymous homepage as public stateless for %s",
+    (scenario) => {
+      const result = runScenario(scenario);
+
+      expect(result.restAllowlisted).toBe(false);
+      expect(result.publicHomeAllowlisted).toBe(true);
+      expect(result.allowlisted).toBe(true);
+    },
+  );
+
   it.each([
+    "pretty-get-home",
+    "pretty-head-event",
+    "pretty-options-product",
+    "query-get-home",
+  ])(
+    "keeps REST classification separate from public home for %s",
+    (scenario) => {
+      const result = runScenario(scenario);
+
+      expect(result.restAllowlisted).toBe(true);
+      expect(result.publicHomeAllowlisted).toBe(false);
+      expect(result.allowlisted).toBe(true);
+    },
+  );
+
+  it.each([
+    "public-home-options",
+    "public-home-query",
+    "public-home-empty-query-marker",
+    "public-home-index",
+    "public-home-session-cookie",
+    "public-home-woocommerce-session",
+    "public-home-woocommerce-cart",
+    "public-home-auth-cookie",
+    "public-home-post-data",
+    "public-home-authorization",
+    "public-home-upload",
+    "public-home-content-length",
+    "public-home-content-type",
+    "public-home-transfer-encoding",
+    "cart-get",
+    "checkout-get",
+    "payment-get",
     "post-allowlist",
     "delete-allowlist",
     "missing-method",
@@ -161,6 +209,12 @@ describe("Tickera stateless REST MU shim", () => {
     expect(source).toContain("remove_action( 'wp_loaded', $callback, 10 )");
     expect(source).toContain("PHP_INT_MIN");
     expect(source).toContain("'HTTP_X_HTTP_METHOD_OVERRIDE'");
+    expect(source).toContain("'HTTP_AUTHORIZATION'");
+    expect(source).toContain("'CONTENT_LENGTH'");
+    expect(source).toContain("'CONTENT_TYPE'");
+    expect(source).toContain("'HTTP_TRANSFER_ENCODING'");
+    expect(source).toContain("'wp_woocommerce_session_'");
+    expect(source).toContain("'woocommerce_items_in_cart'");
     expect(source).toContain("(string) $tc->version !== '3.6.0.2'");
     expect(source).not.toContain("'plugins_loaded'");
     expect(source).not.toMatch(/\bsession_start\s*\(/);
