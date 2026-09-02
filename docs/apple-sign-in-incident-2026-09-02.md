@@ -1,6 +1,6 @@
 # Incident « Continuer avec Apple » — diagnostic, correctif et reprise
 
-**Statut :** correctif local validé, non déployé  
+**Statut :** garde-fou WordPress déployé en production et validé; test réel Apple sur iPhone en attente
 **Date du diagnostic :** 2 septembre 2026  
 **Auteur :** Manus AI  
 **Dépôt :** `jvalentin-azure/ticketbylamako-app`  
@@ -29,7 +29,7 @@ Le correctif préparé agit aux deux frontières. Le client lit maintenant le co
 | Défaut client | Décodage JSON non défensif sur une réponse HTTP réussie | Confirmé |
 | Validation Apple côté serveur | Signature RS256, clés Apple, audience, expiration et nonce sont contrôlés | Confirmé |
 | Origine exacte du HTML | Chemin serveur après validation d’un vrai jeton | Probable, journal requis |
-| Correctif de production | Préparé et testé localement, pas encore déployé | Confirmé |
+| Correctif de production | Garde-fou WordPress actif; client React Native non publié | Confirmé |
 
 ## 3. Chronologie détaillée
 
@@ -49,6 +49,11 @@ Le correctif préparé agit aux deux frontières. Le client lit maintenant le co
 | 12 | Tentative d’accès aux journaux WordPress | L’administration exige une connexion et la reprise du navigateur n’était pas disponible. Aucun journal de production n’a été consulté. |
 | 13 | Création du correctif | Une branche isolée `fix/apple-social-json-response-20260902` a été créée depuis la branche de publication. |
 | 14 | Validation locale | TypeScript, syntaxe PHP, tests ciblés et suite complète réussissent. |
+| 15 | Rétablissement de l’accès Cloudways | Clé SSH dédiée ajoutée par le propriétaire; hôte et application de production vérifiés. |
+| 16 | Sauvegarde de production | Fichier actif et module de sécurité copiés dans un dossier privé horodaté avec manifestes SHA-256. |
+| 17 | Réconciliation production/Git | Après normalisation CRLF/LF, la production active et la base Git sont identiques. |
+| 18 | Déploiement atomique | Le garde-fou WordPress a remplacé le fichier actif avec rollback automatique et vérification PHP/hash. |
+| 19 | Postflight et déverrouillage | Site, route sociale et routes de contenu réussis; résultats consignés; verrou supprimé. |
 
 ## 4. Flux technique analysé
 
@@ -107,7 +112,7 @@ Le fichier `tests/social-auth-security.test.ts` impose désormais que le client 
 
 ## 8. Limites actuelles
 
-Le diagnostic n’a pas inclus les journaux PHP/WordPress ni un nouvel essai réel avec Apple après le correctif, car l’administration WordPress n’était pas accessible dans la session. Le correctif serveur ne peut donc pas encore être présenté comme la preuve définitive de la cause racine. Il supprime toutefois la classe de défaut observée — une sortie non JSON — et ajoute les traces nécessaires pour identifier l’émetteur si le problème persiste.
+L’accès SSH Cloudways a ensuite été rétabli et le garde-fou serveur déployé. Les journaux ont été recherchés uniquement sur le préfixe `[Lamako Social Auth]`; aucune ligne n’est apparue pendant les sondes invalides, ce qui est attendu avant le chemin post-validation. Un nouvel essai réel avec Apple reste nécessaire pour confirmer la cause racine et déclencher, le cas échéant, la trace de sortie parasite.
 
 Aucun jeton Apple réel n’a été collecté ou enregistré. Les sondes ont utilisé des jetons factices volontairement invalides et n’ont créé, modifié ou lié aucun compte.
 
@@ -163,9 +168,15 @@ Si la route retourne une erreur JSON `social_nonce_invalid`, vérifier que le no
 | Branche cible de la PR | `feat/client-mobile-web-20260827` |
 | État au moment du diagnostic | Ouverte, en brouillon et fusionnable; aucun contrôle distant configuré n’est remonté |
 
-La pull request reste volontairement en brouillon tant que le garde-fou WordPress n’a pas été déployé et que la connexion Apple n’a pas été rejouée sur un iPhone réel. La branche distante et la PR constituent le point de reprise officiel pour Codex.
+La pull request reste volontairement en brouillon tant que la connexion Apple n’a pas été rejouée sur un iPhone réel et que les parcours email, Google et Facebook n’ont pas été revérifiés. La branche distante et la PR constituent le point de reprise officiel pour Codex.
 
-## 14. Références
+## 14. Déploiement production du 2 septembre 2026
+
+Le garde-fou WordPress a été déployé sur l’application Cloudways de production `bvprmuerhv`. Le fichier actif possède désormais le SHA-256 `e75bc568ed9d7972d0609e0e11a53acc4b276488b2f3a3853ffed0192d746b98`. La sauvegarde exacte pré-déploiement possède le SHA-256 `0613564f2be9037af5d48020045ae9167fed278c3f76131d7d79ef229bf46a11` et se trouve dans un dossier privé du serveur.
+
+Le postflight a validé la page d’accueil, les réponses JSON de la route sociale, la syntaxe PHP, l’activation du plugin et les routes `home-data`, `events-data` et `shop-data`. Le verrou de déploiement a été libéré. Le détail complet, les horaires, chemins, hashes, commandes de rollback et scénarios iPhone sont consignés dans [`docs/apple-sign-in-production-deployment-2026-09-02.md`](apple-sign-in-production-deployment-2026-09-02.md).
+
+## 15. Références
 
 [1]: https://itunes.apple.com/lookup?id=6793957219&country=us "Apple Lookup API — TicketByLamako"
 [2]: https://docs.expo.dev/versions/latest/sdk/apple-authentication/ "Expo SDK — AppleAuthentication"
