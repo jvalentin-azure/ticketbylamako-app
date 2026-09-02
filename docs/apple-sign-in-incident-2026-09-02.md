@@ -1,6 +1,6 @@
 # Incident « Continuer avec Apple » — diagnostic, correctif et reprise
 
-**Statut :** garde-fou WordPress déployé en production et validé; test réel Apple sur iPhone en attente
+**Statut :** garde-fou WordPress déployé; connexions Apple, Google et Facebook validées sur iPhone
 **Date du diagnostic :** 2 septembre 2026  
 **Auteur :** Manus AI  
 **Dépôt :** `jvalentin-azure/ticketbylamako-app`  
@@ -28,7 +28,7 @@ Le correctif préparé agit aux deux frontières. Le client lit maintenant le co
 | Étape de rupture | Après l’obtention de l’identité Apple, pendant l’échange avec WordPress | Élevée |
 | Défaut client | Décodage JSON non défensif sur une réponse HTTP réussie | Confirmé |
 | Validation Apple côté serveur | Signature RS256, clés Apple, audience, expiration et nonce sont contrôlés | Confirmé |
-| Origine exacte du HTML | Chemin serveur après validation d’un vrai jeton | Probable, journal requis |
+| Résolution opérationnelle | Le garde-fou serveur rétablit le login Apple; aucune récidive ni trace d’exception pendant le test réel | Confirmé |
 | Correctif de production | Garde-fou WordPress actif; client React Native non publié | Confirmé |
 
 ## 3. Chronologie détaillée
@@ -54,6 +54,9 @@ Le correctif préparé agit aux deux frontières. Le client lit maintenant le co
 | 17 | Réconciliation production/Git | Après normalisation CRLF/LF, la production active et la base Git sont identiques. |
 | 18 | Déploiement atomique | Le garde-fou WordPress a remplacé le fichier actif avec rollback automatique et vérification PHP/hash. |
 | 19 | Postflight et déverrouillage | Site, route sociale et routes de contenu réussis; résultats consignés; verrou supprimé. |
+| 20 | Test Apple réel | Le propriétaire confirme une authentification réussie et l’affichage de son compte; aucune trace d’erreur ciblée. |
+| 21 | Test Google sur iPhone | Le propriétaire confirme une authentification réussie. |
+| 22 | Test Facebook sur iPhone | Le compte s’ouvre; le callback répond HTTP 200; un message visuel aperçu une fois n’est plus reproductible. |
 
 ## 4. Flux technique analysé
 
@@ -112,7 +115,7 @@ Le fichier `tests/social-auth-security.test.ts` impose désormais que le client 
 
 ## 8. Limites actuelles
 
-L’accès SSH Cloudways a ensuite été rétabli et le garde-fou serveur déployé. Les journaux ont été recherchés uniquement sur le préfixe `[Lamako Social Auth]`; aucune ligne n’est apparue pendant les sondes invalides, ce qui est attendu avant le chemin post-validation. Un nouvel essai réel avec Apple reste nécessaire pour confirmer la cause racine et déclencher, le cas échéant, la trace de sortie parasite.
+L’accès SSH Cloudways a ensuite été rétabli et le garde-fou serveur déployé. Les journaux ont été recherchés uniquement sur le préfixe `[Lamako Social Auth]`. Aucune ligne n’est apparue pendant les sondes invalides ni après le login Apple réel réussi. Le correctif est donc validé opérationnellement, même si l’émetteur historique de la réponse HTML n’a pas pu être reproduit après protection.
 
 Aucun jeton Apple réel n’a été collecté ou enregistré. Les sondes ont utilisé des jetons factices volontairement invalides et n’ont créé, modifié ou lié aucun compte.
 
@@ -153,7 +156,7 @@ Avant toute restauration, conserver les lignes `[Lamako Social Auth]` et le stat
 
 La reprise doit commencer sur `fix/apple-social-json-response-20260902`, sans repartir de `main`. La base du binaire publié est `origin/feat/client-mobile-web-20260827`, commit `d9520c7a01f233ad0d4ff70c131b410da3de25da`. Le diff utile porte uniquement sur `lib/api/social-auth.ts`, `scripts/lamako-mobile-api.php`, `tests/social-auth-security.test.ts` et le présent journal.
 
-La prochaine étape n’est pas de réécrire le flux Apple. Il faut d’abord déployer le garde-fou WordPress, tester avec un vrai compte Apple sur iPhone et relever les lignes `[Lamako Social Auth]`. Si une ligne `Suppressed unexpected output` apparaît, rechercher quel hook exécuté par `wp_insert_user()`, `update_user_meta()`, `get_avatar_url()` ou le filtre JWT produit une sortie. Toute instrumentation supplémentaire doit journaliser des étapes et identifiants de corrélation, jamais les jetons ou informations personnelles.
+Le garde-fou WordPress est déployé et les connexions Apple, Google et Facebook ont réussi sur iPhone. Ne pas redéployer ou retirer le garde-fou tant que son hash actif correspond au journal de production. Le message Facebook `Something went wrong` est non reproductible; ne pas modifier Meta ni le callback sans une nouvelle preuve. Le diagnostic et le protocole de récidive sont dans `docs/facebook-ios-transient-message-2026-09-02.md`. Toute instrumentation supplémentaire doit journaliser des étapes et identifiants de corrélation, jamais les jetons ou informations personnelles.
 
 Si la route retourne une erreur JSON `social_nonce_invalid`, vérifier que le nonce transmis par `startAppleLogin()` correspond au claim du jeton. La source Expo consultée montre toutefois que le nonce est transmis sans transformation dans cette version, donc aucune modification de hachage ne doit être introduite sans une preuve issue du jeton décodé de façon sûre.[3]
 
@@ -168,13 +171,13 @@ Si la route retourne une erreur JSON `social_nonce_invalid`, vérifier que le no
 | Branche cible de la PR | `feat/client-mobile-web-20260827` |
 | État au moment du diagnostic | Ouverte, en brouillon et fusionnable; aucun contrôle distant configuré n’est remonté |
 
-La pull request reste volontairement en brouillon tant que la connexion Apple n’a pas été rejouée sur un iPhone réel et que les parcours email, Google et Facebook n’ont pas été revérifiés. La branche distante et la PR constituent le point de reprise officiel pour Codex.
+Les connexions Apple, Google et Facebook ont été rejouées avec succès sur iPhone. Le message Facebook aperçu une fois est non reproductible et ne justifie aucun changement. La pull request reste volontairement en brouillon jusqu’à la décision concernant le correctif défensif client et la vérification finale de la connexion directe par email. La branche distante et la PR constituent le point de reprise officiel pour Codex.
 
 ## 14. Déploiement production du 2 septembre 2026
 
 Le garde-fou WordPress a été déployé sur l’application Cloudways de production `bvprmuerhv`. Le fichier actif possède désormais le SHA-256 `e75bc568ed9d7972d0609e0e11a53acc4b276488b2f3a3853ffed0192d746b98`. La sauvegarde exacte pré-déploiement possède le SHA-256 `0613564f2be9037af5d48020045ae9167fed278c3f76131d7d79ef229bf46a11` et se trouve dans un dossier privé du serveur.
 
-Le postflight a validé la page d’accueil, les réponses JSON de la route sociale, la syntaxe PHP, l’activation du plugin et les routes `home-data`, `events-data` et `shop-data`. Le verrou de déploiement a été libéré. Le détail complet, les horaires, chemins, hashes, commandes de rollback et scénarios iPhone sont consignés dans [`docs/apple-sign-in-production-deployment-2026-09-02.md`](apple-sign-in-production-deployment-2026-09-02.md).
+Le postflight a validé la page d’accueil, les réponses JSON de la route sociale, la syntaxe PHP, l’activation du plugin et les routes `home-data`, `events-data` et `shop-data`. Le verrou de déploiement a été libéré. À `2026-09-02T18:29:54Z`, le propriétaire a confirmé que « Continuer avec Apple » ouvre correctement son compte; Google et Facebook ont ensuite réussi sur le même iPhone. Le hash actif est resté inchangé et aucune ligne d’erreur ciblée n’a été relevée. Le détail complet, les horaires, chemins, hashes, commandes de rollback et résultats iPhone sont consignés dans [`docs/apple-sign-in-production-deployment-2026-09-02.md`](apple-sign-in-production-deployment-2026-09-02.md). L’anomalie visuelle Facebook non reproductible est documentée dans [`docs/facebook-ios-transient-message-2026-09-02.md`](facebook-ios-transient-message-2026-09-02.md).
 
 ## 15. Références
 

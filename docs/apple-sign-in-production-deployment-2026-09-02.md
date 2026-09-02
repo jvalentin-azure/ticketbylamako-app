@@ -1,6 +1,6 @@
 # Déploiement production — garde-fou « Continuer avec Apple »
 
-**Statut :** garde-fou WordPress déployé et postflight réussi; test réel Apple sur iPhone en attente  
+**Statut :** garde-fou WordPress déployé, postflight réussi et connexion Apple validée sur iPhone réel
 **Date :** 2 septembre 2026  
 **Auteur :** Manus AI  
 **Pull request :** [#8 — `fix(auth): harden iOS Apple sign-in response handling`](https://github.com/jvalentin-azure/ticketbylamako-app/pull/8)  
@@ -33,6 +33,9 @@ Le propriétaire a explicitement autorisé l’intervention sur Cloudways par SS
 | 18:18:11 | Remplacement atomique | Le candidat a été installé sous un nom temporaire dans le même répertoire, validé puis déplacé atomiquement sur le fichier actif. |
 | 18:18–18:19 | Postflight | Site, route sociale, plugin et routes publiques de contenu validés. |
 | 18:19:59 | Libération du verrou | Résultats écrits dans `postflight.txt`, puis verrou supprimé et absence vérifiée. |
+| 18:29:54 | Test Apple réel | Le propriétaire confirme la connexion Apple et l’affichage de son compte; hash actif inchangé et aucune trace d’erreur ciblée. |
+| 18:31:01 | Test Google sur iPhone | Le propriétaire confirme la connexion Google; résultat consigné sans donnée personnelle. |
+| 18:30:13–18:44:09 | Test et diagnostic Facebook | Connexion et compte réussis; callback HTTP 200; le premier message visuel n’est plus reproductible et aucun changement n’est appliqué. |
 
 ## 3. Identification du fichier actif
 
@@ -104,7 +107,7 @@ Après le remplacement, le fichier actif avait les caractéristiques suivantes :
 | Sauvegarde pré-déploiement | Hash vérifié |
 | Verrou mono-writer | Supprimé et absence vérifiée |
 
-Aucune ligne `[Lamako Social Auth]` n’a été produite par les sondes invalides. Ce résultat est attendu : elles échouent pendant la validation du jeton et ne déclenchent aucune sortie parasite. Le test décisif reste un vrai login Apple sur iPhone.
+Aucune ligne `[Lamako Social Auth]` n’a été produite par les sondes invalides. Après le test réel, le propriétaire a confirmé que la connexion Apple réussit et que son compte est visible. Une seconde recherche ciblée n’a relevé aucune ligne `[Lamako Social Auth]`; le garde-fou n’a donc signalé ni sortie parasite ni exception pendant ce login réussi. Le fichier actif conservait le SHA-256 attendu.
 
 ## 8. Retour arrière
 
@@ -130,15 +133,28 @@ rm -rf "$LOCK"
 
 Après rollback, il faut vérifier la page d’accueil, les trois routes publiques de contenu et les deux sondes JSON de la route sociale.
 
-## 9. Prochaine étape obligatoire
+## 9. Résultat du test réel et clôture serveur
 
-Tester maintenant **« Continuer avec Apple » sur un iPhone réel** avec l’application App Store actuelle. Noter l’heure UTC approximative et le résultat affiché, sans communiquer le jeton ni l’email relais Apple. Après le test, rechercher uniquement les lignes `[Lamako Social Auth]` dans les journaux Cloudways.
+Le propriétaire a testé **« Continuer avec Apple » sur un iPhone réel** avec l’application App Store actuelle. Il confirme que l’authentification réussit et que son compte s’affiche. Le résultat a été consigné à `2026-09-02T18:29:54Z` dans le fichier privé `real-apple-test.txt`, sans identité, email ni jeton.
 
-| Résultat iPhone | Action suivante |
+| Contrôle après test réel | Résultat |
 |---|---|
-| Connexion réussie | Consigner le succès, rejouer email/Google/Facebook, puis décider de la publication du correctif client. |
-| Erreur JSON lisible | Consigner le code et le message sans donnée personnelle; corriger la cause spécifique. |
-| Même erreur brute `Unexpected character: <` | Relever l’heure; inspecter les lignes `Suppressed unexpected output`; le binaire client actuel reste vulnérable au parsing brut. |
-| Message serveur temporairement indisponible | Inspecter `Unhandled server error` et la classe d’exception, puis corriger le hook fautif. |
+| Authentification Apple | Réussie |
+| Compte visible dans l’application | Oui |
+| Hash du plugin actif | `e75bc568ed9d7972d0609e0e11a53acc4b276488b2f3a3853ffed0192d746b98` |
+| Lignes `[Lamako Social Auth]` | Aucune |
+| Donnée personnelle enregistrée dans la trace | Aucune |
 
-La pull request doit rester en brouillon jusqu’au test iPhone et à la vérification des autres méthodes de connexion.
+Le correctif serveur est donc validé en conditions réelles. Google et Facebook ont également réussi sur iPhone. Le garde-fou WordPress ne doit pas être retiré : il empêche une future sortie non JSON de corrompre la réponse sociale et fournit une trace non sensible en cas de récidive.
+
+## 10. Validation Google et Facebook sur iPhone
+
+| Fournisseur | Résultat | Preuve complémentaire |
+|---|---|---|
+| Google | Connexion réussie | Trace privée `real-google-ios-test.txt`; aucune donnée personnelle |
+| Facebook | Connexion réussie et compte visible | Callback `/lamako-mobile/oauth/facebook-callback` HTTP 200 depuis un iPhone à `18:30:13Z` |
+| Facebook — message visuel | « Something went wrong » aperçu une fois avant le retour | Non reproductible lors des essais suivants |
+
+Le message Facebook est classé comme anomalie visuelle transitoire non reproductible. Les paramètres Meta et WordPress correspondent, le callback répond HTTP 200 et le compte s’ouvre. Aucun changement Facebook n’a été appliqué afin de ne pas introduire une régression dans un parcours fonctionnel. Le diagnostic complet et le protocole de surveillance se trouvent dans [`facebook-ios-transient-message-2026-09-02.md`](facebook-ios-transient-message-2026-09-02.md).
+
+La pull request peut rester en brouillon jusqu’à la décision concernant le correctif défensif client et la vérification finale de la connexion directe par email sur iPhone.
