@@ -198,6 +198,40 @@ async function fetchWithTimeout(
   }
 }
 
+type SocialApiError = {
+  code?: string;
+  message?: string;
+};
+
+async function parseSocialApiResponse<T>(
+  response: Response,
+  provider: SocialProvider,
+): Promise<T> {
+  const rawBody = await response.text();
+  const body = rawBody.replace(/^\uFEFF/, "").trim();
+
+  if (!body) {
+    throw new Error(
+      `Le service de connexion ${provider} a renvoyé une réponse vide (${response.status}). Veuillez réessayer.`,
+    );
+  }
+
+  try {
+    return JSON.parse(body) as T;
+  } catch {
+    const contentType = response.headers.get("content-type") || "";
+    const receivedHtml =
+      /^\s*</.test(body) || contentType.toLowerCase().includes("text/html");
+    const responseKind = receivedHtml
+      ? "une page HTML"
+      : "une réponse illisible";
+
+    throw new Error(
+      `Le service de connexion ${provider} a renvoyé ${responseKind} au lieu du JSON attendu (${response.status}). Veuillez réessayer.`,
+    );
+  }
+}
+
 export async function socialLogin(
   provider: SocialProvider,
   credential: SocialCredential,
@@ -220,15 +254,19 @@ export async function socialLogin(
     },
   );
 
+  const payload = await parseSocialApiResponse<
+    SocialLoginResponse | WebSocialLoginResponse | SocialApiError
+  >(res, provider);
+
   if (!res.ok) {
-    const errorBody = await res.json().catch(() => ({}));
+    const errorBody = payload as SocialApiError;
     throw new Error(
       errorBody.message || `Erreur de connexion ${provider} (${res.status})`,
     );
   }
 
   if (isWeb) {
-    const data: WebSocialLoginResponse = await res.json();
+    const data = payload as WebSocialLoginResponse;
     if (!data.authenticated || !data.user) {
       throw new Error(data.message || "Échec de l'authentification");
     }
@@ -239,8 +277,8 @@ export async function socialLogin(
     return sessionUser;
   }
 
-  const data: SocialLoginResponse = await res.json();
-  if (!data.success || !data.token) {
+  const data = payload as SocialLoginResponse;
+  if (!data.success || !data.token || !data.user) {
     throw new Error(data.message || "Échec de l'authentification");
   }
 
