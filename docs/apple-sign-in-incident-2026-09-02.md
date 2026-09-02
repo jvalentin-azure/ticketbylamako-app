@@ -152,7 +152,20 @@ La prochaine étape n’est pas de réécrire le flux Apple. Il faut d’abord d
 
 Si la route retourne une erreur JSON `social_nonce_invalid`, vérifier que le nonce transmis par `startAppleLogin()` correspond au claim du jeton. La source Expo consultée montre toutefois que le nonce est transmis sans transformation dans cette version, donc aucune modification de hachage ne doit être introduite sans une preuve issue du jeton décodé de façon sûre.[3]
 
-## 13. Références
+## 13. Livraison Git
+
+| Élément | Référence |
+|---|---|
+| Branche distante | `fix/apple-social-json-response-20260902` |
+| Commit du correctif | `06ac889` — `fix(auth): harden Apple social login JSON handling` |
+| Commit de documentation initial | `852a03d` — `docs(auth): record Apple sign-in incident handoff` |
+| Pull request | [#8 — fix(auth): harden iOS Apple sign-in response handling](https://github.com/jvalentin-azure/ticketbylamako-app/pull/8) |
+| Branche cible de la PR | `feat/client-mobile-web-20260827` |
+| État au moment du diagnostic | Ouverte, en brouillon et fusionnable; aucun contrôle distant configuré n’est remonté |
+
+La pull request reste volontairement en brouillon tant que le garde-fou WordPress n’a pas été déployé et que la connexion Apple n’a pas été rejouée sur un iPhone réel. La branche distante et la PR constituent le point de reprise officiel pour Codex.
+
+## 14. Références
 
 [1]: https://itunes.apple.com/lookup?id=6793957219&country=us "Apple Lookup API — TicketByLamako"
 [2]: https://docs.expo.dev/versions/latest/sdk/apple-authentication/ "Expo SDK — AppleAuthentication"

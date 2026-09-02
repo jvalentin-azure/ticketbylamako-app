@@ -2,7 +2,7 @@
 
 ## Active incident: Sign in with Apple on iOS
 
-The active work is on branch `fix/apple-social-json-response-20260902`, based on `origin/feat/client-mobile-web-20260827` at commit `d9520c7a01f233ad0d4ff70c131b410da3de25da`. Do not restart this incident from `main`: the public App Store build matches the feature branch, while `main` does not contain the same Apple login UI and configuration.
+The active work is on branch `fix/apple-social-json-response-20260902`, based on `origin/feat/client-mobile-web-20260827` at commit `d9520c7a01f233ad0d4ff70c131b410da3de25da`. The official review and continuation point is draft pull request [#8](https://github.com/jvalentin-azure/ticketbylamako-app/pull/8). The code fix is commit `06ac889` and the initial handoff documentation is commit `852a03d`. Do not restart this incident from `main`: the public App Store build matches the feature branch, while `main` does not contain the same Apple login UI and configuration.
 
 Read [`docs/apple-sign-in-incident-2026-09-02.md`](docs/apple-sign-in-incident-2026-09-02.md) before changing authentication code. It contains the screenshot finding, complete investigation timeline, safe production probes, source comparison, implemented patch, validation results, deployment order, rollback, and unresolved production-log requirement.
 
