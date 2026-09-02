@@ -122,6 +122,26 @@ describe("social authentication security", () => {
     expect(appConfig).toContain('"expo-apple-authentication"');
   });
 
+  it("rejects non-JSON social responses before they reach React Native JSON parsing", () => {
+    const socialLoginFlow = socialAuth.slice(
+      socialAuth.indexOf("type SocialApiError"),
+      socialAuth.indexOf("export async function startGoogleLogin"),
+    );
+    expect(socialLoginFlow).toContain("parseSocialApiResponse");
+    expect(socialLoginFlow).toContain("await response.text()");
+    expect(socialLoginFlow).toContain("une page HTML");
+    expect(socialLoginFlow).not.toContain("await res.json()");
+  });
+
+  it("keeps the WordPress social-login response free of echoed HTML", () => {
+    expect(oauthCallbackPage).toContain(
+      "'callback' => 'lamako_mobile_social_login_json_guard'",
+    );
+    expect(oauthCallbackPage).toContain("ob_start()");
+    expect(oauthCallbackPage).toContain("Suppressed unexpected output");
+    expect(oauthCallbackPage).toContain("social_login_server_error");
+  });
+
   it("does not place the WordPress JWT in a WebView URL", () => {
     expect(seatingFlow).not.toContain("/auto-login?token=");
     expect(seatingFlow).toContain('mixedContentMode="never"');

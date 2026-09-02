@@ -3222,7 +3222,7 @@ add_action( 'rest_api_init', function () {
     // Public endpoint - validates provider tokens and returns JWT
     register_rest_route( 'lamako-mobile/v1', '/social-login', [
         'methods'  => 'POST',
-        'callback' => 'lamako_mobile_social_login',
+        'callback' => 'lamako_mobile_social_login_json_guard',
         'permission_callback' => 'lamako_mobile_public_auth_permission',
     ] );
 
@@ -3873,6 +3873,43 @@ function lamako_mobile_is_boutique_product( $product_id ) {
  * 
  * Response: { "success": true, "token": "jwt...", "user": {...}, "is_new_user": bool, "linked_existing": bool }
  */
+function lamako_mobile_social_login_json_guard( WP_REST_Request $request ) {
+    $initial_buffer_level = ob_get_level();
+    $unexpected_output    = '';
+    ob_start();
+
+    try {
+        $response = lamako_mobile_social_login( $request );
+    } catch ( Throwable $error ) {
+        error_log( sprintf(
+            '[Lamako Social Auth] Unhandled server error provider=%s type=%s code=%s',
+            sanitize_key( (string) $request->get_param( 'provider' ) ),
+            get_class( $error ),
+            (string) $error->getCode()
+        ) );
+        $response = new WP_Error(
+            'social_login_server_error',
+            'Le service de connexion est temporairement indisponible. Veuillez reessayer.',
+            [ 'status' => 500 ]
+        );
+    } finally {
+        while ( ob_get_level() > $initial_buffer_level ) {
+            $unexpected_output = (string) ob_get_clean() . $unexpected_output;
+        }
+    }
+
+    if ( $unexpected_output !== '' ) {
+        error_log( sprintf(
+            '[Lamako Social Auth] Suppressed unexpected output provider=%s bytes=%d sha256=%s',
+            sanitize_key( (string) $request->get_param( 'provider' ) ),
+            strlen( $unexpected_output ),
+            hash( 'sha256', $unexpected_output )
+        ) );
+    }
+
+    return $response;
+}
+
 function lamako_mobile_social_login( WP_REST_Request $request ) {
     $provider   = sanitize_text_field( $request->get_param( 'provider' ) );
     $token      = sanitize_text_field( $request->get_param( 'token' ) );
