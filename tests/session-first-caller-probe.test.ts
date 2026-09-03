@@ -55,6 +55,7 @@ describe("temporary first session caller probe", () => {
     ["authorized-get", "GET"],
     ["authorized-head", "HEAD"],
     ["fpm-empty-content-metadata", "GET"],
+    ["fpm-zero-content-length", "HEAD"],
   ])("captures one redacted trace and preserves sessions for %s", (scenario, method) => {
     const result = runScenario(scenario);
 
@@ -88,7 +89,7 @@ describe("temporary first session caller probe", () => {
   });
 
   it.each([
-    ["nonempty-content-length", "contentLengthEmpty"],
+    ["nonempty-content-length", "contentLengthEmptyOrZero"],
     ["nonempty-content-type", "contentTypeEmpty"],
     ["query", "queryStringEmpty"],
     ["cookie", "cookiesEmpty"],

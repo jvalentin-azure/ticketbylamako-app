@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TicketByLamako Temporary First Session Caller Probe
  * Description: One-shot, operator-gated attribution of the first PHP session open call.
- * Version: 0.2.0
+ * Version: 0.3.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -41,6 +41,13 @@ if ( ! function_exists( 'tbl_session_probe_server_field_empty' ) ) {
     }
 }
 
+if ( ! function_exists( 'tbl_session_probe_content_length_empty_or_zero' ) ) {
+    function tbl_session_probe_content_length_empty_or_zero() {
+        return tbl_session_probe_server_field_empty( 'CONTENT_LENGTH' )
+            || $_SERVER['CONTENT_LENGTH'] === '0';
+    }
+}
+
 if ( ! function_exists( 'tbl_session_probe_request_shape' ) ) {
     function tbl_session_probe_request_shape() {
         $method = isset( $_SERVER['REQUEST_METHOD'] ) && is_string( $_SERVER['REQUEST_METHOD'] )
@@ -67,7 +74,7 @@ if ( ! function_exists( 'tbl_session_probe_request_shape' ) ) {
                 && tbl_session_probe_server_field_empty( 'REDIRECT_HTTP_AUTHORIZATION' )
                 && tbl_session_probe_server_field_empty( 'PHP_AUTH_USER' )
                 && tbl_session_probe_server_field_empty( 'REMOTE_USER' ),
-            'contentLengthEmpty'    => tbl_session_probe_server_field_empty( 'CONTENT_LENGTH' ),
+            'contentLengthEmptyOrZero' => tbl_session_probe_content_length_empty_or_zero(),
             'contentTypeEmpty'      => tbl_session_probe_server_field_empty( 'CONTENT_TYPE' ),
             'transferEncodingEmpty' => tbl_session_probe_server_field_empty( 'HTTP_TRANSFER_ENCODING' ),
             'methodOverrideEmpty'   => tbl_session_probe_server_field_empty( 'HTTP_X_HTTP_METHOD_OVERRIDE' ),

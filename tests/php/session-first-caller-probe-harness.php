@@ -12,6 +12,7 @@ $known_scenarios = [
     'authorized-get',
     'authorized-head',
     'fpm-empty-content-metadata',
+    'fpm-zero-content-length',
     'nonempty-content-length',
     'nonempty-content-type',
     'ordinary',
@@ -80,7 +81,11 @@ if ( $scenario === 'invalid-config' ) {
     file_put_contents( $manifest_path, '{}' );
 }
 
-$_SERVER['REQUEST_METHOD'] = $scenario === 'authorized-head' ? 'HEAD' : 'GET';
+$_SERVER['REQUEST_METHOD'] = in_array(
+    $scenario,
+    [ 'authorized-head', 'fpm-zero-content-length' ],
+    true
+) ? 'HEAD' : 'GET';
 $_SERVER['REQUEST_URI'] = '/';
 $_SERVER['QUERY_STRING'] = '';
 $_SERVER['REMOTE_ADDR'] = '203.0.113.10';
@@ -93,6 +98,9 @@ $_COOKIE = [];
 if ( $scenario === 'fpm-empty-content-metadata' ) {
     $_SERVER['CONTENT_LENGTH'] = '';
     $_SERVER['CONTENT_TYPE'] = '';
+}
+if ( $scenario === 'fpm-zero-content-length' ) {
+    $_SERVER['CONTENT_LENGTH'] = '0';
 }
 if ( $scenario === 'nonempty-content-length' ) {
     $_SERVER['CONTENT_LENGTH'] = '987654321';

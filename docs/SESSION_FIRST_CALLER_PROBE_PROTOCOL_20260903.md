@@ -37,8 +37,9 @@ All conditions are mandatory:
    or pre-existing output targets.
 4. The request is exact anonymous `GET /` or `HEAD /`, with no query, body,
    upload, cookie, authorization, transfer encoding or method override. FPM
-   may expose `CONTENT_LENGTH` and `CONTENT_TYPE` as present-but-empty; empty
-   values pass, while any non-empty value fails the request-shape gate.
+   may expose `CONTENT_LENGTH` as absent, empty or exactly `0`, and
+   `CONTENT_TYPE` as absent or empty. Those representations all describe an
+   empty body and pass; any other value fails the request-shape gate.
 5. PHP has no active session and the existing session module is not `user`.
 
 An invalid/missing private config, wrong token, active session, `user` handler
@@ -126,7 +127,8 @@ escalates instead of broadening deletion.
 The committed harness uses isolated temporary directories and the native
 `files` handler. It proves authorized GET/HEAD activation, session data
 round-trip, one immutable trace, normalized no-argument frames, FPM-empty
-content metadata acceptance, bounded refusal evidence for non-empty content
+content metadata and exact zero content-length acceptance, bounded refusal
+evidence for non-empty content
 metadata/query/cookie, silent refusal for ordinary/wrong-token/public-path/
 existing-output/active-session/user-handler cases, and exact fixture cleanup.
 A future staging run must separately prove transparency with the actual
