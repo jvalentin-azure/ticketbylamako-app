@@ -22,6 +22,9 @@ type HarnessResult = {
   traceExists: boolean;
   traceIsJson: boolean;
   traceEvent: string | null;
+  refusalReason: string | null;
+  reportedRequestShape: Record<string, boolean | string> | null;
+  gateReport: Record<string, unknown> | null;
   traceMethod: string | null;
   traceFrames: TraceFrame[] | null;
   traceKeys: string[] | null;
@@ -29,6 +32,8 @@ type HarnessResult = {
   traceContainsQuery: boolean;
   traceContainsCookie: boolean;
   traceContainsUserAgent: boolean;
+  traceContainsContentLength: boolean;
+  traceContainsContentType: boolean;
   traceContainsFixtureRoot: boolean;
   anonymousSymbolRedacted: boolean;
   sessionPreserved: boolean | null;
@@ -49,6 +54,7 @@ describe("temporary first session caller probe", () => {
   it.each([
     ["authorized-get", "GET"],
     ["authorized-head", "HEAD"],
+    ["fpm-empty-content-metadata", "GET"],
   ])("captures one redacted trace and preserves sessions for %s", (scenario, method) => {
     const result = runScenario(scenario);
 
@@ -82,11 +88,57 @@ describe("temporary first session caller probe", () => {
   });
 
   it.each([
+    ["nonempty-content-length", "contentLengthEmpty"],
+    ["nonempty-content-type", "contentTypeEmpty"],
+    ["query", "queryStringEmpty"],
+    ["cookie", "cookiesEmpty"],
+  ])("writes only a bounded refusal report for %s", (scenario, rejectedField) => {
+    const result = runScenario(scenario);
+
+    expect(result.requestAuthorized).toBe(false);
+    expect(result.active).toBe(false);
+    expect(result.handlerAfter).toBe(result.handlerBefore);
+    expect(result.traceIsJson).toBe(true);
+    expect(result.traceEvent).toBe("probe_gate_refused");
+    expect(result.refusalReason).toBe("request_shape");
+    expect(result.reportedRequestShape?.[rejectedField]).toBe(false);
+    expect(Object.keys(result.gateReport ?? {})).toEqual([
+      "schema",
+      "event",
+      "reason",
+      "requestShape",
+      "sessionStatus",
+      "sessionModule",
+      "sessionHandlerClassAvailable",
+      "handlerRegistrationAvailable",
+      "configValid",
+      "outputValid",
+    ]);
+    expect(result.gateReport).toMatchObject({
+      schema: 2,
+      event: "probe_gate_refused",
+      reason: "request_shape",
+      sessionStatus: "none",
+      sessionModule: "files",
+      sessionHandlerClassAvailable: true,
+      handlerRegistrationAvailable: true,
+      configValid: true,
+      outputValid: true,
+    });
+    expect(result.traceContainsToken).toBe(false);
+    expect(result.traceContainsQuery).toBe(false);
+    expect(result.traceContainsCookie).toBe(false);
+    expect(result.traceContainsUserAgent).toBe(false);
+    expect(result.traceContainsContentLength).toBe(false);
+    expect(result.traceContainsContentType).toBe(false);
+    expect(result.traceContainsFixtureRoot).toBe(false);
+  });
+
+  it.each([
     "ordinary",
     "wrong-token",
     "short-token",
-    "query",
-    "cookie",
+    "invalid-config",
     "public-output",
     "active-session",
     "user-handler",
@@ -94,6 +146,7 @@ describe("temporary first session caller probe", () => {
     const result = runScenario(scenario);
 
     expect(result.active).toBe(false);
+    expect(result.handlerAfter).toBe(result.handlerBefore);
     expect(result.traceExists).toBe(false);
     expect(result.traceIsJson).toBe(false);
     expect(result.sessionPreserved).toBe(null);
@@ -117,8 +170,9 @@ describe("temporary first session caller probe", () => {
     expect(source).toContain("outputPath");
     expect(source).not.toContain("getenv(");
     expect(source).toContain("DEBUG_BACKTRACE_IGNORE_ARGS");
+    expect(source).toContain("probe_gate_refused");
     expect(source).toContain("return parent::open( $path, $name )");
-    expect(source).toContain("@fopen( $this->output_path, 'x' )");
+    expect(source).toContain("@fopen( $output_path, 'x' )");
     expect(source).toContain("$this->captured = true");
     expect(source).not.toMatch(/\bsession_start\s*\(/);
     expect(source).not.toMatch(/\bsession_destroy\s*\(/);

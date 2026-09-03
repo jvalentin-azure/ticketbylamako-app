@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TicketByLamako Temporary First Session Caller Probe
  * Description: One-shot, operator-gated attribution of the first PHP session open call.
- * Version: 0.1.0
+ * Version: 0.2.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -16,8 +16,8 @@ if ( ! function_exists( 'tbl_session_probe_normalize_path' ) ) {
     }
 }
 
-if ( ! function_exists( 'tbl_session_probe_request_is_authorized' ) ) {
-    function tbl_session_probe_request_is_authorized( $expected_hash ) {
+if ( ! function_exists( 'tbl_session_probe_token_matches' ) ) {
+    function tbl_session_probe_token_matches( $expected_hash ) {
         $token = isset( $_SERVER['HTTP_X_TBL_SESSION_PROBE_TOKEN'] )
             && is_string( $_SERVER['HTTP_X_TBL_SESSION_PROBE_TOKEN'] )
             ? $_SERVER['HTTP_X_TBL_SESSION_PROBE_TOKEN']
@@ -31,6 +31,18 @@ if ( ! function_exists( 'tbl_session_probe_request_is_authorized' ) ) {
             return false;
         }
 
+        return true;
+    }
+}
+
+if ( ! function_exists( 'tbl_session_probe_server_field_empty' ) ) {
+    function tbl_session_probe_server_field_empty( $key ) {
+        return ! array_key_exists( $key, $_SERVER ) || $_SERVER[ $key ] === '';
+    }
+}
+
+if ( ! function_exists( 'tbl_session_probe_request_shape' ) ) {
+    function tbl_session_probe_request_shape() {
         $method = isset( $_SERVER['REQUEST_METHOD'] ) && is_string( $_SERVER['REQUEST_METHOD'] )
             ? $_SERVER['REQUEST_METHOD']
             : '';
@@ -41,21 +53,40 @@ if ( ! function_exists( 'tbl_session_probe_request_is_authorized' ) ) {
             ? $_SERVER['QUERY_STRING']
             : '';
 
-        return in_array( $method, [ 'GET', 'HEAD' ], true )
-            && $request_uri === '/'
-            && $query_string === ''
-            && empty( $_GET )
-            && empty( $_POST )
-            && empty( $_FILES )
-            && empty( $_COOKIE )
-            && ! array_key_exists( 'HTTP_AUTHORIZATION', $_SERVER )
-            && ! array_key_exists( 'REDIRECT_HTTP_AUTHORIZATION', $_SERVER )
-            && ! array_key_exists( 'PHP_AUTH_USER', $_SERVER )
-            && ! array_key_exists( 'REMOTE_USER', $_SERVER )
-            && ! array_key_exists( 'CONTENT_LENGTH', $_SERVER )
-            && ! array_key_exists( 'CONTENT_TYPE', $_SERVER )
-            && ! array_key_exists( 'HTTP_TRANSFER_ENCODING', $_SERVER )
-            && ! array_key_exists( 'HTTP_X_HTTP_METHOD_OVERRIDE', $_SERVER );
+        return [
+            'method'                => in_array( $method, [ 'GET', 'HEAD' ], true )
+                ? $method
+                : 'OTHER',
+            'pathIsRoot'            => $request_uri === '/',
+            'queryStringEmpty'      => $query_string === '',
+            'getEmpty'              => empty( $_GET ),
+            'postEmpty'             => empty( $_POST ),
+            'filesEmpty'            => empty( $_FILES ),
+            'cookiesEmpty'          => empty( $_COOKIE ),
+            'authorizationEmpty'    => tbl_session_probe_server_field_empty( 'HTTP_AUTHORIZATION' )
+                && tbl_session_probe_server_field_empty( 'REDIRECT_HTTP_AUTHORIZATION' )
+                && tbl_session_probe_server_field_empty( 'PHP_AUTH_USER' )
+                && tbl_session_probe_server_field_empty( 'REMOTE_USER' ),
+            'contentLengthEmpty'    => tbl_session_probe_server_field_empty( 'CONTENT_LENGTH' ),
+            'contentTypeEmpty'      => tbl_session_probe_server_field_empty( 'CONTENT_TYPE' ),
+            'transferEncodingEmpty' => tbl_session_probe_server_field_empty( 'HTTP_TRANSFER_ENCODING' ),
+            'methodOverrideEmpty'   => tbl_session_probe_server_field_empty( 'HTTP_X_HTTP_METHOD_OVERRIDE' ),
+        ];
+    }
+}
+
+if ( ! function_exists( 'tbl_session_probe_request_shape_is_allowed' ) ) {
+    function tbl_session_probe_request_shape_is_allowed( $shape ) {
+        if ( ! is_array( $shape ) || ! in_array( $shape['method'] ?? '', [ 'GET', 'HEAD' ], true ) ) {
+            return false;
+        }
+        foreach ( $shape as $key => $value ) {
+            if ( $key !== 'method' && $value !== true ) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
 
@@ -230,7 +261,36 @@ if ( ! function_exists( 'tbl_session_probe_trace_frames' ) ) {
     }
 }
 
-if ( ! class_exists( 'TBL_Session_First_Caller_Probe_Handler', false ) ) {
+if ( ! function_exists( 'tbl_session_probe_write_exclusive_report' ) ) {
+    function tbl_session_probe_write_exclusive_report( $output_path, $report ) {
+        try {
+            $encoded = json_encode(
+                $report,
+                JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE
+            );
+            if ( ! is_string( $encoded ) ) {
+                return false;
+            }
+
+            $handle = @fopen( $output_path, 'x' );
+            if ( $handle === false ) {
+                return false;
+            }
+            @chmod( $output_path, 0600 );
+            $written = @fwrite( $handle, $encoded . "\n" );
+            @fclose( $handle );
+
+            return is_int( $written ) && $written === strlen( $encoded ) + 1;
+        } catch ( Throwable $error ) {
+            return false;
+        }
+    }
+}
+
+if (
+    class_exists( 'SessionHandler', false )
+    && ! class_exists( 'TBL_Session_First_Caller_Probe_Handler', false )
+) {
     final class TBL_Session_First_Caller_Probe_Handler extends SessionHandler {
         private $output_path;
         private $original_handler;
@@ -263,21 +323,7 @@ if ( ! class_exists( 'TBL_Session_First_Caller_Probe_Handler', false ) ) {
                     'originalHandler' => $this->original_handler,
                     'frames'          => tbl_session_probe_trace_frames(),
                 ];
-                $encoded = json_encode(
-                    $report,
-                    JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE
-                );
-                if ( ! is_string( $encoded ) ) {
-                    return;
-                }
-
-                $handle = @fopen( $this->output_path, 'x' );
-                if ( $handle === false ) {
-                    return;
-                }
-                @chmod( $this->output_path, 0600 );
-                @fwrite( $handle, $encoded . "\n" );
-                @fclose( $handle );
+                tbl_session_probe_write_exclusive_report( $this->output_path, $report );
             } catch ( Throwable $error ) {
                 // Attribution must never alter the wrapped session outcome.
             }
@@ -299,23 +345,56 @@ if ( ! function_exists( 'tbl_session_probe_is_active' ) ) {
     }
 }
 
-$tbl_session_probe_active           = false;
-$tbl_session_probe_manifest         = tbl_session_probe_private_manifest();
-$tbl_session_probe_original_handler = session_module_name();
-if (
-    is_array( $tbl_session_probe_manifest )
-    && tbl_session_probe_request_is_authorized( $tbl_session_probe_manifest['tokenSha256'] )
-    && function_exists( 'session_status' )
-    && session_status() === PHP_SESSION_NONE
-    && class_exists( 'SessionHandler', false )
-    && is_string( $tbl_session_probe_original_handler )
-    && preg_match( '/\A[a-z0-9_-]{1,64}\z/D', $tbl_session_probe_original_handler )
-    && $tbl_session_probe_original_handler !== 'user'
-) {
-    $tbl_session_probe_output = tbl_session_probe_output_path(
-        $tbl_session_probe_manifest['outputPath']
-    );
-    if ( $tbl_session_probe_output !== '' ) {
+$tbl_session_probe_active                    = false;
+$tbl_session_probe_manifest                  = tbl_session_probe_private_manifest();
+$tbl_session_probe_config_valid              = is_array( $tbl_session_probe_manifest );
+$tbl_session_probe_token_matches             = $tbl_session_probe_config_valid
+    && tbl_session_probe_token_matches( $tbl_session_probe_manifest['tokenSha256'] );
+$tbl_session_probe_shape                     = tbl_session_probe_request_shape();
+$tbl_session_probe_shape_allowed             = tbl_session_probe_request_shape_is_allowed(
+    $tbl_session_probe_shape
+);
+$tbl_session_probe_status                    = function_exists( 'session_status' )
+    ? session_status()
+    : -1;
+$tbl_session_probe_status_is_none            = defined( 'PHP_SESSION_NONE' )
+    && $tbl_session_probe_status === PHP_SESSION_NONE;
+$tbl_session_probe_status_name               = $tbl_session_probe_status_is_none
+    ? 'none'
+    : ( defined( 'PHP_SESSION_ACTIVE' ) && $tbl_session_probe_status === PHP_SESSION_ACTIVE
+        ? 'active'
+        : ( defined( 'PHP_SESSION_DISABLED' ) && $tbl_session_probe_status === PHP_SESSION_DISABLED
+            ? 'disabled'
+            : 'unknown' ) );
+$tbl_session_probe_original_handler          = function_exists( 'session_module_name' )
+    ? session_module_name()
+    : false;
+$tbl_session_probe_original_handler_is_valid = is_string( $tbl_session_probe_original_handler )
+    && preg_match( '/\A[a-z0-9_-]{1,64}\z/D', $tbl_session_probe_original_handler );
+$tbl_session_probe_module_name               = ! $tbl_session_probe_original_handler_is_valid
+    ? 'invalid'
+    : ( $tbl_session_probe_original_handler === 'files'
+        ? 'files'
+        : ( $tbl_session_probe_original_handler === 'user' ? 'user' : 'other' ) );
+$tbl_session_probe_class_available           = class_exists( 'SessionHandler', false );
+$tbl_session_probe_registration_available    = function_exists( 'session_set_save_handler' );
+$tbl_session_probe_output                    = $tbl_session_probe_token_matches
+    ? tbl_session_probe_output_path( $tbl_session_probe_manifest['outputPath'] )
+    : '';
+$tbl_session_probe_output_valid              = $tbl_session_probe_output !== '';
+$tbl_session_probe_safe_to_report            = $tbl_session_probe_token_matches
+    && $tbl_session_probe_output_valid
+    && $tbl_session_probe_status_is_none
+    && $tbl_session_probe_original_handler_is_valid
+    && $tbl_session_probe_original_handler !== 'user';
+$tbl_session_probe_refusal_reason            = '';
+
+if ( $tbl_session_probe_safe_to_report ) {
+    if ( ! $tbl_session_probe_shape_allowed ) {
+        $tbl_session_probe_refusal_reason = 'request_shape';
+    } elseif ( ! $tbl_session_probe_class_available || ! $tbl_session_probe_registration_available ) {
+        $tbl_session_probe_refusal_reason = 'handler_unavailable';
+    } else {
         $tbl_session_probe_handler = new TBL_Session_First_Caller_Probe_Handler(
             $tbl_session_probe_output,
             $tbl_session_probe_original_handler
@@ -324,13 +403,48 @@ if (
             $tbl_session_probe_handler,
             true
         );
+        if ( ! $tbl_session_probe_active ) {
+            $tbl_session_probe_refusal_reason = 'handler_registration';
+        }
+    }
+
+    if ( $tbl_session_probe_refusal_reason !== '' ) {
+        tbl_session_probe_write_exclusive_report(
+            $tbl_session_probe_output,
+            [
+                'schema'                       => 2,
+                'event'                        => 'probe_gate_refused',
+                'reason'                       => $tbl_session_probe_refusal_reason,
+                'requestShape'                 => $tbl_session_probe_shape,
+                'sessionStatus'                => $tbl_session_probe_status_name,
+                'sessionModule'                => $tbl_session_probe_module_name,
+                'sessionHandlerClassAvailable' => $tbl_session_probe_class_available,
+                'handlerRegistrationAvailable' => $tbl_session_probe_registration_available,
+                'configValid'                  => $tbl_session_probe_config_valid,
+                'outputValid'                  => $tbl_session_probe_output_valid,
+            ]
+        );
     }
 }
 tbl_session_probe_is_active( $tbl_session_probe_active );
 unset(
     $tbl_session_probe_active,
+    $tbl_session_probe_class_available,
+    $tbl_session_probe_config_valid,
     $tbl_session_probe_manifest,
+    $tbl_session_probe_module_name,
     $tbl_session_probe_original_handler,
+    $tbl_session_probe_original_handler_is_valid,
     $tbl_session_probe_output,
+    $tbl_session_probe_output_valid,
+    $tbl_session_probe_refusal_reason,
+    $tbl_session_probe_registration_available,
+    $tbl_session_probe_safe_to_report,
+    $tbl_session_probe_shape,
+    $tbl_session_probe_shape_allowed,
+    $tbl_session_probe_status,
+    $tbl_session_probe_status_is_none,
+    $tbl_session_probe_status_name,
+    $tbl_session_probe_token_matches,
     $tbl_session_probe_handler
 );

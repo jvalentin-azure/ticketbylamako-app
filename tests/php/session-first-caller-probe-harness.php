@@ -11,9 +11,13 @@ $scenario = (string) $argv[1];
 $known_scenarios = [
     'authorized-get',
     'authorized-head',
+    'fpm-empty-content-metadata',
+    'nonempty-content-length',
+    'nonempty-content-type',
     'ordinary',
     'wrong-token',
     'short-token',
+    'invalid-config',
     'query',
     'cookie',
     'public-output',
@@ -72,6 +76,9 @@ $manifest = [
 ];
 file_put_contents( $manifest_path, json_encode( $manifest ) );
 @chmod( $manifest_path, 0600 );
+if ( $scenario === 'invalid-config' ) {
+    file_put_contents( $manifest_path, '{}' );
+}
 
 $_SERVER['REQUEST_METHOD'] = $scenario === 'authorized-head' ? 'HEAD' : 'GET';
 $_SERVER['REQUEST_URI'] = '/';
@@ -82,6 +89,17 @@ $_GET = [];
 $_POST = [];
 $_FILES = [];
 $_COOKIE = [];
+
+if ( $scenario === 'fpm-empty-content-metadata' ) {
+    $_SERVER['CONTENT_LENGTH'] = '';
+    $_SERVER['CONTENT_TYPE'] = '';
+}
+if ( $scenario === 'nonempty-content-length' ) {
+    $_SERVER['CONTENT_LENGTH'] = '987654321';
+}
+if ( $scenario === 'nonempty-content-type' ) {
+    $_SERVER['CONTENT_TYPE'] = 'application/octet-stream';
+}
 
 if ( $scenario !== 'ordinary' ) {
     $_SERVER['HTTP_X_TBL_SESSION_PROBE_TOKEN'] = $scenario === 'wrong-token'
@@ -131,8 +149,11 @@ require dirname( __DIR__, 2 ) . DIRECTORY_SEPARATOR . 'scripts'
 $active = tbl_session_probe_is_active();
 $handler_after = session_module_name();
 $loaded_manifest = tbl_session_probe_private_manifest();
-$request_authorized = is_array( $loaded_manifest )
-    && tbl_session_probe_request_is_authorized( $loaded_manifest['tokenSha256'] );
+$token_matches = is_array( $loaded_manifest )
+    && tbl_session_probe_token_matches( $loaded_manifest['tokenSha256'] );
+$request_shape = tbl_session_probe_request_shape();
+$request_authorized = $token_matches
+    && tbl_session_probe_request_shape_is_allowed( $request_shape );
 $output_path_valid_before_trace = is_array( $loaded_manifest )
     && tbl_session_probe_output_path( $loaded_manifest['outputPath'] ) !== '';
 
@@ -173,6 +194,11 @@ $result = [
     'traceExists' => is_file( $trace_path ),
     'traceIsJson' => is_array( $trace ),
     'traceEvent' => is_array( $trace ) ? ( $trace['event'] ?? null ) : null,
+    'refusalReason' => is_array( $trace ) ? ( $trace['reason'] ?? null ) : null,
+    'reportedRequestShape' => is_array( $trace ) ? ( $trace['requestShape'] ?? null ) : null,
+    'gateReport' => is_array( $trace ) && ( $trace['event'] ?? null ) === 'probe_gate_refused'
+        ? $trace
+        : null,
     'traceMethod' => is_array( $trace ) ? ( $trace['requestMethod'] ?? null ) : null,
     'traceFrames' => is_array( $trace ) ? ( $trace['frames'] ?? null ) : null,
     'traceKeys' => is_array( $trace ) ? array_keys( $trace ) : null,
@@ -183,6 +209,10 @@ $result = [
         && strpos( $trace_raw, 'private-cookie-value' ) !== false,
     'traceContainsUserAgent' => is_string( $trace_raw )
         && strpos( $trace_raw, 'private-fixture-user-agent' ) !== false,
+    'traceContainsContentLength' => is_string( $trace_raw )
+        && strpos( $trace_raw, '987654321' ) !== false,
+    'traceContainsContentType' => is_string( $trace_raw )
+        && strpos( $trace_raw, 'application/octet-stream' ) !== false,
     'traceContainsFixtureRoot' => is_string( $trace_raw )
         && strpos( $trace_raw, str_replace( '\\', '/', $fixture_root ) ) !== false,
     'anonymousSymbolRedacted' => tbl_session_probe_normalize_symbol(

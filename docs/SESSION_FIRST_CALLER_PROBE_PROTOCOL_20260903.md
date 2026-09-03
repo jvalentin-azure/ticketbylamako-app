@@ -36,12 +36,17 @@ All conditions are mandatory:
    `public_html`. The probe creates no directory and refuses public, symlinked,
    or pre-existing output targets.
 4. The request is exact anonymous `GET /` or `HEAD /`, with no query, body,
-   upload, cookie, authorization, transfer encoding or method override.
+   upload, cookie, authorization, transfer encoding or method override. FPM
+   may expose `CONTENT_LENGTH` and `CONTENT_TYPE` as present-but-empty; empty
+   values pass, while any non-empty value fails the request-shape gate.
 5. PHP has no active session and the existing session module is not `user`.
 
-Missing, malformed or mismatched input leaves the configured session handler
-untouched and creates no file. The token, its hash, output path, query,
-cookies, authorization and request headers are never included in evidence.
+An invalid/missing private config, wrong token, active session, `user` handler
+or unsafe output leaves the configured handler untouched and creates no file.
+After a valid config and exact token match, a request-shape refusal or handler
+registration failure consumes the exclusive output with a bounded refusal
+report. The token, its hash, output path, query, cookies, authorization and
+request headers are never included in evidence.
 
 ## Evidence contract
 
@@ -49,13 +54,19 @@ The output is created exclusively (`fopen(..., "x")`) and never overwritten.
 One probe process records at most one trace. Concurrent processes targeting the
 same absent path race safely: only the exclusive creator can write it.
 
-The JSON contains exactly:
+Successful registration keeps the v1 JSON contract:
 
 - schema version and event `first_session_handler_open`;
 - UTC capture time and `GET` or `HEAD`;
 - original session-handler module name;
 - at most 32 stack frames with only normalized file label, line, function,
   class and call type.
+
+If registration cannot proceed after the private-config/token checks, the
+exclusive output instead contains event `probe_gate_refused`, a bounded reason
+enum, request-shape booleans plus `GET`/`HEAD`/`OTHER`, bounded session-status
+and module enums, and booleans for handler/config/output availability. It has
+no timestamp, stack, raw request value, header, token, path, query or cookie.
 
 `DEBUG_BACKTRACE_IGNORE_ARGS` excludes arguments. Files below the WordPress
 root become `[ABSPATH]/...`; all other files become `[external]`. Anonymous
@@ -80,9 +91,11 @@ Install only the probe as
 sealed bytes. Atomically install the sealed mode-`0600` private manifest
 without placing the raw token in a repository, manifest, command transcript
 or access log. Send
-one exact `HEAD /` request with the token header. Do not retry with the same
-token or output path. A missing trace, malformed JSON, raw path, sensitive
-value, handler error, HTTP regression or more than one evidence file is STOP.
+one exact `HEAD /` request with the token header. Any first-caller or refusal
+report consumes that output path. Never retry with the same token or output;
+a new authorized run requires a fresh token, manifest hash and absent output.
+A missing report, malformed JSON, raw path, sensitive value, handler error,
+HTTP regression or more than one evidence file is STOP.
 
 The trace identifies a candidate caller; it does not itself authorize a
 vendor, MU, configuration or product fix. Any correction requires a new local
@@ -112,7 +125,9 @@ escalates instead of broadening deletion.
 
 The committed harness uses isolated temporary directories and the native
 `files` handler. It proves authorized GET/HEAD activation, session data
-round-trip, one immutable trace, normalized no-argument frames, refusal of
-ordinary/wrong/short-token/query/cookie/public-path/existing-output/
-active-session/user-handler cases, and exact fixture cleanup. A future staging
-run must separately prove transparency with the actual staging session module.
+round-trip, one immutable trace, normalized no-argument frames, FPM-empty
+content metadata acceptance, bounded refusal evidence for non-empty content
+metadata/query/cookie, silent refusal for ordinary/wrong-token/public-path/
+existing-output/active-session/user-handler cases, and exact fixture cleanup.
+A future staging run must separately prove transparency with the actual
+staging session module.
