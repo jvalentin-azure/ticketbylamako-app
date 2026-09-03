@@ -104,11 +104,14 @@ describe("Tickera stateless REST MU shim", () => {
     "public-home-empty-query-marker",
     "public-home-index",
     "public-home-session-cookie",
+    "public-home-active-session",
     "public-home-woocommerce-session",
     "public-home-woocommerce-cart",
     "public-home-auth-cookie",
     "public-home-post-data",
     "public-home-authorization",
+    "public-home-php-auth-user",
+    "public-home-remote-user",
     "public-home-upload",
     "public-home-content-length",
     "public-home-content-type",
@@ -210,6 +213,9 @@ describe("Tickera stateless REST MU shim", () => {
     expect(source).toContain("PHP_INT_MIN");
     expect(source).toContain("'HTTP_X_HTTP_METHOD_OVERRIDE'");
     expect(source).toContain("'HTTP_AUTHORIZATION'");
+    expect(source).toContain("'PHP_AUTH_USER'");
+    expect(source).toContain("'REMOTE_USER'");
+    expect(source).toContain("session_status() !== PHP_SESSION_NONE");
     expect(source).toContain("'CONTENT_LENGTH'");
     expect(source).toContain("'CONTENT_TYPE'");
     expect(source).toContain("'HTTP_TRANSFER_ENCODING'");

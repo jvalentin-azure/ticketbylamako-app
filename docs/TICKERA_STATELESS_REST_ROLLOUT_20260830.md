@@ -52,7 +52,9 @@ WooCommerce Store API routes are not allowlisted.
 
 The only non-REST request eligible is exact `GET /` or `HEAD /`, with an empty
 raw query, `$_GET`, `$_POST` and `$_FILES`, no method override or Authorization
-header, no content-length/type/transfer-encoding body marker, and no PHP-session,
+header (including PHP-normalized Basic-auth variables), no
+content-length/type/transfer-encoding body marker, no already-active PHP session,
+and no PHP-session,
 WordPress authentication or WooCommerce
 session/cart cookie. `/index.php`, any query string (including analytics),
 OPTIONS, authenticated visits, existing carts, `/cart/`, `/checkout/` and

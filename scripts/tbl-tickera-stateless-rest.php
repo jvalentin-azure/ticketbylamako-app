@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TicketByLamako Tickera Stateless Public Guard
  * Description: Prevents Tickera's global cart bootstrap from opening PHP sessions on explicitly stateless public reads.
- * Version: 0.2.0
+ * Version: 0.2.1
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -26,6 +26,13 @@ if ( ! function_exists( 'tbl_tickera_stateless_public_home_has_stateful_context'
      * session open on an otherwise passive homepage request.
      */
     function tbl_tickera_stateless_public_home_has_stateful_context() {
+        if (
+            ! function_exists( 'session_status' )
+            || session_status() !== PHP_SESSION_NONE
+        ) {
+            return true;
+        }
+
         $session_cookie = function_exists( 'session_name' ) ? (string) session_name() : 'PHPSESSID';
         if (
             $session_cookie === ''
@@ -76,6 +83,10 @@ if ( ! function_exists( 'tbl_tickera_stateless_public_home_request_is_allowliste
             array_key_exists( 'HTTP_X_HTTP_METHOD_OVERRIDE', $_SERVER )
             || array_key_exists( 'HTTP_AUTHORIZATION', $_SERVER )
             || array_key_exists( 'REDIRECT_HTTP_AUTHORIZATION', $_SERVER )
+            || array_key_exists( 'PHP_AUTH_USER', $_SERVER )
+            || array_key_exists( 'PHP_AUTH_PW', $_SERVER )
+            || array_key_exists( 'AUTH_TYPE', $_SERVER )
+            || array_key_exists( 'REMOTE_USER', $_SERVER )
             || array_key_exists( 'CONTENT_LENGTH', $_SERVER )
             || array_key_exists( 'CONTENT_TYPE', $_SERVER )
             || array_key_exists( 'HTTP_TRANSFER_ENCODING', $_SERVER )

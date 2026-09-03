@@ -34,6 +34,10 @@ namespace {
             'GET', '/', [], 10, false, null, false, '3.6.0.2', false,
             [ 'PHPSESSID' => 'existing-session' ],
         ],
+        'public-home-active-session' => [
+            'GET', '/', [], 10, false, null, false, '3.6.0.2', false,
+            [], [], null, [], [], true,
+        ],
         'public-home-woocommerce-session' => [
             'GET', '/', [], 10, false, null, false, '3.6.0.2', false,
             [ 'wp_woocommerce_session_deadbeef' => 'existing-session' ],
@@ -53,6 +57,14 @@ namespace {
         'public-home-authorization' => [
             'GET', '/', [], 10, false, null, false, '3.6.0.2', false, [], [],
             'Bearer test-token',
+        ],
+        'public-home-php-auth-user' => [
+            'GET', '/', [], 10, false, null, false, '3.6.0.2', false, [], [], null, [],
+            [ 'PHP_AUTH_USER' => 'authorized-user' ],
+        ],
+        'public-home-remote-user' => [
+            'GET', '/', [], 10, false, null, false, '3.6.0.2', false, [], [], null, [],
+            [ 'REMOTE_USER' => 'authorized-user' ],
         ],
         'public-home-upload' => [
             'GET', '/', [], 10, false, null, false, '3.6.0.2', false, [], [], null,
@@ -291,6 +303,7 @@ namespace {
     $server_overrides    = isset( $scenarios[ $scenario ][13] ) && is_array( $scenarios[ $scenario ][13] )
         ? $scenarios[ $scenario ][13]
         : [];
+    $start_active_session = ! empty( $scenarios[ $scenario ][14] );
 
     define( 'ABSPATH', __DIR__ . DIRECTORY_SEPARATOR );
     $_SERVER['REQUEST_METHOD'] = $method;
@@ -318,6 +331,21 @@ namespace {
     $GLOBALS['tbl_tickera_test_remove_fails'] = $remove_fails;
     $GLOBALS['tbl_tickera_test_remove_leaves_hook'] = $remove_leaves_hook;
     $GLOBALS['tbl_tickera_test_restore_calls'] = 0;
+
+    if ( $start_active_session ) {
+        session_set_save_handler(
+            new class implements SessionHandlerInterface {
+                public function open( string $path, string $name ): bool { return true; }
+                public function close(): bool { return true; }
+                public function read( string $id ): string|false { return ''; }
+                public function write( string $id, string $data ): bool { return true; }
+                public function destroy( string $id ): bool { return true; }
+                public function gc( int $max_lifetime ): int|false { return 0; }
+            },
+            true
+        );
+        session_start( [ 'use_cookies' => 0, 'cache_limiter' => '' ] );
+    }
 
     function tbl_tickera_test_callback_id( $callback ): string {
         if ( is_string( $callback ) ) {
@@ -461,6 +489,10 @@ namespace {
     $wp_loaded_priority_before = has_action( 'wp_loaded', [ $tc, 'update_cart' ] );
     do_action( 'wp_loaded' );
     $wp_loaded_priority_after = has_action( 'wp_loaded', [ $tc, 'update_cart' ] );
+
+    if ( $start_active_session ) {
+        session_abort();
+    }
 
     echo json_encode(
         [
