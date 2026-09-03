@@ -10,6 +10,7 @@ type HarnessResult = {
   restAllowlisted: boolean;
   publicHomeAllowlisted: boolean;
   guardRunsFirst: boolean;
+  bridgeBlocksPriority: number | false;
   wpLoadedPriorityBefore: number | false;
   wpLoadedPriorityAfter: number | false;
   sessionStartCalls: number;
@@ -47,6 +48,7 @@ describe("Tickera stateless REST MU shim", () => {
   it.each([
     "public-home-get",
     "public-home-head",
+    "public-home-fpm-head",
     "pretty-get-home",
     "pretty-head-event",
     "pretty-options-product",
@@ -67,11 +69,12 @@ describe("Tickera stateless REST MU shim", () => {
 
     expect(result.allowlisted).toBe(true);
     expect(result.wpLoadedPriorityAfter).toBe(false);
+    expect(result.bridgeBlocksPriority).toBe(false);
     expect(result.sessionStartCalls).toBe(0);
     expectNeighborHooksUntouched(result);
   });
 
-  it.each(["public-home-get", "public-home-head"])(
+  it.each(["public-home-get", "public-home-head", "public-home-fpm-head"])(
     "classifies only the passive anonymous homepage as public stateless for %s",
     (scenario) => {
       const result = runScenario(scenario);
@@ -163,7 +166,8 @@ describe("Tickera stateless REST MU shim", () => {
 
       expect(result.allowlisted).toBe(false);
       expect(result.wpLoadedPriorityAfter).toBe(10);
-      expect(result.sessionStartCalls).toBe(1);
+      expect(result.bridgeBlocksPriority).toBe(10);
+      expect(result.sessionStartCalls).toBe(2);
       expectNeighborHooksUntouched(result);
     },
   );
@@ -173,7 +177,8 @@ describe("Tickera stateless REST MU shim", () => {
 
     expect(result.allowlisted).toBe(true);
     expect(result.wpLoadedPriorityAfter).toBe(10);
-    expect(result.sessionStartCalls).toBe(1);
+    expect(result.bridgeBlocksPriority).toBe(10);
+    expect(result.sessionStartCalls).toBe(2);
     expectNeighborHooksUntouched(result);
   });
 
@@ -182,7 +187,8 @@ describe("Tickera stateless REST MU shim", () => {
 
     expect(result.allowlisted).toBe(true);
     expect(result.wpLoadedPriorityAfter).toBe(10);
-    expect(result.sessionStartCalls).toBe(1);
+    expect(result.bridgeBlocksPriority).toBe(10);
+    expect(result.sessionStartCalls).toBe(2);
     expect(result.restoreCalls).toBe(1);
     expectNeighborHooksUntouched(result);
   });
@@ -222,7 +228,9 @@ describe("Tickera stateless REST MU shim", () => {
     expect(source).toContain("'wp_woocommerce_session_'");
     expect(source).toContain("'woocommerce_items_in_cart'");
     expect(source).toContain("(string) $tc->version !== '3.6.0.2'");
-    expect(source).not.toContain("'plugins_loaded'");
+    expect(source).toContain("'plugins_loaded'");
+    expect(source).toContain("'woocommerce_blocks_loaded'");
+    expect(source).toContain("'init_block_integration'");
     expect(source).not.toMatch(/\bsession_start\s*\(/);
     expect(source).not.toMatch(/\bheader\s*\(/);
     expect(source).not.toMatch(/\bsetcookie\s*\(/);

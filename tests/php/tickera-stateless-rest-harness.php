@@ -18,6 +18,15 @@ namespace Tickera {
 }
 
 namespace {
+    class WP_Hook {
+        public array $callbacks = [];
+    }
+
+    class TC_WooCommerce_Bridge {
+        public function init_block_integration(): void {
+            \Tickera\session_start();
+        }
+    }
     if ( $argc !== 2 ) {
         fwrite( STDERR, "Usage: php tickera-stateless-rest-harness.php <scenario>\n" );
         exit( 2 );
@@ -26,6 +35,10 @@ namespace {
     $scenarios = [
         'public-home-get' => [ 'GET', '/', [], 10, false ],
         'public-home-head' => [ 'HEAD', '/', [], 10, false ],
+        'public-home-fpm-head' => [
+            'HEAD', '/', [], 10, false, null, false, '3.6.0.2', false, [], [], null, [],
+            [ 'CONTENT_LENGTH' => '0', 'CONTENT_TYPE' => '' ],
+        ],
         'public-home-options' => [ 'OPTIONS', '/', [], 10, false ],
         'public-home-query' => [ 'GET', '/?utm_source=test', [ 'utm_source' => 'test' ], 10, false ],
         'public-home-empty-query-marker' => [ 'GET', '/?', [], 10, false ],
@@ -374,6 +387,13 @@ namespace {
             'callback'      => $callback,
             'accepted_args' => (int) $accepted_args,
         ];
+        if ( ! isset( $GLOBALS['wp_filter'][ $hook ] ) ) {
+            $GLOBALS['wp_filter'][ $hook ] = new WP_Hook();
+        }
+        $GLOBALS['wp_filter'][ $hook ]->callbacks[ (int) $priority ][ $id ] = [
+            'function'      => $callback,
+            'accepted_args' => (int) $accepted_args,
+        ];
         return true;
     }
 
@@ -413,6 +433,7 @@ namespace {
         }
 
         unset( $GLOBALS['tbl_tickera_test_hooks'][ $hook ][ (int) $priority ][ $id ] );
+        unset( $GLOBALS['wp_filter'][ $hook ]->callbacks[ (int) $priority ][ $id ] );
         return true;
     }
 
@@ -460,9 +481,21 @@ namespace {
         add_action( 'wp_loaded', [ $GLOBALS['tc'], 'update_cart' ], 10 );
     }
 
+    function tbl_tickera_test_woocommerce_packages_init(): void {
+        do_action( 'woocommerce_blocks_loaded' );
+    }
+
     $tc = new \Tickera\TC();
     $tc->version = $tickera_version;
     $GLOBALS['tc'] = $tc;
+    $tc_woocommerce_bridge = new TC_WooCommerce_Bridge();
+    $GLOBALS['tc_woocommerce_bridge'] = $tc_woocommerce_bridge;
+    add_action(
+        'woocommerce_blocks_loaded',
+        [ $tc_woocommerce_bridge, 'init_block_integration' ],
+        10
+    );
+    add_action( 'plugins_loaded', 'tbl_tickera_test_woocommerce_packages_init', 10 );
     if ( $tickera_priority !== null ) {
         add_action( 'wp_loaded', [ $tc, 'update_cart' ], $tickera_priority );
     }
@@ -483,6 +516,10 @@ namespace {
         'tbl_tickera_stateless_rest_disable_global_cart_bootstrap'
     );
     do_action( 'plugins_loaded' );
+    $bridge_blocks_priority = has_action(
+        'woocommerce_blocks_loaded',
+        [ $tc_woocommerce_bridge, 'init_block_integration' ]
+    );
     $rest_allowlisted = tbl_tickera_stateless_rest_request_is_allowlisted();
     $home_allowlisted = tbl_tickera_stateless_public_home_request_is_allowlisted();
     $allowlisted = tbl_tickera_stateless_request_is_allowlisted();
@@ -501,6 +538,7 @@ namespace {
             'restAllowlisted' => $rest_allowlisted,
             'publicHomeAllowlisted' => $home_allowlisted,
             'guardRunsFirst' => $guard_priority === PHP_INT_MIN,
+            'bridgeBlocksPriority' => $bridge_blocks_priority,
             'wpLoadedPriorityBefore' => $wp_loaded_priority_before,
             'wpLoadedPriorityAfter' => $wp_loaded_priority_after,
             'sessionStartCalls' => $GLOBALS['tbl_tickera_test_session_start_calls'],

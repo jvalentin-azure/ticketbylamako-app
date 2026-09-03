@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TicketByLamako Tickera Stateless Public Guard
  * Description: Prevents Tickera's global cart bootstrap from opening PHP sessions on explicitly stateless public reads.
- * Version: 0.2.1
+ * Version: 0.3.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -16,6 +16,19 @@ if ( ! function_exists( 'tbl_tickera_stateless_rest_method_is_safe' ) ) {
             : '';
 
         return in_array( $method, [ 'GET', 'HEAD', 'OPTIONS' ], true );
+    }
+}
+
+if ( ! function_exists( 'tbl_tickera_stateless_server_field_empty' ) ) {
+    function tbl_tickera_stateless_server_field_empty( $key ) {
+        return ! array_key_exists( $key, $_SERVER ) || $_SERVER[ $key ] === '';
+    }
+}
+
+if ( ! function_exists( 'tbl_tickera_stateless_content_length_empty_or_zero' ) ) {
+    function tbl_tickera_stateless_content_length_empty_or_zero() {
+        return tbl_tickera_stateless_server_field_empty( 'CONTENT_LENGTH' )
+            || $_SERVER['CONTENT_LENGTH'] === '0';
     }
 }
 
@@ -87,9 +100,9 @@ if ( ! function_exists( 'tbl_tickera_stateless_public_home_request_is_allowliste
             || array_key_exists( 'PHP_AUTH_PW', $_SERVER )
             || array_key_exists( 'AUTH_TYPE', $_SERVER )
             || array_key_exists( 'REMOTE_USER', $_SERVER )
-            || array_key_exists( 'CONTENT_LENGTH', $_SERVER )
-            || array_key_exists( 'CONTENT_TYPE', $_SERVER )
-            || array_key_exists( 'HTTP_TRANSFER_ENCODING', $_SERVER )
+            || ! tbl_tickera_stateless_content_length_empty_or_zero()
+            || ! tbl_tickera_stateless_server_field_empty( 'CONTENT_TYPE' )
+            || ! tbl_tickera_stateless_server_field_empty( 'HTTP_TRANSFER_ENCODING' )
         ) {
             return false;
         }
@@ -109,6 +122,81 @@ if ( ! function_exists( 'tbl_tickera_stateless_public_home_request_is_allowliste
             && ! tbl_tickera_stateless_public_home_has_stateful_context();
     }
 }
+
+if ( ! function_exists( 'tbl_tickera_stateless_bridge_blocks_callback' ) ) {
+    function tbl_tickera_stateless_bridge_blocks_callback() {
+        global $wp_filter;
+
+        $hook = isset( $wp_filter['woocommerce_blocks_loaded'] )
+            ? $wp_filter['woocommerce_blocks_loaded']
+            : null;
+        if (
+            ! is_object( $hook )
+            || ! property_exists( $hook, 'callbacks' )
+            || ! is_array( $hook->callbacks )
+        ) {
+            return null;
+        }
+
+        $matches = [];
+        foreach ( (array) ( $hook->callbacks[10] ?? [] ) as $entry ) {
+            $callback = is_array( $entry ) ? ( $entry['function'] ?? null ) : null;
+            if (
+                is_array( $callback )
+                && count( $callback ) === 2
+                && is_object( $callback[0] )
+                && $callback[0] instanceof TC_WooCommerce_Bridge
+                && $callback[1] === 'init_block_integration'
+                && is_callable( $callback )
+            ) {
+                $matches[] = $callback;
+            }
+        }
+
+        return count( $matches ) === 1 ? $matches[0] : null;
+    }
+}
+
+if ( ! function_exists( 'tbl_tickera_stateless_disable_bridge_blocks_bootstrap' ) ) {
+    /**
+     * The WooCommerce bridge eagerly reads Tickera's cart when Blocks loads,
+     * even when the current request cannot render or mutate checkout state.
+     */
+    function tbl_tickera_stateless_disable_bridge_blocks_bootstrap() {
+        if ( ! tbl_tickera_stateless_request_is_allowlisted() ) {
+            return false;
+        }
+
+        if (
+            ! class_exists( 'TC_WooCommerce_Bridge', false )
+        ) {
+            return false;
+        }
+
+        $callback = tbl_tickera_stateless_bridge_blocks_callback();
+        if ( ! is_array( $callback ) ) {
+            return false;
+        }
+        if ( has_action( 'woocommerce_blocks_loaded', $callback ) !== 10 ) {
+            return false;
+        }
+        if ( ! remove_action( 'woocommerce_blocks_loaded', $callback, 10 ) ) {
+            return false;
+        }
+        if ( has_action( 'woocommerce_blocks_loaded', $callback ) === false ) {
+            return true;
+        }
+
+        add_action( 'woocommerce_blocks_loaded', $callback, 10 );
+        return false;
+    }
+}
+
+add_action(
+    'plugins_loaded',
+    'tbl_tickera_stateless_disable_bridge_blocks_bootstrap',
+    PHP_INT_MIN
+);
 
 if ( ! function_exists( 'tbl_tickera_stateless_rest_route_is_canonical' ) ) {
     function tbl_tickera_stateless_rest_route_is_canonical( $route ) {
