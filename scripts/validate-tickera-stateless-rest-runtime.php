@@ -626,7 +626,8 @@ function tbl_tickera_runtime_validator_main(array $arguments): int {
 
     fwrite(
         STDOUT,
-        "COMPONENT_PASS_EXTERNAL_REQUIRED real_wordpress_cli session_events=0 wp_http_attempts=0 "
+        'COMPONENT_PASS_EXTERNAL_REQUIRED real_wordpress_cli session_events=0 wp_http_attempts='
+        . (string) tbl_tickera_runtime_value($report, 'network.wpHttpAttempts') . ' '
         . 'wpdb_non_read_fenced=' . (string) tbl_tickera_runtime_value($report, 'database.nonReadAttempts')
         . ' wp_http_fenced=' . (string) tbl_tickera_runtime_value($report, 'network.wpHttpAttempts')
         . " cache_writes=0 business_hooks=0\n"
