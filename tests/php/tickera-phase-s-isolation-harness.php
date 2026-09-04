@@ -77,5 +77,8 @@ echo json_encode([
     'jetpackIdentityLocal' => isset($filters['pre_transient_jetpack_idc_local'][PHP_INT_MIN][0])
         ? $filters['pre_transient_jetpack_idc_local'][PHP_INT_MIN][0]['callback']()
         : null,
+    'jetpackIdentityValidation' => isset($filters['jetpack_sync_error_idc_validation'][PHP_INT_MIN][0])
+        ? $filters['jetpack_sync_error_idc_validation'][PHP_INT_MIN][0]['callback']()
+        : null,
     'checkinRemaining' => array_values($actions['plugins_loaded'][21] ?? []),
 ], JSON_UNESCAPED_SLASHES) . "\n";

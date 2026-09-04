@@ -92,6 +92,7 @@ function validReport(
         jetpackUrlHistoryFrozen: true,
         jetpackAutoloaderCacheFrozen: true,
         jetpackIdentityLocalFrozen: true,
+        jetpackIdentityValidationFrozen: true,
       },
       fatalError: false,
       runnerSha256: fileSha256(runner),
@@ -577,7 +578,7 @@ describe("Tickera runtime qualification gate", () => {
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
     const evidence = JSON.parse(result.stdout);
-    expect(evidence.version).toBe("1.2.0");
+    expect(evidence.version).toBe("1.3.0");
     expect(evidence.qualified).toBe(true);
     expect(evidence.active).toBe(true);
     expect(evidence.state).toEqual({
@@ -590,6 +591,7 @@ describe("Tickera runtime qualification gate", () => {
       jetpackUrlHistoryFrozen: true,
       jetpackAutoloaderCacheFrozen: true,
       jetpackIdentityLocalFrozen: true,
+      jetpackIdentityValidationFrozen: true,
     });
     for (const priorities of Object.values(
       evidence.filterPriorities,
@@ -608,6 +610,7 @@ describe("Tickera runtime qualification gate", () => {
       home: "https://phase-s.local.invalid",
       siteurl: "https://phase-s.local.invalid",
     });
+    expect(evidence.jetpackIdentityValidation).toBe(true);
   });
 
   it.each(["missing-constant", "staging-host"])(
@@ -628,6 +631,7 @@ describe("Tickera runtime qualification gate", () => {
       expect(evidence.jetpackTransientRead).toBeNull();
       expect(evidence.jetpackTransientPreservesOldValue).toBeNull();
       expect(evidence.jetpackIdentityLocal).toBeNull();
+      expect(evidence.jetpackIdentityValidation).toBeNull();
       expect(evidence.checkinRemaining).toEqual([
         "tbl_checkin_facts_install_schema",
       ]);

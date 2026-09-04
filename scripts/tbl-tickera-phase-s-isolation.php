@@ -12,7 +12,7 @@ declare(strict_types=1);
 
 defined('ABSPATH') || exit;
 
-const TBL_TICKERA_PHASE_S_ISOLATION_VERSION = '1.2.0';
+const TBL_TICKERA_PHASE_S_ISOLATION_VERSION = '1.3.0';
 
 $GLOBALS['tbl_tickera_phase_s_isolation'] = [];
 
@@ -46,10 +46,15 @@ $GLOBALS['tbl_tickera_phase_s_isolation'] = [
     'jetpackUrlHistoryFrozen' => true,
     'jetpackAutoloaderCacheFrozen' => true,
     'jetpackIdentityLocalFrozen' => true,
+    'jetpackIdentityValidationFrozen' => true,
 ];
 
 function tbl_tickera_phase_s_return_false(): bool {
     return false;
+}
+
+function tbl_tickera_phase_s_return_true(): bool {
+    return true;
 }
 
 /**
@@ -121,6 +126,11 @@ add_filter(
 add_filter(
     'pre_transient_jetpack_idc_local',
     'tbl_tickera_phase_s_clone_identity_urls',
+    PHP_INT_MIN
+);
+add_filter(
+    'jetpack_sync_error_idc_validation',
+    'tbl_tickera_phase_s_return_true',
     PHP_INT_MIN
 );
 
