@@ -153,6 +153,8 @@ function tbl_tickera_runtime_validate_report(array $report, string $expected_inv
             'asyncRunnerDisabled'     => true,
             'mailDeliveryDisabled'    => true,
             'freemiusSdkOptionFrozen' => true,
+            'jetpackUrlHistoryFrozen' => true,
+            'jetpackAutoloaderCacheFrozen' => true,
         ],
         'isolation_guard_state'
     );

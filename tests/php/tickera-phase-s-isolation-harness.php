@@ -65,5 +65,14 @@ echo json_encode([
         && function_exists('tbl_tickera_phase_s_preserve_old_option')
         ? tbl_tickera_phase_s_preserve_old_option('new-value', 'old-value')
         : null,
+    'jetpackTransientRead' => isset($filters['pre_option__transient_jetpack_autoloader_plugin_paths'][PHP_INT_MIN][0])
+        ? $filters['pre_option__transient_jetpack_autoloader_plugin_paths'][PHP_INT_MIN][0]['callback']()
+        : null,
+    'jetpackTransientPreservesOldValue' => isset($filters['pre_update_option__transient_jetpack_autoloader_plugin_paths'][PHP_INT_MIN][0])
+        ? $filters['pre_update_option__transient_jetpack_autoloader_plugin_paths'][PHP_INT_MIN][0]['callback'](
+            ['new-plugin'],
+            ['old-plugin']
+        )
+        : null,
     'checkinRemaining' => array_values($actions['plugins_loaded'][21] ?? []),
 ], JSON_UNESCAPED_SLASHES) . "\n";

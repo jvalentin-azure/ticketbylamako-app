@@ -12,7 +12,7 @@ declare(strict_types=1);
 
 defined('ABSPATH') || exit;
 
-const TBL_TICKERA_PHASE_S_ISOLATION_VERSION = '1.0.0';
+const TBL_TICKERA_PHASE_S_ISOLATION_VERSION = '1.1.0';
 
 $GLOBALS['tbl_tickera_phase_s_isolation'] = [];
 
@@ -43,6 +43,8 @@ $GLOBALS['tbl_tickera_phase_s_isolation'] = [
     'asyncRunnerDisabled'     => true,
     'mailDeliveryDisabled'    => true,
     'freemiusSdkOptionFrozen' => true,
+    'jetpackUrlHistoryFrozen' => true,
+    'jetpackAutoloaderCacheFrozen' => true,
 ];
 
 function tbl_tickera_phase_s_return_false(): bool {
@@ -62,12 +64,42 @@ function tbl_tickera_phase_s_preserve_old_option($new_value, $old_value) {
     return $old_value;
 }
 
+/**
+ * Present the clone's missing Jetpack Autoloader transient as a stable empty
+ * cache. Combined with the pre-update fence below, this keeps Jetpack's
+ * shutdown maintenance observable but prevents add/update SQL in the clone.
+ *
+ * @return array<never, never>
+ */
+function tbl_tickera_phase_s_empty_array(): array {
+    return [];
+}
+
 add_filter('jetpack_sync_listener_should_load', 'tbl_tickera_phase_s_return_false', PHP_INT_MIN);
 add_filter('jetpack_sync_sender_should_load', 'tbl_tickera_phase_s_return_false', PHP_INT_MIN);
 add_filter('action_scheduler_allow_async_request_runner', 'tbl_tickera_phase_s_return_false', PHP_INT_MIN);
 add_filter('pre_wp_mail', 'tbl_tickera_phase_s_return_false', PHP_INT_MIN);
 add_filter(
     'pre_update_option_fs_active_plugins',
+    'tbl_tickera_phase_s_preserve_old_option',
+    PHP_INT_MIN,
+    2
+);
+foreach (['home_url', 'site_url'] as $jetpack_url_callable) {
+    add_filter(
+        'pre_update_option_jetpack_sync_https_history_' . $jetpack_url_callable,
+        'tbl_tickera_phase_s_preserve_old_option',
+        PHP_INT_MIN,
+        2
+    );
+}
+add_filter(
+    'pre_option__transient_jetpack_autoloader_plugin_paths',
+    'tbl_tickera_phase_s_empty_array',
+    PHP_INT_MIN
+);
+add_filter(
+    'pre_update_option__transient_jetpack_autoloader_plugin_paths',
     'tbl_tickera_phase_s_preserve_old_option',
     PHP_INT_MIN,
     2
