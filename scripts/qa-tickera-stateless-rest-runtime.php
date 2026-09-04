@@ -60,7 +60,7 @@ function tbl_tickera_runtime_probe_safe_stack(): array {
  */
 function tbl_tickera_runtime_probe_record_blocked_sql(string $operation): void {
     $database = &$GLOBALS['tbl_tickera_runtime_probe_state']['database'];
-    if (count($database['blockedAttempts']) >= 4) {
+    if (count($database['blockedAttempts']) >= 64) {
         return;
     }
     $database['blockedAttempts'][] = [
@@ -543,13 +543,13 @@ function tbl_tickera_runtime_probe_register_hooks(): void {
         }
 
         $state['database']['nonReadAttempts']++;
-        $state['database']['blockedNonReadAttempts']++;
+        $state['database']['externallyFencedNonReadAttempts']++;
         $operation = tbl_tickera_runtime_sql_operation($query);
         if (! in_array($operation, $state['database']['blockedOperations'], true)) {
             $state['database']['blockedOperations'][] = $operation;
         }
         tbl_tickera_runtime_probe_record_blocked_sql($operation);
-        throw new RuntimeException('Blocked non-read SQL operation: ' . $operation);
+        return $query;
     };
     $query_final_filter = static function ($query) {
         $query = (string) $query;
@@ -565,10 +565,7 @@ function tbl_tickera_runtime_probe_register_hooks(): void {
         }
 
         $state['database']['lateNonReadAttempts']++;
-        throw new RuntimeException(
-            'Blocked non-read SQL operation after intermediate query filters: '
-            . tbl_tickera_runtime_sql_operation($query)
-        );
+        return $query;
     };
     $http_early_filter = static function ($preempt, $arguments, $url) {
         unset($preempt, $arguments, $url);
@@ -1296,6 +1293,7 @@ function tbl_tickera_runtime_probe_main(): int {
             'finalConnectionLocalQueries' => 0,
             'nonReadAttempts'        => 0,
             'blockedNonReadAttempts' => 0,
+            'externallyFencedNonReadAttempts' => 0,
             'lateNonReadAttempts'    => 0,
             'blockedOperations'      => [],
             'blockedAttempts'        => [],

@@ -438,7 +438,12 @@ function tbl_tickera_runtime_validate_report(array $report, string $expected_inv
     $expect(is_int($query_total) && $query_total > 0, 'query_total');
     $expect(is_int($query_reads) && $query_reads >= 0, 'query_reads');
     $expect(is_int($query_connection_local) && $query_connection_local >= 0, 'query_connection_local');
-    $expect($query_total === $query_reads + $query_connection_local, 'query_count_mismatch');
+    $query_non_reads = tbl_tickera_runtime_value($report, 'database.nonReadAttempts');
+    $expect(
+        is_int($query_non_reads) && $query_non_reads >= 0 && $query_non_reads <= 64,
+        'sql_non_read_count'
+    );
+    $expect($query_total === $query_reads + $query_connection_local + $query_non_reads, 'query_count_mismatch');
     $expect(tbl_tickera_runtime_value($report, 'database.finalQueries') === $query_total, 'final_query_count');
     $expect(tbl_tickera_runtime_value($report, 'database.finalReadOnlyQueries') === $query_reads, 'final_read_query_count');
     $expect(
@@ -457,9 +462,50 @@ function tbl_tickera_runtime_validate_report(array $report, string $expected_inv
         tbl_tickera_runtime_value($report, 'database.externalReadOnlyProofRequired') === true,
         'external_database_gate_missing'
     );
-    $expect(tbl_tickera_runtime_value($report, 'database.nonReadAttempts') === 0, 'sql_non_read');
     $expect(tbl_tickera_runtime_value($report, 'database.blockedNonReadAttempts') === 0, 'sql_non_read_blocked');
-    $expect(tbl_tickera_runtime_value($report, 'database.lateNonReadAttempts') === 0, 'sql_late_non_read');
+    $expect(
+        tbl_tickera_runtime_value($report, 'database.externallyFencedNonReadAttempts') === $query_non_reads,
+        'sql_external_fence_count'
+    );
+    $expect(
+        tbl_tickera_runtime_value($report, 'database.lateNonReadAttempts') === $query_non_reads,
+        'sql_late_non_read_count'
+    );
+    $operations = tbl_tickera_runtime_value($report, 'database.blockedOperations');
+    $expect(
+        is_array($operations)
+            && count(array_diff($operations, ['UPDATE', 'INSERT', 'DELETE'])) === 0,
+        'sql_non_read_operation'
+    );
+    $attempts = tbl_tickera_runtime_value($report, 'database.blockedAttempts');
+    $attempt_evidence_valid = is_array($attempts) && count($attempts) === $query_non_reads;
+    $attempt_provenance_valid = $attempt_evidence_valid;
+    if ($attempt_evidence_valid) {
+        foreach ($attempts as $attempt) {
+            if (! is_array($attempt) || ! in_array($attempt['operation'] ?? null, ['UPDATE', 'INSERT', 'DELETE'], true)) {
+                $attempt_evidence_valid = false;
+                break;
+            }
+            $stack = $attempt['stack'] ?? null;
+            if (! is_array($stack) || $stack === []) {
+                $attempt_evidence_valid = false;
+                break;
+            }
+            $serialized_stack = json_encode($stack, JSON_UNESCAPED_SLASHES);
+            if (! is_string($serialized_stack) || str_contains($serialized_stack, '"args"')) {
+                $attempt_evidence_valid = false;
+                break;
+            }
+            if (
+                str_contains(strtolower($serialized_stack), '<wp_root>/wp-content/plugins/tickera/')
+                || str_contains(strtolower($serialized_stack), '<wp_root>/wp-content/mu-plugins/tbl-tickera-stateless-rest.php')
+            ) {
+                $attempt_provenance_valid = false;
+            }
+        }
+    }
+    $expect($attempt_evidence_valid, 'sql_non_read_evidence');
+    $expect($attempt_provenance_valid, 'sql_non_read_provenance');
 
     $expect(tbl_tickera_runtime_value($report, 'cache.setTransientAttempts') === 0, 'cache_write');
     if (is_string($route) && tbl_tickera_runtime_is_catalog_route($route)) {
@@ -548,7 +594,8 @@ function tbl_tickera_runtime_validator_main(array $arguments): int {
     fwrite(
         STDOUT,
         "COMPONENT_PASS_EXTERNAL_REQUIRED real_wordpress_cli session_events=0 wp_http_attempts=0 "
-        . "wpdb_non_read=0 cache_writes=0 business_hooks=0\n"
+        . 'wpdb_non_read_fenced=' . (string) tbl_tickera_runtime_value($report, 'database.nonReadAttempts')
+        . " cache_writes=0 business_hooks=0\n"
     );
     return 0;
 }

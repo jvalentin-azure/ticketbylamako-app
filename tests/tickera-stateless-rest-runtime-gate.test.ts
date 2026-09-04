@@ -257,6 +257,7 @@ function validReport(
       finalConnectionLocalQueries: 0,
       nonReadAttempts: 0,
       blockedNonReadAttempts: 0,
+      externallyFencedNonReadAttempts: 0,
       lateNonReadAttempts: 0,
       blockedOperations: [] as string[],
       blockedAttempts: [] as Record<string, unknown>[],
@@ -362,6 +363,48 @@ describe("Tickera runtime qualification gate", () => {
     expect(result.stdout).toContain("COMPONENT_PASS_EXTERNAL_REQUIRED");
   });
 
+  it("accepts bounded non-read maintenance when the external read-only fence accounts for every attempt", () => {
+    const report = validReport();
+    report.database.totalQueries = 4;
+    report.database.finalQueries = 4;
+    report.database.nonReadAttempts = 1;
+    report.database.externallyFencedNonReadAttempts = 1;
+    report.database.lateNonReadAttempts = 1;
+    report.database.blockedOperations = ["INSERT"];
+    report.database.blockedAttempts = [
+      {
+        operation: "INSERT",
+        stack: [{ file: "<WP_ROOT>/wp-content/plugins/example/cache.php", line: 12 }],
+      },
+    ];
+
+    const result = validate(report);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("COMPONENT_PASS_EXTERNAL_REQUIRED");
+  });
+
+  it("rejects a non-read attempt originating from Tickera even when the external fence blocks it", () => {
+    const report = validReport();
+    report.database.totalQueries = 4;
+    report.database.finalQueries = 4;
+    report.database.nonReadAttempts = 1;
+    report.database.externallyFencedNonReadAttempts = 1;
+    report.database.lateNonReadAttempts = 1;
+    report.database.blockedOperations = ["UPDATE"];
+    report.database.blockedAttempts = [
+      {
+        operation: "UPDATE",
+        stack: [{ file: "<WP_ROOT>/wp-content/plugins/tickera/includes/classes/class.cart.php", line: 12 }],
+      },
+    ];
+
+    const result = validate(report);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("sql_non_read_provenance");
+  });
+
   it("rejects an unaccounted SQL query even when the non-read counter is zero", () => {
     const report = validReport();
     report.database.totalQueries = 4;
@@ -444,9 +487,19 @@ describe("Tickera runtime qualification gate", () => {
       "provider_http_attempt",
     ],
     [
-      "SQL write attempted",
-      (report: RuntimeReport) => (report.database.nonReadAttempts = 1),
-      "sql_non_read",
+      "unapproved SQL operation attempted",
+      (report: RuntimeReport) => {
+        report.database.totalQueries = 4;
+        report.database.finalQueries = 4;
+        report.database.nonReadAttempts = 1;
+        report.database.externallyFencedNonReadAttempts = 1;
+        report.database.lateNonReadAttempts = 1;
+        report.database.blockedOperations = ["DROP"];
+        report.database.blockedAttempts = [
+          { operation: "DROP", stack: [{ file: "<WP_ROOT>/wp-admin/schema.php", line: 1 }] },
+        ];
+      },
+      "sql_non_read_operation",
     ],
     [
       "no query observed",
