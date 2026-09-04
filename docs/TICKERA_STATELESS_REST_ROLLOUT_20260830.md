@@ -78,6 +78,10 @@ Tickera cart. At the first `wp_loaded` priority (`PHP_INT_MIN`), before
 Tickera's proven priority 10, it independently removes Tickera's global cart
 bootstrap. Each guard requires all of the following before any change:
 
+FastCGI fields that exist with an empty value are treated as absent. Any
+non-empty authentication identity, authorization value or method override
+still fails closed. This matches the observed Cloudways/FPM request shape.
+
 - the exact allowlisted request classification;
 - the real loaded `Tickera\TC` global object;
 - the independently qualified Tickera version `3.6.0.2`;

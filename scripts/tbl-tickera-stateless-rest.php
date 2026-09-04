@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TicketByLamako Tickera Stateless Public Guard
  * Description: Prevents Tickera's global cart bootstrap from opening PHP sessions on explicitly stateless public reads.
- * Version: 0.3.1
+ * Version: 0.3.2
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -93,13 +93,13 @@ if ( ! function_exists( 'tbl_tickera_stateless_public_home_request_is_allowliste
         }
 
         if (
-            array_key_exists( 'HTTP_X_HTTP_METHOD_OVERRIDE', $_SERVER )
-            || array_key_exists( 'HTTP_AUTHORIZATION', $_SERVER )
-            || array_key_exists( 'REDIRECT_HTTP_AUTHORIZATION', $_SERVER )
-            || array_key_exists( 'PHP_AUTH_USER', $_SERVER )
-            || array_key_exists( 'PHP_AUTH_PW', $_SERVER )
-            || array_key_exists( 'AUTH_TYPE', $_SERVER )
-            || array_key_exists( 'REMOTE_USER', $_SERVER )
+            ! tbl_tickera_stateless_server_field_empty( 'HTTP_X_HTTP_METHOD_OVERRIDE' )
+            || ! tbl_tickera_stateless_server_field_empty( 'HTTP_AUTHORIZATION' )
+            || ! tbl_tickera_stateless_server_field_empty( 'REDIRECT_HTTP_AUTHORIZATION' )
+            || ! tbl_tickera_stateless_server_field_empty( 'PHP_AUTH_USER' )
+            || ! tbl_tickera_stateless_server_field_empty( 'PHP_AUTH_PW' )
+            || ! tbl_tickera_stateless_server_field_empty( 'AUTH_TYPE' )
+            || ! tbl_tickera_stateless_server_field_empty( 'REMOTE_USER' )
             || ! tbl_tickera_stateless_content_length_empty_or_zero()
             || ! tbl_tickera_stateless_server_field_empty( 'CONTENT_TYPE' )
             || ! tbl_tickera_stateless_server_field_empty( 'HTTP_TRANSFER_ENCODING' )

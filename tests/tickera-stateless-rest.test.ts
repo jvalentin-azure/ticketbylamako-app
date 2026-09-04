@@ -51,6 +51,7 @@ describe("Tickera stateless REST MU shim", () => {
     "public-home-get",
     "public-home-head",
     "public-home-fpm-head",
+    "public-home-fpm-empty-cgi-fields",
     "pretty-get-home",
     "pretty-head-event",
     "pretty-options-product",
@@ -76,7 +77,12 @@ describe("Tickera stateless REST MU shim", () => {
     expectNeighborHooksUntouched(result);
   });
 
-  it.each(["public-home-get", "public-home-head", "public-home-fpm-head"])(
+  it.each([
+    "public-home-get",
+    "public-home-head",
+    "public-home-fpm-head",
+    "public-home-fpm-empty-cgi-fields",
+  ])(
     "classifies only the passive anonymous homepage as public stateless for %s",
     (scenario) => {
       const result = runScenario(scenario);
