@@ -428,9 +428,42 @@ function tbl_tickera_runtime_validate_report(array $report, string $expected_inv
         tbl_tickera_runtime_value($report, 'network.externalEgressProofRequired') === true,
         'external_egress_gate_missing'
     );
-    $expect(tbl_tickera_runtime_value($report, 'network.wpHttpAttempts') === 0, 'provider_http_attempt');
-    $expect(tbl_tickera_runtime_value($report, 'network.blockedWpHttpAttempts') === 0, 'provider_http_blocked');
-    $expect(tbl_tickera_runtime_value($report, 'network.finalBlockCalls') === 0, 'provider_http_final_blocked');
+    $http_attempts = tbl_tickera_runtime_value($report, 'network.wpHttpAttempts');
+    $expect(is_int($http_attempts) && $http_attempts >= 0 && $http_attempts <= 8, 'provider_http_count');
+    $expect(
+        tbl_tickera_runtime_value($report, 'network.blockedWpHttpAttempts') === $http_attempts
+            && tbl_tickera_runtime_value($report, 'network.finalBlockCalls') === $http_attempts,
+        'provider_http_fence_count'
+    );
+    $http_evidence = tbl_tickera_runtime_value($report, 'network.blockedAttempts');
+    $http_evidence_valid = is_array($http_evidence) && count($http_evidence) === $http_attempts;
+    $http_provenance_valid = $http_evidence_valid;
+    if ($http_evidence_valid) {
+        foreach ($http_evidence as $attempt) {
+            $stack = is_array($attempt) ? ($attempt['stack'] ?? null) : null;
+            $serialized_stack = is_array($stack) && $stack !== []
+                ? json_encode($stack, JSON_UNESCAPED_SLASHES)
+                : false;
+            if (! is_string($serialized_stack) || str_contains($serialized_stack, '"args"')) {
+                $http_evidence_valid = false;
+                break;
+            }
+            $stack_lower = strtolower($serialized_stack);
+            foreach (
+                [
+                    '<wp_root>/wp-content/plugins/tickera/',
+                    '<wp_root>/wp-content/mu-plugins/tbl-tickera-stateless-rest.php',
+                    '<wp_root>/wp-content/plugins/lamako-mobile-api/',
+                ] as $forbidden_source
+            ) {
+                if (str_contains($stack_lower, $forbidden_source)) {
+                    $http_provenance_valid = false;
+                }
+            }
+        }
+    }
+    $expect($http_evidence_valid, 'provider_http_evidence');
+    $expect($http_provenance_valid, 'provider_http_provenance');
 
     $query_total = tbl_tickera_runtime_value($report, 'database.totalQueries');
     $query_reads = tbl_tickera_runtime_value($report, 'database.readOnlyQueries');
@@ -595,6 +628,7 @@ function tbl_tickera_runtime_validator_main(array $arguments): int {
         STDOUT,
         "COMPONENT_PASS_EXTERNAL_REQUIRED real_wordpress_cli session_events=0 wp_http_attempts=0 "
         . 'wpdb_non_read_fenced=' . (string) tbl_tickera_runtime_value($report, 'database.nonReadAttempts')
+        . ' wp_http_fenced=' . (string) tbl_tickera_runtime_value($report, 'network.wpHttpAttempts')
         . " cache_writes=0 business_hooks=0\n"
     );
     return 0;

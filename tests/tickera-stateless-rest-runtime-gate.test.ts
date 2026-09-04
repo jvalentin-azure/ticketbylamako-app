@@ -244,6 +244,7 @@ function validReport(
       wpHttpAttempts: 0,
       blockedWpHttpAttempts: 0,
       finalBlockCalls: 0,
+      blockedAttempts: [] as Record<string, unknown>[],
     },
     database: {
       guardScope: "WPDB_QUERY_FILTER_ONLY",
@@ -405,6 +406,36 @@ describe("Tickera runtime qualification gate", () => {
     expect(result.stderr).toContain("sql_non_read_provenance");
   });
 
+  it("accepts bounded third-party maintenance HTTP when both process and WP HTTP fences account for it", () => {
+    const report = validReport();
+    report.network.wpHttpAttempts = 1;
+    report.network.blockedWpHttpAttempts = 1;
+    report.network.finalBlockCalls = 1;
+    report.network.blockedAttempts = [
+      { stack: [{ file: "<WP_ROOT>/wp-content/plugins/jetpack/sync.php", line: 12 }] },
+    ];
+
+    const result = validate(report);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("wp_http_fenced=1");
+  });
+
+  it("rejects a fenced HTTP attempt originating from the mobile API callback", () => {
+    const report = validReport();
+    report.network.wpHttpAttempts = 1;
+    report.network.blockedWpHttpAttempts = 1;
+    report.network.finalBlockCalls = 1;
+    report.network.blockedAttempts = [
+      { stack: [{ file: "<WP_ROOT>/wp-content/plugins/lamako-mobile-api/includes/v2.php", line: 22 }] },
+    ];
+
+    const result = validate(report);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("provider_http_provenance");
+  });
+
   it("rejects an unaccounted SQL query even when the non-read counter is zero", () => {
     const report = validReport();
     report.database.totalQueries = 4;
@@ -482,9 +513,9 @@ describe("Tickera runtime qualification gate", () => {
       "session_first_event",
     ],
     [
-      "provider attempted",
+      "provider attempt not fully fenced",
       (report: RuntimeReport) => (report.network.wpHttpAttempts = 1),
-      "provider_http_attempt",
+      "provider_http_fence_count",
     ],
     [
       "unapproved SQL operation attempted",

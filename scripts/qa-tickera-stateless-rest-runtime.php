@@ -69,6 +69,15 @@ function tbl_tickera_runtime_probe_record_blocked_sql(string $operation): void {
     ];
 }
 
+/** Record only a location-only stack; the URL and request arguments are never retained. */
+function tbl_tickera_runtime_probe_record_blocked_http(): void {
+    $network = &$GLOBALS['tbl_tickera_runtime_probe_state']['network'];
+    if (count($network['blockedAttempts']) >= 8) {
+        return;
+    }
+    $network['blockedAttempts'][] = ['stack' => tbl_tickera_runtime_probe_safe_stack()];
+}
+
 final class TBL_Tickera_No_Persist_Session_Handler extends SessionHandler implements SessionUpdateTimestampHandlerInterface {
     private function count(string $operation): void {
         $state = &$GLOBALS['tbl_tickera_runtime_probe_state']['session'];
@@ -572,6 +581,7 @@ function tbl_tickera_runtime_probe_register_hooks(): void {
         $state = &$GLOBALS['tbl_tickera_runtime_probe_state'];
         $state['network']['wpHttpAttempts']++;
         $state['network']['blockedWpHttpAttempts']++;
+        tbl_tickera_runtime_probe_record_blocked_http();
         return new WP_Error('tbl_runtime_probe_http_blocked', 'HTTP blocked by read-only qualification.');
     };
     $http_final_filter = static function ($preempt, $arguments, $url) {
@@ -1280,6 +1290,7 @@ function tbl_tickera_runtime_probe_main(): int {
             'wpHttpAttempts'             => 0,
             'blockedWpHttpAttempts'      => 0,
             'finalBlockCalls'            => 0,
+            'blockedAttempts'            => [],
         ],
         'database'      => [
             'guardScope'             => 'WPDB_QUERY_FILTER_ONLY',
