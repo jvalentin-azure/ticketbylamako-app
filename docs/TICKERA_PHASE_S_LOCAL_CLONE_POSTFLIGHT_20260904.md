@@ -199,3 +199,92 @@ The next engineering action must identify and neutralize the exact remaining
 bootstrap writers using documented clone-only controls and dedicated tests;
 production promotion remains blocked until a future freshly provisioned clone
 passes without any non-read SQL attempt.
+
+## Permanent external-fence repair and final qualification
+
+The zero-attempt invariant above was superseded by a stronger enforceable
+boundary: the isolated database user is `SELECT`-only and the process runs in
+an egress-denied network namespace. WordPress may attempt bounded technical
+maintenance during a real bootstrap, but every attempt must be rejected by the
+external boundary, counted twice by the WordPress query/HTTP filters and carry
+PII-free location-only provenance. Any DDL, unaccounted attempt, or attempt
+originating in Tickera, the public shim or the Lamako mobile API remains a hard
+failure.
+
+Final code and validation state:
+
+- final branch HEAD:
+  `e2e82b342ed18e507b11fffaa7c7eb180385432f`;
+- external database-fence implementation:
+  `e176643bca5559833719dd4d9fbe68412c37097f`;
+- external HTTP-fence implementation:
+  `559573ac6cc5bbfca46d8e7ba3e2614f14196273`;
+- accurate validator reporting:
+  `ed7c1924d1fe064d61b693c19a428537b373395a`;
+- authenticated REST-cookie shim regression coverage:
+  `e2e82b342ed18e507b11fffaa7c7eb180385432f`;
+- runner SHA-256:
+  `b6380ad9d0d69acc01d6869db5b555d1fd9dffa8e2dcd5ad4916e9839fe26f47`;
+- validator SHA-256:
+  `759d9ee102078c5c3c177bb00b1570a887e658ecc8974c221f781df2df811c5a`;
+- clone-only isolation guard SHA-256:
+  `0b1cc1037429495d35741731ca750bf1823a3cf123993f245cb1b4242682df6c`;
+- local gate: 145/145 tests passed, PHP lint passed for runner and
+  validator, TypeScript check passed and `git diff --check` passed.
+
+The final isolated invocation was bound to the existing quarantined clone,
+its unique-salt `wp-config.php` SHA-256
+`3bbb3875bc40ed81bed3125bee6310bd1c268de1f4a2b31d13092db07ffb00ea`
+and the unchanged source dump SHA-256
+`ba9de36ffab520b00d34e19740566ffbbf041f364ecfcc88e497bcd700cb8b78`.
+The database read canary passed and the create-table canary was rejected with
+MariaDB error class 1142. The real WordPress/Tickera component run and its
+independent validator both passed:
+
+- decision: `COMPONENT_PASS_EXTERNAL_REQUIRED`;
+- HTTP status: 200 with valid anonymous web-session semantics;
+- WordPress queries: 285 total;
+- technical non-read attempts rejected by the external DB fence: 16
+  (`INSERT`/`UPDATE` only, no forbidden provenance);
+- technical WP HTTP attempts blocked by both WordPress and the process network
+  fence: 1, with no forbidden provenance;
+- PHP session-handler operations: 0;
+- business mutation hooks: 0;
+- runtime report SHA-256:
+  `476d092c4753bd5b2ab277ce4034a401e88e9d5b195f0a304fca870ba2a71d47`.
+
+The final strict HTTPS/FPM matrix used all seven allowlisted routes, GET/HEAD/
+OPTIONS and both pretty and literal `rest_route` forms. It passed 42/42 with
+HTTP 200, valid JSON for GET, CORS present and no `PHPSESSID`. Exact anonymous
+GET and HEAD `/` also passed 2/2 without `PHPSESSID`. Before that final matrix,
+one no-cache pretty `events-data` request emitted `PHPSESSID`; the condition
+did not recur in 24 targeted repetitions or the complete 42-case final rerun.
+The occurrence is retained as residual evidence rather than discarded. An
+earlier diagnostic encoded the `rest_route` slashes; that is deliberately
+non-canonical and correctly remained stateful. The series was stopped and the
+required literal form was used for the final matrix.
+
+An authenticated-cookie shim path is covered by a dedicated local regression
+test and suppresses Tickera's session bootstrap without touching neighboring
+hooks. A real authenticated staging cookie was not manufactured or extracted;
+that check still requires a dedicated non-customer QA credential and must not
+reuse an administrator session. This does not invalidate the isolated
+component or anonymous public matrix, but remains a production-promotion gate.
+
+Final operational state:
+
+- staging public shim unchanged at
+  `700b353ecb865daa48f0f842c764a415ddce2ab716358cff644a6b98b830e222`;
+- no staging or production code deployment occurred;
+- no SMTP, provider or payment call occurred;
+- private MariaDB stopped; PID and socket absent;
+- final evidence manifest SHA-256:
+  `59d1af96589cebafd000c98de1ba0ed2fcae7bfb75c2867ac224abe6f83e7411`;
+- Phase S lock absent through two SSH connections and SFTP;
+- staging mono-writer absent through two SSH connections and SFTP;
+- quarantined clone retained for audit and not deleted.
+
+The application credential typed into the terminal during this investigation
+was rejected and was not stored in the repository. Rotate that Cloudways
+application credential because it was exposed in the task transcript. The
+successful remote operations used the existing dedicated SSH key.
