@@ -18,6 +18,7 @@ $request_context = [
     'urlForm'                  => 'PRETTY',
     'webSessionMode'           => 'NOT_APPLICABLE',
     'cachePreflightState'      => 'HIT',
+    'sideEffectControlsSha256' => str_repeat('a', 64),
 ];
 $valid_proof = [
     'schemaVersion'                       => 2,
@@ -53,6 +54,7 @@ $valid_proof = [
     'queueWorkersDisabled'                => true,
     'mailDeliveryDisabled'                => true,
     'providerCallbacksDisabled'           => true,
+    'sideEffectControlsSha256'             => $request_context['sideEffectControlsSha256'],
     'activePluginFingerprintSha256'       => str_repeat('8', 64),
     'evidenceManifestSha256'              => str_repeat('9', 64),
     'issuedAtUtc'                         => gmdate('Y-m-d\TH:i:s\Z', time() - 30),
@@ -92,11 +94,28 @@ switch ($scenario) {
         $query  = "SELECT GET_LOCK('tbl-runtime', 1)";
         $result = ['operation' => tbl_tickera_runtime_sql_operation($query), 'readOnly' => tbl_tickera_runtime_sql_is_read_only($query)];
         break;
+    case 'sql-mailpoet-timezone':
+        $query = 'SET time_zone = "+00:00"';
+        $result = ['operation' => tbl_tickera_runtime_sql_operation($query), 'connectionLocal' => tbl_tickera_runtime_sql_is_connection_local($query)];
+        break;
+    case 'sql-mailpoet-big-selects':
+        $query = 'SET SESSION SQL_BIG_SELECTS=1';
+        $result = ['operation' => tbl_tickera_runtime_sql_operation($query), 'connectionLocal' => tbl_tickera_runtime_sql_is_connection_local($query)];
+        break;
+    case 'sql-set-dangerous':
+        $query = 'SET @payload = (SELECT option_value FROM wp_options LIMIT 1)';
+        $result = ['operation' => tbl_tickera_runtime_sql_operation($query), 'connectionLocal' => tbl_tickera_runtime_sql_is_connection_local($query)];
+        break;
+    case 'sql-set-global':
+        $query = 'SET GLOBAL SQL_BIG_SELECTS=1';
+        $result = ['operation' => tbl_tickera_runtime_sql_operation($query), 'connectionLocal' => tbl_tickera_runtime_sql_is_connection_local($query)];
+        break;
     case 'isolation-valid':
     case 'isolation-cache-unblocked':
     case 'isolation-database-unbound':
     case 'isolation-cache-unbound':
     case 'isolation-source-staging-root':
+    case 'isolation-side-effect-unbound':
         $proof   = $valid_proof;
         $context = $request_context;
         if ($scenario === 'isolation-cache-unblocked') {
@@ -108,6 +127,8 @@ switch ($scenario) {
         } elseif ($scenario === 'isolation-source-staging-root') {
             $proof['wpRoot']   = TBL_TICKERA_RUNTIME_SOURCE_STAGING_ROOT;
             $context['wpRoot'] = TBL_TICKERA_RUNTIME_SOURCE_STAGING_ROOT;
+        } elseif ($scenario === 'isolation-side-effect-unbound') {
+            $proof['sideEffectControlsSha256'] = str_repeat('b', 64);
         }
         $result = tbl_tickera_runtime_probe_validate_isolation_proof($proof, $context);
         break;

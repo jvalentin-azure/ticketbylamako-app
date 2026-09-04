@@ -29,6 +29,12 @@ const shutdownHarness = path.join(
   "php",
   "tickera-stateless-rest-runtime-shutdown-harness.php",
 );
+const isolationHarness = path.join(
+  root,
+  "tests",
+  "php",
+  "tickera-phase-s-isolation-harness.php",
+);
 const invocationHash = "a".repeat(64);
 
 function fileSha256(file: string) {
@@ -50,14 +56,10 @@ function validReport(
     "rest_pre_dispatch",
   ];
   if (callbackRuns) sequence.push("rest_before_callbacks");
-  sequence.push(
-    "rest_post_dispatch",
-    "wp_shutdown",
-    "reporter_destruct",
-  );
+  sequence.push("rest_post_dispatch", "wp_shutdown", "reporter_destruct");
 
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     phase: "S",
     runtime: {
       executed: true,
@@ -78,6 +80,15 @@ function validReport(
       shimSha256:
         "700b353ecb865daa48f0f842c764a415ddce2ab716358cff644a6b98b830e222",
       requestAllowlisted: true,
+      isolationGuardLoaded: true,
+      isolationGuardSha256: "3".repeat(64),
+      isolationGuardState: {
+        jetpackListenerDisabled: true,
+        jetpackSenderDisabled: true,
+        checkinInstallerRemoved: true,
+        asyncRunnerDisabled: true,
+        mailDeliveryDisabled: true,
+      },
       fatalError: false,
       runnerSha256: fileSha256(runner),
       validatorSha256: fileSha256(validator),
@@ -143,6 +154,7 @@ function validReport(
       queueWorkersDisabled: true,
       mailDeliveryDisabled: true,
       providerCallbacksDisabled: true,
+      sideEffectControlsSha256: "3".repeat(64),
       publicAccessRestricted: true,
       activePluginFingerprintSha256: "1".repeat(64),
       evidenceManifestSha256: "2".repeat(64),
@@ -170,9 +182,9 @@ function validReport(
             "beb244415bf3e874925bd76a88f9bbf19c246121251877723dc6a3db41caac52",
         },
       ],
-      afterInventory: [] as Array<Record<string, unknown>>,
-      shutdownInventory: [] as Array<Record<string, unknown>>,
-      reporterInventory: [] as Array<Record<string, unknown>>,
+      afterInventory: [] as Record<string, unknown>[],
+      shutdownInventory: [] as Record<string, unknown>[],
+      reporterInventory: [] as Record<string, unknown>[],
       sequence,
     },
     session: {
@@ -208,7 +220,7 @@ function validReport(
       cleanupMethod: "NONE",
       cleanupSucceeded: true,
       firstEvent: null as string | null,
-      firstEventStack: [] as Array<Record<string, unknown>>,
+      firstEventStack: [] as Record<string, unknown>[],
       open: 0,
       read: 0,
       write: 0,
@@ -234,8 +246,10 @@ function validReport(
       externalReadOnlyProofRequired: true,
       totalQueries: 3,
       readOnlyQueries: 3,
+      connectionLocalQueries: 0,
       finalQueries: 3,
       finalReadOnlyQueries: 3,
+      finalConnectionLocalQueries: 0,
       nonReadAttempts: 0,
       blockedNonReadAttempts: 0,
       lateNonReadAttempts: 0,
@@ -282,14 +296,10 @@ function validate(report: RuntimeReport, expectedInvocation = invocationHash) {
   const reportPath = path.join(directory, "runtime-report.json");
   writeFileSync(reportPath, JSON.stringify(report), "utf8");
   try {
-    return spawnSync(
-      "php",
-      [validator, reportPath, expectedInvocation],
-      {
-        cwd: root,
-        encoding: "utf8",
-      },
-    );
+    return spawnSync("php", [validator, reportPath, expectedInvocation], {
+      cwd: root,
+      encoding: "utf8",
+    });
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -330,6 +340,32 @@ describe("Tickera runtime qualification gate", () => {
     expect(result.stdout).toContain("COMPONENT_PASS_EXTERNAL_REQUIRED");
   });
 
+  it("accepts only fully accounted connection-local SQL alongside read-only queries", () => {
+    const report = validReport();
+    report.database.totalQueries = 5;
+    report.database.readOnlyQueries = 3;
+    report.database.connectionLocalQueries = 2;
+    report.database.finalQueries = 5;
+    report.database.finalReadOnlyQueries = 3;
+    report.database.finalConnectionLocalQueries = 2;
+
+    const result = validate(report);
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("COMPONENT_PASS_EXTERNAL_REQUIRED");
+  });
+
+  it("rejects an unaccounted SQL query even when the non-read counter is zero", () => {
+    const report = validReport();
+    report.database.totalQueries = 4;
+
+    const result = validate(report);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("query_count_mismatch");
+  });
+
   it.each([
     [
       "missing runtime",
@@ -350,8 +386,7 @@ describe("Tickera runtime qualification gate", () => {
     [
       "missing prebootstrap database qualification",
       (report: RuntimeReport) =>
-        (report.instrumentation.prebootstrapQualification.databaseQualified =
-          false),
+        (report.instrumentation.prebootstrapQualification.databaseQualified = false),
       "prebootstrap_qualification",
     ],
     [
@@ -436,8 +471,7 @@ describe("Tickera runtime qualification gate", () => {
     ],
     [
       "cold cache",
-      (report: RuntimeReport) =>
-        (report.cache.observedPreflightState = "MISS"),
+      (report: RuntimeReport) => (report.cache.observedPreflightState = "MISS"),
       "cache_not_hot_before",
     ],
     [
@@ -496,10 +530,7 @@ describe("Tickera runtime qualification gate", () => {
     );
     expect(report.instrumentation.wp_shutdown_seen).toBe(true);
     expect(report.instrumentation.reporterAfterWpShutdown).toBe(true);
-    expect(report.hook.sequence).toEqual([
-      "wp_shutdown",
-      "reporter_destruct",
-    ]);
+    expect(report.hook.sequence).toEqual(["wp_shutdown", "reporter_destruct"]);
     expect(report.report.attempts).toBe(1);
     expect(report.report.intendedExitCode).toBe(1);
     expect(report.decision).toBe("STOP");
@@ -517,6 +548,66 @@ describe("Tickera runtime qualification gate", () => {
   ])("classifies %s conservatively", (scenario, operation, readOnly) => {
     expect(runLibraryScenario(scenario)).toEqual({ operation, readOnly });
   });
+
+  it.each([
+    ["sql-mailpoet-timezone", true],
+    ["sql-mailpoet-big-selects", true],
+    ["sql-set-dangerous", false],
+    ["sql-set-global", false],
+  ])(
+    "classifies %s as a bounded connection-local statement",
+    (scenario, connectionLocal) => {
+      expect(runLibraryScenario(scenario)).toEqual({
+        operation: "SET",
+        connectionLocal,
+      });
+    },
+  );
+
+  it("requires the clone-only isolation guard controls", () => {
+    const result = spawnSync("php", [isolationHarness, "active"], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    const evidence = JSON.parse(result.stdout);
+    expect(evidence.version).toBe("1.0.0");
+    expect(evidence.qualified).toBe(true);
+    expect(evidence.active).toBe(true);
+    expect(evidence.state).toEqual({
+      jetpackListenerDisabled: true,
+      jetpackSenderDisabled: true,
+      checkinInstallerRemoved: true,
+      asyncRunnerDisabled: true,
+      mailDeliveryDisabled: true,
+    });
+    for (const priorities of Object.values(
+      evidence.filterPriorities,
+    ) as string[][]) {
+      expect(priorities).toEqual(["PHP_INT_MIN"]);
+    }
+    expect(evidence.checkinRemaining).toEqual([]);
+  });
+
+  it.each(["missing-constant", "staging-host"])(
+    "keeps the clone-only isolation guard inert for %s",
+    (scenario) => {
+      const result = spawnSync("php", [isolationHarness, scenario], {
+        cwd: root,
+        encoding: "utf8",
+      });
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe("");
+      const evidence = JSON.parse(result.stdout);
+      expect(evidence.qualified).toBe(false);
+      expect(evidence.active).toBe(false);
+      expect(evidence.filterPriorities).toEqual({});
+      expect(evidence.checkinRemaining).toEqual([
+        "tbl_checkin_facts_install_schema",
+      ]);
+    },
+  );
 
   it("accepts exact GET, HEAD, OPTIONS, rest_route, and web-session request forms", () => {
     expect(runLibraryScenario("request-pretty-get")).toMatchObject({
@@ -566,6 +657,9 @@ describe("Tickera runtime qualification gate", () => {
     );
     expect(runLibraryScenario("isolation-source-staging-root")).toContain(
       "source_staging_root_forbidden",
+    );
+    expect(runLibraryScenario("isolation-side-effect-unbound")).toContain(
+      "side_effect_controls_hash",
     );
   });
 

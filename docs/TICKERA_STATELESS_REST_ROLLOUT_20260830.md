@@ -160,9 +160,21 @@ with any commerce regression or cache warm-up:
   expired or uncertain, STOP Phase S and do not call that route. The runner
   re-reads the exact key and stops before the callback on `MISS`;
 - require cache `HIT` again in the measured response, zero `set_transient`
-  attempt, zero WordPress HTTP attempt, zero non-read `$wpdb` query and zero
-  business hook. Do not relabel these counters as global `provider_calls=0` or
-  `writes=0`;
+  attempt, zero WordPress HTTP attempt, zero data-mutating `$wpdb` query and
+  zero business hook. The only accepted non-`SELECT`/`SHOW` statements are the
+  two exact connection-local forms used by the active MailPoet stack:
+  `SET time_zone = '+00:00'` and `SET SESSION SQL_BIG_SELECTS=1`. They are
+  counted separately, must be fully accounted at the final reporter, and do
+  not replace the independently proven clone `SELECT`-only credential. Every
+  other `SET` or non-read statement remains a hard failure. Do not relabel
+  these counters as global `provider_calls=0` or `writes=0`;
+- install the reviewed clone-only isolation guard before bootstrap. It must be
+  bound by hash in the private proof and activates only when both
+  `TBL_TICKERA_PHASE_S_ISOLATED_CLONE=true` and an RFC 2606 `.invalid` host are
+  present. It disables Jetpack sync listener/sender loading, the async Action
+  Scheduler request runner, WordPress mail delivery and the Check-in schema
+  installer. Its exact state is evidence; the guard is inert if copied to an
+  ordinary staging or production hostname;
 - CLI does not reliably expose CORS, `Set-Cookie` or final web-server status.
   Its successful verdict is therefore only
   `COMPONENT_PASS_EXTERNAL_REQUIRED`, never a Phase S release PASS. CLI covers

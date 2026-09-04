@@ -22,19 +22,19 @@ staging would therefore make a successful report non-probative.
 
 ## Frozen candidates
 
-| Item | Value |
-| --- | --- |
-| Application shim commit | `9edc6c81af3a10228d223ce9438698da42403284` |
-| Qualification tooling baseline (superseded by this hardening) | `ef38f8d5bacdd28f0aaa2a927a9855ade815e9d2` |
-| MU-plugin SHA-256 | `9ee50c7fc73bbe4f2cebdc17ca8aac93aface21f7620e85d83cf2babe3ec1ddf` |
-| Runtime runner SHA-256 | `d4f7bf4ad308c551aea15e1317aeb93cfe690eaea66f24a367509f211518b0c8` |
-| Runtime validator SHA-256 | `ae799c8542998f8e22ea323e13feb4f1a543303d683e7f7bf2540857e1f2fe60` |
-| Runtime library harness SHA-256 | `cc88c4056c362bd926339eccdaedf5ef92727086de5480dfcd14107295456adb` |
-| Runtime shutdown harness SHA-256 | `525c107d0d55434280ca0ce7b08cf7425f116949ba97f3284dd631b406e93f91` |
-| Runtime gate SHA-256 | `8e5be5f5971e8bd40a46c73e6629fb5d0caec2fd9b5343d491cc5f870a50ff88` |
-| Source staging `wp-config.php` SHA-256 | `3e1b6e68874f3784e35df8944a9e96eef82f318736eaa3c4ad010e3290f46227` |
-| Active Tickera version | `3.6.0.2` |
-| Active REST/cookie guard SHA-256 | `ebed8d97dd9336dc6332844fc43ef417db1eb929f344d1f15c950f559a32d06e` |
+| Item                                                          | Value                                                              |
+| ------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Application shim commit                                       | `9edc6c81af3a10228d223ce9438698da42403284`                         |
+| Qualification tooling baseline (superseded by this hardening) | `ef38f8d5bacdd28f0aaa2a927a9855ade815e9d2`                         |
+| MU-plugin SHA-256                                             | `9ee50c7fc73bbe4f2cebdc17ca8aac93aface21f7620e85d83cf2babe3ec1ddf` |
+| Runtime runner SHA-256                                        | `d4f7bf4ad308c551aea15e1317aeb93cfe690eaea66f24a367509f211518b0c8` |
+| Runtime validator SHA-256                                     | `ae799c8542998f8e22ea323e13feb4f1a543303d683e7f7bf2540857e1f2fe60` |
+| Runtime library harness SHA-256                               | `cc88c4056c362bd926339eccdaedf5ef92727086de5480dfcd14107295456adb` |
+| Runtime shutdown harness SHA-256                              | `525c107d0d55434280ca0ce7b08cf7425f116949ba97f3284dd631b406e93f91` |
+| Runtime gate SHA-256                                          | `8e5be5f5971e8bd40a46c73e6629fb5d0caec2fd9b5343d491cc5f870a50ff88` |
+| Source staging `wp-config.php` SHA-256                        | `3e1b6e68874f3784e35df8944a9e96eef82f318736eaa3c4ad010e3290f46227` |
+| Active Tickera version                                        | `3.6.0.2`                                                          |
+| Active REST/cookie guard SHA-256                              | `ebed8d97dd9336dc6332844fc43ef417db1eb929f344d1f15c950f559a32d06e` |
 
 The carousel candidate `e23fddaed6f53d2303b31a8be9a5bd1e417ab491`
 remains frozen and read-only until this Phase S is sealed PASS.
@@ -68,7 +68,10 @@ only redacted classifications and hashes and proves all of the following:
 5. Orange, CyberSource, SMTP, Firebase, OAuth and every other production
    credential are absent or replaced with non-routable sentinels;
 6. cron, Action Scheduler runners, queue workers, e-mail delivery and provider
-   callbacks are disabled for the clone;
+   callbacks are disabled for the clone. The repository clone-only isolation
+   guard must be sealed by SHA-256 in the proof. It activates only with
+   `TBL_TICKERA_PHASE_S_ISOLATED_CLONE=true` and a `.invalid` hostname, and
+   must report all five expected controls active;
 7. the active-plugin list, Tickera bytes, MU-neighbor hashes, PHP version and
    clone `wp-config.php` hash are sealed;
 8. the clone is password protected or otherwise inaccessible to the public,
@@ -100,10 +103,15 @@ staging or production lock.
    forms. Use `ANONYMOUS_CLI` only for `/web-session` and `NOT_APPLICABLE` for
    every other route. Accept only
    `COMPONENT_PASS_EXTERNAL_REQUIRED` with zero session operations, zero
-   non-read SQL, zero cache writes, zero outbound attempts and the exact
+   data-mutating SQL, zero cache writes, zero outbound attempts and the exact
    inventory of every `Tickera\TC::update_cart` callback transitioning from
    the single global priority-`10` callback to absent through WordPress
-   shutdown and the late reporter.
+   shutdown and the late reporter. The only accepted connection-local SQL is
+   exactly `SET time_zone = '+00:00'` or `SET SESSION SQL_BIG_SELECTS=1`;
+   these statements are counted separately and every observed query must equal
+   read-only plus connection-local counts. All other `SET` and non-read SQL is
+   a hard failure. The external clone `SELECT`-only credential remains the
+   authoritative write fence.
 6. Through real HTTPS/FPM, separately run GET, HEAD and OPTIONS for pretty and
    literal `rest_route` forms. Require valid JSON/CORS/JWT semantics and no
    `PHPSESSID` on a fresh client; `/web-session` needs distinct anonymous and

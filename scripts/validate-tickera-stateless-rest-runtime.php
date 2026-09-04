@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-const TBL_TICKERA_STATELESS_REST_RUNTIME_SCHEMA = 3;
+const TBL_TICKERA_STATELESS_REST_RUNTIME_SCHEMA = 4;
 const TBL_TICKERA_STATELESS_REST_SHA256 = '700b353ecb865daa48f0f842c764a415ddce2ab716358cff644a6b98b830e222';
 const TBL_TICKERA_3602_SHA256 = 'beb244415bf3e874925bd76a88f9bbf19c246121251877723dc6a3db41caac52';
 
@@ -61,6 +61,21 @@ function tbl_tickera_runtime_sql_is_read_only(string $query): bool {
     }
 
     return true;
+}
+
+function tbl_tickera_runtime_sql_is_connection_local(string $query): bool {
+    $query = preg_replace('/^\xEF\xBB\xBF/', '', $query) ?? $query;
+    do {
+        $before = $query;
+        $query = ltrim($query);
+        $query = preg_replace('#^/\*.*?\*/\s*#s', '', $query) ?? $query;
+        $query = preg_replace('/^(?:--|#)[^\r\n]*(?:\r\n|\r|\n|$)\s*/', '', $query) ?? $query;
+    } while ($query !== $before);
+
+    return (bool) preg_match(
+        '/^SET\s+(?:SESSION\s+)?(?:time_zone\s*=\s*[\'\"]\+00:00[\'\"]|SQL_BIG_SELECTS\s*=\s*1)\s*;?\s*$/iD',
+        $query
+    );
 }
 
 function tbl_tickera_runtime_is_catalog_route(string $route): bool {
@@ -123,6 +138,23 @@ function tbl_tickera_runtime_validate_report(array $report, string $expected_inv
         'shim_hash'
     );
     $expect(tbl_tickera_runtime_value($report, 'runtime.requestAllowlisted') === true, 'request_not_allowlisted');
+    $expect(tbl_tickera_runtime_value($report, 'runtime.isolationGuardLoaded') === true, 'isolation_guard_not_loaded');
+    $guard_hash = tbl_tickera_runtime_value($report, 'runtime.isolationGuardSha256');
+    $expect(is_string($guard_hash) && preg_match('/^[a-f0-9]{64}$/D', $guard_hash) === 1, 'isolation_guard_hash');
+    $expect(
+        $guard_hash === tbl_tickera_runtime_value($report, 'isolation.sideEffectControlsSha256'),
+        'isolation_guard_binding'
+    );
+    $expect(
+        tbl_tickera_runtime_value($report, 'runtime.isolationGuardState') === [
+            'jetpackListenerDisabled' => true,
+            'jetpackSenderDisabled'   => true,
+            'checkinInstallerRemoved' => true,
+            'asyncRunnerDisabled'     => true,
+            'mailDeliveryDisabled'    => true,
+        ],
+        'isolation_guard_state'
+    );
     $expect(tbl_tickera_runtime_value($report, 'runtime.fatalError') === false, 'runtime_error');
     foreach (
         [
@@ -227,6 +259,7 @@ function tbl_tickera_runtime_validate_report(array $report, string $expected_inv
             'objectCacheTargetFingerprintSha256',
             'activePluginFingerprintSha256',
             'evidenceManifestSha256',
+            'sideEffectControlsSha256',
         ] as $isolation_hash
     ) {
         $value = tbl_tickera_runtime_value($report, 'isolation.' . $isolation_hash);
@@ -396,11 +429,17 @@ function tbl_tickera_runtime_validate_report(array $report, string $expected_inv
 
     $query_total = tbl_tickera_runtime_value($report, 'database.totalQueries');
     $query_reads = tbl_tickera_runtime_value($report, 'database.readOnlyQueries');
+    $query_connection_local = tbl_tickera_runtime_value($report, 'database.connectionLocalQueries');
     $expect(is_int($query_total) && $query_total > 0, 'query_total');
     $expect(is_int($query_reads) && $query_reads >= 0, 'query_reads');
-    $expect($query_total === $query_reads, 'query_count_mismatch');
+    $expect(is_int($query_connection_local) && $query_connection_local >= 0, 'query_connection_local');
+    $expect($query_total === $query_reads + $query_connection_local, 'query_count_mismatch');
     $expect(tbl_tickera_runtime_value($report, 'database.finalQueries') === $query_total, 'final_query_count');
-    $expect(tbl_tickera_runtime_value($report, 'database.finalReadOnlyQueries') === $query_total, 'final_read_query_count');
+    $expect(tbl_tickera_runtime_value($report, 'database.finalReadOnlyQueries') === $query_reads, 'final_read_query_count');
+    $expect(
+        tbl_tickera_runtime_value($report, 'database.finalConnectionLocalQueries') === $query_connection_local,
+        'final_connection_local_query_count'
+    );
     $expect(
         tbl_tickera_runtime_value($report, 'database.guardScope') === 'WPDB_QUERY_FILTER_ONLY',
         'database_guard_scope'

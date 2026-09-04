@@ -279,6 +279,10 @@ function tbl_tickera_runtime_probe_validate_isolation_proof(array $proof, array 
     $expect(($proof['urlForm'] ?? null) === ($context['urlForm'] ?? null), 'url_form');
     $expect(($proof['webSessionMode'] ?? null) === ($context['webSessionMode'] ?? null), 'web_session_mode');
     $expect(($proof['cachePreflightState'] ?? null) === ($context['cachePreflightState'] ?? null), 'cache_preflight');
+    $expect(
+        ($proof['sideEffectControlsSha256'] ?? null) === ($context['sideEffectControlsSha256'] ?? null),
+        'side_effect_controls_hash'
+    );
     $clone_host = is_string($proof['cloneHost'] ?? null) ? strtolower((string) $proof['cloneHost']) : '';
     $expect(tbl_tickera_runtime_probe_clone_host_is_safe($clone_host), 'clone_host');
     foreach (
@@ -295,6 +299,7 @@ function tbl_tickera_runtime_probe_validate_isolation_proof(array $proof, array 
             'queueWorkersDisabled',
             'mailDeliveryDisabled',
             'providerCallbacksDisabled',
+            'sideEffectControlsSha256',
         ] as $gate
     ) {
         if (str_ends_with($gate, 'Sha256')) {
@@ -516,6 +521,10 @@ function tbl_tickera_runtime_probe_register_hooks(): void {
             $state['database']['readOnlyQueries']++;
             return $query;
         }
+        if (tbl_tickera_runtime_sql_is_connection_local($query)) {
+            $state['database']['connectionLocalQueries']++;
+            return $query;
+        }
 
         $state['database']['nonReadAttempts']++;
         $state['database']['blockedNonReadAttempts']++;
@@ -531,6 +540,10 @@ function tbl_tickera_runtime_probe_register_hooks(): void {
         $state['database']['finalQueries']++;
         if (tbl_tickera_runtime_sql_is_read_only($query)) {
             $state['database']['finalReadOnlyQueries']++;
+            return $query;
+        }
+        if (tbl_tickera_runtime_sql_is_connection_local($query)) {
+            $state['database']['finalConnectionLocalQueries']++;
             return $query;
         }
 
@@ -696,6 +709,18 @@ function tbl_tickera_runtime_probe_register_hooks(): void {
                     'wp_loaded',
                     'tbl_tickera_stateless_rest_disable_global_cart_bootstrap'
                 ) === PHP_INT_MIN;
+            }
+            $state['runtime']['isolationGuardLoaded'] = function_exists('tbl_tickera_phase_s_isolation_state')
+                && function_exists('tbl_tickera_phase_s_isolated_clone_is_qualified')
+                && tbl_tickera_phase_s_isolated_clone_is_qualified()
+                && defined('TBL_TICKERA_PHASE_S_ISOLATION_VERSION');
+            if ($state['runtime']['isolationGuardLoaded']) {
+                $reflection = new ReflectionFunction('tbl_tickera_phase_s_isolation_state');
+                $source = $reflection->getFileName();
+                $state['runtime']['isolationGuardSha256'] = is_string($source) && is_readable($source)
+                    ? strtolower((string) hash_file('sha256', $source))
+                    : '';
+                $state['runtime']['isolationGuardState'] = tbl_tickera_phase_s_isolation_state();
             }
             $state['instrumentation']['filterHealthAtWpLoaded'] = tbl_tickera_runtime_probe_filter_health();
             tbl_tickera_runtime_probe_capture_session_checkpoint('AtWpLoadedBefore');
@@ -1016,6 +1041,15 @@ function tbl_tickera_runtime_probe_main(): int {
         fwrite(STDERR, "STOP wp_config_hash_mismatch\n");
         return 1;
     }
+    $isolation_guard_path = $wp_root . DIRECTORY_SEPARATOR . 'wp-content'
+        . DIRECTORY_SEPARATOR . 'mu-plugins' . DIRECTORY_SEPARATOR . '000-phase-s-isolation.php';
+    $isolation_guard_sha256 = is_readable($isolation_guard_path)
+        ? strtolower((string) hash_file('sha256', $isolation_guard_path))
+        : '';
+    if (! preg_match('/^[a-f0-9]{64}$/D', $isolation_guard_sha256)) {
+        fwrite(STDERR, "STOP isolation_guard_unavailable\n");
+        return 1;
+    }
 
     $runner_sha256    = strtolower((string) hash_file('sha256', __FILE__));
     $validator_sha256 = strtolower(
@@ -1062,6 +1096,7 @@ function tbl_tickera_runtime_probe_main(): int {
         'urlForm'                  => $parsed['urlForm'],
         'webSessionMode'           => $web_session_mode,
         'cachePreflightState'      => $cache_preflight,
+        'sideEffectControlsSha256' => $isolation_guard_sha256,
     ]);
     if ($proof_failures !== []) {
         fwrite(STDERR, 'STOP isolation_' . implode(',', $proof_failures) . "\n");
@@ -1102,6 +1137,9 @@ function tbl_tickera_runtime_probe_main(): int {
             'shimLoaded'           => false,
             'shimSha256'           => '',
             'requestAllowlisted'   => false,
+            'isolationGuardLoaded' => false,
+            'isolationGuardSha256' => '',
+            'isolationGuardState'  => [],
             'fatalError'           => false,
             'runnerSha256'         => $runner_sha256,
             'validatorSha256'      => $validator_sha256,
@@ -1152,6 +1190,7 @@ function tbl_tickera_runtime_probe_main(): int {
             'queueWorkersDisabled'            => true,
             'mailDeliveryDisabled'            => true,
             'providerCallbacksDisabled'       => true,
+            'sideEffectControlsSha256'         => (string) $proof['sideEffectControlsSha256'],
             'publicAccessRestricted'          => true,
             'activePluginFingerprintSha256'  => (string) $proof['activePluginFingerprintSha256'],
             'evidenceManifestSha256'         => (string) $proof['evidenceManifestSha256'],
@@ -1234,8 +1273,10 @@ function tbl_tickera_runtime_probe_main(): int {
             'externalReadOnlyProofRequired' => true,
             'totalQueries'           => 0,
             'readOnlyQueries'        => 0,
+            'connectionLocalQueries' => 0,
             'finalQueries'           => 0,
             'finalReadOnlyQueries'   => 0,
+            'finalConnectionLocalQueries' => 0,
             'nonReadAttempts'        => 0,
             'blockedNonReadAttempts' => 0,
             'lateNonReadAttempts'    => 0,
