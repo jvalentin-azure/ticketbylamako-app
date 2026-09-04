@@ -155,6 +155,7 @@ function tbl_tickera_runtime_validate_report(array $report, string $expected_inv
             'freemiusSdkOptionFrozen' => true,
             'jetpackUrlHistoryFrozen' => true,
             'jetpackAutoloaderCacheFrozen' => true,
+            'jetpackIdentityLocalFrozen' => true,
         ],
         'isolation_guard_state'
     );

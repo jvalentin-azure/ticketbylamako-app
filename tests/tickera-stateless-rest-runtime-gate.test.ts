@@ -91,6 +91,7 @@ function validReport(
         freemiusSdkOptionFrozen: true,
         jetpackUrlHistoryFrozen: true,
         jetpackAutoloaderCacheFrozen: true,
+        jetpackIdentityLocalFrozen: true,
       },
       fatalError: false,
       runnerSha256: fileSha256(runner),
@@ -576,7 +577,7 @@ describe("Tickera runtime qualification gate", () => {
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
     const evidence = JSON.parse(result.stdout);
-    expect(evidence.version).toBe("1.1.0");
+    expect(evidence.version).toBe("1.2.0");
     expect(evidence.qualified).toBe(true);
     expect(evidence.active).toBe(true);
     expect(evidence.state).toEqual({
@@ -588,6 +589,7 @@ describe("Tickera runtime qualification gate", () => {
       freemiusSdkOptionFrozen: true,
       jetpackUrlHistoryFrozen: true,
       jetpackAutoloaderCacheFrozen: true,
+      jetpackIdentityLocalFrozen: true,
     });
     for (const priorities of Object.values(
       evidence.filterPriorities,
@@ -602,6 +604,10 @@ describe("Tickera runtime qualification gate", () => {
     expect(evidence.freemiusPreservesOldValue).toBe("old-value");
     expect(evidence.jetpackTransientRead).toEqual([]);
     expect(evidence.jetpackTransientPreservesOldValue).toEqual(["old-plugin"]);
+    expect(evidence.jetpackIdentityLocal).toEqual({
+      home: "https://phase-s.local.invalid",
+      siteurl: "https://phase-s.local.invalid",
+    });
   });
 
   it.each(["missing-constant", "staging-host"])(
@@ -621,6 +627,7 @@ describe("Tickera runtime qualification gate", () => {
       expect(evidence.freemiusPreservesOldValue).toBeNull();
       expect(evidence.jetpackTransientRead).toBeNull();
       expect(evidence.jetpackTransientPreservesOldValue).toBeNull();
+      expect(evidence.jetpackIdentityLocal).toBeNull();
       expect(evidence.checkinRemaining).toEqual([
         "tbl_checkin_facts_install_schema",
       ]);

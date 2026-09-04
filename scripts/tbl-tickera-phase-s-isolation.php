@@ -12,7 +12,7 @@ declare(strict_types=1);
 
 defined('ABSPATH') || exit;
 
-const TBL_TICKERA_PHASE_S_ISOLATION_VERSION = '1.1.0';
+const TBL_TICKERA_PHASE_S_ISOLATION_VERSION = '1.2.0';
 
 $GLOBALS['tbl_tickera_phase_s_isolation'] = [];
 
@@ -45,6 +45,7 @@ $GLOBALS['tbl_tickera_phase_s_isolation'] = [
     'freemiusSdkOptionFrozen' => true,
     'jetpackUrlHistoryFrozen' => true,
     'jetpackAutoloaderCacheFrozen' => true,
+    'jetpackIdentityLocalFrozen' => true,
 ];
 
 function tbl_tickera_phase_s_return_false(): bool {
@@ -75,6 +76,19 @@ function tbl_tickera_phase_s_empty_array(): array {
     return [];
 }
 
+/**
+ * Supply the exact non-public clone URL to Jetpack's identity check so its
+ * short-lived local-URL transient never needs to be created in the clone DB.
+ *
+ * @return array{home: string, siteurl: string}
+ */
+function tbl_tickera_phase_s_clone_identity_urls(): array {
+    return [
+        'home'    => 'https://phase-s.local.invalid',
+        'siteurl' => 'https://phase-s.local.invalid',
+    ];
+}
+
 add_filter('jetpack_sync_listener_should_load', 'tbl_tickera_phase_s_return_false', PHP_INT_MIN);
 add_filter('jetpack_sync_sender_should_load', 'tbl_tickera_phase_s_return_false', PHP_INT_MIN);
 add_filter('action_scheduler_allow_async_request_runner', 'tbl_tickera_phase_s_return_false', PHP_INT_MIN);
@@ -103,6 +117,11 @@ add_filter(
     'tbl_tickera_phase_s_preserve_old_option',
     PHP_INT_MIN,
     2
+);
+add_filter(
+    'pre_transient_jetpack_idc_local',
+    'tbl_tickera_phase_s_clone_identity_urls',
+    PHP_INT_MIN
 );
 
 add_action(
