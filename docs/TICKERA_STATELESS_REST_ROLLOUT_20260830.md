@@ -72,9 +72,11 @@ and Seating keys leave Tickera stateful.
 
 ## Preserved behavior
 
-At the first `wp_loaded` priority (`PHP_INT_MIN`), after normal plugin and
-`plugins_loaded` registration but before Tickera's proven priority 10, the shim
-requires all of the following before any change:
+At the first `woocommerce_blocks_loaded` priority (`PHP_INT_MIN`), the shim
+removes only the proven Bridge priority-10 bootstrap before it can read the
+Tickera cart. At the first `wp_loaded` priority (`PHP_INT_MIN`), before
+Tickera's proven priority 10, it independently removes Tickera's global cart
+bootstrap. Each guard requires all of the following before any change:
 
 - the exact allowlisted request classification;
 - the real loaded `Tickera\TC` global object;

@@ -76,7 +76,7 @@ function validReport(
         "beb244415bf3e874925bd76a88f9bbf19c246121251877723dc6a3db41caac52",
       shimLoaded: true,
       shimSha256:
-        "873d1bce303877cf805040460bc0e3509caec0fc38c288fdb8ddab3e845a2581",
+        "9c868d7762d992bf1d01b4ea7d7a9546106512f725033d3951c8e436e05bd67c",
       requestAllowlisted: true,
       fatalError: false,
       runnerSha256: fileSha256(runner),

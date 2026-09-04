@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TicketByLamako Tickera Stateless Public Guard
  * Description: Prevents Tickera's global cart bootstrap from opening PHP sessions on explicitly stateless public reads.
- * Version: 0.3.0
+ * Version: 0.3.1
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -193,7 +193,7 @@ if ( ! function_exists( 'tbl_tickera_stateless_disable_bridge_blocks_bootstrap' 
 }
 
 add_action(
-    'plugins_loaded',
+    'woocommerce_blocks_loaded',
     'tbl_tickera_stateless_disable_bridge_blocks_bootstrap',
     PHP_INT_MIN
 );

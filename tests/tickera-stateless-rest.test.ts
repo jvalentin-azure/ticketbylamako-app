@@ -10,6 +10,7 @@ type HarnessResult = {
   restAllowlisted: boolean;
   publicHomeAllowlisted: boolean;
   guardRunsFirst: boolean;
+  bridgeGuardRunsFirst: boolean;
   bridgeBlocksPriority: number | false;
   wpLoadedPriorityBefore: number | false;
   wpLoadedPriorityAfter: number | false;
@@ -35,6 +36,7 @@ function runScenario(scenario: string): HarnessResult {
 
 function expectNeighborHooksUntouched(result: HarnessResult) {
   expect(result.guardRunsFirst).toBe(true);
+  expect(result.bridgeGuardRunsFirst).toBe(true);
   expect(result.adminPostPriority).toBe(10);
   expect(result.adminPostNoPrivPriority).toBe(10);
   expect(result.corsPriority).toBe(10);
@@ -228,8 +230,10 @@ describe("Tickera stateless REST MU shim", () => {
     expect(source).toContain("'wp_woocommerce_session_'");
     expect(source).toContain("'woocommerce_items_in_cart'");
     expect(source).toContain("(string) $tc->version !== '3.6.0.2'");
-    expect(source).toContain("'plugins_loaded'");
     expect(source).toContain("'woocommerce_blocks_loaded'");
+    expect(source).not.toMatch(
+      /add_action\(\s*'plugins_loaded',\s*'tbl_tickera_stateless_disable_bridge_blocks_bootstrap'/,
+    );
     expect(source).toContain("'init_block_integration'");
     expect(source).not.toMatch(/\bsession_start\s*\(/);
     expect(source).not.toMatch(/\bheader\s*\(/);

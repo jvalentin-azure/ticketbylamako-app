@@ -515,6 +515,10 @@ namespace {
         'wp_loaded',
         'tbl_tickera_stateless_rest_disable_global_cart_bootstrap'
     );
+    $bridge_guard_priority = has_action(
+        'woocommerce_blocks_loaded',
+        'tbl_tickera_stateless_disable_bridge_blocks_bootstrap'
+    );
     do_action( 'plugins_loaded' );
     $bridge_blocks_priority = has_action(
         'woocommerce_blocks_loaded',
@@ -538,6 +542,7 @@ namespace {
             'restAllowlisted' => $rest_allowlisted,
             'publicHomeAllowlisted' => $home_allowlisted,
             'guardRunsFirst' => $guard_priority === PHP_INT_MIN,
+            'bridgeGuardRunsFirst' => $bridge_guard_priority === PHP_INT_MIN,
             'bridgeBlocksPriority' => $bridge_blocks_priority,
             'wpLoadedPriorityBefore' => $wp_loaded_priority_before,
             'wpLoadedPriorityAfter' => $wp_loaded_priority_after,
