@@ -88,6 +88,7 @@ function validReport(
         checkinInstallerRemoved: true,
         asyncRunnerDisabled: true,
         mailDeliveryDisabled: true,
+        freemiusSdkOptionFrozen: true,
       },
       fatalError: false,
       runnerSha256: fileSha256(runner),
@@ -581,6 +582,7 @@ describe("Tickera runtime qualification gate", () => {
       checkinInstallerRemoved: true,
       asyncRunnerDisabled: true,
       mailDeliveryDisabled: true,
+      freemiusSdkOptionFrozen: true,
     });
     for (const priorities of Object.values(
       evidence.filterPriorities,
@@ -588,6 +590,11 @@ describe("Tickera runtime qualification gate", () => {
       expect(priorities).toEqual(["PHP_INT_MIN"]);
     }
     expect(evidence.checkinRemaining).toEqual([]);
+    expect(evidence.freemiusFilter).toEqual({
+      callback: "tbl_tickera_phase_s_preserve_old_option",
+      acceptedArgs: 2,
+    });
+    expect(evidence.freemiusPreservesOldValue).toBe("old-value");
   });
 
   it.each(["missing-constant", "staging-host"])(
@@ -603,6 +610,8 @@ describe("Tickera runtime qualification gate", () => {
       expect(evidence.qualified).toBe(false);
       expect(evidence.active).toBe(false);
       expect(evidence.filterPriorities).toEqual({});
+      expect(evidence.freemiusFilter).toBeNull();
+      expect(evidence.freemiusPreservesOldValue).toBeNull();
       expect(evidence.checkinRemaining).toEqual([
         "tbl_checkin_facts_install_schema",
       ]);

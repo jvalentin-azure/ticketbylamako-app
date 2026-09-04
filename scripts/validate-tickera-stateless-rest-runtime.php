@@ -152,6 +152,7 @@ function tbl_tickera_runtime_validate_report(array $report, string $expected_inv
             'checkinInstallerRemoved' => true,
             'asyncRunnerDisabled'     => true,
             'mailDeliveryDisabled'    => true,
+            'freemiusSdkOptionFrozen' => true,
         ],
         'isolation_guard_state'
     );

@@ -71,7 +71,8 @@ only redacted classifications and hashes and proves all of the following:
    callbacks are disabled for the clone. The repository clone-only isolation
    guard must be sealed by SHA-256 in the proof. It activates only with
    `TBL_TICKERA_PHASE_S_ISOLATED_CLONE=true` and a `.invalid` hostname, and
-   must report all five expected controls active;
+   must report all expected controls active, including preservation of the
+   cloned Tickera/Freemius `fs_active_plugins` option during plugin inclusion;
 7. the active-plugin list, Tickera bytes, MU-neighbor hashes, PHP version and
    clone `wp-config.php` hash are sealed;
 8. the clone is password protected or otherwise inaccessible to the public,

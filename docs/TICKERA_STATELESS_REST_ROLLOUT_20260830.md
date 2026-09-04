@@ -173,8 +173,10 @@ with any commerce regression or cache warm-up:
   `TBL_TICKERA_PHASE_S_ISOLATED_CLONE=true` and an RFC 2606 `.invalid` host are
   present. It disables Jetpack sync listener/sender loading, the async Action
   Scheduler request runner, WordPress mail delivery and the Check-in schema
-  installer. Its exact state is evidence; the guard is inert if copied to an
-  ordinary staging or production hostname;
+  installer. It also freezes Tickera/Freemius' technical
+  `fs_active_plugins` inventory at its cloned value so plugin inclusion cannot
+  refresh that option. Its exact state is evidence; the guard is inert if
+  copied to an ordinary staging or production hostname;
 - CLI does not reliably expose CORS, `Set-Cookie` or final web-server status.
   Its successful verdict is therefore only
   `COMPONENT_PASS_EXTERNAL_REQUIRED`, never a Phase S release PASS. CLI covers

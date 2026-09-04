@@ -139,7 +139,9 @@ observed MailPoet connection-local statements are allowlisted by exact syntax
 and counted independently; all other non-read SQL still fails closed. A
 hash-bound clone-only MU guard suppresses Jetpack sync loading, async runner
 dispatch, WordPress mail delivery and the Check-in schema installer without
-altering the active-plugin inventory. The guard requires an explicit clone
+altering the active-plugin inventory. It also preserves Tickera/Freemius'
+cloned `fs_active_plugins` inventory during plugin inclusion. The guard
+requires an explicit clone
 constant and a `.invalid` hostname, so an accidental staging/production copy
 is inert. This section is implementation status only, not new Phase S runtime
 evidence; the quarantined run remains `QUARANTINED_NO_GO` until a separately

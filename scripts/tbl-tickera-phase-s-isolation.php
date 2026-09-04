@@ -42,16 +42,36 @@ $GLOBALS['tbl_tickera_phase_s_isolation'] = [
     'checkinInstallerRemoved' => false,
     'asyncRunnerDisabled'     => true,
     'mailDeliveryDisabled'    => true,
+    'freemiusSdkOptionFrozen' => true,
 ];
 
 function tbl_tickera_phase_s_return_false(): bool {
     return false;
 }
 
+/**
+ * Preserve the clone snapshot's Freemius SDK inventory. Tickera's bundled
+ * Freemius loader otherwise refreshes this technical option during plugin
+ * inclusion, before the measured REST route is dispatched.
+ *
+ * @param mixed $new_value
+ * @param mixed $old_value
+ * @return mixed
+ */
+function tbl_tickera_phase_s_preserve_old_option($new_value, $old_value) {
+    return $old_value;
+}
+
 add_filter('jetpack_sync_listener_should_load', 'tbl_tickera_phase_s_return_false', PHP_INT_MIN);
 add_filter('jetpack_sync_sender_should_load', 'tbl_tickera_phase_s_return_false', PHP_INT_MIN);
 add_filter('action_scheduler_allow_async_request_runner', 'tbl_tickera_phase_s_return_false', PHP_INT_MIN);
 add_filter('pre_wp_mail', 'tbl_tickera_phase_s_return_false', PHP_INT_MIN);
+add_filter(
+    'pre_update_option_fs_active_plugins',
+    'tbl_tickera_phase_s_preserve_old_option',
+    PHP_INT_MIN,
+    2
+);
 
 add_action(
     'plugins_loaded',

@@ -17,8 +17,11 @@ $actions = [
     'plugins_loaded' => [21 => ['tbl_checkin_facts_install_schema']],
 ];
 
-function add_filter(string $tag, $callback, int $priority): void {
-    $GLOBALS['filters'][$tag][$priority][] = $callback;
+function add_filter(string $tag, $callback, int $priority, int $accepted_args = 1): void {
+    $GLOBALS['filters'][$tag][$priority][] = [
+        'callback' => $callback,
+        'acceptedArgs' => $accepted_args,
+    ];
 }
 function add_action(string $tag, $callback, int $priority): void {
     $GLOBALS['actions'][$tag][$priority][] = $callback;
@@ -55,5 +58,12 @@ echo json_encode([
         ),
         $filters
     ),
+    'freemiusFilter' => isset($filters['pre_update_option_fs_active_plugins'][PHP_INT_MIN][0])
+        ? $filters['pre_update_option_fs_active_plugins'][PHP_INT_MIN][0]
+        : null,
+    'freemiusPreservesOldValue' => tbl_tickera_phase_s_isolated_clone_is_qualified()
+        && function_exists('tbl_tickera_phase_s_preserve_old_option')
+        ? tbl_tickera_phase_s_preserve_old_option('new-value', 'old-value')
+        : null,
     'checkinRemaining' => array_values($actions['plugins_loaded'][21] ?? []),
 ], JSON_UNESCAPED_SLASHES) . "\n";
