@@ -330,3 +330,56 @@ connection and SFTP (`sftp_rc=0`).
 This closes the authenticated staging requirement that was still pending in
 the preceding section. Phase S is complete for the active staging shim;
 production remains a separate explicit promotion decision.
+
+## Phase C staging commerce compatibility
+
+The separately authorized commerce canary ran under mono-writer owner
+`tickera-phase-c-commerce-canary-20260904T103851Z`. It used the official
+Tickera QA ticket product 13844 at quantity one. Product 13845 was rejected
+during read-only selection because it is a boutique product, not a ticket.
+
+The successful bounded run passed all intended checks:
+
+- add-to-cart returned HTTP 200;
+- the WooCommerce Store API cart returned HTTP 200 with product 13844 at
+  quantity one;
+- `/cart/` and `/paiement/` returned HTTP 200;
+- a GET to the stateless public endpoint returned HTTP 200 JSON without a
+  `PHPSESSID` response cookie;
+- the exact WooCommerce session-row hash was unchanged by the public endpoint;
+- the cart still contained the same ticket after the public request;
+- the exact QA session was deleted and no session containing product 13844
+  remained.
+
+No order, payment, ticket, stock, SMTP, provider, Action Scheduler runner,
+wp-cron or production mutation occurred. Legacy orders remained 715, HPOS
+orders 1,848, product 13844 remained published with stock value 100,
+`manage_stock=no` and `_tc_is_ticket=yes`, Action Scheduler remained pending
+23/in-progress 0, and the WP Mail SMTP log count remained 6,186. The broad
+ticket baseline remained 4,721: 4,719 `tc_tickets_instances` rows plus two
+`tc_tickets` type rows.
+
+WooCommerce session count changed from four to two during the bounded Woo
+request sequence. Investigation found that the two remaining sessions were
+future-dated and no cleanup action ran during the window. The evidence is
+consistent with WooCommerce removing two pre-existing expired rows during
+request processing. Their preflight rowset had not been sealed, so their exact
+IDs cannot be proven retrospectively and no unknown session was recreated.
+This is retained as a documented dynamic technical cleanup, not hidden as an
+unchanged counter.
+
+Several tooling attempts stopped before the final successful run. Each exact
+QA row was removed, and the metrics above confirmed no business-object delta.
+One diagnostic command contained a shell syntax error and did not execute.
+
+The private evidence directory is
+`/home/1525593.cloudwaysapps.com/wvvtwdcenn/private_html/tbl-deploy/tickera-phase-c-commerce-canary-20260904T103851Z`.
+Its `MANIFEST.sha256` SHA-256 is
+`b6318d3d1839a4fb668b28ec132a8aac36b55c696add35a1acdd6c72be534eb6`.
+The active staging shim remained unchanged at
+`700b353ecb865daa48f0f842c764a415ddce2ab716358cff644a6b98b830e222`.
+The mono-writer was released by exact owner and independently verified absent
+through a second SSH connection and SFTP (`sftp_rc=0`).
+
+Phase C is therefore complete on staging with the session cleanup disclosure
+above. Production promotion remains a separate explicit authorization.
