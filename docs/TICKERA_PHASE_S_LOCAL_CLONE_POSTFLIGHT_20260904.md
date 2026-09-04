@@ -146,3 +146,56 @@ constant and a `.invalid` hostname, so an accidental staging/production copy
 is inert. This section is implementation status only, not new Phase S runtime
 evidence; the quarantined run remains `QUARANTINED_NO_GO` until a separately
 authorized clean clone rerun succeeds.
+
+## Authorized rerun `20260904T084852Z`
+
+The authorized rerun used a newly provisioned private clone at:
+
+`/home/1525593.cloudwaysapps.com/wvvtwdcenn/private_html/tbl-phase-s/tickera-20260904T084852Z-b1ab7e5`
+
+The directory name records the initially authorized tooling candidate
+`b1ab7e5880178756853763d136a1fc6ac1a1be54`. During the run, the first guarded
+bootstrap exposed a deterministic Tickera/Freemius refresh of the technical
+`fs_active_plugins` option. No route callback ran and the clone's `SELECT`-only
+credential prevented the write. The clone-only guard was then corrected,
+reviewed, fully revalidated and committed as
+`3a54a14da63c96611af11de827b0b9a754874740`; this commit was pushed before the
+single clean re-execution.
+
+The second execution still stopped before the route callback. The runtime
+guard observed and blocked one `UPDATE` and one `INSERT`. Because the required
+release invariant is zero non-read SQL attempts, the run was not retried and
+no real HTTPS matrix was started. This is a new bootstrap-side-effect blocker,
+not a failure of the public Tickera shim itself.
+
+Rerun evidence:
+
+- clone database dump SHA-256:
+  `ba9de36ffab520b00d34e19740566ffbbf041f364ecfcc88e497bcd700cb8b78`;
+- amended clone guard SHA-256:
+  `db0d1a6a7158fba4202abc496b1e756d58f3a12099eb279b5e8020d443594937`;
+- runner SHA-256:
+  `a69fe031f0e1d5c44534508b15ab72e755d9b505b742711cd0dc5d2c2e95b912`;
+- validator SHA-256:
+  `c6edb8346b43892a27265ea745b59b615f3153ecbbf53a7d8aaf858e1084369b`;
+- second-run stderr SHA-256:
+  `db026265db1d7ce3d900b337713ec8f131aec2c5f5d302895953f7d6d3e57906`;
+- sealed evidence manifest SHA-256:
+  `aa61f48260384e1d00d301f209cfd3f96d65008035638b6538ff511607760612`;
+- final decision: `NO_GO`;
+- route executions: zero;
+- SMTP, provider and HTTP attempts: zero;
+- clone database mutation: none; the write canary remained absent;
+- staging and production mutations: none;
+- private MariaDB stopped; PID and socket absent;
+- Phase S clone lock absent;
+- shared staging mono-writer absent through the original SSH session, a second
+  SSH connection and SFTP;
+- staging shim unchanged at
+  `700b353ecb865daa48f0f842c764a415ddce2ab716358cff644a6b98b830e222`.
+
+The clone remains quarantined with its sealed evidence. It was not deleted.
+The next engineering action must identify and neutralize the exact remaining
+bootstrap writers using documented clone-only controls and dedicated tests;
+production promotion remains blocked until a future freshly provisioned clone
+passes without any non-read SQL attempt.
