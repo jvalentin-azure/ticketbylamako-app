@@ -288,3 +288,45 @@ The application credential typed into the terminal during this investigation
 was rejected and was not stored in the repository. Rotate that Cloudways
 application credential because it was exposed in the task transcript. The
 successful remote operations used the existing dedicated SSH key.
+
+## Authenticated staging closeout
+
+The remaining authenticated-cookie gate was executed in a separate bounded
+staging window under mono-writer owner
+`tickera-phase-s-auth-websession-qa-20260904T103358Z`. No application file was
+changed. A synthetic `.invalid` subscriber was created without sending email,
+an expiring WordPress session token was generated, and one authenticated GET
+was sent to `/wp-json/lamako-mobile/v2/web-session`.
+
+Result:
+
+- HTTP 200;
+- `authenticated=true`;
+- returned user ID matched the ephemeral fixture;
+- REST nonce present;
+- no `PHPSESSID` response cookie;
+- after deletion of the fixture, the same cookie returned
+  `authenticated=false`, still without `PHPSESSID`;
+- the user, usermeta/session token and all private cookie/body/header files
+  were deleted;
+- user auto-increment moved from 433 to 434 as the only expected durable
+  technical sequence delta; it was not rewound;
+- users 198, maximum live user ID 382 and usermeta 7,906 returned exactly to
+  baseline;
+- legacy orders 715, HPOS orders 1,848, tickets 4,721, WooCommerce sessions 4,
+  Action Scheduler pending 23/in-progress 0 and WP Mail SMTP log count 6,186
+  were unchanged;
+- MU-plugin tree and public shim hashes were unchanged;
+- SMTP/provider/payment calls: zero.
+
+The first sealing command stopped without mutation because WP-CLI emitted a
+trailing blank line after `qa_invalid_users=0`. The exact owner remained held,
+the unchanged baseline was rechecked using a normalized non-empty-line match,
+and the manifest was then sealed. Final authenticated-canary manifest SHA-256:
+`8a1d2c8e605ee8d2fea85d7e02a9a9dfd06f91d9835ab3f5a1ca4fd61c8f1bc0`.
+The staging mono-writer and Phase S lock were absent through a second SSH
+connection and SFTP (`sftp_rc=0`).
+
+This closes the authenticated staging requirement that was still pending in
+the preceding section. Phase S is complete for the active staging shim;
+production remains a separate explicit promotion decision.
