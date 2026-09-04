@@ -119,6 +119,18 @@ namespace {
         'pretty-get-shop' => [ 'GET', '/wp-json/lamako-mobile/v2/public/shop-data?limit=40', [ 'limit' => '40' ], 10, false ],
         'pretty-head-rewards' => [ 'HEAD', '/wp-json/lamako-mobile/v2/rewards/config', [], 10, false ],
         'pretty-options-session' => [ 'OPTIONS', '/wp-json/lamako-mobile/v2/web-session', [], 10, false ],
+        'pretty-get-session-auth-cookie' => [
+            'GET',
+            '/wp-json/lamako-mobile/v2/web-session',
+            [],
+            10,
+            false,
+            null,
+            false,
+            '3.6.0.2',
+            false,
+            [ 'wordpress_logged_in_test' => 'opaque-test-cookie' ],
+        ],
         'query-get-rewards' => [ 'GET', '/?rest_route=/lamako-mobile/v2/rewards/config', [ 'rest_route' => '/lamako-mobile/v2/rewards/config' ], 10, false ],
         'query-head-session' => [ 'HEAD', '/index.php?rest_route=/lamako-mobile/v2/web-session', [ 'rest_route' => '/lamako-mobile/v2/web-session' ], 10, false ],
         'query-get-home' => [

@@ -59,6 +59,7 @@ describe("Tickera stateless REST MU shim", () => {
     "pretty-get-shop",
     "pretty-head-rewards",
     "pretty-options-session",
+    "pretty-get-session-auth-cookie",
     "query-get-rewards",
     "query-head-session",
     "query-get-home",
