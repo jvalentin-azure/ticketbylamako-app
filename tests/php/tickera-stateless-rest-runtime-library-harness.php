@@ -204,6 +204,14 @@ switch ($scenario) {
             'firstEventStack' => $GLOBALS['tbl_tickera_runtime_probe_state']['session']['firstEventStack'],
         ];
         break;
+    case 'blocked-sql-safe-stack':
+        $GLOBALS['tbl_tickera_runtime_probe_state'] = [
+            'runtime' => ['wpRoot' => '/srv/tbl-phase-s-clone/current'],
+            'database' => ['blockedAttempts' => []],
+        ];
+        tbl_tickera_runtime_probe_record_blocked_sql('UPDATE');
+        $result = $GLOBALS['tbl_tickera_runtime_probe_state']['database']['blockedAttempts'];
+        break;
     default:
         fwrite(STDERR, "Unknown scenario\n");
         exit(2);

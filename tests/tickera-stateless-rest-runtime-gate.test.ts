@@ -255,6 +255,7 @@ function validReport(
       blockedNonReadAttempts: 0,
       lateNonReadAttempts: 0,
       blockedOperations: [] as string[],
+      blockedAttempts: [] as Record<string, unknown>[],
     },
     cache: {
       declaredPreflightState: catalogRoute ? "HIT" : "NOT_APPLICABLE",
@@ -691,6 +692,18 @@ describe("Tickera runtime qualification gate", () => {
     expect(evidence.firstEventStack.length).toBeGreaterThan(0);
     expect(serialized).not.toContain("PII-session-id-never-report");
     expect(serialized).not.toContain("PII-session-data-never-report");
+    expect(serialized).not.toMatch(/"args"/);
+    expect(serialized).toContain("<PROBE_ROOT>");
+  });
+
+  it("captures blocked SQL provenance without accepting SQL text or values", () => {
+    const evidence = runLibraryScenario("blocked-sql-safe-stack");
+    const serialized = JSON.stringify(evidence);
+
+    expect(evidence).toHaveLength(1);
+    expect(evidence[0].operation).toBe("UPDATE");
+    expect(evidence[0].stack.length).toBeGreaterThan(0);
+    expect(serialized).not.toMatch(/option_value|email|token|password/i);
     expect(serialized).not.toMatch(/"args"/);
     expect(serialized).toContain("<PROBE_ROOT>");
   });

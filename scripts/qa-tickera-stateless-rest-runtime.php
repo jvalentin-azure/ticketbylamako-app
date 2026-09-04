@@ -53,6 +53,22 @@ function tbl_tickera_runtime_probe_safe_stack(): array {
     return $safe;
 }
 
+/**
+ * Record only the SQL operation class and a location-only stack. The SQL text
+ * is deliberately never accepted by this function, so option values, emails,
+ * tokens and other query-bound data cannot enter the evidence report.
+ */
+function tbl_tickera_runtime_probe_record_blocked_sql(string $operation): void {
+    $database = &$GLOBALS['tbl_tickera_runtime_probe_state']['database'];
+    if (count($database['blockedAttempts']) >= 4) {
+        return;
+    }
+    $database['blockedAttempts'][] = [
+        'operation' => $operation,
+        'stack'     => tbl_tickera_runtime_probe_safe_stack(),
+    ];
+}
+
 final class TBL_Tickera_No_Persist_Session_Handler extends SessionHandler implements SessionUpdateTimestampHandlerInterface {
     private function count(string $operation): void {
         $state = &$GLOBALS['tbl_tickera_runtime_probe_state']['session'];
@@ -532,6 +548,7 @@ function tbl_tickera_runtime_probe_register_hooks(): void {
         if (! in_array($operation, $state['database']['blockedOperations'], true)) {
             $state['database']['blockedOperations'][] = $operation;
         }
+        tbl_tickera_runtime_probe_record_blocked_sql($operation);
         throw new RuntimeException('Blocked non-read SQL operation: ' . $operation);
     };
     $query_final_filter = static function ($query) {
@@ -1281,6 +1298,7 @@ function tbl_tickera_runtime_probe_main(): int {
             'blockedNonReadAttempts' => 0,
             'lateNonReadAttempts'    => 0,
             'blockedOperations'      => [],
+            'blockedAttempts'        => [],
         ],
         'cache'         => [
             'declaredPreflightState' => $cache_preflight,
