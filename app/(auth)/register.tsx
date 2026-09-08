@@ -67,6 +67,17 @@ export default function RegisterScreen() {
       setError("Veuillez remplir tous les champs obligatoires");
       return;
     }
+    if (
+      password.length < 10 ||
+      !/[a-z]/.test(password) ||
+      !/[A-Z]/.test(password) ||
+      !/[0-9]/.test(password)
+    ) {
+      setError(
+        "Utilisez au moins 10 caractères avec une majuscule, une minuscule et un chiffre",
+      );
+      return;
+    }
     setError("");
     setLoading(true);
     try {
@@ -275,7 +286,7 @@ export default function RegisterScreen() {
             >
               <IconSymbol name="lock.fill" size={18} color={colors.muted} />
               <TextInput
-                placeholder="Min. 6 caractères"
+                placeholder="10+ caractères, majuscule, minuscule et chiffre"
                 placeholderTextColor={colors.muted}
                 value={password}
                 onChangeText={setPassword}

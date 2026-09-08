@@ -18,6 +18,13 @@
 
 if ( ! defined( 'ABSPATH' ) ) exit; // Exit if accessed directly
 
+function lamako_mobile_password_is_strong( $password ) {
+    return strlen( (string) $password ) >= 10
+        && preg_match( '/[a-z]/', (string) $password )
+        && preg_match( '/[A-Z]/', (string) $password )
+        && preg_match( '/[0-9]/', (string) $password );
+}
+
 $lamako_mobile_v2_file = __DIR__ . '/lamako-mobile-api/includes/v2-commerce.php';
 if ( file_exists( $lamako_mobile_v2_file ) ) {
     require_once $lamako_mobile_v2_file;
@@ -41,6 +48,11 @@ if ( file_exists( $lamako_mobile_web_apple_auth_file ) ) {
 $lamako_mobile_web_facebook_auth_file = __DIR__ . '/lamako-mobile-api/includes/web-facebook-auth.php';
 if ( file_exists( $lamako_mobile_web_facebook_auth_file ) ) {
     require_once $lamako_mobile_web_facebook_auth_file;
+}
+
+$lamako_mobile_woocommerce_auth_ui_file = __DIR__ . '/lamako-mobile-api/includes/woocommerce-auth-ui.php';
+if ( file_exists( $lamako_mobile_woocommerce_auth_ui_file ) ) {
+    require_once $lamako_mobile_woocommerce_auth_ui_file;
 }
 
 // ============================================================
@@ -3278,8 +3290,8 @@ function lamako_mobile_register_customer( WP_REST_Request $request ) {
         return new WP_Error( 'missing_first_name', 'Le prenom est requis.', [ 'status' => 400 ] );
     }
 
-    if ( strlen( $password ) < 6 ) {
-        return new WP_Error( 'weak_password', 'Le mot de passe doit contenir au moins 6 caracteres.', [ 'status' => 400 ] );
+    if ( ! lamako_mobile_password_is_strong( $password ) ) {
+        return new WP_Error( 'weak_password', 'Utilisez au moins 10 caracteres avec une majuscule, une minuscule et un chiffre.', [ 'status' => 400 ] );
     }
 
     $email_parts   = explode( '@', $email );

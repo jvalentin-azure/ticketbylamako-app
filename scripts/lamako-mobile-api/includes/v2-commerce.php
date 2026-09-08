@@ -547,8 +547,8 @@ function lamako_mobile_v2_web_session_register( WP_REST_Request $request ) {
     if ( $first_name === '' ) {
         return new WP_Error( 'lamako_v2_web_first_name_required', 'Le prenom est requis.', [ 'status' => 400 ] );
     }
-    if ( strlen( $password ) < 6 ) {
-        return new WP_Error( 'lamako_v2_web_weak_password', 'Le mot de passe doit contenir au moins 6 caracteres.', [ 'status' => 400 ] );
+    if ( ! function_exists( 'lamako_mobile_password_is_strong' ) || ! lamako_mobile_password_is_strong( $password ) ) {
+        return new WP_Error( 'lamako_v2_web_weak_password', 'Utilisez au moins 10 caracteres avec une majuscule, une minuscule et un chiffre.', [ 'status' => 400 ] );
     }
 
     $parts         = explode( '@', $email );

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Text,
   View,
@@ -35,11 +35,25 @@ export default function LoginScreen() {
   const [error, setError] = useState("");
   const [resetMessage, setResetMessage] = useState("");
 
+  const completeAuthentication = useCallback(() => {
+    const returnTo = params.returnTo;
+    if (
+      Platform.OS === "web" &&
+      returnTo?.startsWith("/") &&
+      !returnTo.startsWith("//") &&
+      !returnTo.startsWith("/mobile")
+    ) {
+      window.location.assign(returnTo);
+      return;
+    }
+    if (returnTo) router.replace(returnTo as any);
+    else router.replace("/(tabs)/" as any);
+  }, [params.returnTo, router]);
+
   useEffect(() => {
     if (isAuthLoading || !isAuthenticated) return;
-    if (params.returnTo) router.replace(params.returnTo as any);
-    else router.replace("/(tabs)/" as any);
-  }, [isAuthLoading, isAuthenticated, params.returnTo, router]);
+    completeAuthentication();
+  }, [completeAuthentication, isAuthLoading, isAuthenticated]);
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -50,11 +64,7 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await login(email.trim(), password);
-      if (params.returnTo) {
-        router.replace(params.returnTo as any);
-      } else {
-        router.replace("/(tabs)/" as any);
-      }
+      completeAuthentication();
     } catch (e: any) {
       setError(e.message || "Identifiants incorrects");
     } finally {
@@ -138,10 +148,7 @@ export default function LoginScreen() {
 
           <SocialAuthButtons
             onError={setError}
-            onAuthenticated={() => {
-              if (params.returnTo) router.replace(params.returnTo as any);
-              else router.replace("/(tabs)/" as any);
-            }}
+            onAuthenticated={completeAuthentication}
           />
 
           <View style={styles.divider}>
