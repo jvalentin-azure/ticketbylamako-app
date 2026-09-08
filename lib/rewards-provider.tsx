@@ -8,9 +8,11 @@ import {
   type ReactNode,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
 import { useAuth } from "@/lib/auth-provider";
 import {
   getMobileReferralCode,
+  claimMobileFirstAppOpenBonus,
   getMobileRewardsBalance,
   getMobileRewardsConfig,
   getMobileRewardsHistory,
@@ -126,7 +128,8 @@ export const TIERS: TierInfo[] = [
 export const EARN_RULES = {
   purchaseRate: 1, // 1 point per 1000 Ar spent
   purchaseUnit: 1000, // Ar per point
-  registrationBonus: 100, // like Otayo
+  registrationBonus: 100,
+  firstAppOpenBonus: 50,
   profileCompleteBonus: 100, // complete profile
   loginBonus: 2, // per day (max 1x/day) - conservative
   firstPurchaseBonus: 200, // bonus on first purchase (like Otayo)
@@ -141,8 +144,9 @@ export const EARN_RULES = {
 
 // ===== REDEMPTION RULES =====
 // Offline fallback only. The server endpoint /rewards/config is authoritative.
-export const REDEMPTION_MIN_POINTS_LIFETIME = 750; // 750 pts = 750 000 Ar spent
+export const REDEMPTION_MIN_POINTS_LIFETIME = 500;
 export const REDEMPTION_TIERS = [
+  { points: 500, value: 10000, label: "500 pts = 10 000 Ar" },
   { points: 1000, value: 20000, label: "1 000 pts = 20 000 Ar" },
   { points: 2000, value: 40000, label: "2 000 pts = 40 000 Ar" },
 ];
@@ -493,6 +497,14 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
 
     try {
       const wpUserId = user.id;
+
+      if (Platform.OS === "ios" || Platform.OS === "android") {
+        try {
+          await claimMobileFirstAppOpenBonus();
+        } catch (error) {
+          console.warn("First app open campaign unavailable:", error);
+        }
+      }
 
       const [balanceData, history, referral] = await Promise.all([
         fetchBalance(wpUserId),
