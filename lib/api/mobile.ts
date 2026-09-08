@@ -828,6 +828,18 @@ export async function getMobileRewardsConfig(): Promise<MobileRewardsConfig> {
   });
 }
 
+export async function claimMobileFirstAppOpenBonus(): Promise<{
+  success: boolean;
+  awarded: boolean;
+  alreadyAwarded: boolean;
+  points: number;
+}> {
+  return mobileV2Fetch("rewards/engagement/first-app-open", {
+    method: "POST",
+    body: {},
+  });
+}
+
 export async function getMobileRewardsHistory(
   limit = 20,
 ): Promise<MobileRewardTransaction[]> {

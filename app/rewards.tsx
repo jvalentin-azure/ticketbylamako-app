@@ -217,8 +217,8 @@ export default function RewardsScreen() {
             Activité récente
           </Text>
           <Text style={[styles.historyIntro, { color: colors.muted }]}>
-            Connexions, achats et utilisations de points enregistrés sur votre
-            compte.
+            Chaque mouvement validé par Lamako est visible ici. Les points
+            d'achat sont crédités selon le statut de la commande.
           </Text>
           {state.history.length === 0 ? (
             <View
@@ -232,7 +232,7 @@ export default function RewardsScreen() {
                 Aucun mouvement pour le moment
               </Text>
               <Text style={[styles.emptySubText, { color: colors.muted }]}>
-                Les bonus de connexion et vos achats apparaîtront ici.
+                Vos achats et bonus confirmés apparaîtront ici.
               </Text>
             </View>
           ) : (
@@ -361,6 +361,25 @@ export default function RewardsScreen() {
             </View>
           </View>
         </View>
+
+        <LinearGradient
+          colors={["#12100D", "#342113", "#8B5E34"]}
+          style={styles.priorityCard}
+        >
+          <View style={styles.priorityEyebrow}>
+            <IconSymbol name="bolt.fill" size={14} color="#F6D69A" />
+            <Text style={styles.priorityEyebrowText}>NOUVEAU POUR LES MEMBRES GOLD+</Text>
+          </View>
+          <Text style={styles.priorityTitle}>Votre statut peut vous faire gagner du temps</Text>
+          <Text style={styles.priorityCopy}>
+            Sur les événements participants, une file LamakoRewards peut être
+            activée par l'organisateur. Le pass accélère l'orientation vers le
+            kiosque, mais ne remplace jamais le contrôle et la validité du billet.
+          </Text>
+          <Text style={styles.priorityFinePrint}>
+            Disponibilité, horaires et capacité affichés pour chaque événement.
+          </Text>
+        </LinearGradient>
 
         {/* Tiers */}
         <View style={styles.tiersSection}>
@@ -567,6 +586,17 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
   },
+  priorityCard: {
+    borderRadius: 20,
+    padding: 22,
+    marginBottom: 18,
+    overflow: "hidden",
+  },
+  priorityEyebrow: { flexDirection: "row", alignItems: "center", gap: 7 },
+  priorityEyebrowText: { color: "#F6D69A", fontSize: 10, fontWeight: "800", letterSpacing: 0.8 },
+  priorityTitle: { color: "#FFFFFF", fontSize: 22, lineHeight: 27, fontWeight: "800", marginTop: 12 },
+  priorityCopy: { color: "rgba(255,255,255,0.82)", fontSize: 13, lineHeight: 20, marginTop: 9 },
+  priorityFinePrint: { color: "rgba(255,255,255,0.58)", fontSize: 11, lineHeight: 16, marginTop: 12 },
   referralDesc: { fontSize: 13, marginTop: 4, marginBottom: 12 },
   codeBox: {
     alignItems: "center",

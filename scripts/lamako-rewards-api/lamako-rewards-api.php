@@ -1290,10 +1290,10 @@ function lr_shortcode_rewards_page() {
                 <div class="lr-tier-threshold">500 pts (≈ 3-5 événements)</div>
                 <div class="lr-tier-mult">x1 points</div>
                 <ul class="lr-tier-benefits">
-                    <li>Réductions membres exclusives</li>
-                    <li>Accès prioritaire aux préventes</li>
-                    <li>Offres spéciales par notification</li>
-                    <li>Support prioritaire WhatsApp</li>
+                    <li>Offres membres selon disponibilité</li>
+                    <li>Alertes de prévente dans l'application</li>
+                    <li>Solde et historique synchronisés</li>
+                    <li>Avantages annoncés avant l'événement</li>
                 </ul>
             </div>
             <div class="lr-tier-card gold">
@@ -1303,9 +1303,9 @@ function lr_shortcode_rewards_page() {
                 <div class="lr-tier-mult">x1.25 points</div>
                 <ul class="lr-tier-benefits">
                     <li>x1.25 points sur chaque achat</li>
-                    <li>Invitations aux événements exclusifs</li>
-                    <li>Early access aux nouvelles ventes</li>
-                    <li>Cadeaux surprises aux événements</li>
+                    <li>File prioritaire sur les événements participants</li>
+                    <li>Accès anticipé lorsque la vente le prévoit</li>
+                    <li>Offres ponctuelles dans l'application</li>
                 </ul>
             </div>
             <div class="lr-tier-card platinum">
@@ -1315,9 +1315,9 @@ function lr_shortcode_rewards_page() {
                 <div class="lr-tier-mult">x1.5 points</div>
                 <ul class="lr-tier-benefits">
                     <li>x1.5 points sur chaque achat</li>
-                    <li>Surclassement de billets</li>
-                    <li>Accès VIP aux événements</li>
-                    <li>Support dédié</li>
+                    <li>File prioritaire sur les événements participants</li>
+                    <li>Opportunités VIP selon l'organisateur</li>
+                    <li>Support prioritaire Rewards</li>
                 </ul>
             </div>
             <div class="lr-tier-card diamond">
@@ -1327,11 +1327,10 @@ function lr_shortcode_rewards_page() {
                 <div class="lr-tier-mult">x2 points</div>
                 <ul class="lr-tier-benefits">
                     <li>x2 points sur chaque achat</li>
-                    <li>Accès backstage</li>
-                    <li>Meet & greet artistes</li>
-                    <li>Conciergerie événementielle</li>
-                    <li>Surclassement automatique</li>
-                    <li>Invitations privées</li>
+                    <li>File prioritaire sur les événements participants</li>
+                    <li>Expériences spéciales selon disponibilités</li>
+                    <li>Support prioritaire Rewards</li>
+                    <li>Invitations ponctuelles, sans garantie</li>
                 </ul>
             </div>
         </div>
@@ -1339,7 +1338,7 @@ function lr_shortcode_rewards_page() {
         <!-- How to earn -->
         <div class="lr-earn-section">
             <h2 class="lr-section-title" style="color:#3d2314;">Comment gagner des points</h2>
-            <p class="lr-section-subtitle">Chaque interaction vous rapproche du niveau supérieur</p>
+            <p class="lr-section-subtitle">Les points sont attribués uniquement après validation de l'action par Lamako.</p>
             <div class="lr-earn-grid">
                 <div class="lr-earn-item">
                     <div class="points">1 pt / 1 000 Ar</div>
@@ -1348,6 +1347,10 @@ function lr_shortcode_rewards_page() {
                 <div class="lr-earn-item">
                     <div class="points">+100 pts</div>
                     <div class="action">S'inscrire au programme</div>
+                </div>
+                <div class="lr-earn-item">
+                    <div class="points">Jusqu'à +50 pts</div>
+                    <div class="action">Première ouverture authentifiée de l'application, pendant une campagne active</div>
                 </div>
                 <div class="lr-earn-item">
                     <div class="points">+100 pts</div>
@@ -1389,7 +1392,7 @@ function lr_shortcode_rewards_page() {
             <h2 class="lr-section-title">Échanger vos points</h2>
             <p class="lr-section-subtitle">Convertissez vos points en réductions sur vos prochains achats</p>
             <div class="lr-redeem-note">
-                <strong>Condition :</strong> Le cashback est débloqué dès 750 000 Ar dépensés au total (= 750 points cumulés). Taux fixe : 20 Ar par point (2% de retour).
+                <strong>Condition :</strong> l'échange est disponible à partir de 500 points disponibles. Valeur de référence : 20 Ar par point. Les produits éligibles et limites applicables sont affichés avant confirmation.
             </div>
             <table class="lr-redeem-table">
                 <thead>
@@ -1433,7 +1436,7 @@ function lr_shortcode_rewards_page() {
                     <span class="lr-faq-arrow">▼</span>
                 </div>
                 <div class="lr-faq-answer">
-                    <p>C'est gratuit et automatique ! Il suffit de créer un compte sur TicketByLamako (site web ou application mobile). Vous recevez immédiatement <strong>100 points bonus</strong> à l'inscription et commencez au niveau Fan.</p>
+                    <p>L'adhésion est gratuite mais volontaire. Créez un compte puis acceptez les conditions LamakoRewards depuis le site ou l'application. Le bonus d'adhésion affiché au moment de l'inscription est crédité une seule fois après validation.</p>
                 </div>
             </div>
 
@@ -1453,7 +1456,7 @@ function lr_shortcode_rewards_page() {
                     <span class="lr-faq-arrow">▼</span>
                 </div>
                 <div class="lr-faq-answer">
-                    <p>Le cashback est débloqué dès que vous avez dépensé <strong>750 000 Ar au total</strong> sur la plateforme (soit 750 points cumulés à vie). Cela correspond à environ 5 à 7 événements. Une fois ce seuil atteint, vous pouvez échanger vos points à tout moment au taux de 20 Ar par point.</p>
+                    <p>L'échange est proposé dès <strong>500 points disponibles</strong>, selon les options affichées dans votre compte. La valeur de référence est de 20 Ar par point. Vous voyez toujours la réduction, les restrictions et la durée de validité avant de confirmer.</p>
                 </div>
             </div>
 
@@ -1463,7 +1466,7 @@ function lr_shortcode_rewards_page() {
                     <span class="lr-faq-arrow">▼</span>
                 </div>
                 <div class="lr-faq-answer">
-                    <p>Non, vos points n'expirent jamais ! Ils restent sur votre compte tant que celui-ci est actif. Vous pouvez accumuler vos points à votre rythme et les échanger quand vous le souhaitez.</p>
+                    <p>La durée de validité applicable est indiquée dans les conditions LamakoRewards et dans votre compte. Toute évolution défavorable est annoncée à l'avance; une clôture de compte, une fraude confirmée ou une annulation remboursée peut entraîner un ajustement du solde.</p>
                 </div>
             </div>
 
@@ -1473,7 +1476,7 @@ function lr_shortcode_rewards_page() {
                     <span class="lr-faq-arrow">▼</span>
                 </div>
                 <div class="lr-faq-answer">
-                    <p>Chaque membre reçoit un code de parrainage unique (ex: TBL-XXXXXXXX). Partagez-le avec vos amis. Quand un ami s'inscrit avec votre code et effectue son premier achat, vous recevez <strong>75 points</strong> et votre ami reçoit <strong>25 points bonus</strong>. Il n'y a pas de limite au nombre de parrainages !</p>
+                    <p>Chaque membre peut recevoir un code personnel. Les montants, limites et conditions de la campagne sont affichés avant le partage. Un bonus n'est crédité qu'après validation du premier achat éligible et peut être refusé en cas d'auto-parrainage, doublon ou fraude.</p>
                 </div>
             </div>
 

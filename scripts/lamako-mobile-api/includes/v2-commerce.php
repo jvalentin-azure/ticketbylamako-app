@@ -352,6 +352,12 @@ function lamako_mobile_v2_register_routes() {
         'permission_callback' => 'lamako_mobile_v2_require_user',
     ] );
 
+    register_rest_route( $namespace, '/rewards/engagement/first-app-open', [
+        'methods'             => WP_REST_Server::CREATABLE,
+        'callback'            => 'lamako_mobile_v2_rewards_first_app_open',
+        'permission_callback' => 'lamako_mobile_v2_require_user',
+    ] );
+
     register_rest_route( $namespace, '/rewards/redeem', [
         'methods'             => WP_REST_Server::CREATABLE,
         'callback'            => 'lamako_mobile_v2_rewards_redeem',
@@ -6515,6 +6521,56 @@ function lamako_mobile_v2_rewards_balance() {
         'nextTier'         => function_exists( 'lr_get_next_tier' ) ? lr_get_next_tier( $tier ) : '',
         'pointsToNextTier' => function_exists( 'lr_get_points_to_next_tier' ) ? lr_get_points_to_next_tier( $total ) : 0,
         'canRedeem'        => defined( 'LR_REDEMPTION_MIN_LIFETIME' ) ? $total >= LR_REDEMPTION_MIN_LIFETIME : false,
+    ] );
+}
+
+/**
+ * Award the native-app activation campaign once per authenticated account.
+ * The unique user-meta marker is the concurrency lock; clients never choose
+ * the amount and retries are safe across devices.
+ */
+function lamako_mobile_v2_rewards_first_app_open() {
+    $user_id = get_current_user_id();
+    $bonus   = 50;
+
+    if ( $user_id <= 0 ) {
+        return new WP_Error( 'lamako_v2_auth_required', 'Authentication required.', [ 'status' => 401 ] );
+    }
+
+    if ( ! apply_filters( 'lamako_rewards_first_app_open_campaign_enabled', true, $user_id ) ) {
+        return new WP_Error( 'lamako_rewards_campaign_inactive', 'Cette campagne est actuellement inactive.', [ 'status' => 409 ] );
+    }
+
+    if ( ! function_exists( 'mycred_add' ) ) {
+        return new WP_Error( 'lamako_v2_mycred_missing', 'myCred is not available.', [ 'status' => 503 ] );
+    }
+
+    if ( ! add_user_meta( $user_id, '_lamako_rewards_first_app_open_v1', gmdate( 'c' ), true ) ) {
+        return rest_ensure_response( [
+            'success'        => true,
+            'awarded'        => false,
+            'alreadyAwarded' => true,
+            'points'         => 0,
+        ] );
+    }
+
+    $credited = mycred_add(
+        'first_app_open_v1',
+        $user_id,
+        $bonus,
+        'Bonus première ouverture de l’application TicketByLamako'
+    );
+
+    if ( ! $credited ) {
+        delete_user_meta( $user_id, '_lamako_rewards_first_app_open_v1' );
+        return new WP_Error( 'lamako_rewards_credit_failed', 'Le bonus n’a pas pu être crédité.', [ 'status' => 503 ] );
+    }
+
+    return rest_ensure_response( [
+        'success'        => true,
+        'awarded'        => true,
+        'alreadyAwarded' => false,
+        'points'         => $bonus,
     ] );
 }
 

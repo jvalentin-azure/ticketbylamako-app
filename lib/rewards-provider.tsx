@@ -9,9 +9,11 @@ import {
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { randomUUID } from "expo-crypto";
+import { Platform } from "react-native";
 import { useAuth } from "@/lib/auth-provider";
 import {
   getMobileReferralCode,
+  claimMobileFirstAppOpenBonus,
   getMobileRewardsBalance,
   getMobileRewardsConfig,
   getMobileRewardsHistory,
@@ -20,8 +22,10 @@ import {
   validateMobileReferralCode,
 } from "@/lib/api/mobile";
 
-// ===== TIERS (based on Otayo, Live Nation, Ticketmaster benchmarks) =====
-// Conservative model: high thresholds, low cashback (2%), experiential rewards
+// ===== TIERS =====
+// The server ledger is authoritative. Benefits that depend on an event are
+// deliberately described as conditional so the client never promises access
+// that an organizer has not enabled.
 // Earn rate: 1 pt per 1,000 Ar spent
 // Average ticket: 50,000 Ar = 50 pts per event
 // Fan: 0 (free join)
@@ -68,10 +72,10 @@ export const TIERS: TierInfo[] = [
     discountPercent: 0,
     multiplier: 1,
     benefits: [
-      "Réductions membres exclusives",
-      "Accès prioritaire aux préventes",
-      "Offres spéciales par notification",
-      "Support prioritaire WhatsApp",
+      "Offres membres lorsqu'elles sont disponibles",
+      "Alertes de prévente dans l'application",
+      "Historique et solde synchronisés",
+      "Avantages annoncés avant chaque événement",
     ],
   },
   {
@@ -84,9 +88,9 @@ export const TIERS: TierInfo[] = [
     multiplier: 1.25,
     benefits: [
       "x1.25 points sur chaque achat",
-      "Invitations aux événements exclusifs",
-      "Early access aux nouvelles ventes",
-      "Cadeaux surprises aux événements",
+      "File prioritaire sur les événements participants",
+      "Accès anticipé lorsqu'une vente le prévoit",
+      "Offres ponctuelles annoncées dans l'application",
     ],
   },
   {
@@ -99,9 +103,9 @@ export const TIERS: TierInfo[] = [
     multiplier: 1.5,
     benefits: [
       "x1.5 points sur chaque achat",
-      "Surclassement de billets",
-      "Accès VIP aux événements",
-      "Support dédié",
+      "File prioritaire sur les événements participants",
+      "Opportunités VIP selon l'organisateur",
+      "Support prioritaire pour le compte Rewards",
     ],
   },
   {
@@ -114,11 +118,10 @@ export const TIERS: TierInfo[] = [
     multiplier: 2,
     benefits: [
       "x2 points sur chaque achat",
-      "Accès backstage",
-      "Meet & greet artistes",
-      "Conciergerie événementielle",
-      "Surclassement automatique",
-      "Invitations privées",
+      "File prioritaire sur les événements participants",
+      "Expériences spéciales selon disponibilités",
+      "Support prioritaire pour le compte Rewards",
+      "Invitations ponctuelles, sans garantie",
     ],
   },
 ];
@@ -127,7 +130,8 @@ export const TIERS: TierInfo[] = [
 export const EARN_RULES = {
   purchaseRate: 1, // 1 point per 1000 Ar spent
   purchaseUnit: 1000, // Ar per point
-  registrationBonus: 100, // like Otayo
+  registrationBonus: 100,
+  firstAppOpenBonus: 50, // one-time authenticated campaign, server-awarded only
   profileCompleteBonus: 100, // complete profile
   loginBonus: 2, // per day (max 1x/day) - conservative
   firstPurchaseBonus: 200, // bonus on first purchase (like Otayo)
@@ -142,8 +146,9 @@ export const EARN_RULES = {
 
 // ===== REDEMPTION RULES =====
 // Offline fallback only. The server endpoint /rewards/config is authoritative.
-export const REDEMPTION_MIN_POINTS_LIFETIME = 750; // 750 pts = 750 000 Ar spent
+export const REDEMPTION_MIN_POINTS_LIFETIME = 500;
 export const REDEMPTION_TIERS = [
+  { points: 500, value: 10000, label: "500 pts = 10 000 Ar" },
   { points: 1000, value: 20000, label: "1 000 pts = 20 000 Ar" },
   { points: 2000, value: 40000, label: "2 000 pts = 40 000 Ar" },
 ];
@@ -496,6 +501,16 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
 
     try {
       const wpUserId = user.id;
+
+      if (Platform.OS === "ios" || Platform.OS === "android") {
+        try {
+          await claimMobileFirstAppOpenBonus();
+        } catch (error) {
+          // Rewards synchronization must remain available if the optional
+          // activation campaign is paused or temporarily unavailable.
+          console.warn("First app open campaign unavailable:", error);
+        }
+      }
 
       const [balanceData, history, referral] = await Promise.all([
         fetchBalance(wpUserId),
