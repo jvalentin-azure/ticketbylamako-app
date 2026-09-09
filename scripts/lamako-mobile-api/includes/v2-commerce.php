@@ -352,6 +352,19 @@ function lamako_mobile_v2_register_routes() {
         'permission_callback' => 'lamako_mobile_v2_require_user',
     ] );
 
+    register_rest_route( $namespace, '/rewards/membership', [
+        [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => 'lamako_mobile_v2_rewards_membership_status',
+            'permission_callback' => 'lamako_mobile_v2_require_user',
+        ],
+        [
+            'methods'             => WP_REST_Server::EDITABLE,
+            'callback'            => 'lamako_mobile_v2_rewards_membership_update',
+            'permission_callback' => 'lamako_mobile_v2_require_user',
+        ],
+    ] );
+
     register_rest_route( $namespace, '/rewards/engagement/first-app-open', [
         'methods'             => WP_REST_Server::CREATABLE,
         'callback'            => 'lamako_mobile_v2_rewards_first_app_open',
@@ -6502,8 +6515,62 @@ function lamako_mobile_v2_unregister_push_token( WP_REST_Request $request ) {
     ] );
 }
 
+function lamako_mobile_v2_rewards_role_is_eligible( $user_id ) {
+    if ( function_exists( 'lr_rewards_user_role_is_eligible' ) ) return lr_rewards_user_role_is_eligible( $user_id );
+    $user = get_userdata( (int) $user_id );
+    if ( ! $user ) return false;
+    $roles = (array) $user->roles;
+    return ! array_diff( $roles, array( 'customer', 'subscriber' ) ) && (bool) array_intersect( $roles, array( 'customer', 'subscriber' ) );
+}
+
+function lamako_mobile_v2_rewards_is_member( $user_id ) {
+    if ( function_exists( 'lr_rewards_user_is_member' ) ) return lr_rewards_user_is_member( $user_id );
+    return 'yes' === (string) get_user_meta( (int) $user_id, '_lamako_rewards_member', true );
+}
+
+function lamako_mobile_v2_rewards_require_member( $user_id ) {
+    if ( ! lamako_mobile_v2_rewards_role_is_eligible( $user_id ) ) {
+        return new WP_Error( 'lamako_v2_rewards_role_ineligible', 'Ce compte ne peut pas utiliser LamakoRewards.', [ 'status' => 403 ] );
+    }
+    if ( ! lamako_mobile_v2_rewards_is_member( $user_id ) ) {
+        return new WP_Error( 'lamako_v2_rewards_membership_required', 'Adhesion LamakoRewards requise.', [ 'status' => 403 ] );
+    }
+    return true;
+}
+
+function lamako_mobile_v2_rewards_membership_status() {
+    $user_id = get_current_user_id();
+    return rest_ensure_response( [
+        'roleEligible' => lamako_mobile_v2_rewards_role_is_eligible( $user_id ),
+        'joined'       => lamako_mobile_v2_rewards_is_member( $user_id ),
+        'joinedAt'     => (string) get_user_meta( $user_id, '_lamako_rewards_member_since', true ),
+    ] );
+}
+
+function lamako_mobile_v2_rewards_membership_update( WP_REST_Request $request ) {
+    $user_id = get_current_user_id();
+    $body = $request->get_json_params();
+    $body = is_array( $body ) ? $body : [];
+    $joined = rest_sanitize_boolean( $body['joined'] ?? false );
+
+    if ( $joined ) {
+        $result = function_exists( 'lr_rewards_activate_membership' )
+            ? lr_rewards_activate_membership( $user_id )
+            : new WP_Error( 'lamako_v2_rewards_backend_unavailable', 'Le service LamakoRewards est indisponible.', [ 'status' => 503 ] );
+    } else {
+        $result = function_exists( 'lr_rewards_deactivate_membership' )
+            ? lr_rewards_deactivate_membership( $user_id )
+            : new WP_Error( 'lamako_v2_rewards_backend_unavailable', 'Le service LamakoRewards est indisponible.', [ 'status' => 503 ] );
+    }
+
+    if ( is_wp_error( $result ) ) return $result;
+    return lamako_mobile_v2_rewards_membership_status();
+}
+
 function lamako_mobile_v2_rewards_balance() {
     $user_id = get_current_user_id();
+    $membership = lamako_mobile_v2_rewards_require_member( $user_id );
+    if ( is_wp_error( $membership ) ) return $membership;
     if ( ! function_exists( 'mycred_get_users_balance' ) ) {
         return new WP_Error( 'lamako_v2_mycred_missing', 'myCred is not available.', [ 'status' => 500 ] );
     }
@@ -6536,6 +6603,8 @@ function lamako_mobile_v2_rewards_first_app_open() {
     if ( $user_id <= 0 ) {
         return new WP_Error( 'lamako_v2_auth_required', 'Authentication required.', [ 'status' => 401 ] );
     }
+    $membership = lamako_mobile_v2_rewards_require_member( $user_id );
+    if ( is_wp_error( $membership ) ) return $membership;
 
     if ( ! apply_filters( 'lamako_rewards_first_app_open_campaign_enabled', true, $user_id ) ) {
         return new WP_Error( 'lamako_rewards_campaign_inactive', 'Cette campagne est actuellement inactive.', [ 'status' => 409 ] );
@@ -6715,6 +6784,8 @@ function lamako_mobile_v2_rewards_history_description( $row ) {
 function lamako_mobile_v2_rewards_history( WP_REST_Request $request ) {
     global $wpdb;
     $user_id = get_current_user_id();
+    $membership = lamako_mobile_v2_rewards_require_member( $user_id );
+    if ( is_wp_error( $membership ) ) return $membership;
     $limit   = min( max( absint( $request->get_param( 'limit' ) ?: 20 ), 1 ), 100 );
     $table   = $wpdb->prefix . 'myCRED_log';
 
@@ -6788,6 +6859,8 @@ function lamako_mobile_v2_rewards_redeem( WP_REST_Request $request ) {
     $body    = $request->get_json_params();
     $body    = is_array( $body ) ? $body : [];
     $user_id = get_current_user_id();
+    $membership = lamako_mobile_v2_rewards_require_member( $user_id );
+    if ( is_wp_error( $membership ) ) return $membership;
     $points  = absint( $body['points'] ?? 0 );
     $idempotency_key = $request->get_header( 'Idempotency-Key' );
     if ( ! $idempotency_key ) {
@@ -6815,6 +6888,8 @@ function lamako_mobile_v2_rewards_redeem( WP_REST_Request $request ) {
 
 function lamako_mobile_v2_referral_code() {
     $user_id = get_current_user_id();
+    $membership = lamako_mobile_v2_rewards_require_member( $user_id );
+    if ( is_wp_error( $membership ) ) return $membership;
     if ( function_exists( 'lr_generate_referral_code' ) ) {
         $code = lr_generate_referral_code( $user_id );
     } else {

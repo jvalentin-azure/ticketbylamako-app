@@ -245,6 +245,9 @@ function lr_rewards_replay_response( $record, $request_hash ) {
  * unique option name prevents a retry from issuing another coupon.
  */
 function lr_redeem_points_for_user( $user_id, $points, $raw_idempotency_key ) {
+    if ( ! function_exists( 'lr_rewards_user_is_eligible' ) || ! lr_rewards_user_is_eligible( $user_id ) ) {
+        return new WP_Error( 'rewards_membership_required', 'Adhesion LamakoRewards requise.', array( 'status' => 403 ) );
+    }
     if ( ! function_exists( 'mycred_get_users_balance' ) || ! function_exists( 'mycred_subtract' ) ) {
         return new WP_Error( 'mycred_missing', 'myCred plugin not active.', array( 'status' => 500 ) );
     }
@@ -500,10 +503,69 @@ function lr_get_total_earned( $user_id ) {
 // REFERRAL SYSTEM
 // ============================================================
 
+function lr_rewards_user_role_is_eligible( $user_id ) {
+    $user = get_userdata( (int) $user_id );
+    if ( ! $user ) return false;
+
+    $roles = array_map( 'sanitize_key', (array) $user->roles );
+    $internal_roles = array(
+        'administrator', 'shop_manager', 'staff', 'organisateur', 'guichet',
+        'responsable', 'responsable_vente', 'staff_checkin', 'staff_kiosk',
+        'event_manager', 'checkin_supervisor', 'responsable_finance',
+        'operations_supervisor', 'lamako_support', 'editor', 'author',
+        'contributor', 'wpseo_manager', 'wpseo_editor',
+    );
+    if ( array_intersect( $roles, $internal_roles ) ) return false;
+
+    return (bool) array_intersect( $roles, array( 'customer', 'subscriber' ) );
+}
+
+function lr_rewards_user_is_member( $user_id ) {
+    return 'yes' === (string) get_user_meta( (int) $user_id, '_lamako_rewards_member', true );
+}
+
+function lr_rewards_user_is_eligible( $user_id ) {
+    return lr_rewards_user_role_is_eligible( $user_id ) && lr_rewards_user_is_member( $user_id );
+}
+
+function lr_rewards_activate_membership( $user_id ) {
+    $user_id = (int) $user_id;
+    if ( ! lr_rewards_user_role_is_eligible( $user_id ) ) {
+        return new WP_Error( 'rewards_role_ineligible', 'Ce compte ne peut pas rejoindre LamakoRewards.', array( 'status' => 403 ) );
+    }
+
+    if ( lr_rewards_user_is_member( $user_id ) ) {
+        return array( 'joined' => true, 'alreadyJoined' => true );
+    }
+
+    update_user_meta( $user_id, '_lamako_rewards_member', 'yes' );
+    update_user_meta( $user_id, '_lamako_rewards_member_since', gmdate( 'c' ) );
+
+    if ( ! get_user_meta( $user_id, '_lamako_rewards_welcome_awarded', true ) ) {
+        if ( ! function_exists( 'mycred_add' ) || ! mycred_add( 'registration', $user_id, LR_REGISTRATION_BONUS, 'Bonus inscription LamakoRewards' ) ) {
+            delete_user_meta( $user_id, '_lamako_rewards_member' );
+            delete_user_meta( $user_id, '_lamako_rewards_member_since' );
+            return new WP_Error( 'rewards_welcome_credit_failed', 'L adhesion n a pas pu etre finalisee.', array( 'status' => 503 ) );
+        }
+        update_user_meta( $user_id, '_lamako_rewards_welcome_awarded', gmdate( 'c' ) );
+    }
+
+    lr_generate_referral_code( $user_id );
+    if ( function_exists( 'lr_send_welcome_email' ) ) lr_send_welcome_email( $user_id );
+    return array( 'joined' => true, 'alreadyJoined' => false );
+}
+
+function lr_rewards_deactivate_membership( $user_id ) {
+    update_user_meta( (int) $user_id, '_lamako_rewards_member', 'no' );
+    update_user_meta( (int) $user_id, '_lamako_rewards_left_at', gmdate( 'c' ) );
+    return array( 'joined' => false );
+}
+
 /**
  * Store referral code in user meta when user registers
  */
 function lr_generate_referral_code( $user_id ) {
+    if ( ! lr_rewards_user_is_eligible( $user_id ) ) return '';
     $existing = get_user_meta( $user_id, '_lamako_referral_code', true );
     if ( $existing ) return $existing;
     
@@ -520,6 +582,9 @@ function lr_generate_referral_code( $user_id ) {
  * Register a referral relationship
  */
 function lr_register_referral( $referee_user_id, $referrer_code ) {
+    if ( ! lr_rewards_user_is_eligible( $referee_user_id ) ) {
+        return new WP_Error( 'rewards_membership_required', 'Adhesion LamakoRewards requise.', array( 'status' => 403 ) );
+    }
     global $wpdb;
 
     $referee_user_id = (int) $referee_user_id;
@@ -562,7 +627,7 @@ function lr_register_referral( $referee_user_id, $referrer_code ) {
         $count = (int) get_user_meta( $referrer_id, '_lamako_referral_count', true );
         update_user_meta( $referrer_id, '_lamako_referral_count', $count + 1 );
 
-        if ( function_exists( 'mycred_add' ) ) {
+        if ( function_exists( 'mycred_add' ) && lr_rewards_user_is_eligible( $referee_user_id ) && lr_rewards_user_is_eligible( $referrer_id ) ) {
             mycred_add(
                 'referral_signup',
                 $referee_user_id,
@@ -604,8 +669,8 @@ function lr_credit_referrer_on_purchase( $order_id ) {
     $credited = get_user_meta( $customer_id, '_lamako_referral_credited', true );
     if ( $credited ) return;
     
-    // Credit the referrer
-    if ( function_exists( 'mycred_add' ) ) {
+    // Credit the referrer only while both accounts remain eligible members.
+    if ( function_exists( 'mycred_add' ) && lr_rewards_user_is_eligible( $customer_id ) && lr_rewards_user_is_eligible( $referrer_id ) ) {
         mycred_add( 'referral_purchase', (int) $referrer_id, LR_REFERRAL_BONUS, 
             sprintf( 'Bonus parrainage - filleul #%d a effectué un achat', $customer_id ) 
         );
@@ -676,6 +741,8 @@ function lr_get_order_rewardable_total( WC_Order $order ) {
 }
 
 function lr_award_purchase_points( $order_id ) {
+    $membership_order = function_exists( 'wc_get_order' ) ? wc_get_order( $order_id ) : false;
+    if ( ! $membership_order || ! lr_rewards_user_is_eligible( (int) $membership_order->get_customer_id() ) ) return;
     $order = wc_get_order( $order_id );
     if ( ! $order ) return;
 
@@ -802,6 +869,7 @@ add_action( 'wp_login', 'lr_daily_login_bonus', 10, 2 );
 
 function lr_daily_login_bonus( $user_login, $user ) {
     $user_id = $user->ID;
+    if ( ! lr_rewards_user_is_eligible( $user_id ) ) return;
     $today = date( 'Y-m-d' );
     $last_login_bonus = get_user_meta( $user_id, '_lamako_last_login_bonus', true );
     
@@ -821,13 +889,9 @@ function lr_daily_login_bonus( $user_login, $user ) {
 add_action( 'user_register', 'lr_registration_bonus', 10, 1 );
 
 function lr_registration_bonus( $user_id ) {
-    // Generate referral code for new user
-    lr_generate_referral_code( $user_id );
-    
-    // Award registration bonus
-    if ( function_exists( 'mycred_add' ) ) {
-        mycred_add( 'registration', $user_id, LR_REGISTRATION_BONUS, 'Bonus inscription LamakoRewards' );
-    }
+    // Membership is voluntary. The welcome bonus is awarded by the explicit
+    // membership endpoint, never by generic WordPress account creation.
+    return;
 }
 
 // ============================================================
@@ -847,6 +911,7 @@ function lr_check_birthdays() {
     ) );
     
     foreach ( $users as $user_id ) {
+        if ( ! lr_rewards_user_is_eligible( $user_id ) ) continue;
         $last_birthday_bonus = get_user_meta( $user_id, '_lamako_last_birthday_bonus', true );
         if ( $last_birthday_bonus === date( 'Y' ) ) continue;
         
@@ -931,6 +996,7 @@ add_action( 'rest_api_init', function() {
 function lr_api_get_balance( $request ) {
     $user_id = lr_authenticated_user_id( $request, $request->get_param( 'user_id' ) );
     if ( is_wp_error( $user_id ) ) return $user_id;
+    if ( ! lr_rewards_user_is_eligible( $user_id ) ) return new WP_Error( 'rewards_membership_required', 'Adhesion LamakoRewards requise.', array( 'status' => 403 ) );
     
     if ( ! function_exists( 'mycred_get_users_balance' ) ) {
         return new WP_Error( 'mycred_missing', 'myCred plugin not active.', array( 'status' => 500 ) );
@@ -963,6 +1029,7 @@ function lr_get_discount_percent( $tier ) {
 function lr_api_get_history( $request ) {
     $user_id = lr_authenticated_user_id( $request, $request->get_param( 'user_id' ) );
     if ( is_wp_error( $user_id ) ) return $user_id;
+    if ( ! lr_rewards_user_is_eligible( $user_id ) ) return new WP_Error( 'rewards_membership_required', 'Adhesion LamakoRewards requise.', array( 'status' => 403 ) );
     $limit = min( (int) ( $request->get_param( 'limit' ) ?: 20 ), 100 );
     
     global $wpdb;
@@ -1022,6 +1089,7 @@ function lr_api_redeem_points( $request ) {
     $body = is_array( $body ) ? $body : array();
     $user_id = lr_authenticated_user_id( $request, $body['user_id'] ?? 0 );
     if ( is_wp_error( $user_id ) ) return $user_id;
+    if ( ! lr_rewards_user_is_eligible( $user_id ) ) return new WP_Error( 'rewards_membership_required', 'Adhesion LamakoRewards requise.', array( 'status' => 403 ) );
     $points = (int) ( $body['points'] ?? 0 );
 
     $idempotency_key = $request->get_header( 'Idempotency-Key' );
@@ -1057,6 +1125,7 @@ function lr_api_register_referral( $request ) {
 function lr_api_validate_referral_code( $request ) {
     $user_id = lr_authenticated_user_id( $request );
     if ( is_wp_error( $user_id ) ) return $user_id;
+    if ( ! lr_rewards_user_is_eligible( $user_id ) ) return new WP_Error( 'rewards_membership_required', 'Adhesion LamakoRewards requise.', array( 'status' => 403 ) );
     
     $body = $request->get_json_params();
     $code = sanitize_text_field( $body['code'] ?? '' );
@@ -1089,6 +1158,7 @@ function lr_api_validate_referral_code( $request ) {
 function lr_api_get_referral_code( $request ) {
     $user_id = lr_authenticated_user_id( $request, $request->get_param( 'user_id' ) );
     if ( is_wp_error( $user_id ) ) return $user_id;
+    if ( ! lr_rewards_user_is_eligible( $user_id ) ) return new WP_Error( 'rewards_membership_required', 'Adhesion LamakoRewards requise.', array( 'status' => 403 ) );
     
     $code = lr_generate_referral_code( $user_id );
     $referral_count = (int) get_user_meta( $user_id, '_lamako_referral_count', true );
@@ -1913,6 +1983,7 @@ function lr_homepage_cta_banner() {
 add_action( 'user_register', 'lr_send_welcome_email', 20 );
 
 function lr_send_welcome_email( $user_id ) {
+    if ( ! lr_rewards_user_is_eligible( $user_id ) ) return;
     $user = get_userdata( $user_id );
     if ( ! $user ) return;
     
