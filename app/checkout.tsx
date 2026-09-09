@@ -48,6 +48,7 @@ export default function CheckoutScreen() {
   } = useCart();
   const { isAuthenticated, user } = useAuth();
   const {
+    membership,
     currentTier,
     canRedeem,
     programConfig,
@@ -64,25 +65,28 @@ export default function CheckoutScreen() {
   const hasTicketCheckoutFields = cartNeedsCheckoutFieldSchema(items);
   const canShowRedeem =
     isAuthenticated &&
+    membership?.joined === true &&
     programConfig.enabled &&
     allItemsRewardEligible &&
     canRedeem &&
     rewardsState.availablePoints >=
       (programConfig.redemptionTiers[0]?.points ?? Infinity);
-  const totalPointsToEarn = rewardEligibleItems.reduce((sum, item) => {
-    const price =
-      typeof item.price === "string"
-        ? Number.parseFloat(item.price) || 0
-        : item.price;
-    return (
-      sum +
-      estimatePointsForPrice(
-        price * item.quantity,
-        currentTier.multiplier,
-        programConfig,
-      )
-    );
-  }, 0);
+  const totalPointsToEarn = membership?.joined
+    ? rewardEligibleItems.reduce((sum, item) => {
+        const price =
+          typeof item.price === "string"
+            ? Number.parseFloat(item.price) || 0
+            : item.price;
+        return (
+          sum +
+          estimatePointsForPrice(
+            price * item.quantity,
+            currentTier.multiplier,
+            programConfig,
+          )
+        );
+      }, 0)
+    : 0;
 
   const [phase, setPhase] = useState<CheckoutPhase>(
     hasPhysicalProducts ? "address" : canShowRedeem ? "confirm" : "creating",

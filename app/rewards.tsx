@@ -1,4 +1,7 @@
 import {
+  ActivityIndicator,
+  Alert,
+  Linking,
   Text,
   View,
   TouchableOpacity,
@@ -27,6 +30,8 @@ export default function RewardsScreen() {
   const { isAuthenticated } = useAuth();
   const {
     state,
+    membership,
+    membershipError,
     programConfig,
     currentTier,
     nextTier,
@@ -36,7 +41,10 @@ export default function RewardsScreen() {
     pointsUntilRedemption,
     getDiscountValue,
     syncRewards,
+    updateMembership,
     isSyncing,
+    isMembershipLoading,
+    isMembershipUpdating,
   } = useRewards();
 
   useFocusEffect(
@@ -54,35 +62,217 @@ export default function RewardsScreen() {
     });
   };
 
+  const openProgramRules = () => {
+    Linking.openURL("https://www.ticketbylamako.com/lamako-rewards/").catch(
+      () =>
+        Alert.alert(
+          "Lien indisponible",
+          "Impossible d'ouvrir les règles du programme pour le moment.",
+        ),
+    );
+  };
+
+  const confirmJoin = () => {
+    Alert.alert(
+      "Adhérer à LamakoRewards",
+      "L'adhésion est gratuite et volontaire. En confirmant, vous activez le programme sur votre compte TicketByLamako.",
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Adhérer",
+          onPress: async () => {
+            try {
+              await updateMembership(true);
+            } catch (error: any) {
+              Alert.alert(
+                "Adhésion impossible",
+                error?.message || "Veuillez réessayer plus tard.",
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const confirmLeave = () => {
+    Alert.alert(
+      "Quitter LamakoRewards",
+      "Votre participation au programme sera désactivée. Cette action ne supprime ni votre compte TicketByLamako ni vos autres données.",
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Quitter le programme",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await updateMembership(false);
+            } catch (error: any) {
+              Alert.alert(
+                "Retrait impossible",
+                error?.message || "Veuillez réessayer plus tard.",
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const header = (
+    <View style={[styles.header, { borderBottomColor: colors.border }]}>
+      <TouchableOpacity
+        onPress={() => router.back()}
+        style={[styles.backButton, { backgroundColor: colors.surface }]}
+      >
+        <IconSymbol name="chevron.left" size={20} color={colors.foreground} />
+        <Text style={{ color: colors.foreground, fontSize: 14, marginLeft: 4 }}>
+          Retour
+        </Text>
+      </TouchableOpacity>
+      <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+        LamakoRewards
+      </Text>
+      <TouchableOpacity
+        onPress={syncRewards}
+        style={[
+          styles.backButton,
+          { backgroundColor: colors.surface, opacity: isSyncing ? 0.5 : 1 },
+        ]}
+        disabled={isSyncing}
+      >
+        <IconSymbol name="arrow.clockwise" size={18} color={colors.primary} />
+      </TouchableOpacity>
+    </View>
+  );
+
+  if (!isAuthenticated || isMembershipLoading || !membership?.joined) {
+    return (
+      <ScreenContainer edges={["top", "left", "right"]}>
+        {header}
+        <ScrollView
+          contentContainerStyle={styles.membershipGate}
+          showsVerticalScrollIndicator={false}
+        >
+          <Image
+            source={colorScheme === "dark" ? rewardsLogoWhite : rewardsLogoDark}
+            style={styles.membershipLogo}
+            resizeMode="contain"
+          />
+          {isMembershipLoading ? (
+            <>
+              <ActivityIndicator color={colors.primary} />
+              <Text style={[styles.membershipCopy, { color: colors.muted }]}>
+                Vérification de votre adhésion...
+              </Text>
+            </>
+          ) : !isAuthenticated ? (
+            <View style={styles.membershipCard}>
+              <Text
+                style={[styles.membershipTitle, { color: colors.foreground }]}
+              >
+                Connexion requise
+              </Text>
+              <Text style={[styles.membershipCopy, { color: colors.muted }]}>
+                Connectez-vous pour consulter ou gérer votre adhésion.
+              </Text>
+              <TouchableOpacity
+                onPress={() => router.push("/(auth)/login" as any)}
+                accessibilityRole="button"
+                accessibilityLabel="Se connecter pour gérer LamakoRewards"
+                style={[
+                  styles.membershipButton,
+                  { backgroundColor: colors.primary },
+                ]}
+              >
+                <Text style={styles.membershipButtonText}>Se connecter</Text>
+              </TouchableOpacity>
+            </View>
+          ) : membershipError && !membership ? (
+            <View style={styles.membershipCard}>
+              <Text
+                style={[styles.membershipTitle, { color: colors.foreground }]}
+              >
+                Statut indisponible
+              </Text>
+              <Text style={[styles.membershipCopy, { color: colors.muted }]}>
+                {membershipError}
+              </Text>
+              <TouchableOpacity
+                onPress={syncRewards}
+                accessibilityRole="button"
+                accessibilityLabel="Réessayer de vérifier mon adhésion"
+                style={[
+                  styles.membershipButton,
+                  { backgroundColor: colors.primary },
+                ]}
+              >
+                <Text style={styles.membershipButtonText}>Réessayer</Text>
+              </TouchableOpacity>
+            </View>
+          ) : membership && !membership.roleEligible ? (
+            <View style={styles.membershipCard}>
+              <Text
+                style={[styles.membershipTitle, { color: colors.foreground }]}
+              >
+                Programme indisponible pour ce compte
+              </Text>
+              <Text style={[styles.membershipCopy, { color: colors.muted }]}>
+                LamakoRewards est réservé aux comptes clients éligibles.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.membershipCard}>
+              <Text
+                style={[styles.membershipTitle, { color: colors.foreground }]}
+              >
+                Rejoindre LamakoRewards
+              </Text>
+              <Text style={[styles.membershipCopy, { color: colors.muted }]}>
+                L'adhésion est gratuite et volontaire. Consultez les règles,
+                puis confirmez seulement si vous souhaitez participer.
+              </Text>
+              <TouchableOpacity
+                onPress={openProgramRules}
+                accessibilityRole="link"
+                accessibilityLabel="Consulter les règles du programme LamakoRewards"
+                style={styles.rulesLink}
+              >
+                <Text style={[styles.rulesLinkText, { color: colors.primary }]}>
+                  Consulter les règles du programme
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={confirmJoin}
+                disabled={isMembershipUpdating}
+                accessibilityRole="button"
+                accessibilityLabel="Adhérer volontairement à LamakoRewards"
+                style={[
+                  styles.membershipButton,
+                  {
+                    backgroundColor: colors.primary,
+                    opacity: isMembershipUpdating ? 0.6 : 1,
+                  },
+                ]}
+              >
+                {isMembershipUpdating ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.membershipButtonText}>
+                    Adhérer volontairement
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+        </ScrollView>
+      </ScreenContainer>
+    );
+  }
+
   return (
     <ScreenContainer edges={["top", "left", "right"]}>
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={[styles.backButton, { backgroundColor: colors.surface }]}
-        >
-          <IconSymbol name="chevron.left" size={20} color={colors.foreground} />
-          <Text
-            style={{ color: colors.foreground, fontSize: 14, marginLeft: 4 }}
-          >
-            Retour
-          </Text>
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.foreground }]}>
-          LamakoRewards
-        </Text>
-        <TouchableOpacity
-          onPress={syncRewards}
-          style={[
-            styles.backButton,
-            { backgroundColor: colors.surface, opacity: isSyncing ? 0.5 : 1 },
-          ]}
-          disabled={isSyncing}
-        >
-          <IconSymbol name="arrow.clockwise" size={18} color={colors.primary} />
-        </TouchableOpacity>
-      </View>
+      {header}
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -481,6 +671,36 @@ export default function RewardsScreen() {
             </View>
           </View>
         )}
+
+        <View
+          style={[
+            styles.leaveCard,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
+        >
+          <Text style={[styles.leaveTitle, { color: colors.foreground }]}>
+            Gérer mon adhésion
+          </Text>
+          <Text style={[styles.leaveCopy, { color: colors.muted }]}>
+            Vous pouvez quitter LamakoRewards sans supprimer votre compte
+            TicketByLamako.
+          </Text>
+          <TouchableOpacity
+            onPress={confirmLeave}
+            disabled={isMembershipUpdating}
+            accessibilityRole="button"
+            accessibilityLabel="Quitter LamakoRewards"
+            style={[styles.leaveButton, { borderColor: colors.error + "60" }]}
+          >
+            {isMembershipUpdating ? (
+              <ActivityIndicator color={colors.error} />
+            ) : (
+              <Text style={[styles.leaveButtonText, { color: colors.error }]}>
+                Quitter LamakoRewards
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </ScreenContainer>
   );
@@ -506,6 +726,33 @@ const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 40 },
   logoContainer: { alignItems: "center", marginBottom: 16 },
   rewardsLogo: { width: 200, height: 72 },
+  membershipGate: {
+    flexGrow: 1,
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    paddingBottom: 48,
+  },
+  membershipLogo: { width: 210, height: 76, alignSelf: "center" },
+  membershipCard: { marginTop: 20, alignItems: "center" },
+  membershipTitle: { fontSize: 22, fontWeight: "800", textAlign: "center" },
+  membershipCopy: {
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: "center",
+    marginTop: 10,
+  },
+  membershipButton: {
+    minHeight: 48,
+    minWidth: 220,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+    marginTop: 18,
+  },
+  membershipButtonText: { color: "#fff", fontSize: 14, fontWeight: "800" },
+  rulesLink: { paddingVertical: 10, paddingHorizontal: 12, marginTop: 8 },
+  rulesLinkText: { fontSize: 13, fontWeight: "700" },
 
   // Points card
   pointsCard: { borderRadius: 20, padding: 24, marginBottom: 16 },
@@ -630,6 +877,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   codeText: { fontSize: 22, fontWeight: "800", letterSpacing: 2 },
+  leaveCard: {
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 16,
+  },
+  leaveTitle: { fontSize: 15, fontWeight: "700" },
+  leaveCopy: { fontSize: 12, lineHeight: 18, marginTop: 5 },
+  leaveButton: {
+    minHeight: 44,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 12,
+  },
+  leaveButtonText: { fontSize: 13, fontWeight: "700" },
 
   // History
   historySection: { marginBottom: 20 },

@@ -22,6 +22,8 @@ export default function ProfileScreen() {
   const { isAuthenticated, user, logout } = useAuth();
   const { colorScheme, setColorScheme } = useThemeContext();
   const {
+    membership,
+    isMembershipLoading,
     state: rewards,
     currentTier,
     progressToNextTier,
@@ -126,10 +128,12 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        {isAuthenticated ? (
+        {isAuthenticated && membership?.joined ? (
           <TouchableOpacity
             onPress={() => router.push("/rewards" as any)}
             activeOpacity={0.82}
+            accessibilityRole="button"
+            accessibilityLabel="Consulter et gérer mon adhésion LamakoRewards"
             style={[
               styles.rewardsPanel,
               {
@@ -187,6 +191,44 @@ export default function ProfileScreen() {
               <IconSymbol
                 name="chevron.right"
                 size={15}
+                color={colors.primary}
+              />
+            </View>
+          </TouchableOpacity>
+        ) : isAuthenticated &&
+          !isMembershipLoading &&
+          membership?.roleEligible ? (
+          <TouchableOpacity
+            onPress={() => router.push("/rewards" as any)}
+            activeOpacity={0.82}
+            accessibilityRole="button"
+            accessibilityLabel="Découvrir l'adhésion volontaire LamakoRewards"
+            style={[
+              styles.rewardsPanel,
+              { borderColor: "#C99A54", backgroundColor: colors.surface },
+            ]}
+          >
+            <View style={styles.rewardsHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.eyebrow, { color: "#8B5E34" }]}>
+                  LAMAKOREWARDS
+                </Text>
+                <Text
+                  style={[
+                    styles.joinRewardsTitle,
+                    { color: colors.foreground },
+                  ]}
+                >
+                  Adhésion volontaire
+                </Text>
+                <Text style={[styles.joinRewardsCopy, { color: colors.muted }]}>
+                  Consultez les règles du programme puis choisissez librement
+                  d'adhérer.
+                </Text>
+              </View>
+              <IconSymbol
+                name="chevron.right"
+                size={18}
                 color={colors.primary}
               />
             </View>
@@ -316,6 +358,8 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: { color: "#fff", fontSize: 14, fontWeight: "800" },
   rewardsPanel: { marginTop: 14, borderWidth: 1, borderRadius: 8, padding: 16 },
+  joinRewardsTitle: { fontSize: 18, fontWeight: "800", marginTop: 4 },
+  joinRewardsCopy: { fontSize: 12, lineHeight: 18, marginTop: 5 },
   rewardsHeader: {
     flexDirection: "row",
     justifyContent: "space-between",

@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { View, Text, Animated, StyleSheet, TouchableOpacity, Dimensions, Modal } from "react-native";
+import {
+  View,
+  Text,
+  Animated,
+  StyleSheet,
+  TouchableOpacity,
+  Dimensions,
+  Modal,
+} from "react-native";
 import { Image } from "expo-image";
 import { router } from "expo-router";
 import { useAuth } from "@/lib/auth-provider";
@@ -79,11 +87,25 @@ export function RewardsPopup({ delay = 30000 }: RewardsPopupProps) {
   if (!visible) return null;
 
   return (
-    <Modal transparent visible={visible} animationType="none" statusBarTranslucent>
+    <Modal
+      transparent
+      visible={visible}
+      animationType="none"
+      statusBarTranslucent
+    >
       <View style={styles.backdrop}>
-        <Animated.View style={[styles.card, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
+        <Animated.View
+          style={[
+            styles.card,
+            { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
+          ]}
+        >
           {/* Close button */}
-          <TouchableOpacity onPress={handleClose} style={styles.closeBtn} activeOpacity={0.7}>
+          <TouchableOpacity
+            onPress={handleClose}
+            style={styles.closeBtn}
+            activeOpacity={0.7}
+          >
             <View style={styles.closeBtnInner}>
               <Text style={styles.closeBtnText}>✕</Text>
             </View>
@@ -106,21 +128,29 @@ export function RewardsPopup({ delay = 30000 }: RewardsPopupProps) {
             />
             <Text style={styles.rewardsLabel}>Rewards</Text>
 
-            <Text style={styles.title}>
-              Créez votre compte pour cumuler des points à chaque achat
-            </Text>
+            <Text style={styles.title}>Découvrez LamakoRewards</Text>
 
             <Text style={styles.features}>
-              Vos avantages restent associés à votre compte, sur le site et dans l'application.
+              Après la création de votre compte, vous pourrez choisir d'adhérer
+              gratuitement au programme.
             </Text>
 
-            <TouchableOpacity onPress={handleJoin} style={styles.joinBtn} activeOpacity={0.85}>
-              <Text style={styles.joinBtnText}>Rejoindre maintenant !</Text>
+            <TouchableOpacity
+              onPress={handleJoin}
+              style={styles.joinBtn}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.joinBtnText}>Créer un compte</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={handleLogin} style={styles.loginLink} activeOpacity={0.7}>
+            <TouchableOpacity
+              onPress={handleLogin}
+              style={styles.loginLink}
+              activeOpacity={0.7}
+            >
               <Text style={styles.loginLinkText}>
-                Déjà un compte ? <Text style={styles.loginLinkAccent}>Se connecter</Text>
+                Déjà un compte ?{" "}
+                <Text style={styles.loginLinkAccent}>Se connecter</Text>
               </Text>
             </TouchableOpacity>
           </View>

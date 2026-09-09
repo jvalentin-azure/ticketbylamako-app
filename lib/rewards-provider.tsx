@@ -16,9 +16,12 @@ import {
   getMobileRewardsBalance,
   getMobileRewardsConfig,
   getMobileRewardsHistory,
+  getMobileRewardsMembership,
   redeemMobileRewards,
   registerMobileReferral,
+  updateMobileRewardsMembership,
   validateMobileReferralCode,
+  type MobileRewardsMembership,
 } from "@/lib/api/mobile";
 
 // ===== TIERS =====
@@ -202,6 +205,8 @@ const DEFAULT_STATE: RewardsState = {
 // ===== CONTEXT =====
 interface RewardsContextType {
   state: RewardsState;
+  membership: MobileRewardsMembership | null;
+  membershipError: string | null;
   programConfig: RewardsProgramConfig;
   currentTier: TierInfo;
   nextTier: TierInfo | null;
@@ -215,8 +220,11 @@ interface RewardsContextType {
     points: number,
   ) => { points: number; value: number } | null;
   redeemPoints: (points: number, wpUserId: number) => Promise<RedeemResult>;
+  updateMembership: (joined: boolean) => Promise<MobileRewardsMembership>;
   isLoading: boolean;
   isSyncing: boolean;
+  isMembershipLoading: boolean;
+  isMembershipUpdating: boolean;
 }
 
 export interface RedeemResult {
@@ -231,6 +239,13 @@ export interface RedeemResult {
 const RewardsContext = createContext<RewardsContextType | null>(null);
 
 const STORAGE_KEY = "@lamako_rewards";
+const PENDING_REFERRAL_KEY = "@lamako_rewards_pending_referral";
+
+export async function savePendingReferralCode(code: string): Promise<void> {
+  const normalized = code.trim().toUpperCase();
+  if (!normalized) return;
+  await AsyncStorage.setItem(PENDING_REFERRAL_KEY, normalized);
+}
 
 function getTierForPoints(lifetimePoints: number): RewardTier {
   if (lifetimePoints >= 10000) return "diamond";
@@ -395,17 +410,40 @@ async function fetchHistory(
 export function RewardsProvider({ children }: { children: ReactNode }) {
   const { user, isAuthenticated } = useAuth();
   const [state, setState] = useState<RewardsState>(DEFAULT_STATE);
+  const [membership, setMembership] = useState<MobileRewardsMembership | null>(
+    null,
+  );
+  const [membershipError, setMembershipError] = useState<string | null>(null);
   const [programConfig, setProgramConfig] = useState<RewardsProgramConfig>(
     DEFAULT_REWARDS_PROGRAM_CONFIG,
   );
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isMembershipLoading, setIsMembershipLoading] = useState(false);
+  const [isMembershipUpdating, setIsMembershipUpdating] = useState(false);
   const stateRef = useRef(state);
+  const membershipRef = useRef(membership);
+  const userIdRef = useRef(user?.id ?? null);
   const syncingRef = useRef(false);
 
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  useEffect(() => {
+    membershipRef.current = membership;
+  }, [membership]);
+
+  useEffect(() => {
+    userIdRef.current = user?.id ?? null;
+    setMembership(null);
+    setMembershipError(null);
+    setIsMembershipLoading(Boolean(isAuthenticated && user?.id));
+    if (!isAuthenticated || !user?.id) {
+      stateRef.current = DEFAULT_STATE;
+      setState(DEFAULT_STATE);
+    }
+  }, [isAuthenticated, user?.id]);
 
   useEffect(() => {
     let active = true;
@@ -488,9 +526,23 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
     if (!user?.id || syncingRef.current) return;
     syncingRef.current = true;
     setIsSyncing(true);
+    setIsMembershipLoading(true);
+    setMembershipError(null);
 
     try {
       const wpUserId = user.id;
+      const nextMembership = await getMobileRewardsMembership();
+      if (userIdRef.current !== wpUserId) return;
+
+      membershipRef.current = nextMembership;
+      setMembership(nextMembership);
+      if (!nextMembership.joined) {
+        const clearedState = { ...DEFAULT_STATE };
+        stateRef.current = clearedState;
+        setState(clearedState);
+        await AsyncStorage.removeItem(`${STORAGE_KEY}_${wpUserId}`);
+        return;
+      }
 
       if (Platform.OS === "ios" || Platform.OS === "android") {
         try {
@@ -505,7 +557,11 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
         fetchHistory(wpUserId),
         fetchReferralCode(wpUserId),
       ]);
-      if (!balanceData) {
+      if (
+        !balanceData ||
+        userIdRef.current !== wpUserId ||
+        !membershipRef.current?.joined
+      ) {
         return;
       }
 
@@ -531,13 +587,67 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
 
       setState(newState);
       await saveState(newState);
-    } catch (e) {
+    } catch (e: any) {
+      if (userIdRef.current === user.id) {
+        setMembershipError(
+          e?.message || "Impossible de vérifier votre adhésion LamakoRewards.",
+        );
+      }
       console.warn("Failed to sync rewards:", e);
     } finally {
       syncingRef.current = false;
       setIsSyncing(false);
+      if (userIdRef.current === user.id) setIsMembershipLoading(false);
     }
   }, [user?.id, saveState]);
+
+  const updateMembership = useCallback(
+    async (joined: boolean): Promise<MobileRewardsMembership> => {
+      if (!user?.id) throw new Error("Connexion requise.");
+
+      const wpUserId = user.id;
+      setIsMembershipUpdating(true);
+      setMembershipError(null);
+      try {
+        const nextMembership = await updateMobileRewardsMembership(joined);
+        if (userIdRef.current !== wpUserId) return nextMembership;
+
+        membershipRef.current = nextMembership;
+        setMembership(nextMembership);
+
+        if (nextMembership.joined) {
+          const pendingReferral =
+            await AsyncStorage.getItem(PENDING_REFERRAL_KEY);
+          if (pendingReferral) {
+            try {
+              const referral = await registerMobileReferral(pendingReferral);
+              if (referral.success) {
+                await AsyncStorage.removeItem(PENDING_REFERRAL_KEY);
+              }
+            } catch (error) {
+              console.warn("Pending referral registration unavailable:", error);
+            }
+          }
+          await syncRewards();
+        } else {
+          const clearedState = { ...DEFAULT_STATE };
+          stateRef.current = clearedState;
+          setState(clearedState);
+          await AsyncStorage.removeItem(`${STORAGE_KEY}_${wpUserId}`);
+        }
+
+        return nextMembership;
+      } catch (e: any) {
+        const message =
+          e?.message || "Impossible de modifier votre adhésion LamakoRewards.";
+        setMembershipError(message);
+        throw e;
+      } finally {
+        if (userIdRef.current === wpUserId) setIsMembershipUpdating(false);
+      }
+    },
+    [syncRewards, user?.id],
+  );
 
   // Refresh the account ledger after the cached state has been restored.
   useEffect(() => {
@@ -548,6 +658,7 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
 
   // The server program configuration controls redemption eligibility.
   const canRedeem =
+    membership?.joined === true &&
     programConfig.enabled &&
     state.lifetimePoints >= programConfig.minimumRedeemPoints;
   const pointsUntilRedemption = canRedeem
@@ -558,6 +669,7 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
   const getBestRedemption = useCallback(
     (points: number): { points: number; value: number } | null => {
       if (
+        !membership?.joined ||
         !programConfig.enabled ||
         state.lifetimePoints < programConfig.minimumRedeemPoints
       ) {
@@ -570,7 +682,7 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
       if (affordable.length === 0) return null;
       return affordable[affordable.length - 1];
     },
-    [programConfig, state.lifetimePoints],
+    [membership?.joined, programConfig, state.lifetimePoints],
   );
 
   // Legacy discount calculation (backward compat)
@@ -603,6 +715,12 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
   // Redeem points - calls API and updates local state
   const redeemPoints = useCallback(
     async (points: number, wpUserId: number): Promise<RedeemResult> => {
+      if (!membership?.joined) {
+        return {
+          success: false,
+          error: "Adhésion LamakoRewards requise.",
+        };
+      }
       const result = await redeemPointsApi(points, wpUserId);
       if (result.success && result.new_balance !== undefined) {
         // Update local state with new balance
@@ -627,13 +745,15 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
       }
       return result;
     },
-    [state, saveState],
+    [membership?.joined, state, saveState],
   );
 
   return (
     <RewardsContext.Provider
       value={{
         state,
+        membership,
+        membershipError,
         programConfig,
         currentTier,
         nextTier: nextTierInfo,
@@ -645,8 +765,11 @@ export function RewardsProvider({ children }: { children: ReactNode }) {
         getDiscountValue,
         getBestRedemption,
         redeemPoints,
+        updateMembership,
         isLoading,
         isSyncing,
+        isMembershipLoading,
+        isMembershipUpdating,
       }}
     >
       {children}

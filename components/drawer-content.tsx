@@ -31,7 +31,7 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
   const { width } = useWindowDimensions();
   const { isAuthenticated, user, logout } = useAuth();
   const { colorScheme, setColorScheme } = useThemeContext();
-  const { state: rewards } = useRewards();
+  const { membership, state: rewards } = useRewards();
   const userDisplayName = user
     ? [user.firstName, user.lastName].filter(Boolean).join(" ") ||
       user.displayName ||
@@ -91,11 +91,15 @@ export function DrawerContent({ onClose }: DrawerContentProps) {
               label: "Mes commandes",
               onPress: () => navigate("/orders"),
             },
-            {
-              icon: "star.fill" as const,
-              label: `LamakoRewards · ${rewards.availablePoints.toLocaleString("fr-FR")} pts`,
-              onPress: () => navigate("/rewards"),
-            },
+            ...(membership?.joined
+              ? [
+                  {
+                    icon: "star.fill" as const,
+                    label: `LamakoRewards · ${rewards.availablePoints.toLocaleString("fr-FR")} pts`,
+                    onPress: () => navigate("/rewards"),
+                  },
+                ]
+              : []),
             {
               icon: "heart.fill" as const,
               label: "Mes favoris",

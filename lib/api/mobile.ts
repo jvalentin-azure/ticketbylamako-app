@@ -432,6 +432,12 @@ export interface MobileRewardsBalance {
   canRedeem: boolean;
 }
 
+export interface MobileRewardsMembership {
+  roleEligible: boolean;
+  joined: boolean;
+  joinedAt: string;
+}
+
 export interface MobileRewardsConfig {
   version: number;
   platform: string;
@@ -764,6 +770,21 @@ export async function unregisterMobilePushToken(
 export async function getMobileRewardsBalance(): Promise<MobileRewardsBalance> {
   return mobileV2Fetch<MobileRewardsBalance>("rewards/balance", {
     params: { fresh: Date.now() },
+  });
+}
+
+export async function getMobileRewardsMembership(): Promise<MobileRewardsMembership> {
+  return mobileV2Fetch<MobileRewardsMembership>("rewards/membership", {
+    params: { fresh: Date.now() },
+  });
+}
+
+export async function updateMobileRewardsMembership(
+  joined: boolean,
+): Promise<MobileRewardsMembership> {
+  return mobileV2Fetch<MobileRewardsMembership>("rewards/membership", {
+    method: "PATCH",
+    body: { joined },
   });
 }
 

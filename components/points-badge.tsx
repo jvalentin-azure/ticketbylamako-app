@@ -28,11 +28,11 @@ export function PointsBadge({
   multiplier = 1,
   tierName,
 }: PointsBadgeProps) {
-  const { programConfig } = useRewards();
+  const { membership, programConfig } = useRewards();
   const priceNum = typeof price === "string" ? parseFloat(price) || 0 : price;
   const points = estimatePointsForPrice(priceNum, multiplier, programConfig);
 
-  if (points <= 0) return null;
+  if (!membership?.joined || points <= 0) return null;
 
   if (compact) {
     return (

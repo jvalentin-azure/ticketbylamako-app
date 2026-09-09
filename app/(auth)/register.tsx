@@ -18,7 +18,10 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useAuth } from "@/lib/auth-provider";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { SocialAuthButtons } from "@/components/auth/social-auth-buttons";
-import { validateReferralCode, registerReferral } from "@/lib/rewards-provider";
+import {
+  savePendingReferralCode,
+  validateReferralCode,
+} from "@/lib/rewards-provider";
 
 export default function RegisterScreen() {
   const colors = useColors();
@@ -75,15 +78,12 @@ export default function RegisterScreen() {
     setLoading(true);
     try {
       await register(email.trim(), password, firstName.trim(), lastName.trim());
-      // If referral code was provided and valid, register the referral
+      // Keep a validated code until the customer voluntarily joins Rewards.
       if (referralCode.trim() && referralStatus?.valid) {
-        // We'll register the referral after signup - the server will handle it
         try {
-          // The WP user ID will be fetched by the rewards provider on first sync
-          await registerReferral(0, referralCode.trim()); // 0 = will be resolved server-side by email
+          await savePendingReferralCode(referralCode);
         } catch (e) {
-          // Non-blocking - referral is a bonus, don't fail registration
-          console.warn("Referral registration failed:", e);
+          console.warn("Referral code storage failed:", e);
         }
       }
       router.replace("/(tabs)/" as any);
@@ -329,8 +329,8 @@ export default function RegisterScreen() {
               <Text
                 style={{ color: colors.success, fontSize: 12, marginTop: 4 }}
               >
-                Parrainé par {referralStatus.name} - vous recevrez 25 pts bonus
-                !
+                Code de {referralStatus.name} validé. Il sera appliqué si vous
+                adhérez à LamakoRewards.
               </Text>
             )}
             {referralStatus &&

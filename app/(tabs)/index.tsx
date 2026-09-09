@@ -57,7 +57,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const { isAuthenticated, user } = useAuth();
-  const { state: rewards, currentTier } = useRewards();
+  const { membership, state: rewards, currentTier } = useRewards();
   const { isFavorite, toggleFavorite } = useFavorites();
   const [events, setEvents] = useState<TCEvent[]>([]);
   const [products, setProducts] = useState<WCProduct[]>([]);
@@ -384,6 +384,7 @@ export default function HomeScreen() {
         <OrganizerEventCta style={styles.organizerCta} />
         <RewardsBanner
           authenticated={isAuthenticated}
+          member={membership?.joined === true}
           points={rewards.availablePoints}
           tier={currentTier.name}
           onPress={() =>
@@ -630,11 +631,13 @@ function ProductCard({
 
 function RewardsBanner({
   authenticated,
+  member,
   points,
   tier,
   onPress,
 }: {
   authenticated: boolean;
+  member: boolean;
   points: number;
   tier: string;
   onPress: () => void;
@@ -655,9 +658,11 @@ function RewardsBanner({
         <View style={styles.rewardsCopy}>
           <Text style={styles.rewardsTitle}>LamakoRewards</Text>
           <Text style={styles.rewardsSubtitle}>
-            {authenticated
+            {member
               ? `${points} pts · ${tier}`
-              : "Cumulez des points à chaque achat"}
+              : authenticated
+                ? "Adhérez volontairement depuis votre espace"
+                : "Créez un compte puis choisissez d'adhérer"}
           </Text>
         </View>
         <RNImage

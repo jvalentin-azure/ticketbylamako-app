@@ -34,6 +34,7 @@ export default function CartScreen() {
     expiresAt,
   } = useCart();
   const {
+    membership,
     state: rewardsState,
     currentTier,
     canRedeem,
@@ -54,18 +55,22 @@ export default function CartScreen() {
     items.length > 0 && rewardEligibleItems.length === items.length;
 
   // Calculate total points to earn for this cart
-  const totalPointsToEarn = rewardEligibleItems.reduce((sum, item) => {
-    const price =
-      typeof item.price === "string" ? parseFloat(item.price) || 0 : item.price;
-    return (
-      sum +
-      estimatePointsForPrice(
-        price * item.quantity,
-        currentTier.multiplier,
-        programConfig,
-      )
-    );
-  }, 0);
+  const totalPointsToEarn = membership?.joined
+    ? rewardEligibleItems.reduce((sum, item) => {
+        const price =
+          typeof item.price === "string"
+            ? parseFloat(item.price) || 0
+            : item.price;
+        return (
+          sum +
+          estimatePointsForPrice(
+            price * item.quantity,
+            currentTier.multiplier,
+            programConfig,
+          )
+        );
+      }, 0)
+    : 0;
 
   // Calculate potential discount from available points
   const availableDiscount =
@@ -287,7 +292,7 @@ export default function CartScreen() {
               </View>
             )}
 
-            {isAuthenticated && totalPointsToEarn > 0 && (
+            {isAuthenticated && membership?.joined && totalPointsToEarn > 0 && (
               <View
                 style={[
                   styles.rewardsSummary,
@@ -339,6 +344,40 @@ export default function CartScreen() {
               </View>
             )}
 
+            {isAuthenticated &&
+              membership?.roleEligible &&
+              !membership.joined &&
+              rewardEligibleItems.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => router.push("/rewards" as any)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Adhérer volontairement à LamakoRewards"
+                  style={[
+                    styles.rewardsSummary,
+                    { backgroundColor: "#fdf6ee", borderColor: "#e8d5a3" },
+                  ]}
+                >
+                  <View style={styles.rewardsRow}>
+                    <View style={styles.rewardsIcon}>
+                      <IconSymbol name="star.fill" size={16} color="#fff" />
+                    </View>
+                    <View style={styles.rewardsContent}>
+                      <Text style={styles.rewardsTitle}>
+                        Adhérez volontairement à LamakoRewards
+                      </Text>
+                      <Text style={styles.rewardsBonus}>
+                        Consultez les règles avant de rejoindre le programme.
+                      </Text>
+                    </View>
+                    <IconSymbol
+                      name="chevron.right"
+                      size={16}
+                      color="#b45309"
+                    />
+                  </View>
+                </TouchableOpacity>
+              )}
+
             {/* Not logged in - encourage login for rewards */}
             {!isAuthenticated && rewardEligibleItems.length > 0 && (
               <TouchableOpacity
@@ -354,11 +393,11 @@ export default function CartScreen() {
                   </View>
                   <View style={styles.rewardsContent}>
                     <Text style={styles.rewardsTitle}>
-                      Connectez-vous pour gagner des{" "}
+                      Connectez-vous pour découvrir{" "}
                       <Text style={styles.rewardsPoints}>LamakoRewards</Text>
                     </Text>
                     <Text style={styles.rewardsBonus}>
-                      1 point par 1 000 Ar dépensé
+                      L'adhésion au programme reste volontaire.
                     </Text>
                   </View>
                   <IconSymbol name="chevron.right" size={16} color="#b45309" />
