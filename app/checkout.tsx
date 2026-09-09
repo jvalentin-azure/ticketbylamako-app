@@ -198,9 +198,18 @@ export default function CheckoutScreen() {
         setCheckoutFields(null);
         if (hasTicketCheckoutFields) {
           setErrorSource("fields");
-          setErrorMessage(
-            "Impossible de charger les champs requis pour ce billet. Veuillez réessayer.",
-          );
+          if (
+            error?.code === "lamako_v2_event_ended" ||
+            error?.code === "lamako_v2_ticket_sales_closed"
+          ) {
+            setErrorMessage(
+              "Un billet de votre panier concerne un événement terminé ou une vente fermée. Retirez-le du panier avant de continuer.",
+            );
+          } else {
+            setErrorMessage(
+              "Impossible de charger les informations requises pour ce billet. Veuillez réessayer.",
+            );
+          }
           setPhase("error");
         }
       })
@@ -283,7 +292,7 @@ export default function CheckoutScreen() {
         )
       ) {
         throw new Error(
-          "Un ou plusieurs billets ne sont plus disponibles. Supprimez-les avant de continuer.",
+          "Un ou plusieurs articles ne sont plus disponibles. Supprimez-les avant de continuer.",
         );
       }
       if (items.some((item) => item.seatLabel)) {

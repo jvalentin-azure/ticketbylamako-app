@@ -157,10 +157,13 @@ export function OrderSummary({
 }) {
   const subtotal = Number(order.subtotal || order.total || 0);
   const discount = Number(order.discountTotal || 0);
-  const ticketCount = (order.items || []).reduce(
+  const itemCount = (order.items || []).reduce(
     (total, item) => total + Number(item.quantity || 0),
     0,
   );
+  const allItemsAreTickets =
+    (order.items || []).length > 0 &&
+    (order.items || []).every((item) => item.isTicket !== false);
   return (
     <View
       style={[
@@ -185,47 +188,55 @@ export function OrderSummary({
         >
           <IconSymbol name="ticket.fill" size={17} color={colors.primary} />
           <Text style={[styles.ticketCountText, { color: colors.primary }]}>
-            {ticketCount} billet{ticketCount > 1 ? "s" : ""}
+            {allItemsAreTickets
+              ? `${itemCount} billet${itemCount > 1 ? "s" : ""}`
+              : `${itemCount} article${itemCount > 1 ? "s" : ""}`}
           </Text>
         </View>
       </View>
-      {order.items?.map((item) => (
-        <View
-          key={item.id}
-          style={[
-            styles.itemRow,
-            { backgroundColor: colors.background, borderColor: colors.border },
-          ]}
-        >
+      {order.items?.map((item) => {
+        const isTicket = item.isTicket !== false;
+        return (
           <View
-            style={[styles.itemAccent, { backgroundColor: colors.primary }]}
-          />
-          <View style={styles.itemCopy}>
-            <Text style={[styles.itemType, { color: colors.primary }]}>BILLET</Text>
-            <Text style={[styles.itemName, { color: colors.foreground }]}>
-              {item.name}
+            key={item.id}
+            style={[
+              styles.itemRow,
+              { backgroundColor: colors.background, borderColor: colors.border },
+            ]}
+          >
+            <View
+              style={[styles.itemAccent, { backgroundColor: colors.primary }]}
+            />
+            <View style={styles.itemCopy}>
+              <Text style={[styles.itemType, { color: colors.primary }]}>
+                {isTicket ? "BILLET" : "PRODUIT"}
+              </Text>
+              <Text style={[styles.itemName, { color: colors.foreground }]}>
+                {item.name}
+              </Text>
+              <Text style={[styles.itemQty, { color: colors.muted }]}>
+                {item.quantity} {isTicket ? "billet" : "article"}
+                {item.quantity > 1 ? "s" : ""}
+              </Text>
+              {item.seatLabels?.length ? (
+                <View style={styles.seatRow}>
+                  <IconSymbol
+                    name="chair.fill"
+                    size={14}
+                    color={colors.primary}
+                  />
+                  <Text style={[styles.seatText, { color: colors.primary }]}>
+                    {item.seatLabels.join(", ")}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            <Text style={[styles.itemPrice, { color: colors.foreground }]}>
+              {formatAriary(Number(item.total || 0))}
             </Text>
-            <Text style={[styles.itemQty, { color: colors.muted }]}>
-              {item.quantity} billet{item.quantity > 1 ? "s" : ""}
-            </Text>
-            {item.seatLabels?.length ? (
-              <View style={styles.seatRow}>
-                <IconSymbol
-                  name="chair.fill"
-                  size={14}
-                  color={colors.primary}
-                />
-                <Text style={[styles.seatText, { color: colors.primary }]}>
-                  {item.seatLabels.join(", ")}
-                </Text>
-              </View>
-            ) : null}
           </View>
-          <Text style={[styles.itemPrice, { color: colors.foreground }]}>
-            {formatAriary(Number(item.total || 0))}
-          </Text>
-        </View>
-      ))}
+        );
+      })}
       <View style={[styles.totalBlock, { borderTopColor: colors.border }]}>
         <SummaryLine
           label="Sous-total"

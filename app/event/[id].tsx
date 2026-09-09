@@ -44,11 +44,23 @@ const { width: SCREEN_W } = Dimensions.get("window");
 type EventDetailsTab = "description" | "location" | "conditions";
 
 function isEventSalesClosed(event?: TCEvent | null) {
-  return (
+  if (
     event?.salesClosed === true ||
     event?.isPastEvent === true ||
     event?.ticketingStatus === "ended"
-  );
+  ) {
+    return true;
+  }
+
+  const rawDate =
+    event?.mobileFields?.event_end_date_time ||
+    event?.mobileFields?.event_date_time;
+  if (!rawDate) return false;
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(rawDate)
+    ? `${rawDate}T23:59:59`
+    : rawDate.replace(" ", "T");
+  const timestamp = Date.parse(normalized);
+  return Number.isFinite(timestamp) && timestamp < Date.now();
 }
 
 function isTicketAvailable(ticket?: TicketType | null) {

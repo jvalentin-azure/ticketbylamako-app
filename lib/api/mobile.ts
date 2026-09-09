@@ -264,6 +264,8 @@ export interface MobileOrderItem {
   price?: number;
   sku?: string;
   seatLabels?: string[];
+  isTicket?: boolean;
+  isSeating?: boolean;
 }
 
 export interface MobileOrderSummary {
