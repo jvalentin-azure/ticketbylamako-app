@@ -40,8 +40,8 @@ define( 'LR_TIER_GOLD', 2000 );
 define( 'LR_TIER_PLATINUM', 5000 );
 define( 'LR_TIER_DIAMOND', 10000 );
 
-// Redemption minimum: 750 pts lifetime = 750 000 Ar spent (independent of tier)
-define( 'LR_REDEMPTION_MIN_LIFETIME', 750 );
+// Redemption minimum aligned with the public Rewards configuration.
+define( 'LR_REDEMPTION_MIN_LIFETIME', 500 );
 
 // Points configuration
 define( 'LR_POINTS_PER_1000AR', 1 );
@@ -954,7 +954,7 @@ function lr_api_get_balance( $request ) {
 }
 
 function lr_get_discount_percent( $tier ) {
-    // No automatic discount - rewards are experiential (early access, upgrades, backstage)
+    // No automatic discount. Benefits remain conditional on participating offers.
     // Discounts come from redeeming points only
     return 0;
 }
@@ -1134,7 +1134,7 @@ function lr_api_get_tiers( $request ) {
                 'min_points' => LR_TIER_PLATINUM,
                 'discount' => 0,
                 'multiplier' => LR_MULTIPLIER_PLATINUM,
-                'benefits' => array( 'x1.5 points sur chaque achat', 'Surclassement de billets', 'Accès VIP aux événements', 'Support dédié' ),
+                'benefits' => array( 'x1.5 points sur chaque achat éligible', 'Surclassements selon disponibilité', 'Accès VIP selon disponibilité', 'Support dédié selon disponibilité' ),
             ),
             array(
                 'id' => 'diamond',
@@ -1142,7 +1142,7 @@ function lr_api_get_tiers( $request ) {
                 'min_points' => LR_TIER_DIAMOND,
                 'discount' => 0,
                 'multiplier' => LR_MULTIPLIER_DIAMOND,
-                'benefits' => array( 'x2 points sur chaque achat', 'Accès backstage', 'Meet & greet artistes', 'Conciergerie événementielle', 'Surclassement automatique', 'Invitations privées' ),
+                'benefits' => array( 'x2 points sur chaque achat éligible', 'Expériences exclusives selon disponibilité', 'Expériences spéciales selon disponibilité', 'Conciergerie événementielle selon disponibilité', 'Invitations privées selon disponibilité' ),
             ),
         ),
         'earn_rules' => array(
@@ -1595,7 +1595,7 @@ function lr_shortcode_checkout_popup() {
             <button onclick="document.getElementById('lr-checkout-popup').style.display='none'" style="position:absolute; top:12px; right:16px; background:none; border:none; font-size:1.5em; cursor:pointer;">&times;</button>
             <img src="https://www.ticketbylamako.com/wp-content/uploads/2026/04/LamakoRewards_Dark.png" alt="LamakoRewards" style="height:40px; width:auto; margin-bottom:16px;">
             <h3 style="margin-bottom:8px; font-family:Raleway,-apple-system,sans-serif; color:#3d2314;">Rejoignez LamakoRewards !</h3>
-            <p style="color:#666; font-size:0.9em; margin-bottom:16px; font-family:Raleway,-apple-system,sans-serif;">Créez un compte et gagnez <strong>50 points bonus</strong> + des points sur cet achat. Échangez-les contre du <strong>cashback</strong> !</p>
+            <p style="color:#666; font-size:0.9em; margin-bottom:16px; font-family:Raleway,-apple-system,sans-serif;">Créez votre compte puis choisissez de rejoindre LamakoRewards pour recevoir <strong>100 points de bienvenue</strong>. Les réductions sont disponibles sur les événements et offres participants.</p>
             <a href="<?php echo wp_registration_url(); ?>" style="display:block; background:linear-gradient(135deg,#3d2314,#663d17); color:white; padding:14px; border-radius:8px; text-decoration:none; font-weight:600; margin-bottom:8px; font-family:Raleway,-apple-system,sans-serif;">S'inscrire gratuitement</a>
             <button onclick="document.getElementById('lr-checkout-popup').style.display='none'" style="background:none; border:none; color:#666; cursor:pointer; font-size:0.9em; font-family:Raleway,-apple-system,sans-serif;">Non merci, continuer sans compte</button>
         </div>
