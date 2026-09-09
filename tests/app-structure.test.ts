@@ -102,4 +102,9 @@ describe("App Config", () => {
     expect(configContent).toContain("logoUrl:");
     expect(configContent).not.toContain('logoUrl: ""');
   });
+
+  it("targets the Google Play required Android API level", () => {
+    const configContent = fs.readFileSync(path.resolve(__dirname, "../app.config.ts"), "utf-8");
+    expect(configContent).toContain("targetSdkVersion: 36");
+  });
 });
