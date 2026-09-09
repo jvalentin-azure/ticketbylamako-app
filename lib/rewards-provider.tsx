@@ -127,16 +127,16 @@ export const EARN_RULES = {
   purchaseUnit: 1000, // Ar per point
   registrationBonus: 100,
   firstAppOpenBonus: 50,
-  profileCompleteBonus: 100, // complete profile
-  loginBonus: 2, // per day (max 1x/day) - conservative
-  firstPurchaseBonus: 200, // bonus on first purchase (like Otayo)
-  eventAttendanceBonus: 10, // scan at entry
-  reviewBonus: 15, // leave a review
+  profileCompleteBonus: 0, // retired from the public contract
+  loginBonus: 0, // retired from the public contract
+  firstPurchaseBonus: 0, // retired from the public contract
+  eventAttendanceBonus: 0, // retired from the public contract
+  reviewBonus: 0, // retired from the public contract
   referralBonus: 75, // when referee makes first purchase
   refereeBonus: 25, // bonus for the new user who used a referral code
-  birthdayBonus: 200, // annual birthday bonus (like Otayo)
-  shareBonus: 20, // share event on social media (like Otayo)
-  newsletterBonus: 100, // subscribe to newsletter
+  birthdayBonus: 0, // retired from the public contract
+  shareBonus: 0, // retired from the public contract
+  newsletterBonus: 0, // retired from the public contract
 };
 
 // ===== REDEMPTION RULES =====
@@ -146,6 +146,7 @@ export const REDEMPTION_TIERS = [
   { points: 500, value: 10000, label: "500 pts = 10 000 Ar" },
   { points: 1000, value: 20000, label: "1 000 pts = 20 000 Ar" },
   { points: 2000, value: 40000, label: "2 000 pts = 40 000 Ar" },
+  { points: 5000, value: 100000, label: "5 000 pts = 100 000 Ar" },
 ];
 
 export interface RewardsProgramConfig {

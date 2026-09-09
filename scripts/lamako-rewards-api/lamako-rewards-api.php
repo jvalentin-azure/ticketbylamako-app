@@ -3,7 +3,7 @@
  * Plugin Name: Lamako Rewards API
  * Plugin URI: https://www.ticketbylamako.com
  * Description: REST API for LamakoRewards loyalty program - points, tiers, referrals, redemption.
- * Version: 3.0.0
+ * Version: 3.1.0
  * Author: Lamako Events
  * Author URI: https://www.ticketbylamako.com
  * License: GPL v2 or later
@@ -39,22 +39,22 @@ define( 'LR_TIER_GOLD', 2000 );
 define( 'LR_TIER_PLATINUM', 5000 );
 define( 'LR_TIER_DIAMOND', 10000 );
 
-// Redemption minimum: 750 pts lifetime = 750 000 Ar spent (independent of tier)
-define( 'LR_REDEMPTION_MIN_LIFETIME', 750 );
+// Redemption minimum: 500 lifetime points and 500 available points.
+define( 'LR_REDEMPTION_MIN_LIFETIME', 500 );
 
 // Points configuration
 define( 'LR_POINTS_PER_1000AR', 1 );
 define( 'LR_REGISTRATION_BONUS', 100 );
-define( 'LR_PROFILE_BONUS', 100 );
-define( 'LR_LOGIN_BONUS', 2 );
-define( 'LR_FIRST_PURCHASE_BONUS', 200 );
-define( 'LR_ATTENDANCE_BONUS', 10 );
-define( 'LR_REVIEW_BONUS', 15 );
+define( 'LR_PROFILE_BONUS', 0 );
+define( 'LR_LOGIN_BONUS', 0 );
+define( 'LR_FIRST_PURCHASE_BONUS', 0 );
+define( 'LR_ATTENDANCE_BONUS', 0 );
+define( 'LR_REVIEW_BONUS', 0 );
 define( 'LR_REFERRAL_BONUS', 75 );
 define( 'LR_REFEREE_BONUS', 25 );
-define( 'LR_BIRTHDAY_BONUS', 200 );
-define( 'LR_SHARE_BONUS', 20 );
-define( 'LR_NEWSLETTER_BONUS', 100 );
+define( 'LR_BIRTHDAY_BONUS', 0 );
+define( 'LR_SHARE_BONUS', 0 );
+define( 'LR_NEWSLETTER_BONUS', 0 );
 
 // Tier multipliers (conservative: only high tiers get bonus)
 define( 'LR_MULTIPLIER_FAN', 1.0 );
@@ -178,6 +178,85 @@ function lr_get_next_tier( $tier ) {
         'diamond' => '',
     );
     return $next[ $tier ] ?? '';
+}
+
+function lr_rewards_minimum_redeem_points() {
+    return LR_REDEMPTION_MIN_LIFETIME;
+}
+
+function lr_rewards_redemption_options() {
+    return array(
+        array( 'points' => 500, 'amount_ariary' => 10000 ),
+        array( 'points' => 1000, 'amount_ariary' => 20000 ),
+        array( 'points' => 2000, 'amount_ariary' => 40000 ),
+        array( 'points' => 5000, 'amount_ariary' => 100000 ),
+    );
+}
+
+function lr_rewards_user_is_eligible( $user_id ) {
+    $user = get_userdata( (int) $user_id );
+    if ( ! $user ) return false;
+
+    $blocked_roles = array(
+        'administrator', 'editor', 'shop_manager', 'event_organizer',
+        'organizer', 'vendor', 'cashier', 'pos_staff', 'checkin_staff',
+    );
+
+    return count( array_intersect( $blocked_roles, (array) $user->roles ) ) === 0;
+}
+
+function lr_rewards_user_is_member( $user_id ) {
+    if ( ! lr_rewards_user_is_eligible( $user_id ) ) return false;
+
+    $joined = get_user_meta( (int) $user_id, '_lamako_rewards_joined', true );
+    if ( $joined !== '' ) return $joined === 'yes';
+
+    // Preserve existing customers as members while moving to explicit consent.
+    $earned = function_exists( 'lr_get_total_earned' )
+        ? (float) lr_get_total_earned( (int) $user_id )
+        : (float) get_user_meta( (int) $user_id, 'mycred_default_total', true );
+    return $earned > 0;
+}
+
+function lr_rewards_public_config( $platform = 'web' ) {
+    return apply_filters( 'lamako_rewards_public_config', array(
+        'version' => 4,
+        'platform' => sanitize_key( $platform ),
+        'program' => array(
+            'enabled' => true,
+            'membership' => 'voluntary',
+            'signup_bonus_points' => LR_REGISTRATION_BONUS,
+            'first_app_open_bonus_points' => 50,
+            'earn_rate' => array( 'points' => 1, 'amount_ariary' => 1000 ),
+            'minimum_redeem_points' => lr_rewards_minimum_redeem_points(),
+            'redemption_options' => lr_rewards_redemption_options(),
+            'referral' => array(
+                'referrer_points' => LR_REFERRAL_BONUS,
+                'referred_points' => LR_REFEREE_BONUS,
+            ),
+            'priority_lane' => array(
+                'enabled' => true,
+                'minimum_lifetime_points' => 500,
+                'event_activation_required' => true,
+            ),
+        ),
+        'popup' => array(
+            'mobile' => array(
+                'enabled' => true,
+                'audience' => 'guests',
+                'delay_seconds' => 12,
+                'frequency_days' => 7,
+                'max_impressions_per_user' => 3,
+                'cta_route' => '/rewards',
+            ),
+        ),
+        'copy' => array(
+            'earn_message' => '1 point par tranche de 1 000 Ar sur les achats eligibles confirmes.',
+            'redeem_message' => 'Echangez vos points contre une reduction sur les offres participantes.',
+            'minimum_redeem_message' => 'Les reductions Rewards sont disponibles des 500 points cumules et 500 points disponibles.',
+            'priority_lane_message' => 'File LamakoRewards disponible uniquement sur les evenements participants, selon activation et capacite.',
+        ),
+    ), $platform );
 }
 
 function lr_get_points_to_next_tier( $lifetime_points ) {
@@ -513,7 +592,7 @@ function lr_reverse_purchase_points_on_order_close( $order_id ) {
 // DAILY LOGIN BONUS
 // ============================================================
 
-add_action( 'wp_login', 'lr_daily_login_bonus', 10, 2 );
+// Daily-login points retired in Rewards contract v4.
 
 function lr_daily_login_bonus( $user_login, $user ) {
     $user_id = $user->ID;
@@ -533,7 +612,7 @@ function lr_daily_login_bonus( $user_login, $user ) {
 // REGISTRATION BONUS
 // ============================================================
 
-add_action( 'user_register', 'lr_registration_bonus', 10, 1 );
+// Enrollment bonus is awarded only after explicit LamakoRewards enrollment.
 
 function lr_registration_bonus( $user_id ) {
     // Generate referral code for new user
@@ -958,7 +1037,7 @@ function lr_api_get_tiers( $request ) {
 // ============================================================
 
 // [lamako_rewards_page] - Full rewards page
-add_shortcode( 'lamako_rewards_page', 'lr_shortcode_rewards_page' );
+add_shortcode( 'lamako_rewards_page', 'lr_shortcode_rewards_page_v4' );
 
 function lr_shortcode_rewards_page() {
     $logo_dark = 'https://www.ticketbylamako.com/wp-content/uploads/2026/04/LamakoRewards_Dark.png';
@@ -1352,6 +1431,68 @@ function lr_shortcode_rewards_page() {
     <?php
     return ob_get_clean();
 }
+
+function lr_rewards_terms_markup() {
+    ob_start();
+    ?>
+    <div class="lr-terms">
+        <h2>Conditions du programme LamakoRewards</h2>
+        <p class="lr-terms-version">Version en vigueur au 9 septembre 2026</p>
+        <div class="lr-terms-grid">
+            <article><h3>1. Adhésion</h3><p>L’adhésion est gratuite, volontaire et réservée aux clients disposant d’un compte personnel TicketByLamako. Les comptes administrateur, organisateur, Check-in, POS, vendeur, caisse ou tout autre compte technique ne sont pas éligibles.</p></article>
+            <article><h3>2. Acquisition</h3><p>Une adhésion validée donne droit une seule fois à 100 points. La première ouverture authentifiée de l’application mobile peut donner droit une seule fois à 50 points pendant la campagne active. Les achats éligibles confirmés rapportent 1 point par tranche entière de 1 000 Ar effectivement payée.</p></article>
+            <article><h3>3. Exclusions et corrections</h3><p>Les commandes annulées, échouées, remboursées, frauduleuses, de test ou non participantes ne génèrent pas de points. TicketByLamako peut corriger ou reprendre des points attribués à tort, notamment après remboursement.</p></article>
+            <article><h3>4. Utilisation</h3><p>L’échange est ouvert à partir de 500 points cumulés à vie et exige au moins le nombre de points disponibles correspondant au palier choisi. Les paliers sont 500 points pour 10 000 Ar, 1 000 pour 20 000 Ar, 2 000 pour 40 000 Ar et 5 000 pour 100 000 Ar.</p></article>
+            <article><h3>5. Nature des points</h3><p>Les points sont personnels, non cessibles, non remboursables, sans valeur monétaire et ne peuvent pas être convertis en espèces. Une réduction ne peut être utilisée que selon les conditions affichées au moment de la commande.</p></article>
+            <article><h3>6. Priority Lane</h3><p>À partir de 500 points cumulés, un membre peut être éligible à la file LamakoRewards sur un événement participant. Son activation, sa capacité, ses horaires et les contrôles de sécurité restent décidés par l’organisateur. Elle ne garantit ni admission, ni accès VIP, backstage, surclassement ou rencontre artiste.</p></article>
+            <article><h3>7. Durée et évolution</h3><p>Les niveaux reposent sur les points cumulés. TicketByLamako peut faire évoluer le programme pour l’avenir, avec une information claire des membres. Les opérations promotionnelles peuvent avoir une durée, un plafond et des critères particuliers affichés dans l’offre concernée.</p></article>
+            <article><h3>8. Fraude et suspension</h3><p>Tout abus, automatisation, compte multiple, fausse identité ou manipulation peut entraîner le refus d’une attribution, la reprise des points ou la suspension du compte, sans préjudice des autres recours applicables.</p></article>
+            <article><h3>9. Données personnelles</h3><p>Les données nécessaires au compte, au solde, aux opérations et à la prévention de la fraude sont traitées conformément à la politique de confidentialité TicketByLamako et aux droits applicables à la personne concernée.</p></article>
+            <article><h3>10. Assistance</h3><p>Pour toute question ou contestation, le membre peut contacter TicketByLamako depuis la rubrique d’assistance en indiquant son compte et, le cas échéant, la commande concernée.</p></article>
+        </div>
+        <p class="lr-terms-links"><a href="/conditions-generales-dutilisation/">Conditions générales</a><span>·</span><a href="/politique-de-confidentialite/">Politique de confidentialité</a><span>·</span><a href="/contact/">Assistance</a></p>
+    </div>
+    <?php
+    return ob_get_clean();
+}
+
+add_shortcode( 'lamako_rewards_terms', 'lr_rewards_terms_markup' );
+
+function lr_shortcode_rewards_page_v4() {
+    $logo = 'https://www.ticketbylamako.com/wp-content/uploads/2026/04/LamakoRewards_white.png';
+    ob_start();
+    ?>
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700;800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <main id="lamako-rewards-v4" class="lrv4">
+        <style>
+            .lrv4{--ink:#17120e;--cream:#fff8ec;--sun:#ffb000;--orange:#ff5c21;--lime:#d8ff4f;--line:rgba(23,18,14,.14);font-family:'Manrope',sans-serif;color:var(--ink);max-width:1240px;margin:0 auto;padding:18px;overflow:hidden}.lrv4 *{box-sizing:border-box}.lrv4 h1,.lrv4 h2,.lrv4 h3{font-family:'Bricolage Grotesque',sans-serif;letter-spacing:-.035em}.lrv4 a{text-decoration:none}.lrv4-hero{position:relative;min-height:610px;border-radius:36px;padding:46px;display:flex;align-items:flex-end;background:radial-gradient(circle at 82% 15%,rgba(216,255,79,.9) 0 7%,transparent 28%),radial-gradient(circle at 70% 60%,rgba(255,176,0,.85),transparent 31%),linear-gradient(145deg,#ff5c21 0%,#ef2d16 48%,#17120e 100%);color:#fff;isolation:isolate}.lrv4-hero:before,.lrv4-hero:after{content:'';position:absolute;border:1px solid rgba(255,255,255,.28);border-radius:50%;z-index:-1}.lrv4-hero:before{width:440px;height:440px;right:-80px;top:-100px}.lrv4-hero:after{width:640px;height:640px;right:-180px;top:-210px}.lrv4-logo{width:min(330px,70vw);margin-bottom:34px}.lrv4-kicker{display:inline-flex;padding:8px 13px;border:1px solid rgba(255,255,255,.45);border-radius:999px;font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em}.lrv4 h1{font-size:clamp(3.25rem,8vw,7.7rem);line-height:.86;max-width:900px;margin:18px 0 24px}.lrv4-lead{font-size:clamp(1rem,2vw,1.3rem);line-height:1.55;max-width:650px;margin:0 0 30px}.lrv4-actions{display:flex;gap:12px;flex-wrap:wrap}.lrv4-button{display:inline-flex;align-items:center;justify-content:center;min-height:52px;padding:0 22px;border-radius:14px;background:var(--lime);color:var(--ink);font-weight:800}.lrv4-button.alt{background:#fff;color:var(--ink)}.lrv4-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:24px;overflow:hidden;margin:18px 0 70px}.lrv4-stat{background:var(--cream);padding:27px}.lrv4-stat strong{display:block;font-family:'Bricolage Grotesque';font-size:clamp(1.7rem,3vw,2.8rem)}.lrv4-stat span{font-size:.83rem;color:#6f6258}.lrv4-section{margin:0 0 76px}.lrv4-head{display:grid;grid-template-columns:1fr 1fr;gap:30px;align-items:end;margin-bottom:26px}.lrv4-head h2{font-size:clamp(2.4rem,5vw,5.2rem);line-height:.95;margin:0}.lrv4-head p{max-width:540px;margin:0 0 7px;line-height:1.65;color:#6f6258}.lrv4-flow{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.lrv4-card{border:1px solid var(--line);border-radius:24px;padding:28px;background:#fff}.lrv4-card.accent{background:var(--ink);color:#fff}.lrv4-num{display:inline-grid;place-items:center;width:42px;height:42px;border-radius:50%;background:var(--sun);font-family:'Bricolage Grotesque';font-weight:800}.lrv4-card h3{font-size:1.7rem;margin:24px 0 10px}.lrv4-card p{line-height:1.65;margin:0;color:#6f6258}.lrv4-card.accent p{color:#d7cdc4}.lrv4-levels{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}.lrv4-level{position:relative;min-height:240px;border-radius:22px;padding:23px;background:#f5ecdf;border:1px solid var(--line);overflow:hidden}.lrv4-level:nth-child(2){background:#eceff2}.lrv4-level:nth-child(3){background:#ffc928}.lrv4-level:nth-child(4){background:#e6f0ef}.lrv4-level:nth-child(5){background:#17120e;color:#fff}.lrv4-level b{font-family:'Bricolage Grotesque';font-size:1.5rem}.lrv4-level em{display:block;font-style:normal;font-size:.78rem;margin:8px 0 35px}.lrv4-level p{font-size:.86rem;line-height:1.55;margin:0}.lrv4-redeem{display:grid;grid-template-columns:.9fr 1.1fr;border-radius:30px;overflow:hidden;background:var(--ink);color:#fff}.lrv4-redeem-copy{padding:45px}.lrv4-redeem-copy h2{font-size:clamp(2.7rem,5vw,5.5rem);line-height:.92;margin:0 0 22px}.lrv4-redeem-copy p{color:#d7cdc4;line-height:1.65}.lrv4-table{background:var(--lime);color:var(--ink);padding:28px;display:grid;align-content:center}.lrv4-row{display:flex;justify-content:space-between;gap:20px;padding:18px 7px;border-bottom:1px solid rgba(23,18,14,.22);font-weight:800}.lrv4-row:last-child{border:0}.lrv4-lane{background:linear-gradient(120deg,#ffb000,#ff5c21);border-radius:30px;padding:42px;display:grid;grid-template-columns:1fr 1fr;gap:30px}.lrv4-lane h2{font-size:clamp(2.7rem,5vw,5rem);line-height:.93;margin:0}.lrv4-lane p{line-height:1.7;margin:0}.lrv4-legal{border-top:1px solid var(--line);padding-top:45px}.lr-terms h2{font-size:clamp(2.2rem,4vw,4rem);margin:0}.lr-terms-version{color:#6f6258}.lr-terms-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:25px}.lr-terms article{border:1px solid var(--line);border-radius:18px;padding:22px}.lr-terms h3{font-size:1.12rem;margin:0 0 10px}.lr-terms article p{font-size:.9rem;line-height:1.65;color:#6f6258;margin:0}.lr-terms-links{display:flex;gap:12px;flex-wrap:wrap;margin-top:24px}.lr-terms-links a{color:var(--ink);font-weight:700;text-decoration:underline}@media(max-width:880px){.lrv4-hero{min-height:560px;padding:30px}.lrv4-strip{grid-template-columns:1fr 1fr}.lrv4-head,.lrv4-redeem,.lrv4-lane{grid-template-columns:1fr}.lrv4-flow{grid-template-columns:1fr}.lrv4-levels{grid-template-columns:1fr 1fr}.lr-terms-grid{grid-template-columns:1fr}}@media(max-width:520px){.lrv4{padding:10px}.lrv4-hero{border-radius:24px;padding:24px;min-height:590px}.lrv4 h1{font-size:3.3rem}.lrv4-strip,.lrv4-levels{grid-template-columns:1fr}.lrv4-redeem-copy,.lrv4-lane{padding:28px}.lrv4-stat{padding:20px}}
+        </style>
+        <section class="lrv4-hero">
+            <div><img class="lrv4-logo" src="<?php echo esc_url( $logo ); ?>" alt="LamakoRewards"><br><span class="lrv4-kicker">Vos sorties vous récompensent</span><h1>Plus de moments.<br>Plus de valeur.</h1><p class="lrv4-lead">Un programme simple et transparent: gagnez sur vos achats éligibles, suivez votre solde et utilisez vos points dès 500.</p><div class="lrv4-actions"><a class="lrv4-button" href="/mobile/rewards">Ouvrir LamakoRewards</a><a class="lrv4-button alt" href="/conditions-lamakorewards/">Voir les conditions</a></div></div>
+        </section>
+        <div class="lrv4-strip"><div class="lrv4-stat"><strong>+100</strong><span>à l’adhésion volontaire</span></div><div class="lrv4-stat"><strong>+50</strong><span>à la première ouverture de l’app</span></div><div class="lrv4-stat"><strong>1 / 1 000 Ar</strong><span>sur les achats éligibles confirmés</span></div><div class="lrv4-stat"><strong>500 pts</strong><span>premier palier d’échange</span></div></div>
+        <section class="lrv4-section"><div class="lrv4-head"><h2>Trois gestes.<br>Un vrai avantage.</h2><p>Pas de promesse floue: votre progression, vos opérations et vos réductions restent visibles depuis votre compte TicketByLamako.</p></div><div class="lrv4-flow"><article class="lrv4-card"><span class="lrv4-num">01</span><h3>Rejoignez</h3><p>Activez volontairement LamakoRewards depuis l’application et recevez votre bonus d’adhésion une seule fois.</p></article><article class="lrv4-card"><span class="lrv4-num">02</span><h3>Gagnez</h3><p>Chaque tranche entière de 1 000 Ar payée sur une offre participante rapporte 1 point, après confirmation de la commande.</p></article><article class="lrv4-card accent"><span class="lrv4-num">03</span><h3>Utilisez</h3><p>Dès 500 points cumulés et disponibles, choisissez votre palier puis appliquez la réduction à une commande éligible.</p></article></div></section>
+        <section class="lrv4-section"><div class="lrv4-head"><h2>Votre rythme.<br>Votre niveau.</h2><p>Les niveaux mesurent votre fidélité et déterminent votre multiplicateur sur les achats éligibles.</p></div><div class="lrv4-levels"><article class="lrv4-level"><b>Fan</b><em>0 point · x1</em><p>Solde, historique et accès au programme.</p></article><article class="lrv4-level"><b>Silver</b><em>500 points · x1</em><p>Échanges débloqués et éligibilité Priority Lane.</p></article><article class="lrv4-level"><b>Gold</b><em>2 000 points · x1,25</em><p>Multiplicateur renforcé sur les achats éligibles.</p></article><article class="lrv4-level"><b>Platinum</b><em>5 000 points · x1,5</em><p>Progression accélérée et file participante.</p></article><article class="lrv4-level"><b>Diamond</b><em>10 000 points · x2</em><p>Multiplicateur maximal, sans promesse VIP automatique.</p></article></div></section>
+        <section class="lrv4-section lrv4-redeem"><div class="lrv4-redeem-copy"><h2>Des points qui servent vraiment.</h2><p>Le taux est fixe: 20 Ar de réduction par point. Le palier choisi doit être disponible sur votre solde.</p></div><div class="lrv4-table"><div class="lrv4-row"><span>500 points</span><span>10 000 Ar</span></div><div class="lrv4-row"><span>1 000 points</span><span>20 000 Ar</span></div><div class="lrv4-row"><span>2 000 points</span><span>40 000 Ar</span></div><div class="lrv4-row"><span>5 000 points</span><span>100 000 Ar</span></div></div></section>
+        <section class="lrv4-section lrv4-lane"><h2>Priority Lane,<br>quand l’événement l’active.</h2><p>À partir de 500 points cumulés, votre statut peut ouvrir la file LamakoRewards sur les événements participants. L’organisateur conserve la capacité, les horaires, les contrôles de billet et de sécurité. Cette file ne remplace jamais les conditions d’admission.</p></section>
+        <section class="lrv4-section lrv4-legal"><?php echo lr_rewards_terms_markup(); ?></section>
+    </main>
+    <?php
+    return ob_get_clean();
+}
+
+function lr_rewards_document_title( $title ) {
+    return is_page( 'lamako-rewards' ) ? 'LamakoRewards | Gagnez et utilisez vos points' : $title;
+}
+function lr_rewards_meta_description( $description ) {
+    return is_page( 'lamako-rewards' ) ? 'LamakoRewards récompense vos achats éligibles et permet des réductions dès 500 points, avec Priority Lane sur les événements participants.' : $description;
+}
+add_filter( 'pre_get_document_title', 'lr_rewards_document_title', 50 );
+add_filter( 'wpseo_title', 'lr_rewards_document_title', 50 );
+add_filter( 'wpseo_metadesc', 'lr_rewards_meta_description', 50 );
+add_filter( 'wpseo_opengraph_desc', 'lr_rewards_meta_description', 50 );
+add_filter( 'rank_math/frontend/title', 'lr_rewards_document_title', 50 );
+add_filter( 'rank_math/frontend/description', 'lr_rewards_meta_description', 50 );
 
 // [lamako_rewards_cta] - Small CTA banner for existing pages
 add_shortcode( 'lamako_rewards_cta', 'lr_shortcode_cta' );

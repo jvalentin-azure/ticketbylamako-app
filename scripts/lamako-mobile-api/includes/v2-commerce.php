@@ -294,6 +294,25 @@ function lamako_mobile_v2_register_routes() {
         'permission_callback' => '__return_true',
     ] );
 
+    register_rest_route( $namespace, '/rewards/membership', [
+        [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => 'lamako_mobile_v2_rewards_membership',
+            'permission_callback' => 'lamako_mobile_v2_require_user',
+        ],
+        [
+            'methods'             => 'PATCH',
+            'callback'            => 'lamako_mobile_v2_update_rewards_membership',
+            'permission_callback' => 'lamako_mobile_v2_require_user',
+        ],
+    ] );
+
+    register_rest_route( $namespace, '/rewards/engagement/first-app-open', [
+        'methods'             => WP_REST_Server::CREATABLE,
+        'callback'            => 'lamako_mobile_v2_rewards_first_app_open',
+        'permission_callback' => 'lamako_mobile_v2_require_user',
+    ] );
+
     register_rest_route( $namespace, '/rewards/history', [
         'methods'             => WP_REST_Server::READABLE,
         'callback'            => 'lamako_mobile_v2_rewards_history',
@@ -6206,6 +6225,80 @@ function lamako_mobile_v2_unregister_push_token( WP_REST_Request $request ) {
     ] );
 }
 
+function lamako_mobile_v2_rewards_role_eligible( $user_id ) {
+    if ( function_exists( 'lr_rewards_user_is_eligible' ) ) {
+        return lr_rewards_user_is_eligible( $user_id );
+    }
+    $user = get_userdata( (int) $user_id );
+    if ( ! $user ) return false;
+    $blocked = [ 'administrator', 'editor', 'shop_manager', 'event_organizer', 'organizer', 'vendor', 'cashier', 'pos_staff', 'checkin_staff' ];
+    return count( array_intersect( $blocked, (array) $user->roles ) ) === 0;
+}
+
+function lamako_mobile_v2_rewards_joined( $user_id ) {
+    if ( function_exists( 'lr_rewards_user_is_member' ) ) {
+        return lr_rewards_user_is_member( $user_id );
+    }
+    $joined = get_user_meta( (int) $user_id, '_lamako_rewards_joined', true );
+    if ( $joined !== '' ) return $joined === 'yes';
+    $earned = function_exists( 'lr_get_total_earned' ) ? (float) lr_get_total_earned( $user_id ) : (float) get_user_meta( $user_id, 'mycred_default_total', true );
+    return $earned > 0;
+}
+
+function lamako_mobile_v2_rewards_membership() {
+    $user_id = get_current_user_id();
+    $joined_at = (string) get_user_meta( $user_id, '_lamako_rewards_joined_at', true );
+    return rest_ensure_response( [
+        'roleEligible' => lamako_mobile_v2_rewards_role_eligible( $user_id ),
+        'joined'       => lamako_mobile_v2_rewards_joined( $user_id ),
+        'joinedAt'     => $joined_at,
+    ] );
+}
+
+function lamako_mobile_v2_update_rewards_membership( WP_REST_Request $request ) {
+    $user_id = get_current_user_id();
+    if ( ! lamako_mobile_v2_rewards_role_eligible( $user_id ) ) {
+        return new WP_Error( 'lamako_v2_rewards_role_ineligible', 'This account is not eligible for LamakoRewards.', [ 'status' => 403 ] );
+    }
+    $body = $request->get_json_params();
+    $body = is_array( $body ) ? $body : [];
+    $joined = rest_sanitize_boolean( $body['joined'] ?? false );
+    $was_joined = lamako_mobile_v2_rewards_joined( $user_id );
+    $joined_at = (string) get_user_meta( $user_id, '_lamako_rewards_joined_at', true );
+
+    if ( $joined ) {
+        if ( $joined_at === '' ) $joined_at = current_time( 'mysql', true );
+        update_user_meta( $user_id, '_lamako_rewards_joined', 'yes' );
+        update_user_meta( $user_id, '_lamako_rewards_joined_at', $joined_at );
+        if ( ! $was_joined && ! get_user_meta( $user_id, '_lamako_rewards_signup_bonus_awarded', true ) && function_exists( 'mycred_add' ) ) {
+            if ( mycred_add( 'registration', $user_id, 100, 'Bonus adhesion LamakoRewards' ) ) {
+                update_user_meta( $user_id, '_lamako_rewards_signup_bonus_awarded', current_time( 'mysql', true ) );
+            }
+        }
+    } else {
+        update_user_meta( $user_id, '_lamako_rewards_joined', 'no' );
+    }
+
+    return rest_ensure_response( [ 'roleEligible' => true, 'joined' => $joined, 'joinedAt' => $joined ? $joined_at : '' ] );
+}
+
+function lamako_mobile_v2_rewards_first_app_open() {
+    $user_id = get_current_user_id();
+    if ( ! lamako_mobile_v2_rewards_role_eligible( $user_id ) || ! lamako_mobile_v2_rewards_joined( $user_id ) ) {
+        return new WP_Error( 'lamako_v2_rewards_membership_required', 'Active LamakoRewards membership is required.', [ 'status' => 403 ] );
+    }
+    $meta_key = '_lamako_rewards_first_app_open_2026_v1';
+    if ( get_user_meta( $user_id, $meta_key, true ) ) {
+        return rest_ensure_response( [ 'success' => true, 'awarded' => false, 'alreadyAwarded' => true, 'points' => 50 ] );
+    }
+    if ( ! function_exists( 'mycred_add' ) ) {
+        return new WP_Error( 'lamako_v2_mycred_missing', 'myCred is not available.', [ 'status' => 500 ] );
+    }
+    $awarded = (bool) mycred_add( 'first_app_open', $user_id, 50, 'Bonus premiere ouverture application TicketByLamako' );
+    if ( $awarded ) update_user_meta( $user_id, $meta_key, current_time( 'mysql', true ) );
+    return rest_ensure_response( [ 'success' => $awarded, 'awarded' => $awarded, 'alreadyAwarded' => false, 'points' => 50 ] );
+}
+
 function lamako_mobile_v2_rewards_balance() {
     $user_id = get_current_user_id();
     if ( ! function_exists( 'mycred_get_users_balance' ) ) {
@@ -6224,7 +6317,7 @@ function lamako_mobile_v2_rewards_balance() {
         'tierName'         => function_exists( 'lr_get_tier_name' ) ? lr_get_tier_name( $tier ) : ucfirst( $tier ),
         'nextTier'         => function_exists( 'lr_get_next_tier' ) ? lr_get_next_tier( $tier ) : '',
         'pointsToNextTier' => function_exists( 'lr_get_points_to_next_tier' ) ? lr_get_points_to_next_tier( $total ) : 0,
-        'canRedeem'        => defined( 'LR_REDEMPTION_MIN_LIFETIME' ) ? $total >= LR_REDEMPTION_MIN_LIFETIME : false,
+        'canRedeem'        => lamako_mobile_v2_rewards_joined( $user_id ) && $total >= 500 && $balance >= 500,
     ] );
 }
 
@@ -6243,10 +6336,12 @@ function lamako_mobile_v2_rewards_config( WP_REST_Request $request ) {
                 'points' => 1,
                 'amount_ariary' => 1000,
             ],
-            'minimum_redeem_points' => 750,
+            'minimum_redeem_points' => 500,
             'redemption_options' => [
+                [ 'points' => 500, 'amount_ariary' => 10000 ],
                 [ 'points' => 1000, 'amount_ariary' => 20000 ],
                 [ 'points' => 2000, 'amount_ariary' => 40000 ],
+                [ 'points' => 5000, 'amount_ariary' => 100000 ],
             ],
             'referral' => [
                 'referrer_points' => 75,
@@ -6266,7 +6361,7 @@ function lamako_mobile_v2_rewards_config( WP_REST_Request $request ) {
         'copy' => [
             'earn_message' => 'Gagnez des points sur vos achats eligibles.',
             'redeem_message' => 'Utilisez vos points sur les evenements et offres participants Lamako Rewards.',
-            'minimum_redeem_message' => 'Les reductions Rewards sont debloquees a partir de 750 points.',
+            'minimum_redeem_message' => 'Les reductions Rewards sont debloquees a partir de 500 points cumules et disponibles.',
         ],
     ] );
 }
@@ -6451,7 +6546,11 @@ function lamako_mobile_v2_rewards_redeem( WP_REST_Request $request ) {
     $user_id = get_current_user_id();
     $points  = absint( $body['points'] ?? 0 );
 
-    $minimum_redeem_points = function_exists( 'lr_rewards_minimum_redeem_points' ) ? lr_rewards_minimum_redeem_points() : 750;
+    if ( ! lamako_mobile_v2_rewards_role_eligible( $user_id ) || ! lamako_mobile_v2_rewards_joined( $user_id ) ) {
+        return new WP_Error( 'lamako_v2_rewards_membership_required', 'Active LamakoRewards membership is required.', [ 'status' => 403 ] );
+    }
+
+    $minimum_redeem_points = function_exists( 'lr_rewards_minimum_redeem_points' ) ? lr_rewards_minimum_redeem_points() : 500;
     $valid_tiers = [];
     if ( function_exists( 'lr_rewards_redemption_options' ) ) {
         foreach ( lr_rewards_redemption_options() as $option ) {
@@ -6477,7 +6576,7 @@ function lamako_mobile_v2_rewards_redeem( WP_REST_Request $request ) {
 
     $balance = mycred_get_users_balance( $user_id );
     if ( $balance < $minimum_redeem_points ) {
-        return new WP_Error( 'lamako_v2_rewards_minimum_balance_required', 'Rewards redemption requires at least 750 available points.', [ 'status' => 403 ] );
+        return new WP_Error( 'lamako_v2_rewards_minimum_balance_required', 'Rewards redemption requires at least 500 available points.', [ 'status' => 403 ] );
     }
     if ( $balance < $points ) {
         return new WP_Error( 'lamako_v2_insufficient_points', 'Insufficient rewards balance.', [ 'status' => 400 ] );
