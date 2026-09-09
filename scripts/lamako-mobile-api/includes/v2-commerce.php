@@ -1290,8 +1290,46 @@ function lamako_mobile_v2_public_event_mobile_fields( $event_id, $include_detail
     ] );
 }
 
+function lamako_mobile_v2_event_has_ended( $event_id ) {
+    $event_id = absint( $event_id );
+    if ( $event_id <= 0 ) {
+        return false;
+    }
+
+    $end_value = lamako_mobile_v2_meta_first(
+        $event_id,
+        [ 'event_end_date_time', '_event_end_date_time', 'event_end_date', '_event_end_date' ],
+        ''
+    );
+    $value = is_scalar( $end_value ) ? trim( (string) $end_value ) : '';
+    if ( '' === $value ) {
+        $start_value = lamako_mobile_v2_meta_first(
+            $event_id,
+            [ 'event_date_time', '_event_date_time', 'event_start_date', '_event_start_date' ],
+            ''
+        );
+        $value = is_scalar( $start_value ) ? trim( (string) $start_value ) : '';
+    }
+    if ( '' === $value ) {
+        return false;
+    }
+
+    if ( preg_match( '/^\d{4}-\d{2}-\d{2}$/', $value ) ) {
+        $value .= ' 23:59:59';
+    }
+
+    try {
+        $event_end = new DateTimeImmutable( $value, wp_timezone() );
+    } catch ( Exception $exception ) {
+        return false;
+    }
+
+    return $event_end->getTimestamp() < current_datetime()->getTimestamp();
+}
+
 function lamako_mobile_v2_public_event_summary( WP_Post $event, array $ticket_map, $include_details = true ) {
     $event_id = $event->ID;
+    $event_has_ended = lamako_mobile_v2_event_has_ended( $event_id );
     $terms = wp_get_post_terms( $event_id, 'event_category', [ 'fields' => 'all' ] );
     $category_ids = [];
     $category_names = [];
@@ -1331,6 +1369,10 @@ function lamako_mobile_v2_public_event_summary( WP_Post $event, array $ticket_ma
         'mobileFields'    => lamako_mobile_v2_public_event_mobile_fields( $event_id, $include_details ),
         'lamako_rewards_enabled' => lamako_mobile_v2_rewards_redeem_enabled( $event_id ),
         'rewardsRedeemEnabled' => lamako_mobile_v2_rewards_redeem_enabled( $event_id ),
+        'isPastEvent'     => $event_has_ended,
+        'salesClosed'     => $event_has_ended,
+        'ticketingStatus' => $event_has_ended ? 'ended' : 'available',
+        'ticketingMessage'=> $event_has_ended ? 'Cet evenement est termine. La billetterie est fermee.' : '',
         'tickets'         => $tickets,
         'minPrice'        => ! empty( $prices ) ? min( $prices ) : null,
         'maxPrice'        => ! empty( $prices ) ? max( $prices ) : null,
@@ -2257,6 +2299,10 @@ function lamako_mobile_v2_validate_checkout_item( $raw_item, $index ) {
     if ( $is_ticket ) {
         if ( empty( $event_id ) || ! get_post( (int) $event_id ) ) {
             return new WP_Error( 'lamako_v2_ticket_event_missing', 'Ticket product is not linked to a valid event.', [ 'status' => 400 ] );
+        }
+
+        if ( lamako_mobile_v2_event_has_ended( (int) $event_id ) ) {
+            return new WP_Error( 'lamako_v2_event_ended', 'This event has ended and tickets can no longer be purchased.', [ 'status' => 409 ] );
         }
 
         if ( class_exists( '\Tickera\TC_Ticket' ) && method_exists( '\Tickera\TC_Ticket', 'is_sales_available' ) ) {
