@@ -18,8 +18,9 @@ const EARN_RULES = {
   newsletterBonus: 100,
 };
 
-const REDEMPTION_MIN_POINTS_LIFETIME = 750;
+const REDEMPTION_MIN_POINTS_LIFETIME = 500;
 const REDEMPTION_TIERS = [
+  { points: 500, value: 10000, label: "500 pts = 10 000 Ar" },
   { points: 1000, value: 20000, label: "1 000 pts = 20 000 Ar" },
   { points: 2000, value: 40000, label: "2 000 pts = 40 000 Ar" },
 ];
@@ -203,15 +204,21 @@ describe("LamakoRewards - Cart total points calculation", () => {
 });
 
 describe("LamakoRewards - Redemption logic", () => {
-  it("returns null if lifetime points below threshold (750)", () => {
-    expect(getBestRedemption(500, 600)).toBeNull();
-    expect(getBestRedemption(1000, 749)).toBeNull();
+  it("returns null if lifetime points are below the 500-point threshold", () => {
+    expect(getBestRedemption(500, 499)).toBeNull();
+    expect(getBestRedemption(1000, 499)).toBeNull();
   });
 
   it("returns best affordable tier when eligible", () => {
-    // Has 750 lifetime points, 1200 available points
-    const result = getBestRedemption(1200, 750);
+    const result = getBestRedemption(1200, 500);
     expect(result).toMatchObject({ points: 1000, value: 20000 });
+  });
+
+  it("allows the first redemption option at 500 points", () => {
+    expect(getBestRedemption(500, 500)).toMatchObject({
+      points: 500,
+      value: 10000,
+    });
   });
 
   it("returns highest affordable tier", () => {
@@ -221,15 +228,16 @@ describe("LamakoRewards - Redemption logic", () => {
   });
 
   it("returns null if not enough points for any tier", () => {
-    const result = getBestRedemption(300, 800); // eligible but below the first configured option
+    const result = getBestRedemption(300, 800); // eligible but below 500 available points
     expect(result).toBeNull();
   });
 
   it("getDiscountValue returns correct Ariary value", () => {
-    expect(getDiscountValue(1200, 750)).toBe(20000); // 1000 pts tier = 20,000 Ar
+    expect(getDiscountValue(500, 500)).toBe(10000); // 500 pts tier = 10,000 Ar
+    expect(getDiscountValue(1200, 500)).toBe(20000); // 1000 pts tier = 20,000 Ar
     expect(getDiscountValue(5000, 5000)).toBe(40000); // highest server option is 2,000 pts
     expect(getDiscountValue(300, 800)).toBe(0); // not enough for any tier
-    expect(getDiscountValue(1000, 500)).toBe(0); // lifetime too low
+    expect(getDiscountValue(1000, 499)).toBe(0); // lifetime too low
   });
 });
 
@@ -270,8 +278,8 @@ describe("LamakoRewards - REDEMPTION_TIERS value consistency", () => {
     }
   });
 
-  it("matches the server fallback: minimum option is 1,000 pts", () => {
-    expect(REDEMPTION_TIERS[0].points).toBe(1000);
-    expect(REDEMPTION_TIERS[0].value).toBe(20000);
+  it("matches the server fallback: minimum option is 500 pts", () => {
+    expect(REDEMPTION_TIERS[0].points).toBe(500);
+    expect(REDEMPTION_TIERS[0].value).toBe(10000);
   });
 });

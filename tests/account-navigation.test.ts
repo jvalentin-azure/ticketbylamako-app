@@ -29,6 +29,14 @@ const rewardsProvider = fs.readFileSync(
   path.join(root, "lib", "rewards-provider.tsx"),
   "utf8",
 );
+const mobileApi = fs.readFileSync(
+  path.join(root, "lib", "api", "mobile.ts"),
+  "utf8",
+);
+const checkout = fs.readFileSync(
+  path.join(root, "app", "checkout.tsx"),
+  "utf8",
+);
 const about = fs.readFileSync(path.join(root, "app", "about.tsx"), "utf8");
 const privacyData = fs.readFileSync(
   path.join(root, "app", "privacy-data.tsx"),
@@ -74,6 +82,33 @@ describe("account navigation and profile experience", () => {
     expect(rewardsProvider).toContain("history,");
     expect(rewardsProvider).toContain("getMobileRewardsConfig");
     expect(rewardsProvider).toContain("programConfig.redemptionTiers");
+  });
+
+  it("claims the native first-app-open campaign after authentication", () => {
+    expect(mobileApi).toContain('"rewards/engagement/first-app-open"');
+    expect(rewardsProvider).toContain("claimMobileFirstAppOpenBonus");
+    expect(rewardsProvider).toContain(
+      'Platform.OS === "ios" || Platform.OS === "android"',
+    );
+    expect(rewardsProvider).toContain(
+      "isAuthenticated && user?.id && !isLoading",
+    );
+  });
+
+  it("keeps redemption server-driven with a 500-point fallback", () => {
+    expect(rewardsProvider).toContain("REDEMPTION_MIN_POINTS_LIFETIME = 500");
+    expect(rewardsProvider).toContain(
+      '{ points: 500, value: 10000, label: "500 pts = 10 000 Ar" }',
+    );
+    expect(checkout).toContain("programConfig.redemptionTiers");
+    expect(checkout).not.toContain("750");
+  });
+
+  it("does not advertise unconfirmed LamakoRewards benefits", () => {
+    expect(rewardsProvider).toContain("Adhésion volontaire au programme");
+    expect(rewardsProvider).not.toContain("Accès backstage");
+    expect(rewardsProvider).not.toContain("Meet & greet artistes");
+    expect(rewardsProvider).not.toContain("Surclassement automatique");
   });
 
   it("uses the configured app version rather than stale screen constants", () => {

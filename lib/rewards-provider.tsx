@@ -21,8 +21,8 @@ import {
   validateMobileReferralCode,
 } from "@/lib/api/mobile";
 
-// ===== TIERS (based on Otayo, Live Nation, Ticketmaster benchmarks) =====
-// Conservative model: high thresholds, low cashback (2%), experiential rewards
+// ===== TIERS =====
+// Only expose benefits that are implemented and covered by the program rules.
 // Earn rate: 1 pt per 1,000 Ar spent
 // Average ticket: 50,000 Ar = 50 pts per event
 // Fan: 0 (free join)
@@ -54,7 +54,7 @@ export const TIERS: TierInfo[] = [
     discountPercent: 0,
     multiplier: 1,
     benefits: [
-      "Accès au programme de fidélité",
+      "Adhésion volontaire au programme",
       "1 point par 1 000 Ar dépensé",
       "Historique des points et transactions",
       "Code de parrainage personnel",
@@ -69,10 +69,9 @@ export const TIERS: TierInfo[] = [
     discountPercent: 0,
     multiplier: 1,
     benefits: [
-      "Réductions membres exclusives",
-      "Accès prioritaire aux préventes",
-      "Offres spéciales par notification",
-      "Support prioritaire WhatsApp",
+      "Seuil de 500 points atteint",
+      "Échange de points selon les options disponibles",
+      "Historique des points et transactions",
     ],
   },
   {
@@ -84,10 +83,9 @@ export const TIERS: TierInfo[] = [
     discountPercent: 0,
     multiplier: 1.25,
     benefits: [
-      "x1.25 points sur chaque achat",
-      "Invitations aux événements exclusifs",
-      "Early access aux nouvelles ventes",
-      "Cadeaux surprises aux événements",
+      "x1.25 points sur chaque achat éligible",
+      "File LamakoRewards sur les événements participants",
+      "Accès soumis à activation et capacité",
     ],
   },
   {
@@ -99,10 +97,9 @@ export const TIERS: TierInfo[] = [
     discountPercent: 0,
     multiplier: 1.5,
     benefits: [
-      "x1.5 points sur chaque achat",
-      "Surclassement de billets",
-      "Accès VIP aux événements",
-      "Support dédié",
+      "x1.5 points sur chaque achat éligible",
+      "File LamakoRewards sur les événements participants",
+      "Accès soumis à activation et capacité",
     ],
   },
   {
@@ -114,12 +111,9 @@ export const TIERS: TierInfo[] = [
     discountPercent: 0,
     multiplier: 2,
     benefits: [
-      "x2 points sur chaque achat",
-      "Accès backstage",
-      "Meet & greet artistes",
-      "Conciergerie événementielle",
-      "Surclassement automatique",
-      "Invitations privées",
+      "x2 points sur chaque achat éligible",
+      "File LamakoRewards sur les événements participants",
+      "Accès soumis à activation et capacité",
     ],
   },
 ];
