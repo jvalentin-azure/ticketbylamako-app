@@ -1681,25 +1681,80 @@ function lr_shortcode_cta( $atts ) {
 add_shortcode( 'lamako_rewards_checkout_popup', 'lr_shortcode_checkout_popup' );
 
 function lr_shortcode_checkout_popup() {
-    if ( is_user_logged_in() ) return ''; // Don't show to logged-in users
+    if ( is_user_logged_in() ) return '';
+
+    $delay = 12 * 1000;
+    $frequency = 7 * DAY_IN_SECONDS * 1000;
+    $max_impressions = 3;
+    $first_open_bonus = 50;
     ob_start();
     ?>
-    <div id="lr-checkout-popup" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.6); z-index:99999; align-items:center; justify-content:center;">
-        <div style="background:white; border-radius:16px; padding:32px; max-width:400px; width:90%; text-align:center; position:relative;">
-            <button onclick="document.getElementById('lr-checkout-popup').style.display='none'" style="position:absolute; top:12px; right:16px; background:none; border:none; font-size:1.5em; cursor:pointer;">&times;</button>
-            <img src="https://www.ticketbylamako.com/wp-content/uploads/2026/04/LamakoRewards_Dark.png" alt="LamakoRewards" style="height:40px; width:auto; margin-bottom:16px;">
-            <h3 style="margin-bottom:8px; font-family:Raleway,-apple-system,sans-serif; color:#3d2314;">Rejoignez LamakoRewards !</h3>
-            <p style="color:#666; font-size:0.9em; margin-bottom:16px; font-family:Raleway,-apple-system,sans-serif;">Créez votre compte puis choisissez de rejoindre LamakoRewards pour recevoir <strong>100 points de bienvenue</strong>. Les réductions sont disponibles sur les événements et offres participants.</p>
-            <a href="<?php echo wp_registration_url(); ?>" style="display:block; background:linear-gradient(135deg,#3d2314,#663d17); color:white; padding:14px; border-radius:8px; text-decoration:none; font-weight:600; margin-bottom:8px; font-family:Raleway,-apple-system,sans-serif;">S'inscrire gratuitement</a>
-            <button onclick="document.getElementById('lr-checkout-popup').style.display='none'" style="background:none; border:none; color:#666; cursor:pointer; font-size:0.9em; font-family:Raleway,-apple-system,sans-serif;">Non merci, continuer sans compte</button>
+    <style>
+        #lr-rewards-popup { display:none; position:fixed; inset:0; z-index:99999; align-items:center; justify-content:center; padding:20px; background:rgba(11,9,8,.78); }
+        #lr-rewards-popup.lr-rewards-popup--open { display:flex !important; visibility:visible !important; pointer-events:auto !important; }
+        #lr-rewards-popup .lr-rewards-popup__card { position:relative; width:min(100%,440px); max-height:calc(100vh - 32px); overflow:auto; padding:28px 24px 22px; border:1px solid rgba(255,255,255,.18); border-radius:24px; background:linear-gradient(145deg,#ff4b1f 0%,#ff7900 48%,#17120e 100%); color:#fff; box-shadow:0 24px 80px rgba(0,0,0,.42); font-family:Raleway,-apple-system,BlinkMacSystemFont,sans-serif; }
+        #lr-rewards-popup .lr-rewards-popup__close { position:absolute; top:12px; right:12px; width:38px; height:38px; border:1px solid rgba(255,255,255,.25); border-radius:50%; background:rgba(0,0,0,.28); color:#fff; font-size:24px; line-height:1; cursor:pointer; }
+        #lr-rewards-popup .lr-rewards-popup__close:focus-visible, #lr-rewards-popup .lr-rewards-popup__cta:focus-visible, #lr-rewards-popup .lr-rewards-popup__later:focus-visible { outline:3px solid #d8ff36; outline-offset:3px; }
+        #lr-rewards-popup .lr-rewards-popup__logo { width:142px; height:auto; margin:0 0 16px; }
+        #lr-rewards-popup .lr-rewards-popup__eyebrow { margin:0 0 8px; color:#e5ff67; font-size:11px; font-weight:800; letter-spacing:1.15px; }
+        #lr-rewards-popup h2 { max-width:360px; margin:0; color:#fff; font-size:clamp(28px,7vw,36px); line-height:1; letter-spacing:-1.1px; }
+        #lr-rewards-popup .lr-rewards-popup__copy { margin:13px 0 17px; color:#fff; font-size:14px; line-height:1.55; }
+        #lr-rewards-popup .lr-rewards-popup__facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1px; overflow:hidden; margin-bottom:18px; border-radius:14px; background:rgba(255,255,255,.2); }
+        #lr-rewards-popup .lr-rewards-popup__fact { min-height:72px; padding:12px 8px; background:rgba(20,14,10,.38); text-align:center; }
+        #lr-rewards-popup .lr-rewards-popup__fact strong { display:block; color:#e5ff67; font-size:16px; line-height:1.2; }
+        #lr-rewards-popup .lr-rewards-popup__fact span { display:block; margin-top:4px; color:#fff; font-size:10px; line-height:1.3; }
+        #lr-rewards-popup .lr-rewards-popup__cta { display:block; padding:14px 18px; border-radius:13px; background:#d8ff36; color:#17120e; text-align:center; text-decoration:none; font-weight:800; }
+        #lr-rewards-popup .lr-rewards-popup__later { display:block; width:100%; margin-top:7px; padding:10px; border:0; background:transparent; color:#fff; cursor:pointer; }
+        @media (max-width:480px) { #lr-rewards-popup { padding:12px; } #lr-rewards-popup .lr-rewards-popup__card { padding:24px 18px 18px; border-radius:20px; } #lr-rewards-popup .lr-rewards-popup__logo { width:124px; } }
+    </style>
+    <div id="lr-rewards-popup" aria-hidden="true">
+        <div class="lr-rewards-popup__card" role="dialog" aria-modal="true" aria-labelledby="lr-rewards-popup-title">
+            <button type="button" class="lr-rewards-popup__close" aria-label="Fermer">&times;</button>
+            <img class="lr-rewards-popup__logo" src="https://www.ticketbylamako.com/wp-content/uploads/2026/04/LamakoRewards_white.png" alt="LamakoRewards">
+            <p class="lr-rewards-popup__eyebrow">VOS SORTIES. VOTRE VALEUR.</p>
+            <h2 id="lr-rewards-popup-title">Des points qui servent vraiment.</h2>
+            <p class="lr-rewards-popup__copy">Activez gratuitement LamakoRewards et cumulez 1 point par tranche de 1 000 Ar sur vos achats eligibles.</p>
+            <div class="lr-rewards-popup__facts">
+                <div class="lr-rewards-popup__fact"><strong>+<?php echo esc_html( LR_REGISTRATION_BONUS ); ?></strong><span>a l'adhesion volontaire</span></div>
+                <div class="lr-rewards-popup__fact"><strong>+<?php echo esc_html( $first_open_bonus ); ?></strong><span>a la premiere ouverture</span></div>
+                <div class="lr-rewards-popup__fact"><strong><?php echo esc_html( LR_REDEMPTION_MIN_LIFETIME ); ?> pts</strong><span>premiere reduction</span></div>
+                <div class="lr-rewards-popup__fact"><strong>Priority Lane</strong><span>evenements participants</span></div>
+            </div>
+            <a class="lr-rewards-popup__cta" href="<?php echo esc_url( home_url( '/lamako-rewards/' ) ); ?>">Decouvrir LamakoRewards</a>
+            <button type="button" class="lr-rewards-popup__later">Continuer sans activer</button>
         </div>
     </div>
     <script>
     (function() {
-        setTimeout(function() {
-            var popup = document.getElementById('lr-checkout-popup');
-            if (popup) popup.style.display = 'flex';
-        }, 3000);
+        var popup = document.getElementById('lr-rewards-popup');
+        if (!popup) return;
+        var key = 'lamako_rewards_popup_v3';
+        var history = { impressions: 0, lastShownAt: 0 };
+        try { history = JSON.parse(window.localStorage.getItem(key) || 'null') || history; } catch (error) {}
+        if (history.impressions >= <?php echo wp_json_encode( $max_impressions ); ?> || Date.now() - history.lastShownAt < <?php echo wp_json_encode( $frequency ); ?>) return;
+
+        var previousFocus = null;
+        var closePopup = function() {
+            popup.classList.remove('lr-rewards-popup--open');
+            popup.setAttribute('aria-hidden', 'true');
+            document.documentElement.style.overflow = '';
+            if (previousFocus && typeof previousFocus.focus === 'function') previousFocus.focus();
+        };
+        popup.querySelector('.lr-rewards-popup__close').addEventListener('click', closePopup);
+        popup.querySelector('.lr-rewards-popup__later').addEventListener('click', closePopup);
+        popup.addEventListener('click', function(event) { if (event.target === popup) closePopup(); });
+        document.addEventListener('keydown', function(event) { if (event.key === 'Escape' && popup.classList.contains('lr-rewards-popup--open')) closePopup(); });
+
+        window.setTimeout(function() {
+            previousFocus = document.activeElement;
+            history.impressions += 1;
+            history.lastShownAt = Date.now();
+            try { window.localStorage.setItem(key, JSON.stringify(history)); } catch (error) {}
+            popup.classList.add('lr-rewards-popup--open');
+            popup.setAttribute('aria-hidden', 'false');
+            document.documentElement.style.overflow = 'hidden';
+            popup.querySelector('.lr-rewards-popup__close').focus();
+        }, <?php echo wp_json_encode( $delay ); ?>);
     })();
     </script>
     <?php
@@ -1773,18 +1828,25 @@ add_action( 'wp_footer', 'lr_checkout_page_popup' );
 
 function lr_checkout_page_popup() {
     if ( is_user_logged_in() ) return;
-    // Show on: checkout, cart, events, shop/boutique pages
+
+    $path = strtolower( (string) wp_parse_url( $_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH ) );
+    $excluded_prefixes = array(
+        '/lamako-rewards', '/my-account', '/mon-compte', '/connexion', '/inscription',
+        '/cart', '/panier', '/checkout', '/checkout-2', '/paiement', '/payment', '/order-pay',
+    );
+    foreach ( $excluded_prefixes as $excluded_prefix ) {
+        if ( 0 === strpos( $path, $excluded_prefix ) ) return;
+    }
+    if ( ( function_exists( 'is_checkout' ) && is_checkout() )
+        || ( function_exists( 'is_cart' ) && is_cart() )
+        || ( function_exists( 'is_account_page' ) && is_account_page() ) ) return;
+
     $is_target = false;
-    if ( function_exists( 'is_checkout' ) && is_checkout() ) $is_target = true;
-    if ( function_exists( 'is_cart' ) && is_cart() ) $is_target = true;
-    if ( is_page( 'checkout' ) || is_page( 'cart' ) || is_page( 'panier' ) ) $is_target = true;
-    if ( function_exists( 'is_shop' ) && is_shop() ) $is_target = true;
+    if ( is_front_page() || is_home() ) $is_target = true;
+    if ( ( function_exists( 'is_shop' ) && is_shop() ) || is_page( 'boutique' ) ) $is_target = true;
     if ( is_singular( 'tc_events' ) ) $is_target = true;
     if ( is_singular( 'product' ) ) $is_target = true;
     if ( is_post_type_archive( 'tc_events' ) ) $is_target = true;
-    // Fallback: check page ID directly
-    $page_id = get_queried_object_id();
-    if ( $page_id == wc_get_page_id( 'checkout' ) || $page_id == wc_get_page_id( 'cart' ) || $page_id == wc_get_page_id( 'shop' ) ) $is_target = true;
     if ( ! $is_target ) return;
     echo do_shortcode( '[lamako_rewards_checkout_popup]' );
 }
