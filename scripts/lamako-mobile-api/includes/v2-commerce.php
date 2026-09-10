@@ -6710,8 +6710,8 @@ function lamako_mobile_v2_rewards_config( WP_REST_Request $request ) {
                 [ 'points' => 2000, 'amount_ariary' => 40000 ],
             ],
             'referral' => [
-                'referrer_points' => 75,
-                'referred_points' => 25,
+                'referrer_points' => 0,
+                'referred_points' => 0,
             ],
         ],
         'popup' => [
