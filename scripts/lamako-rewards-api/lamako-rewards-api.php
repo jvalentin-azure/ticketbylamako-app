@@ -1760,7 +1760,7 @@ function lr_shortcode_checkout_popup() {
         }
 
         popupTimer = window.setTimeout(function() {
-            if (commerceStarted || document.querySelector('#fkcart-modal.fkcart-show, .fkcart-show, [role="dialog"][aria-modal="true"]')) return;
+            if (commerceStarted || document.querySelector('#fkcart-modal.fkcart-show, .fkcart-show, [role="dialog"][aria-modal="true"]:not(.lr-rewards-popup__card)')) return;
             previousFocus = document.activeElement;
             history.impressions += 1;
             history.lastShownAt = Date.now();
