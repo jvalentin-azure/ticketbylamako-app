@@ -840,6 +840,25 @@ export async function claimMobileFirstAppOpenBonus(): Promise<{
   });
 }
 
+export interface MobileRewardsMembershipResponse {
+  success: boolean;
+  active: boolean;
+  awarded: boolean;
+  alreadyActive: boolean;
+  points: number;
+  balance?: number;
+}
+
+export async function activateMobileRewardsMembership(): Promise<MobileRewardsMembershipResponse> {
+  return mobileV2Fetch<MobileRewardsMembershipResponse>(
+    "rewards/membership/activate",
+    {
+      method: "POST",
+      body: {},
+    },
+  );
+}
+
 export async function getMobileRewardsHistory(
   limit = 20,
 ): Promise<MobileRewardTransaction[]> {

@@ -6,10 +6,11 @@ import {
   StyleSheet,
   Image,
   RefreshControl,
+  Alert,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { goBackOrFallback } from "@/lib/navigation";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -17,6 +18,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useRewards, TIERS } from "@/lib/rewards-provider";
 import { useAuth } from "@/lib/auth-provider";
 import { LinearGradient } from "expo-linear-gradient";
+import { activateMobileRewardsMembership } from "@/lib/api/mobile";
 
 const rewardsLogoDark = require("@/assets/images/lamako-rewards-dark.png");
 const rewardsLogoWhite = require("@/assets/images/lamako-rewards-white.png");
@@ -26,6 +28,8 @@ export default function RewardsScreen() {
   const colorScheme = useColorScheme();
   const router = useRouter();
   const { isAuthenticated } = useAuth();
+  const [isActivating, setIsActivating] = useState(false);
+  const [membershipConfirmed, setMembershipConfirmed] = useState(false);
   const {
     state,
     programConfig,
@@ -54,6 +58,33 @@ export default function RewardsScreen() {
       year: "numeric",
     });
   };
+
+  const activateMembership = useCallback(async () => {
+    if (!isAuthenticated) {
+      router.push("/login");
+      return;
+    }
+    if (isActivating) return;
+    setIsActivating(true);
+    try {
+      const result = await activateMobileRewardsMembership();
+      setMembershipConfirmed(result.active);
+      await syncRewards();
+      Alert.alert(
+        "LamakoRewards activé",
+        result.awarded
+          ? `${result.points} points d'adhésion ont été ajoutés à votre solde.`
+          : "Votre adhésion LamakoRewards est déjà active.",
+      );
+    } catch (error: any) {
+      Alert.alert(
+        "Activation impossible",
+        error?.message || "Veuillez vérifier votre connexion puis réessayer.",
+      );
+    } finally {
+      setIsActivating(false);
+    }
+  }, [isAuthenticated, isActivating, router, syncRewards]);
 
   return (
     <ScreenContainer edges={["top", "left", "right"]}>
@@ -362,13 +393,46 @@ export default function RewardsScreen() {
           </View>
         </View>
 
+        <View
+          style={[
+            styles.membershipCard,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
+        >
+          <View style={styles.membershipFacts}>
+            <Text style={[styles.membershipFact, { color: colors.foreground }]}>+100 adhésion</Text>
+            <Text style={[styles.membershipFact, { color: colors.foreground }]}>+50 première ouverture</Text>
+            <Text style={[styles.membershipFact, { color: colors.foreground }]}>1 pt / 1 000 Ar</Text>
+          </View>
+          <Text style={[styles.membershipCopy, { color: colors.muted }]}>Adhésion gratuite et volontaire. Les points sont crédités uniquement sur les achats éligibles confirmés.</Text>
+          <TouchableOpacity
+            onPress={activateMembership}
+            disabled={isActivating || membershipConfirmed}
+            style={[
+              styles.membershipButton,
+              { backgroundColor: membershipConfirmed ? colors.success : colors.primary },
+              (isActivating || membershipConfirmed) && { opacity: 0.72 },
+            ]}
+          >
+            <Text style={styles.membershipButtonText}>
+              {membershipConfirmed
+                ? "LamakoRewards actif"
+                : isActivating
+                  ? "Activation..."
+                  : isAuthenticated
+                    ? "Activer LamakoRewards"
+                    : "Se connecter pour activer"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         <LinearGradient
           colors={["#12100D", "#342113", "#8B5E34"]}
           style={styles.priorityCard}
         >
           <View style={styles.priorityEyebrow}>
             <IconSymbol name="bolt.fill" size={14} color="#F6D69A" />
-            <Text style={styles.priorityEyebrowText}>NOUVEAU POUR LES MEMBRES GOLD+</Text>
+            <Text style={styles.priorityEyebrowText}>PRIORITY LANE DES 500 POINTS</Text>
           </View>
           <Text style={styles.priorityTitle}>Votre statut peut vous faire gagner du temps</Text>
           <Text style={styles.priorityCopy}>
@@ -459,8 +523,8 @@ export default function RewardsScreen() {
               Parrainage
             </Text>
             <Text style={[styles.referralDesc, { color: colors.muted }]}>
-              Partagez votre code et gagnez 75 pts quand un ami fait son premier
-              achat !
+              Partagez votre code avec vos proches. Les éventuels bonus sont
+              annoncés dans l'application avant leur activation.
             </Text>
             <View
               style={[
@@ -502,6 +566,12 @@ const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 40 },
   logoContainer: { alignItems: "center", marginBottom: 16 },
   rewardsLogo: { width: 200, height: 72 },
+  membershipCard: { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 16 },
+  membershipFacts: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  membershipFact: { fontSize: 12, fontWeight: "800" },
+  membershipCopy: { fontSize: 12, lineHeight: 18, marginTop: 10 },
+  membershipButton: { alignItems: "center", borderRadius: 12, marginTop: 14, paddingVertical: 12 },
+  membershipButtonText: { color: "#FFFFFF", fontSize: 14, fontWeight: "800" },
 
   // Points card
   pointsCard: { borderRadius: 20, padding: 24, marginBottom: 16 },

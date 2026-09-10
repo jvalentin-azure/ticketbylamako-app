@@ -85,9 +85,9 @@ export const TIERS: TierInfo[] = [
     color: "#FFD700",
     icon: "🌟",
     discountPercent: 0,
-    multiplier: 1.25,
+    multiplier: 1,
     benefits: [
-      "x1.25 points sur chaque achat",
+      "Progression Gold visible dans votre compte",
       "File prioritaire sur les événements participants",
       "Accès anticipé lorsqu'une vente le prévoit",
       "Offres ponctuelles annoncées dans l'application",
@@ -100,9 +100,9 @@ export const TIERS: TierInfo[] = [
     color: "#E5E4E2",
     icon: "💎",
     discountPercent: 0,
-    multiplier: 1.5,
+    multiplier: 1,
     benefits: [
-      "x1.5 points sur chaque achat",
+      "Progression Platinum visible dans votre compte",
       "File prioritaire sur les événements participants",
       "Opportunités VIP selon l'organisateur",
       "Support prioritaire pour le compte Rewards",
@@ -115,9 +115,9 @@ export const TIERS: TierInfo[] = [
     color: "#B9F2FF",
     icon: "💠",
     discountPercent: 0,
-    multiplier: 2,
+    multiplier: 1,
     benefits: [
-      "x2 points sur chaque achat",
+      "Progression Diamond visible dans votre compte",
       "File prioritaire sur les événements participants",
       "Expériences spéciales selon disponibilités",
       "Support prioritaire pour le compte Rewards",
@@ -132,16 +132,16 @@ export const EARN_RULES = {
   purchaseUnit: 1000, // Ar per point
   registrationBonus: 100,
   firstAppOpenBonus: 50, // one-time authenticated campaign, server-awarded only
-  profileCompleteBonus: 100, // complete profile
-  loginBonus: 2, // per day (max 1x/day) - conservative
-  firstPurchaseBonus: 200, // bonus on first purchase (like Otayo)
-  eventAttendanceBonus: 10, // scan at entry
-  reviewBonus: 15, // leave a review
-  referralBonus: 75, // when referee makes first purchase
-  refereeBonus: 25, // bonus for the new user who used a referral code
-  birthdayBonus: 200, // annual birthday bonus (like Otayo)
-  shareBonus: 20, // share event on social media (like Otayo)
-  newsletterBonus: 100, // subscribe to newsletter
+  profileCompleteBonus: 0,
+  loginBonus: 0,
+  firstPurchaseBonus: 0,
+  eventAttendanceBonus: 0,
+  reviewBonus: 0,
+  referralBonus: 0,
+  refereeBonus: 0,
+  birthdayBonus: 0,
+  shareBonus: 0,
+  newsletterBonus: 0,
 };
 
 // ===== REDEMPTION RULES =====
@@ -682,12 +682,12 @@ export function useRewards() {
 
 /**
  * Estimate points earned for a given price in Ariary.
- * Uses the user's current tier multiplier if available.
+ * Uses the fixed public rate. Tier progression never changes the earn rate.
  * Can be used outside of RewardsProvider (returns base points only).
  */
 export function estimatePointsForPrice(
   priceAr: number,
-  multiplier: number = 1,
+  _multiplier: number = 1,
   config: Pick<
     RewardsProgramConfig,
     "enabled" | "earnPoints" | "earnAmountAriary"
@@ -701,5 +701,5 @@ export function estimatePointsForPrice(
     return 0;
   }
   const baseUnits = Math.floor(priceAr / config.earnAmountAriary);
-  return Math.floor(baseUnits * config.earnPoints * multiplier);
+  return Math.floor(baseUnits * config.earnPoints);
 }
