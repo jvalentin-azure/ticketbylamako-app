@@ -18,7 +18,10 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useRewards, TIERS } from "@/lib/rewards-provider";
 import { useAuth } from "@/lib/auth-provider";
 import { LinearGradient } from "expo-linear-gradient";
-import { activateMobileRewardsMembership } from "@/lib/api/mobile";
+import {
+  activateMobileRewardsMembership,
+  claimMobileFirstAppOpenBonus,
+} from "@/lib/api/mobile";
 
 const rewardsLogoDark = require("@/assets/images/lamako-rewards-dark.png");
 const rewardsLogoWhite = require("@/assets/images/lamako-rewards-white.png");
@@ -69,11 +72,18 @@ export default function RewardsScreen() {
     try {
       const result = await activateMobileRewardsMembership();
       setMembershipConfirmed(result.active);
+      let firstOpenPoints = 0;
+      try {
+        const firstOpen = await claimMobileFirstAppOpenBonus();
+        firstOpenPoints = firstOpen.awarded ? firstOpen.points : 0;
+      } catch {
+        // Membership remains active; the idempotent claim will retry at startup.
+      }
       await syncRewards();
       Alert.alert(
         "LamakoRewards activé",
         result.awarded
-          ? `${result.points} points d'adhésion ont été ajoutés à votre solde.`
+          ? `${result.points + firstOpenPoints} points ont été ajoutés à votre solde.`
           : "Votre adhésion LamakoRewards est déjà active.",
       );
     } catch (error: any) {
