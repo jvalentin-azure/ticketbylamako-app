@@ -1730,6 +1730,8 @@ function lr_shortcode_checkout_popup() {
         if (!popup) return;
         var key = 'lamako_rewards_popup_v3';
         var history = { impressions: 0, lastShownAt: 0 };
+        var commerceStarted = false;
+        var popupTimer = 0;
         try { history = JSON.parse(window.localStorage.getItem(key) || 'null') || history; } catch (error) {}
         if (history.impressions >= <?php echo wp_json_encode( $max_impressions ); ?> || Date.now() - history.lastShownAt < <?php echo wp_json_encode( $frequency ); ?>) return;
 
@@ -1744,8 +1746,21 @@ function lr_shortcode_checkout_popup() {
         popup.querySelector('.lr-rewards-popup__later').addEventListener('click', closePopup);
         popup.addEventListener('click', function(event) { if (event.target === popup) closePopup(); });
         document.addEventListener('keydown', function(event) { if (event.key === 'Escape' && popup.classList.contains('lr-rewards-popup--open')) closePopup(); });
+        document.addEventListener('click', function(event) {
+            if (!event.target.closest('button.single_add_to_cart_button, .add_to_cart_button, [name="add-to-cart"]')) return;
+            commerceStarted = true;
+            window.clearTimeout(popupTimer);
+        }, true);
+        if (window.jQuery) {
+            window.jQuery(document.body).on('adding_to_cart added_to_cart', function() {
+                commerceStarted = true;
+                window.clearTimeout(popupTimer);
+                closePopup();
+            });
+        }
 
-        window.setTimeout(function() {
+        popupTimer = window.setTimeout(function() {
+            if (commerceStarted || document.querySelector('#fkcart-modal.fkcart-show, .fkcart-show, [role="dialog"][aria-modal="true"]')) return;
             previousFocus = document.activeElement;
             history.impressions += 1;
             history.lastShownAt = Date.now();
@@ -1843,10 +1858,6 @@ function lr_checkout_page_popup() {
 
     $is_target = false;
     if ( is_front_page() || is_home() ) $is_target = true;
-    if ( ( function_exists( 'is_shop' ) && is_shop() ) || is_page( 'boutique' ) ) $is_target = true;
-    if ( is_singular( 'tc_events' ) ) $is_target = true;
-    if ( is_singular( 'product' ) ) $is_target = true;
-    if ( is_post_type_archive( 'tc_events' ) ) $is_target = true;
     if ( ! $is_target ) return;
     echo do_shortcode( '[lamako_rewards_checkout_popup]' );
 }
