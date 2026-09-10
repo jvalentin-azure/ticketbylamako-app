@@ -754,6 +754,19 @@ function lr_get_order_rewardable_total( WC_Order $order ) {
     return max( 0, $total );
 }
 
+function lr_product_rewards_enabled( $product_id ) {
+    $product_id = absint( $product_id );
+    if ( ! $product_id ) return false;
+
+    $product = function_exists( 'wc_get_product' ) ? wc_get_product( $product_id ) : false;
+    $base_id = $product && $product->get_parent_id() ? $product->get_parent_id() : $product_id;
+    if ( ! lr_rewards_enabled_for_post( $base_id, true ) ) return false;
+
+    if ( 'yes' !== get_post_meta( $base_id, '_tc_is_ticket', true ) ) return true;
+    $event_id = absint( get_post_meta( $base_id, '_event_name', true ) );
+    return $event_id > 0 && lr_rewards_enabled_for_post( $event_id, true );
+}
+
 function lr_award_purchase_points( $order_id ) {
     $membership_order = function_exists( 'wc_get_order' ) ? wc_get_order( $order_id ) : false;
     if ( ! $membership_order || ! lr_rewards_user_is_eligible( (int) $membership_order->get_customer_id() ) ) return;
@@ -1703,26 +1716,14 @@ add_action( 'woocommerce_before_add_to_cart_form', 'lr_product_page_cta' );
 function lr_product_page_cta() {
     global $product;
     if ( ! $product ) return;
+    if ( ! lr_product_rewards_enabled( $product->get_id() ) ) return;
 
     $price = (float) $product->get_price();
     $base_points = floor( $price / 1000 );
 
     if ( $base_points <= 0 ) return;
 
-    // Get user tier multiplier if logged in
-    $multiplier = 1;
-    $tier_name = '';
-    $tier_emoji = '';
-    if ( is_user_logged_in() ) {
-        $user_id = get_current_user_id();
-        $lifetime = (int) get_user_meta( $user_id, 'lr_lifetime_points', true );
-        if ( $lifetime >= LR_TIER_DIAMOND ) { $multiplier = 2; $tier_name = 'Diamond'; $tier_emoji = '👑'; }
-        elseif ( $lifetime >= LR_TIER_PLATINUM ) { $multiplier = 1.5; $tier_name = 'Platinum'; $tier_emoji = '💎'; }
-        elseif ( $lifetime >= LR_TIER_GOLD ) { $multiplier = 1.25; $tier_name = 'Gold'; $tier_emoji = '🌟'; }
-        else { $multiplier = 1; }
-    }
-
-    $final_points = floor( $base_points * $multiplier );
+    $final_points = $base_points;
     $logo_dark = 'https://www.ticketbylamako.com/wp-content/uploads/2026/04/LamakoRewards_Dark.png';
 
     // Stacked layout (matching mobile app PointsBadge)
@@ -1733,9 +1734,6 @@ function lr_product_page_cta() {
     echo '<img src="' . esc_url( $logo_dark ) . '" alt="LamakoRewards" style="width:36px; height:auto; flex-shrink:0;">';
     echo '<div>';
     echo '<div style="font-weight:600; color:#3d2314; font-size:0.9em;">Gagnez <span style="font-weight:700; color:#b45309; font-size:1.05em;">' . $final_points . ' points</span> LamakoRewards</div>';
-    if ( $multiplier > 1 ) {
-        echo '<div style="font-size:0.78em; color:#92400e; margin-top:2px;">' . $tier_emoji . ' Bonus ' . $tier_name . ' : x' . $multiplier . '</div>';
-    }
     echo '</div>';
     echo '</div>';
 
@@ -1743,7 +1741,7 @@ function lr_product_page_cta() {
     if ( ! is_user_logged_in() ) {
         echo '<div style="margin-top:10px; padding-top:10px; border-top:1px solid #e8d5a3; font-size:0.8em; color:#92400e;"><a href="' . wp_registration_url() . '" style="color:#b45309; font-weight:600; text-decoration:underline;">Inscrivez-vous gratuitement</a> pour commencer</div>';
     } else {
-        $balance = (int) get_user_meta( get_current_user_id(), 'lr_points_balance', true );
+        $balance = function_exists( 'mycred_get_users_balance' ) ? (int) mycred_get_users_balance( get_current_user_id() ) : 0;
         echo '<div style="margin-top:10px; padding-top:10px; border-top:1px solid #e8d5a3; font-size:0.8em; color:#92400e;">Votre solde : <strong>' . $balance . ' pts</strong></div>';
     }
 
@@ -1756,6 +1754,7 @@ add_action( 'woocommerce_after_shop_loop_item_title', 'lr_shop_loop_points_badge
 function lr_shop_loop_points_badge() {
     global $product;
     if ( ! $product ) return;
+    if ( ! lr_product_rewards_enabled( $product->get_id() ) ) return;
 
     $price = (float) $product->get_price();
     $points = floor( $price / 1000 );
@@ -2203,6 +2202,7 @@ function lr_tickera_event_badge( $content ) {
 
     // Get the event's ticket price (from linked ticket products)
     $event_id = $post->ID;
+    if ( ! lr_rewards_enabled_for_post( $event_id, true ) ) return $content;
     $price = 0;
 
     // Try to get price from Tickera ticket types linked to this event
@@ -2218,6 +2218,7 @@ function lr_tickera_event_badge( $content ) {
         // Get the cheapest ticket price for display
         $min_price = PHP_INT_MAX;
         foreach ( $ticket_types as $ticket_id ) {
+            if ( ! lr_rewards_enabled_for_post( $ticket_id, true ) ) continue;
             $ticket_price = (float) get_post_meta( $ticket_id, 'price_per_ticket', true );
             if ( $ticket_price > 0 && $ticket_price < $min_price ) {
                 $min_price = $ticket_price;
@@ -2237,19 +2238,7 @@ function lr_tickera_event_badge( $content ) {
 
     $base_points = floor( $price / 1000 );
 
-    // Get user tier multiplier
-    $multiplier = 1;
-    $tier_info = '';
-    $tier_name = '';
-    if ( is_user_logged_in() ) {
-        $user_id = get_current_user_id();
-        $lifetime = (int) get_user_meta( $user_id, 'lr_lifetime_points', true );
-        if ( $lifetime >= LR_TIER_DIAMOND ) { $multiplier = 2; $tier_info = 'x2'; $tier_name = 'Diamond'; }
-        elseif ( $lifetime >= LR_TIER_PLATINUM ) { $multiplier = 1.5; $tier_info = 'x1.5'; $tier_name = 'Platinum'; }
-        elseif ( $lifetime >= LR_TIER_GOLD ) { $multiplier = 1.25; $tier_info = 'x1.25'; $tier_name = 'Gold'; }
-    }
-
-    $final_points = ( $base_points > 0 ) ? floor( $base_points * $multiplier ) : 0;
+    $final_points = ( $base_points > 0 ) ? $base_points : 0;
 
     // Premium dark card style (matching mobile app RewardsPopup)
     $logo_white = 'https://www.ticketbylamako.com/wp-content/uploads/2026/04/LamakoRewards_white.png';
@@ -2284,20 +2273,17 @@ function lr_tickera_event_badge( $content ) {
         $badge .= '<div style="margin-bottom:14px;">';
         $badge .= '<span style="color:#c79f6c; font-size:32px; font-weight:800; line-height:1;">' . $final_points . '</span>';
         $badge .= '<span style="color:rgba(255,255,255,0.8); font-size:14px; font-weight:600; margin-left:6px;">points</span>';
-        if ( $tier_info ) {
-            $badge .= '<div style="color:#c79f6c; font-size:12px; font-weight:500; margin-top:4px; opacity:0.85;">Bonus ' . $tier_name . ' ' . $tier_info . '</div>';
-        }
         $badge .= '</div>';
     }
 
     // Main text
     $badge .= '<p style="color:#ffffff; font-size:15px; font-weight:600; line-height:1.5; margin:0 0 10px; max-width:320px; margin-left:auto; margin-right:auto;">';
-    $badge .= 'Profitez de reductions et recompenses<br>en gagnant des points !';
+    $badge .= 'Cumulez des points sur les achats eligibles confirmes.';
     $badge .= '</p>';
 
     // Features line
     $badge .= '<p style="color:rgba(255,255,255,0.65); font-size:12px; font-weight:500; margin:0 0 22px; letter-spacing:0.3px;">';
-    $badge .= 'Billets gratuits &bull; Cashback &bull; Evenements exclusifs';
+    $badge .= '1 point / 1 000 Ar &bull; Reductions des 500 points &bull; Conditions affichees';
     $badge .= '</p>';
 
     if ( ! is_user_logged_in() ) {
