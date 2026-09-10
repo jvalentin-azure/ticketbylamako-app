@@ -1760,7 +1760,19 @@ function lr_shortcode_checkout_popup() {
         }
 
         popupTimer = window.setTimeout(function() {
-            if (commerceStarted || document.querySelector('#fkcart-modal.fkcart-show, .fkcart-show, [role="dialog"][aria-modal="true"]:not(.lr-rewards-popup__card)')) return;
+            var competingModal = Array.prototype.some.call(
+                document.querySelectorAll('#fkcart-modal.fkcart-show, .fkcart-show, [role="dialog"][aria-modal="true"]:not(.lr-rewards-popup__card)'),
+                function(modal) {
+                    var style = window.getComputedStyle(modal);
+                    return !modal.hidden
+                        && modal.getAttribute('aria-hidden') !== 'true'
+                        && style.display !== 'none'
+                        && style.visibility !== 'hidden'
+                        && parseFloat(style.opacity || '1') > 0
+                        && (modal.offsetWidth > 0 || modal.offsetHeight > 0 || modal.getClientRects().length > 0);
+                }
+            );
+            if (commerceStarted || competingModal) return;
             previousFocus = document.activeElement;
             history.impressions += 1;
             history.lastShownAt = Date.now();
