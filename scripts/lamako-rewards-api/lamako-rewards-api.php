@@ -3,7 +3,7 @@
  * Plugin Name: Lamako Rewards API
  * Plugin URI: https://www.ticketbylamako.com
  * Description: REST API for LamakoRewards loyalty program - points, tiers, referrals, redemption.
- * Version: 3.0.0
+ * Version: 3.3.0
  * Author: Lamako Events
  * Author URI: https://www.ticketbylamako.com
  * License: GPL v2 or later
@@ -18,8 +18,7 @@
  * - POST /wp-json/lamako-rewards/v1/referral/validate
  * - GET  /wp-json/lamako-rewards/v1/referral/code?user_id={id}
  *
- * Authentication: user-scoped routes require a JWT token from the mobile app.
- * The legacy API key remains available only to non-user-scoped integrations.
+ * Authentication: JWT token (from mobile app) OR API key (legacy)
  * Rate Limiting: 60 requests per minute per IP
  */
 
@@ -40,29 +39,350 @@ define( 'LR_TIER_GOLD', 2000 );
 define( 'LR_TIER_PLATINUM', 5000 );
 define( 'LR_TIER_DIAMOND', 10000 );
 
-// Redemption minimum aligned with the public Rewards configuration.
+// Redemption minimum: 750 pts lifetime = 750 000 Ar spent (independent of tier)
 define( 'LR_REDEMPTION_MIN_LIFETIME', 500 );
 
 // Points configuration
 define( 'LR_POINTS_PER_1000AR', 1 );
 define( 'LR_REGISTRATION_BONUS', 100 );
-define( 'LR_PROFILE_BONUS', 100 );
-define( 'LR_LOGIN_BONUS', 2 );
-define( 'LR_FIRST_PURCHASE_BONUS', 200 );
-define( 'LR_ATTENDANCE_BONUS', 10 );
-define( 'LR_REVIEW_BONUS', 15 );
-define( 'LR_REFERRAL_BONUS', 75 );
-define( 'LR_REFEREE_BONUS', 25 );
-define( 'LR_BIRTHDAY_BONUS', 200 );
-define( 'LR_SHARE_BONUS', 20 );
-define( 'LR_NEWSLETTER_BONUS', 100 );
+define( 'LR_PROFILE_BONUS', 0 );
+define( 'LR_LOGIN_BONUS', 0 );
+define( 'LR_FIRST_PURCHASE_BONUS', 0 );
+define( 'LR_ATTENDANCE_BONUS', 0 );
+define( 'LR_REVIEW_BONUS', 0 );
+define( 'LR_REFERRAL_BONUS', 0 );
+define( 'LR_REFEREE_BONUS', 0 );
+define( 'LR_BIRTHDAY_BONUS', 0 );
+define( 'LR_SHARE_BONUS', 0 );
+define( 'LR_NEWSLETTER_BONUS', 0 );
 
 // Tier multipliers (conservative: only high tiers get bonus)
 define( 'LR_MULTIPLIER_FAN', 1.0 );
 define( 'LR_MULTIPLIER_SILVER', 1.0 );
-define( 'LR_MULTIPLIER_GOLD', 1.25 );
-define( 'LR_MULTIPLIER_PLATINUM', 1.5 );
-define( 'LR_MULTIPLIER_DIAMOND', 2.0 );
+define( 'LR_MULTIPLIER_GOLD', 1.0 );
+define( 'LR_MULTIPLIER_PLATINUM', 1.0 );
+define( 'LR_MULTIPLIER_DIAMOND', 1.0 );
+
+define( 'LR_CONFIG_OPTION', 'lamako_rewards_config_v1' );
+define( 'LR_AUDIT_LOG_OPTION', 'lamako_rewards_audit_log_v1' );
+
+function lr_rewards_array_merge_recursive_distinct( array $base, array $override ) {
+    foreach ( $override as $key => $value ) {
+        if ( is_array( $value ) && isset( $base[ $key ] ) && is_array( $base[ $key ] ) ) {
+            $base[ $key ] = lr_rewards_array_merge_recursive_distinct( $base[ $key ], $value );
+        } else {
+            $base[ $key ] = $value;
+        }
+    }
+
+    return $base;
+}
+
+function lr_rewards_default_config() {
+    return array(
+        'version' => 4,
+        'program' => array(
+            'enabled' => true,
+            'signup_bonus_points' => LR_REGISTRATION_BONUS,
+            'earn_rate' => array(
+                'points' => LR_POINTS_PER_1000AR,
+                'amount_ariary' => 1000,
+            ),
+            'minimum_redeem_points' => LR_REDEMPTION_MIN_LIFETIME,
+            'redemption_options' => array(
+                array( 'points' => 500, 'amount_ariary' => 10000 ),
+                array( 'points' => 1000, 'amount_ariary' => 20000 ),
+                array( 'points' => 2000, 'amount_ariary' => 40000 ),
+                array( 'points' => 5000, 'amount_ariary' => 100000 ),
+            ),
+            'referral' => array(
+                'referrer_points' => LR_REFERRAL_BONUS,
+                'referred_points' => LR_REFEREE_BONUS,
+            ),
+            'earning_actions' => array(
+                'profile_completed_points' => LR_PROFILE_BONUS,
+                'daily_login_points' => LR_LOGIN_BONUS,
+                'first_purchase_points' => LR_FIRST_PURCHASE_BONUS,
+                'event_attendance_points' => LR_ATTENDANCE_BONUS,
+                'review_points' => LR_REVIEW_BONUS,
+                'social_share_points' => LR_SHARE_BONUS,
+                'newsletter_points' => LR_NEWSLETTER_BONUS,
+                'birthday_points' => LR_BIRTHDAY_BONUS,
+            ),
+            'tiers' => array(
+                array(
+                    'id' => 'fan',
+                    'name' => 'Fan',
+                    'min_points' => LR_TIER_FAN,
+                    'multiplier' => LR_MULTIPLIER_FAN,
+                    'benefits' => array( 'Acces au programme de fidelite', '1 point par 1 000 Ar depense', 'Historique des points et transactions', 'Code de parrainage personnel' ),
+                ),
+                array(
+                    'id' => 'silver',
+                    'name' => 'Silver',
+                    'min_points' => LR_TIER_SILVER,
+                    'multiplier' => LR_MULTIPLIER_SILVER,
+                    'benefits' => array( 'Reductions membres selon disponibilite', 'Acces prioritaire aux preventes selon disponibilite', 'Offres speciales par notification', 'Support prioritaire selon disponibilite' ),
+                ),
+                array(
+                    'id' => 'gold',
+                    'name' => 'Gold',
+                    'min_points' => LR_TIER_GOLD,
+                    'multiplier' => LR_MULTIPLIER_GOLD,
+                    'benefits' => array( 'Progression de statut', 'Offres participantes selon disponibilite', 'Suivi de la fidelite', 'Regles visibles avant utilisation' ),
+                ),
+                array(
+                    'id' => 'platinum',
+                    'name' => 'Platinum',
+                    'min_points' => LR_TIER_PLATINUM,
+                    'multiplier' => LR_MULTIPLIER_PLATINUM,
+                    'benefits' => array( 'Progression de statut', 'Offres participantes selon disponibilite', 'Suivi de la fidelite', 'Regles visibles avant utilisation' ),
+                ),
+                array(
+                    'id' => 'diamond',
+                    'name' => 'Diamond',
+                    'min_points' => LR_TIER_DIAMOND,
+                    'multiplier' => LR_MULTIPLIER_DIAMOND,
+                    'benefits' => array( 'Progression de statut', 'Offres participantes selon disponibilite', 'Suivi de la fidelite', 'Regles visibles avant utilisation' ),
+                ),
+            ),
+            'points_expire' => false,
+        ),
+        'visibility' => array(
+            'show_global_cta' => true,
+            'show_product_badges' => true,
+            'show_event_badges' => true,
+            'show_badges_only_when_redeem_available' => true,
+            'distinguish_earn_from_redeem' => true,
+        ),
+        'popup' => array(
+            'web' => array(
+                'enabled' => true,
+                'audience' => 'guests',
+                'delay_seconds' => 12,
+                'frequency_days' => 7,
+                'max_impressions_per_user' => 3,
+                'pages' => array( 'home', 'shop', 'event', 'product' ),
+                'exclude_pages' => array( 'cart', 'checkout', 'checkout_payment_step', 'login', 'register', 'account' ),
+                'cta_url' => '/lamako-rewards/',
+            ),
+            'mobile' => array(
+                'enabled' => true,
+                'audience' => 'guests',
+                'delay_seconds' => 12,
+                'frequency_days' => 7,
+                'max_impressions_per_user' => 3,
+                'cta_route' => '/rewards',
+            ),
+        ),
+        'notifications' => array(
+            'email' => array( 'enabled' => true ),
+            'push' => array( 'enabled' => true ),
+            'in_app' => array( 'enabled' => true ),
+            'daily_email_cap' => 2,
+            'daily_push_cap' => 2,
+            'quiet_hours_enabled' => true,
+            'quiet_hours_start' => '21:00',
+            'quiet_hours_end' => '08:00',
+            'respect_user_preferences' => true,
+        ),
+        'copy' => array(
+            'headline' => 'Rejoignez Lamako Rewards',
+            'signup_bonus' => 'Recevez 100 points de bienvenue',
+            'earn_message' => 'Gagnez des points sur vos achats eligibles.',
+            'redeem_message' => 'Utilisez vos points sur les evenements et offres participants Lamako Rewards.',
+            'minimum_redeem_message' => 'Les reductions Rewards sont debloquees a partir de 500 points disponibles.',
+            'points_to_redeem_message' => 'Plus que {{points_to_redeem}} points pour debloquer vos reductions Rewards.',
+            'non_participating_event_message' => 'Vous gagnez des points avec votre achat, mais les reductions Rewards ne sont pas disponibles sur cet evenement.',
+            'participating_event_message' => 'Points gagnes + reduction Rewards disponible.',
+        ),
+    );
+}
+
+function lr_rewards_get_config() {
+    $stored = get_option( LR_CONFIG_OPTION, array() );
+    if ( ! is_array( $stored ) ) {
+        $stored = array();
+    }
+
+    return lr_rewards_array_merge_recursive_distinct( lr_rewards_default_config(), $stored );
+}
+
+function lr_rewards_config_get( $path, $fallback = null ) {
+    $value = lr_rewards_get_config();
+    foreach ( explode( '.', (string) $path ) as $segment ) {
+        if ( is_array( $value ) && array_key_exists( $segment, $value ) ) {
+            $value = $value[ $segment ];
+        } else {
+            return $fallback;
+        }
+    }
+
+    return $value;
+}
+
+function lr_rewards_public_config( $platform = 'web' ) {
+    $config = lr_rewards_get_config();
+    $platform = in_array( $platform, array( 'web', 'mobile' ), true ) ? $platform : 'web';
+    $config['platform'] = $platform;
+    $config['server_time'] = current_time( 'c' );
+
+    return $config;
+}
+
+function lr_rewards_minimum_redeem_points() {
+    return (int) lr_rewards_config_get( 'program.minimum_redeem_points', LR_REDEMPTION_MIN_LIFETIME );
+}
+
+function lr_rewards_redemption_options() {
+    $options = lr_rewards_config_get( 'program.redemption_options', array() );
+    return is_array( $options ) ? $options : array();
+}
+
+function lr_rewards_redemption_value( $points ) {
+    $points = (int) $points;
+    foreach ( lr_rewards_redemption_options() as $option ) {
+        $option_points = (int) ( $option['points'] ?? 0 );
+        if ( $option_points === $points ) {
+            return (int) ( $option['amount_ariary'] ?? $option['value'] ?? 0 );
+        }
+    }
+
+    return 0;
+}
+
+function lr_rewards_tiers() {
+    $tiers = lr_rewards_config_get( 'program.tiers', array() );
+    return is_array( $tiers ) ? $tiers : array();
+}
+
+function lr_rewards_earning_actions() {
+    $actions = lr_rewards_config_get( 'program.earning_actions', array() );
+    return is_array( $actions ) ? $actions : array();
+}
+
+function lr_rewards_admin_can_manage() {
+    return current_user_can( 'manage_woocommerce' ) || current_user_can( 'manage_options' );
+}
+
+function lr_rewards_sanitize_bool( $value ) {
+    return in_array( strtolower( (string) $value ), array( '1', 'true', 'yes', 'on' ), true );
+}
+
+function lr_rewards_sanitize_string_list( $value ) {
+    if ( is_string( $value ) ) {
+        $value = preg_split( '/[\r\n,]+/', $value );
+    }
+    if ( ! is_array( $value ) ) {
+        return array();
+    }
+
+    $items = array();
+    foreach ( $value as $item ) {
+        $item = sanitize_key( trim( (string) $item ) );
+        if ( $item !== '' ) {
+            $items[] = $item;
+        }
+    }
+
+    return array_values( array_unique( $items ) );
+}
+
+function lr_rewards_sanitize_config( $config ) {
+    $defaults = lr_rewards_default_config();
+    if ( ! is_array( $config ) ) {
+        return $defaults;
+    }
+
+    $config = lr_rewards_array_merge_recursive_distinct( $defaults, $config );
+
+    $config['program']['enabled'] = ! empty( $config['program']['enabled'] );
+    $config['program']['signup_bonus_points'] = max( 0, absint( $config['program']['signup_bonus_points'] ) );
+    $config['program']['minimum_redeem_points'] = max( 500, absint( $config['program']['minimum_redeem_points'] ) );
+    $config['program']['earn_rate']['points'] = max( 1, absint( $config['program']['earn_rate']['points'] ) );
+    $config['program']['earn_rate']['amount_ariary'] = max( 1, absint( $config['program']['earn_rate']['amount_ariary'] ) );
+    $config['program']['referral']['referrer_points'] = max( 0, absint( $config['program']['referral']['referrer_points'] ) );
+    $config['program']['referral']['referred_points'] = max( 0, absint( $config['program']['referral']['referred_points'] ) );
+    $config['program']['points_expire'] = ! empty( $config['program']['points_expire'] );
+
+    foreach ( array( 'profile_completed_points', 'daily_login_points', 'first_purchase_points', 'event_attendance_points', 'review_points', 'social_share_points', 'newsletter_points', 'birthday_points' ) as $key ) {
+        $config['program']['earning_actions'][ $key ] = max( 0, absint( $config['program']['earning_actions'][ $key ] ?? 0 ) );
+    }
+
+    $redemption_options = array();
+    foreach ( (array) ( $config['program']['redemption_options'] ?? array() ) as $option ) {
+        $points = absint( $option['points'] ?? 0 );
+        $amount = absint( $option['amount_ariary'] ?? $option['value'] ?? 0 );
+        if ( $points >= (int) $config['program']['minimum_redeem_points'] && $amount > 0 ) {
+            $redemption_options[] = array(
+                'points' => $points,
+                'amount_ariary' => $amount,
+            );
+        }
+    }
+    $config['program']['redemption_options'] = ! empty( $redemption_options ) ? $redemption_options : $defaults['program']['redemption_options'];
+
+    foreach ( array( 'show_global_cta', 'show_product_badges', 'show_event_badges', 'show_badges_only_when_redeem_available', 'distinguish_earn_from_redeem' ) as $key ) {
+        $config['visibility'][ $key ] = ! empty( $config['visibility'][ $key ] );
+    }
+
+    foreach ( array( 'web', 'mobile' ) as $channel ) {
+        $config['popup'][ $channel ]['enabled'] = ! empty( $config['popup'][ $channel ]['enabled'] );
+        $audience = sanitize_key( $config['popup'][ $channel ]['audience'] ?? 'guests' );
+        $config['popup'][ $channel ]['audience'] = in_array( $audience, array( 'guests', 'authenticated', 'all' ), true ) ? $audience : 'guests';
+        $config['popup'][ $channel ]['delay_seconds'] = max( 0, absint( $config['popup'][ $channel ]['delay_seconds'] ?? 0 ) );
+        $config['popup'][ $channel ]['frequency_days'] = max( 1, absint( $config['popup'][ $channel ]['frequency_days'] ?? 7 ) );
+        $config['popup'][ $channel ]['max_impressions_per_user'] = max( 0, absint( $config['popup'][ $channel ]['max_impressions_per_user'] ?? 3 ) );
+    }
+    $config['popup']['web']['pages'] = lr_rewards_sanitize_string_list( $config['popup']['web']['pages'] ?? array() );
+    $config['popup']['web']['exclude_pages'] = lr_rewards_sanitize_string_list( $config['popup']['web']['exclude_pages'] ?? array() );
+    $config['popup']['web']['cta_url'] = esc_url_raw( $config['popup']['web']['cta_url'] ?? '/lamako-rewards/' );
+    $config['popup']['mobile']['cta_route'] = sanitize_text_field( $config['popup']['mobile']['cta_route'] ?? '/rewards' );
+
+    foreach ( array( 'email', 'push', 'in_app' ) as $channel ) {
+        $config['notifications'][ $channel ]['enabled'] = ! empty( $config['notifications'][ $channel ]['enabled'] );
+    }
+    $config['notifications']['daily_email_cap'] = max( 0, absint( $config['notifications']['daily_email_cap'] ?? 2 ) );
+    $config['notifications']['daily_push_cap'] = max( 0, absint( $config['notifications']['daily_push_cap'] ?? 2 ) );
+    $config['notifications']['quiet_hours_enabled'] = ! empty( $config['notifications']['quiet_hours_enabled'] );
+    $config['notifications']['quiet_hours_start'] = sanitize_text_field( $config['notifications']['quiet_hours_start'] ?? '21:00' );
+    $config['notifications']['quiet_hours_end'] = sanitize_text_field( $config['notifications']['quiet_hours_end'] ?? '08:00' );
+    $config['notifications']['respect_user_preferences'] = ! empty( $config['notifications']['respect_user_preferences'] );
+
+    foreach ( (array) $config['copy'] as $key => $value ) {
+        $config['copy'][ $key ] = sanitize_text_field( $value );
+    }
+
+    return $config;
+}
+
+function lr_rewards_update_config( array $config, $source = 'admin' ) {
+    $sanitized = lr_rewards_sanitize_config( $config );
+    update_option( LR_CONFIG_OPTION, $sanitized, false );
+    lr_rewards_audit_log( 'config_updated', array( 'source' => sanitize_key( $source ) ) );
+    return $sanitized;
+}
+
+function lr_rewards_audit_log( $action, array $details = array() ) {
+    $logs = get_option( LR_AUDIT_LOG_OPTION, array() );
+    if ( ! is_array( $logs ) ) {
+        $logs = array();
+    }
+
+    array_unshift( $logs, array(
+        'time' => current_time( 'mysql' ),
+        'user_id' => get_current_user_id(),
+        'action' => sanitize_key( $action ),
+        'details' => $details,
+    ) );
+
+    update_option( LR_AUDIT_LOG_OPTION, array_slice( $logs, 0, 100 ), false );
+}
+
+function lr_rewards_get_audit_log() {
+    $logs = get_option( LR_AUDIT_LOG_OPTION, array() );
+    return is_array( $logs ) ? $logs : array();
+}
 
 // ============================================================
 // RATE LIMITING
@@ -72,18 +392,261 @@ function lr_check_rate_limit() {
     $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
     $transient_key = 'lr_rate_' . md5( $ip );
     $current = get_transient( $transient_key );
-    
+
     if ( $current === false ) {
         set_transient( $transient_key, 1, LR_RATE_WINDOW );
         return true;
     }
-    
+
     if ( (int) $current >= LR_RATE_LIMIT ) {
         return false;
     }
-    
+
     set_transient( $transient_key, (int) $current + 1, LR_RATE_WINDOW );
     return true;
+}
+
+// ============================================================
+// ADMIN CONTROL CENTER
+// ============================================================
+
+add_action( 'admin_menu', 'lr_rewards_register_admin_page' );
+
+function lr_rewards_register_admin_page() {
+    add_menu_page(
+        'Lamako Rewards',
+        'Lamako Rewards',
+        'manage_woocommerce',
+        'lamako-rewards-control-center',
+        'lr_rewards_render_admin_page',
+        'dashicons-awards',
+        56
+    );
+}
+
+function lr_rewards_admin_notice( $message, $type = 'success' ) {
+    printf(
+        '<div class="notice notice-%s is-dismissible"><p>%s</p></div>',
+        esc_attr( $type ),
+        esc_html( $message )
+    );
+}
+
+function lr_rewards_admin_apply_basic_post( array $config ) {
+    $program = isset( $_POST['program'] ) && is_array( $_POST['program'] ) ? wp_unslash( $_POST['program'] ) : array();
+    $popup = isset( $_POST['popup'] ) && is_array( $_POST['popup'] ) ? wp_unslash( $_POST['popup'] ) : array();
+    $visibility = isset( $_POST['visibility'] ) && is_array( $_POST['visibility'] ) ? wp_unslash( $_POST['visibility'] ) : array();
+    $copy = isset( $_POST['copy'] ) && is_array( $_POST['copy'] ) ? wp_unslash( $_POST['copy'] ) : array();
+
+    $config['program']['enabled'] = ! empty( $program['enabled'] );
+    $config['program']['signup_bonus_points'] = absint( $program['signup_bonus_points'] ?? 100 );
+    $config['program']['minimum_redeem_points'] = absint( $program['minimum_redeem_points'] ?? 750 );
+    $config['program']['earn_rate']['points'] = absint( $program['earn_rate_points'] ?? 1 );
+    $config['program']['earn_rate']['amount_ariary'] = absint( $program['earn_rate_amount_ariary'] ?? 1000 );
+    $config['program']['referral']['referrer_points'] = absint( $program['referrer_points'] ?? 75 );
+    $config['program']['referral']['referred_points'] = absint( $program['referred_points'] ?? 25 );
+
+    $redemption_lines = isset( $program['redemption_options'] ) ? explode( "\n", sanitize_textarea_field( $program['redemption_options'] ) ) : array();
+    $redemption_options = array();
+    foreach ( $redemption_lines as $line ) {
+        if ( preg_match( '/^\s*(\d+)\s*[:=,]\s*(\d+)\s*$/', $line, $matches ) ) {
+            $redemption_options[] = array(
+                'points' => absint( $matches[1] ),
+                'amount_ariary' => absint( $matches[2] ),
+            );
+        }
+    }
+    if ( ! empty( $redemption_options ) ) {
+        $config['program']['redemption_options'] = $redemption_options;
+    }
+
+    foreach ( array( 'show_global_cta', 'show_product_badges', 'show_event_badges', 'show_badges_only_when_redeem_available', 'distinguish_earn_from_redeem' ) as $key ) {
+        $config['visibility'][ $key ] = ! empty( $visibility[ $key ] );
+    }
+
+    foreach ( array( 'web', 'mobile' ) as $channel ) {
+        $channel_payload = isset( $popup[ $channel ] ) && is_array( $popup[ $channel ] ) ? $popup[ $channel ] : array();
+        $config['popup'][ $channel ]['enabled'] = ! empty( $channel_payload['enabled'] );
+        $config['popup'][ $channel ]['audience'] = sanitize_key( $channel_payload['audience'] ?? 'guests' );
+        $config['popup'][ $channel ]['delay_seconds'] = absint( $channel_payload['delay_seconds'] ?? ( $channel === 'web' ? 8 : 12 ) );
+        $config['popup'][ $channel ]['frequency_days'] = absint( $channel_payload['frequency_days'] ?? 7 );
+        $config['popup'][ $channel ]['max_impressions_per_user'] = absint( $channel_payload['max_impressions_per_user'] ?? 3 );
+    }
+    $config['popup']['web']['pages'] = sanitize_text_field( $popup['web']['pages'] ?? 'home,shop,event,product,cart' );
+    $config['popup']['web']['exclude_pages'] = sanitize_text_field( $popup['web']['exclude_pages'] ?? 'checkout_payment_step' );
+    $config['popup']['web']['cta_url'] = esc_url_raw( $popup['web']['cta_url'] ?? '/lamako-rewards/' );
+    $config['popup']['mobile']['cta_route'] = sanitize_text_field( $popup['mobile']['cta_route'] ?? '/rewards' );
+
+    foreach ( array( 'headline', 'signup_bonus', 'earn_message', 'redeem_message', 'minimum_redeem_message', 'points_to_redeem_message', 'non_participating_event_message', 'participating_event_message' ) as $key ) {
+        if ( isset( $copy[ $key ] ) ) {
+            $config['copy'][ $key ] = sanitize_text_field( $copy[ $key ] );
+        }
+    }
+
+    return $config;
+}
+
+function lr_rewards_handle_admin_post() {
+    if ( empty( $_POST['lr_rewards_action'] ) ) {
+        return;
+    }
+    if ( ! lr_rewards_admin_can_manage() ) {
+        wp_die( esc_html__( 'Permission denied.', 'lamako-rewards' ) );
+    }
+    check_admin_referer( 'lr_rewards_control_center' );
+
+    $action = sanitize_key( wp_unslash( $_POST['lr_rewards_action'] ) );
+    if ( $action === 'reset_defaults' ) {
+        delete_option( LR_CONFIG_OPTION );
+        lr_rewards_audit_log( 'config_reset_defaults' );
+        lr_rewards_admin_notice( 'Configuration Rewards restauree aux valeurs par defaut.' );
+        return;
+    }
+
+    $config = lr_rewards_get_config();
+    if ( $action === 'save_basic' ) {
+        lr_rewards_update_config( lr_rewards_admin_apply_basic_post( $config ), 'admin_basic' );
+        lr_rewards_admin_notice( 'Configuration Rewards sauvegardee.' );
+        return;
+    }
+
+    if ( $action === 'save_json' ) {
+        $raw_json = isset( $_POST['lr_rewards_config_json'] ) ? wp_unslash( $_POST['lr_rewards_config_json'] ) : '';
+        $decoded = json_decode( $raw_json, true );
+        if ( ! is_array( $decoded ) ) {
+            lr_rewards_admin_notice( 'JSON invalide. Aucun changement applique.', 'error' );
+            return;
+        }
+        lr_rewards_update_config( $decoded, 'admin_json' );
+        lr_rewards_admin_notice( 'Configuration JSON importee et sauvegardee.' );
+    }
+}
+
+function lr_rewards_render_admin_page() {
+    if ( ! lr_rewards_admin_can_manage() ) {
+        wp_die( esc_html__( 'Permission denied.', 'lamako-rewards' ) );
+    }
+
+    lr_rewards_handle_admin_post();
+    $config = lr_rewards_get_config();
+    $redemption_lines = array();
+    foreach ( lr_rewards_redemption_options() as $option ) {
+        $redemption_lines[] = (int) ( $option['points'] ?? 0 ) . ':' . (int) ( $option['amount_ariary'] ?? $option['value'] ?? 0 );
+    }
+    $logs = lr_rewards_get_audit_log();
+    ?>
+    <div class="wrap lr-admin">
+        <h1>Lamako Rewards Control Center</h1>
+        <p>Controle centralise des regles Rewards consommees par le web, l'app mobile, les popups et le checkout.</p>
+
+        <style>
+            .lr-admin-grid { display:grid; grid-template-columns: minmax(0, 1.2fr) minmax(320px, .8fr); gap:20px; align-items:start; }
+            .lr-admin-card { background:#fff; border:1px solid #dcdcde; border-radius:8px; padding:16px; margin:0 0 16px; }
+            .lr-admin-card h2 { margin-top:0; }
+            .lr-admin-row { display:grid; grid-template-columns: 220px minmax(0, 1fr); gap:12px; align-items:center; margin:10px 0; }
+            .lr-admin-row input[type="number"], .lr-admin-row input[type="text"], .lr-admin-row select, .lr-admin-row textarea { width:100%; max-width:520px; }
+            .lr-admin-row textarea { min-height:74px; font-family:monospace; }
+            .lr-admin-json { width:100%; min-height:360px; font-family:monospace; }
+            .lr-admin-log { margin:0; padding-left:18px; max-height:260px; overflow:auto; }
+            @media (max-width: 1100px) { .lr-admin-grid { grid-template-columns:1fr; } .lr-admin-row { grid-template-columns:1fr; } }
+        </style>
+
+        <div class="lr-admin-grid">
+            <div>
+                <form method="post">
+                    <?php wp_nonce_field( 'lr_rewards_control_center' ); ?>
+                    <input type="hidden" name="lr_rewards_action" value="save_basic">
+
+                    <div class="lr-admin-card">
+                        <h2>Programme global</h2>
+                        <label><input type="checkbox" name="program[enabled]" value="1" <?php checked( ! empty( $config['program']['enabled'] ) ); ?>> Programme Rewards actif</label>
+                        <div class="lr-admin-row"><label>Bonus inscription</label><input type="number" name="program[signup_bonus_points]" value="<?php echo esc_attr( $config['program']['signup_bonus_points'] ); ?>"></div>
+                        <div class="lr-admin-row"><label>Taux gain points</label><input type="number" name="program[earn_rate_points]" value="<?php echo esc_attr( $config['program']['earn_rate']['points'] ); ?>"></div>
+                        <div class="lr-admin-row"><label>Montant Ariary par point</label><input type="number" name="program[earn_rate_amount_ariary]" value="<?php echo esc_attr( $config['program']['earn_rate']['amount_ariary'] ); ?>"></div>
+                        <div class="lr-admin-row"><label>Minimum echange</label><input type="number" name="program[minimum_redeem_points]" min="750" value="<?php echo esc_attr( $config['program']['minimum_redeem_points'] ); ?>"></div>
+                        <div class="lr-admin-row"><label>Parrain</label><input type="number" name="program[referrer_points]" value="<?php echo esc_attr( $config['program']['referral']['referrer_points'] ); ?>"></div>
+                        <div class="lr-admin-row"><label>Filleul</label><input type="number" name="program[referred_points]" value="<?php echo esc_attr( $config['program']['referral']['referred_points'] ); ?>"></div>
+                        <div class="lr-admin-row"><label>Conversions officielles</label><textarea name="program[redemption_options]" placeholder="1000:20000"><?php echo esc_textarea( implode( "\n", $redemption_lines ) ); ?></textarea></div>
+                        <p class="description">Format: un couple points:ariary par ligne. Les lignes sous le minimum d'echange sont ignorees.</p>
+                    </div>
+
+                    <div class="lr-admin-card">
+                        <h2>Badges et visibilite</h2>
+                        <?php foreach ( array(
+                            'show_global_cta' => 'CTA global',
+                            'show_product_badges' => 'Badges produits',
+                            'show_event_badges' => 'Badges evenements',
+                            'show_badges_only_when_redeem_available' => 'Badges reduction uniquement si utilisable',
+                            'distinguish_earn_from_redeem' => 'Distinguer points gagnes et reduction utilisable',
+                        ) as $key => $label ) : ?>
+                            <label style="display:block;margin:8px 0;"><input type="checkbox" name="visibility[<?php echo esc_attr( $key ); ?>]" value="1" <?php checked( ! empty( $config['visibility'][ $key ] ) ); ?>> <?php echo esc_html( $label ); ?></label>
+                        <?php endforeach; ?>
+                    </div>
+
+                    <div class="lr-admin-card">
+                        <h2>Popups</h2>
+                        <?php foreach ( array( 'web' => 'Web', 'mobile' => 'Mobile' ) as $channel => $label ) : ?>
+                            <h3><?php echo esc_html( $label ); ?></h3>
+                            <label><input type="checkbox" name="popup[<?php echo esc_attr( $channel ); ?>][enabled]" value="1" <?php checked( ! empty( $config['popup'][ $channel ]['enabled'] ) ); ?>> Actif</label>
+                            <div class="lr-admin-row"><label>Audience</label><select name="popup[<?php echo esc_attr( $channel ); ?>][audience]">
+                                <?php foreach ( array( 'guests' => 'Invites', 'authenticated' => 'Connectes', 'all' => 'Tous' ) as $value => $text ) : ?>
+                                    <option value="<?php echo esc_attr( $value ); ?>" <?php selected( $config['popup'][ $channel ]['audience'], $value ); ?>><?php echo esc_html( $text ); ?></option>
+                                <?php endforeach; ?>
+                            </select></div>
+                            <div class="lr-admin-row"><label>Delai secondes</label><input type="number" name="popup[<?php echo esc_attr( $channel ); ?>][delay_seconds]" value="<?php echo esc_attr( $config['popup'][ $channel ]['delay_seconds'] ); ?>"></div>
+                            <div class="lr-admin-row"><label>Frequence jours</label><input type="number" name="popup[<?php echo esc_attr( $channel ); ?>][frequency_days]" value="<?php echo esc_attr( $config['popup'][ $channel ]['frequency_days'] ); ?>"></div>
+                            <div class="lr-admin-row"><label>Max impressions</label><input type="number" name="popup[<?php echo esc_attr( $channel ); ?>][max_impressions_per_user]" value="<?php echo esc_attr( $config['popup'][ $channel ]['max_impressions_per_user'] ); ?>"></div>
+                        <?php endforeach; ?>
+                        <div class="lr-admin-row"><label>Pages web incluses</label><input type="text" name="popup[web][pages]" value="<?php echo esc_attr( implode( ',', (array) $config['popup']['web']['pages'] ) ); ?>"></div>
+                        <div class="lr-admin-row"><label>Pages web exclues</label><input type="text" name="popup[web][exclude_pages]" value="<?php echo esc_attr( implode( ',', (array) $config['popup']['web']['exclude_pages'] ) ); ?>"></div>
+                        <div class="lr-admin-row"><label>CTA web</label><input type="text" name="popup[web][cta_url]" value="<?php echo esc_attr( $config['popup']['web']['cta_url'] ); ?>"></div>
+                        <div class="lr-admin-row"><label>Route mobile</label><input type="text" name="popup[mobile][cta_route]" value="<?php echo esc_attr( $config['popup']['mobile']['cta_route'] ); ?>"></div>
+                    </div>
+
+                    <div class="lr-admin-card">
+                        <h2>Textes principaux</h2>
+                        <?php foreach ( array( 'headline', 'signup_bonus', 'earn_message', 'redeem_message', 'minimum_redeem_message', 'points_to_redeem_message', 'non_participating_event_message', 'participating_event_message' ) as $key ) : ?>
+                            <div class="lr-admin-row"><label><?php echo esc_html( $key ); ?></label><input type="text" name="copy[<?php echo esc_attr( $key ); ?>]" value="<?php echo esc_attr( $config['copy'][ $key ] ?? '' ); ?>"></div>
+                        <?php endforeach; ?>
+                    </div>
+
+                    <?php submit_button( 'Sauvegarder la configuration Rewards' ); ?>
+                </form>
+            </div>
+
+            <div>
+                <div class="lr-admin-card">
+                    <h2>JSON config</h2>
+                    <form method="post">
+                        <?php wp_nonce_field( 'lr_rewards_control_center' ); ?>
+                        <input type="hidden" name="lr_rewards_action" value="save_json">
+                        <textarea class="lr-admin-json" name="lr_rewards_config_json"><?php echo esc_textarea( wp_json_encode( $config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) ); ?></textarea>
+                        <?php submit_button( 'Importer JSON', 'secondary' ); ?>
+                    </form>
+                </div>
+
+                <div class="lr-admin-card">
+                    <h2>Rollback rapide</h2>
+                    <p>Ce bouton restaure les defaults serveur sans supprimer les points utilisateurs.</p>
+                    <form method="post" onsubmit="return confirm('Restaurer les valeurs Rewards par defaut ?');">
+                        <?php wp_nonce_field( 'lr_rewards_control_center' ); ?>
+                        <input type="hidden" name="lr_rewards_action" value="reset_defaults">
+                        <?php submit_button( 'Reset defaults Rewards', 'delete' ); ?>
+                    </form>
+                </div>
+
+                <div class="lr-admin-card">
+                    <h2>Audit log</h2>
+                    <ol class="lr-admin-log">
+                        <?php foreach ( $logs as $log ) : ?>
+                            <li><strong><?php echo esc_html( $log['time'] ?? '' ); ?></strong> - <?php echo esc_html( $log['action'] ?? '' ); ?> - user #<?php echo esc_html( (string) ( $log['user_id'] ?? 0 ) ); ?></li>
+                        <?php endforeach; ?>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+    <?php
 }
 
 // ============================================================
@@ -115,46 +678,6 @@ function lr_authenticate_request( $request ) {
     return new WP_Error( 'unauthorized', 'Invalid authentication.', array( 'status' => 401 ) );
 }
 
-/**
- * Require an authenticated end-user for user-scoped Rewards routes.
- * Legacy API keys identify an application, not the customer whose balance is
- * being changed, so they are intentionally rejected here.
- */
-function lr_rest_require_user( $request ) {
-    $auth = lr_authenticate_request( $request );
-    if ( is_wp_error( $auth ) ) {
-        return $auth;
-    }
-
-    if ( true === $auth || ! is_numeric( $auth ) || (int) $auth <= 0 ) {
-        return new WP_Error( 'user_auth_required', 'A user JWT is required.', array( 'status' => 403 ) );
-    }
-
-    $request->set_param( '_lr_authenticated_user_id', (int) $auth );
-    return true;
-}
-
-/**
- * Return the authenticated user and reject a conflicting caller-supplied ID.
- */
-function lr_authenticated_user_id( $request, $claimed_user_id = 0 ) {
-    $user_id = (int) $request->get_param( '_lr_authenticated_user_id' );
-    if ( $user_id <= 0 ) {
-        $allowed = lr_rest_require_user( $request );
-        if ( is_wp_error( $allowed ) ) {
-            return $allowed;
-        }
-        $user_id = (int) $request->get_param( '_lr_authenticated_user_id' );
-    }
-
-    $claimed_user_id = (int) $claimed_user_id;
-    if ( $claimed_user_id > 0 && $claimed_user_id !== $user_id ) {
-        return new WP_Error( 'forbidden_user', 'You cannot access another user account.', array( 'status' => 403 ) );
-    }
-
-    return $user_id;
-}
-
 function lr_validate_jwt( $token ) {
     // Use the JWT Auth plugin's validation if available
     if ( function_exists( 'jwt_auth_validate_token' ) ) {
@@ -163,255 +686,28 @@ function lr_validate_jwt( $token ) {
             return $result->data->user->id;
         }
     }
-    
+
     // Fallback: decode JWT manually (HS256)
     $secret = defined( 'JWT_AUTH_SECRET_KEY' ) ? JWT_AUTH_SECRET_KEY : wp_salt( 'auth' );
     $parts = explode( '.', $token );
     if ( count( $parts ) !== 3 ) return false;
-    
+
     $payload = json_decode( base64_decode( strtr( $parts[1], '-_', '+/' ) ), true );
     if ( ! $payload || ! isset( $payload['data']['user']['id'] ) ) return false;
-    
+
     // Check expiration
     if ( isset( $payload['exp'] ) && $payload['exp'] < time() ) return false;
-    
+
     // Verify signature
     $header_payload = $parts[0] . '.' . $parts[1];
     $signature = hash_hmac( 'sha256', $header_payload, $secret, true );
     $expected_sig = rtrim( strtr( base64_encode( $signature ), '+/', '-_' ), '=' );
-    
+
     if ( hash_equals( $expected_sig, $parts[2] ) ) {
         return (int) $payload['data']['user']['id'];
     }
-    
+
     return false;
-}
-
-function lr_rewards_idempotency_context( $user_id, $points, $raw_key ) {
-    $raw_key = trim( (string) $raw_key );
-    if ( strlen( $raw_key ) < 16 || strlen( $raw_key ) > 128 || ! preg_match( '/^[A-Za-z0-9._:-]+$/', $raw_key ) ) {
-        return new WP_Error( 'invalid_idempotency_key', 'A valid Idempotency-Key is required.', array( 'status' => 400 ) );
-    }
-
-    $key_hash = hash_hmac( 'sha256', (int) $user_id . '|' . $raw_key, wp_salt( 'nonce' ) );
-    return array(
-        'option_name'  => '_lr_redeem_' . $key_hash,
-        'request_hash' => hash_hmac( 'sha256', (int) $user_id . '|' . (int) $points, wp_salt( 'auth' ) ),
-    );
-}
-
-function lr_rewards_transaction_tables_are_innodb() {
-    global $wpdb;
-
-    $tables = array(
-        $wpdb->posts,
-        $wpdb->postmeta,
-        $wpdb->options,
-        $wpdb->usermeta,
-        $wpdb->prefix . 'myCRED_log',
-    );
-
-    foreach ( array_unique( $tables ) as $table ) {
-        $status = $wpdb->get_row( $wpdb->prepare( 'SHOW TABLE STATUS WHERE Name = %s', $table ) );
-        if ( ! $status || strtoupper( (string) $status->Engine ) !== 'INNODB' ) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-function lr_rewards_replay_response( $record, $request_hash ) {
-    if ( ! is_array( $record ) || empty( $record['request_hash'] ) ) {
-        return new WP_Error( 'idempotency_record_invalid', 'This redemption cannot be replayed safely.', array( 'status' => 409 ) );
-    }
-    if ( ! hash_equals( (string) $record['request_hash'], (string) $request_hash ) ) {
-        return new WP_Error( 'idempotency_conflict', 'This Idempotency-Key was already used for another redemption.', array( 'status' => 409 ) );
-    }
-    if ( ( $record['status'] ?? '' ) !== 'completed' || ! is_array( $record['response'] ?? null ) ) {
-        return new WP_Error( 'redemption_in_progress', 'This redemption is already being processed.', array( 'status' => 409 ) );
-    }
-
-    $response = $record['response'];
-    $response['idempotent_replay'] = true;
-    return $response;
-}
-
-/**
- * Atomically exchange points for a user-bound, single-use coupon.
- *
- * The named lock serializes redemptions for one user, the database
- * transaction binds the myCred debit, coupon and idempotency ledger, and the
- * unique option name prevents a retry from issuing another coupon.
- */
-function lr_redeem_points_for_user( $user_id, $points, $raw_idempotency_key ) {
-    if ( ! function_exists( 'lr_rewards_user_is_eligible' ) || ! lr_rewards_user_is_eligible( $user_id ) ) {
-        return new WP_Error( 'rewards_membership_required', 'Adhesion LamakoRewards requise.', array( 'status' => 403 ) );
-    }
-    if ( ! function_exists( 'mycred_get_users_balance' ) || ! function_exists( 'mycred_subtract' ) ) {
-        return new WP_Error( 'mycred_missing', 'myCred plugin not active.', array( 'status' => 500 ) );
-    }
-    if ( ! class_exists( 'WC_Coupon' ) ) {
-        return new WP_Error( 'woocommerce_missing', 'WooCommerce is not available.', array( 'status' => 500 ) );
-    }
-
-    $user_id = (int) $user_id;
-    $points  = (int) $points;
-    if ( $user_id <= 0 || $points <= 0 ) {
-        return new WP_Error( 'invalid_points', 'Invalid rewards redemption tier.', array( 'status' => 400 ) );
-    }
-
-    $discount_value = function_exists( 'lr_rewards_redemption_value' )
-        ? (int) lr_rewards_redemption_value( $points )
-        : (int) ( array( 500 => 10000, 1000 => 20000, 2000 => 40000, 5000 => 100000 )[ $points ] ?? 0 );
-    if ( $discount_value <= 0 ) {
-        return new WP_Error( 'invalid_points', 'Invalid rewards redemption tier.', array( 'status' => 400 ) );
-    }
-
-    $context = lr_rewards_idempotency_context( $user_id, $points, $raw_idempotency_key );
-    if ( is_wp_error( $context ) ) {
-        return $context;
-    }
-    if ( ! lr_rewards_transaction_tables_are_innodb() ) {
-        return new WP_Error( 'redemption_storage_unsafe', 'Rewards redemption is temporarily unavailable.', array( 'status' => 503 ) );
-    }
-
-    global $wpdb;
-    $lock_name = 'lamako_rewards_redeem_' . $user_id;
-    $locked    = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $lock_name, 5 ) );
-    if ( 1 !== $locked ) {
-        return new WP_Error( 'redemption_busy', 'Another redemption is already being processed.', array( 'status' => 409 ) );
-    }
-
-    $transaction_started = false;
-    $coupon_id            = 0;
-    try {
-        wp_cache_delete( $context['option_name'], 'options' );
-        $existing = get_option( $context['option_name'], null );
-        if ( null !== $existing ) {
-            return lr_rewards_replay_response( $existing, $context['request_hash'] );
-        }
-
-        if ( false === $wpdb->query( 'START TRANSACTION' ) ) {
-            throw new RuntimeException( 'Unable to start rewards transaction.' );
-        }
-        $transaction_started = true;
-
-        // Lock the myCred balance row before the final balance check.
-        $wpdb->get_var( $wpdb->prepare(
-            "SELECT umeta_id FROM {$wpdb->usermeta} WHERE user_id = %d AND meta_key = %s LIMIT 1 FOR UPDATE",
-            $user_id,
-            'mycred_default'
-        ) );
-        wp_cache_delete( $user_id, 'user_meta' );
-
-        $minimum_redeem_points = function_exists( 'lr_rewards_minimum_redeem_points' )
-            ? (int) lr_rewards_minimum_redeem_points()
-            : (int) LR_REDEMPTION_MIN_LIFETIME;
-        $total_earned = lr_get_total_earned( $user_id );
-        if ( $total_earned < $minimum_redeem_points ) {
-            $wpdb->query( 'ROLLBACK' );
-            $transaction_started = false;
-            return new WP_Error( 'tier_too_low', 'Rewards redemption is not unlocked for this account.', array( 'status' => 403 ) );
-        }
-
-        $balance = (float) mycred_get_users_balance( $user_id );
-        if ( $balance < $minimum_redeem_points ) {
-            $wpdb->query( 'ROLLBACK' );
-            $transaction_started = false;
-            return new WP_Error( 'minimum_balance_required', 'Rewards redemption is not unlocked for this balance.', array( 'status' => 403 ) );
-        }
-        if ( $balance < $points ) {
-            $wpdb->query( 'ROLLBACK' );
-            $transaction_started = false;
-            return new WP_Error( 'insufficient_points', 'Solde insuffisant.', array( 'status' => 400 ) );
-        }
-
-        $processing_record = array(
-            'status'       => 'processing',
-            'request_hash' => $context['request_hash'],
-            'created_at'   => time(),
-        );
-        if ( ! add_option( $context['option_name'], $processing_record, '', false ) ) {
-            throw new RuntimeException( 'Unable to reserve the idempotency key.' );
-        }
-
-        $user = get_userdata( $user_id );
-        if ( ! $user || ! is_email( $user->user_email ) ) {
-            throw new RuntimeException( 'Rewards user has no valid email.' );
-        }
-
-        $expires_at     = strtotime( '+30 days' );
-        $coupon_code    = 'LR-' . strtoupper( wp_generate_password( 12, false ) );
-        $coupon         = new WC_Coupon();
-        $coupon->set_code( $coupon_code );
-        $coupon->set_discount_type( 'fixed_cart' );
-        $coupon->set_amount( $discount_value );
-        $coupon->set_usage_limit( 1 );
-        $coupon->set_usage_limit_per_user( 1 );
-        $coupon->set_individual_use( true );
-        $coupon->set_email_restrictions( array( sanitize_email( $user->user_email ) ) );
-        $coupon->set_date_expires( $expires_at );
-        $coupon->set_description( sprintf( 'LamakoRewards - %d points exchanged by user #%d', $points, $user_id ) );
-        $coupon_id = (int) $coupon->save();
-        if ( $coupon_id <= 0 ) {
-            throw new RuntimeException( 'Unable to create rewards coupon.' );
-        }
-        update_post_meta( $coupon_id, '_lamako_rewards_user_id', $user_id );
-        update_post_meta( $coupon_id, '_lamako_rewards_idempotency_hash', $context['option_name'] );
-
-        $deducted = mycred_subtract(
-            'redemption',
-            $user_id,
-            $points,
-            sprintf( 'LamakoRewards redemption %d pts', $points ),
-            $coupon_id,
-            $context['request_hash']
-        );
-        if ( ! $deducted ) {
-            throw new RuntimeException( 'Unable to debit rewards balance.' );
-        }
-
-        $response = array(
-            'success'           => true,
-            'coupon_code'       => $coupon_code,
-            'discount_value'    => $discount_value,
-            'points_deducted'   => $points,
-            'new_balance'       => max( 0, $balance - $points ),
-            'expires'           => date( 'c', $expires_at ),
-            'idempotent_replay' => false,
-        );
-        $completed_record = array(
-            'status'       => 'completed',
-            'request_hash' => $context['request_hash'],
-            'response'     => $response,
-            'completed_at' => time(),
-        );
-        if ( ! update_option( $context['option_name'], $completed_record, false ) ) {
-            throw new RuntimeException( 'Unable to finalize redemption ledger.' );
-        }
-        if ( false === $wpdb->query( 'COMMIT' ) ) {
-            throw new RuntimeException( 'Unable to commit rewards transaction.' );
-        }
-        $transaction_started = false;
-
-        return $response;
-    } catch ( Throwable $error ) {
-        if ( $transaction_started ) {
-            $wpdb->query( 'ROLLBACK' );
-        }
-        wp_cache_delete( $context['option_name'], 'options' );
-        wp_cache_delete( $user_id, 'user_meta' );
-        if ( $coupon_id > 0 && get_post( $coupon_id ) ) {
-            $coupon_marker = (string) get_post_meta( $coupon_id, '_lamako_rewards_idempotency_hash', true );
-            if ( $coupon_marker && hash_equals( (string) $context['option_name'], $coupon_marker ) ) {
-                wp_delete_post( $coupon_id, true );
-            }
-        }
-        return new WP_Error( 'redemption_failed', 'Rewards redemption could not be completed safely.', array( 'status' => 500 ) );
-    } finally {
-        $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
-    }
 }
 
 // ============================================================
@@ -486,16 +782,16 @@ function lr_get_multiplier( $tier ) {
 function lr_get_total_earned( $user_id ) {
     global $wpdb;
     $table = $wpdb->prefix . 'myCRED_log';
-    
+
     if ( ! $wpdb->get_var( "SHOW TABLES LIKE '$table'" ) ) {
         return 0;
     }
-    
+
     $total = $wpdb->get_var( $wpdb->prepare(
         "SELECT COALESCE(SUM(creds), 0) FROM $table WHERE user_id = %d AND creds > 0",
         $user_id
     ) );
-    
+
     return (float) $total;
 }
 
@@ -503,77 +799,18 @@ function lr_get_total_earned( $user_id ) {
 // REFERRAL SYSTEM
 // ============================================================
 
-function lr_rewards_user_role_is_eligible( $user_id ) {
-    $user = get_userdata( (int) $user_id );
-    if ( ! $user ) return false;
-
-    $roles = array_map( 'sanitize_key', (array) $user->roles );
-    $internal_roles = array(
-        'administrator', 'shop_manager', 'staff', 'organisateur', 'guichet',
-        'responsable', 'responsable_vente', 'staff_checkin', 'staff_kiosk',
-        'event_manager', 'checkin_supervisor', 'responsable_finance',
-        'operations_supervisor', 'lamako_support', 'editor', 'author',
-        'contributor', 'wpseo_manager', 'wpseo_editor',
-    );
-    if ( array_intersect( $roles, $internal_roles ) ) return false;
-
-    return (bool) array_intersect( $roles, array( 'customer', 'subscriber' ) );
-}
-
-function lr_rewards_user_is_member( $user_id ) {
-    return 'yes' === (string) get_user_meta( (int) $user_id, '_lamako_rewards_member', true );
-}
-
-function lr_rewards_user_is_eligible( $user_id ) {
-    return lr_rewards_user_role_is_eligible( $user_id ) && lr_rewards_user_is_member( $user_id );
-}
-
-function lr_rewards_activate_membership( $user_id ) {
-    $user_id = (int) $user_id;
-    if ( ! lr_rewards_user_role_is_eligible( $user_id ) ) {
-        return new WP_Error( 'rewards_role_ineligible', 'Ce compte ne peut pas rejoindre LamakoRewards.', array( 'status' => 403 ) );
-    }
-
-    if ( lr_rewards_user_is_member( $user_id ) ) {
-        return array( 'joined' => true, 'alreadyJoined' => true );
-    }
-
-    update_user_meta( $user_id, '_lamako_rewards_member', 'yes' );
-    update_user_meta( $user_id, '_lamako_rewards_member_since', gmdate( 'c' ) );
-
-    if ( ! get_user_meta( $user_id, '_lamako_rewards_welcome_awarded', true ) ) {
-        if ( ! function_exists( 'mycred_add' ) || ! mycred_add( 'registration', $user_id, LR_REGISTRATION_BONUS, 'Bonus inscription LamakoRewards' ) ) {
-            delete_user_meta( $user_id, '_lamako_rewards_member' );
-            delete_user_meta( $user_id, '_lamako_rewards_member_since' );
-            return new WP_Error( 'rewards_welcome_credit_failed', 'L adhesion n a pas pu etre finalisee.', array( 'status' => 503 ) );
-        }
-        update_user_meta( $user_id, '_lamako_rewards_welcome_awarded', gmdate( 'c' ) );
-    }
-
-    lr_generate_referral_code( $user_id );
-    if ( function_exists( 'lr_send_welcome_email' ) ) lr_send_welcome_email( $user_id );
-    return array( 'joined' => true, 'alreadyJoined' => false );
-}
-
-function lr_rewards_deactivate_membership( $user_id ) {
-    update_user_meta( (int) $user_id, '_lamako_rewards_member', 'no' );
-    update_user_meta( (int) $user_id, '_lamako_rewards_left_at', gmdate( 'c' ) );
-    return array( 'joined' => false );
-}
-
 /**
  * Store referral code in user meta when user registers
  */
 function lr_generate_referral_code( $user_id ) {
-    if ( ! lr_rewards_user_is_eligible( $user_id ) ) return '';
     $existing = get_user_meta( $user_id, '_lamako_referral_code', true );
     if ( $existing ) return $existing;
-    
+
     $user = get_userdata( $user_id );
     $prefix = strtoupper( substr( $user->user_login, 0, 3 ) );
     $suffix = strtoupper( substr( md5( $user_id . time() ), 0, 5 ) );
     $code = "TBL-{$prefix}{$suffix}";
-    
+
     update_user_meta( $user_id, '_lamako_referral_code', $code );
     return $code;
 }
@@ -582,70 +819,47 @@ function lr_generate_referral_code( $user_id ) {
  * Register a referral relationship
  */
 function lr_register_referral( $referee_user_id, $referrer_code ) {
-    if ( ! lr_rewards_user_is_eligible( $referee_user_id ) ) {
-        return new WP_Error( 'rewards_membership_required', 'Adhesion LamakoRewards requise.', array( 'status' => 403 ) );
-    }
     global $wpdb;
 
-    $referee_user_id = (int) $referee_user_id;
-    if ( $referee_user_id <= 0 ) {
-        return new WP_Error( 'invalid_referee', 'Utilisateur invalide.' );
+    // Find referrer by code
+    $referrer_id = $wpdb->get_var( $wpdb->prepare(
+        "SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key = '_lamako_referral_code' AND meta_value = %s",
+        $referrer_code
+    ) );
+
+    if ( ! $referrer_id ) {
+        return new WP_Error( 'invalid_code', 'Code de parrainage invalide.' );
     }
 
-    $lock_name = 'lamako_referral_' . $referee_user_id;
-    $locked    = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $lock_name, 5 ) );
-    if ( 1 !== $locked ) {
-        return new WP_Error( 'referral_busy', 'Le parrainage est déjà en cours de traitement.' );
+    if ( (int) $referrer_id === (int) $referee_user_id ) {
+        return new WP_Error( 'self_referral', 'Vous ne pouvez pas vous parrainer vous-même.' );
     }
 
-    try {
-        // Find referrer by code
-        $referrer_id = $wpdb->get_var( $wpdb->prepare(
-            "SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key = '_lamako_referral_code' AND meta_value = %s",
-            $referrer_code
-        ) );
-
-        if ( ! $referrer_id ) {
-            return new WP_Error( 'invalid_code', 'Code de parrainage invalide.' );
-        }
-
-        if ( (int) $referrer_id === $referee_user_id ) {
-            return new WP_Error( 'self_referral', 'Vous ne pouvez pas vous parrainer vous-même.' );
-        }
-
-        // A unique relationship marker makes repeated requests idempotent.
-        if ( get_user_meta( $referee_user_id, '_lamako_referred_by', true ) ) {
-            return new WP_Error( 'already_referred', 'Vous avez déjà un parrain.' );
-        }
-        if ( ! add_user_meta( $referee_user_id, '_lamako_referred_by', (int) $referrer_id, true ) ) {
-            return new WP_Error( 'already_referred', 'Vous avez déjà un parrain.' );
-        }
-
-        update_user_meta( $referee_user_id, '_lamako_referral_code_used', $referrer_code );
-        update_user_meta( $referee_user_id, '_lamako_referral_date', current_time( 'mysql' ) );
-
-        $count = (int) get_user_meta( $referrer_id, '_lamako_referral_count', true );
-        update_user_meta( $referrer_id, '_lamako_referral_count', $count + 1 );
-
-        if ( function_exists( 'mycred_add' ) && lr_rewards_user_is_eligible( $referee_user_id ) && lr_rewards_user_is_eligible( $referrer_id ) ) {
-            mycred_add(
-                'referral_signup',
-                $referee_user_id,
-                LR_REFEREE_BONUS,
-                'Bonus parrainage (inscription)',
-                (int) $referrer_id,
-                'referee:' . $referee_user_id
-            );
-        }
-
-        return array(
-            'success' => true,
-            'referrer_id' => (int) $referrer_id,
-            'referee_bonus' => LR_REFEREE_BONUS,
-        );
-    } finally {
-        $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
+    // Check if referee already has a referrer
+    $existing = get_user_meta( $referee_user_id, '_lamako_referred_by', true );
+    if ( $existing ) {
+        return new WP_Error( 'already_referred', 'Vous avez déjà un parrain.' );
     }
+
+    // Store the relationship
+    update_user_meta( $referee_user_id, '_lamako_referred_by', $referrer_id );
+    update_user_meta( $referee_user_id, '_lamako_referral_code_used', $referrer_code );
+    update_user_meta( $referee_user_id, '_lamako_referral_date', current_time( 'mysql' ) );
+
+    // Add referrer's referral count
+    $count = (int) get_user_meta( $referrer_id, '_lamako_referral_count', true );
+    update_user_meta( $referrer_id, '_lamako_referral_count', $count + 1 );
+
+    // Give referee bonus immediately
+    if ( function_exists( 'mycred_add' ) ) {
+        mycred_add( 'referral_signup', $referee_user_id, LR_REFEREE_BONUS, 'Bonus parrainage (inscription)' );
+    }
+
+    return array(
+        'success' => true,
+        'referrer_id' => (int) $referrer_id,
+        'referee_bonus' => LR_REFEREE_BONUS,
+    );
 }
 
 /**
@@ -657,32 +871,40 @@ add_action( 'woocommerce_order_status_completed', 'lr_credit_referrer_on_purchas
 function lr_credit_referrer_on_purchase( $order_id ) {
     $order = wc_get_order( $order_id );
     if ( ! $order ) return;
-    
+
     $customer_id = $order->get_customer_id();
     if ( ! $customer_id ) return;
-    
+
     // Check if this user was referred
     $referrer_id = get_user_meta( $customer_id, '_lamako_referred_by', true );
     if ( ! $referrer_id ) return;
-    
+
     // Check if referrer was already credited for this referee
     $credited = get_user_meta( $customer_id, '_lamako_referral_credited', true );
     if ( $credited ) return;
-    
-    // Credit the referrer only while both accounts remain eligible members.
-    if ( function_exists( 'mycred_add' ) && lr_rewards_user_is_eligible( $customer_id ) && lr_rewards_user_is_eligible( $referrer_id ) ) {
-        mycred_add( 'referral_purchase', (int) $referrer_id, LR_REFERRAL_BONUS, 
-            sprintf( 'Bonus parrainage - filleul #%d a effectué un achat', $customer_id ) 
+
+    // Credit the referrer
+    if ( function_exists( 'mycred_add' ) ) {
+        mycred_add( 'referral_purchase', (int) $referrer_id, LR_REFERRAL_BONUS,
+            sprintf( 'Bonus parrainage - filleul #%d a effectué un achat', $customer_id )
         );
     }
-    
+
     // Mark as credited
     update_user_meta( $customer_id, '_lamako_referral_credited', current_time( 'mysql' ) );
 }
 
 // ============================================================
-// POINTS ON PURCHASE (with tier multiplier)
+// POINTS ON PURCHASE (fixed public rate)
 // ============================================================
+
+add_filter( 'mycred_before_woo_payout_reward', 'lr_disable_legacy_mycred_woo_payout', 10, 2 );
+
+function lr_disable_legacy_mycred_woo_payout( $proceed, $order ) {
+    $config = lr_rewards_get_config();
+    return empty( $config['program']['enabled'] ) ? $proceed : false;
+}
+
 
 add_action( 'woocommerce_payment_complete', 'lr_award_purchase_points', 10, 1 );
 add_action( 'woocommerce_order_status_processing', 'lr_award_purchase_points', 10, 1 );
@@ -741,18 +963,16 @@ function lr_get_order_rewardable_total( WC_Order $order ) {
 }
 
 function lr_award_purchase_points( $order_id ) {
-    $membership_order = function_exists( 'wc_get_order' ) ? wc_get_order( $order_id ) : false;
-    if ( ! $membership_order || ! lr_rewards_user_is_eligible( (int) $membership_order->get_customer_id() ) ) return;
     $order = wc_get_order( $order_id );
     if ( ! $order ) return;
 
     if ( ! $order->is_paid() || in_array( $order->get_status(), array( 'cancelled', 'failed', 'refunded' ), true ) ) {
         return;
     }
-    
+
     $customer_id = $order->get_customer_id();
     if ( ! $customer_id ) return;
-    
+
     // Check if points already awarded for this order.
     $awarded  = (int) $order->get_meta( '_lamako_points_awarded', true );
     $reversed = (int) $order->get_meta( '_lamako_points_reversed', true );
@@ -771,29 +991,26 @@ function lr_award_purchase_points( $order_id ) {
         $order->save();
         return;
     }
-    
-    // Calculate base points only from products/events that participate in LamakoRewards.
+
+    // Calculate base points (1 pt per 1000 Ar)
     $total = lr_get_order_rewardable_total( $order );
     $base_points = floor( $total / 1000 );
-    
+
     if ( $base_points <= 0 ) return;
-    
-    // Apply tier multiplier
-    $lifetime = lr_get_total_earned( $customer_id );
-    $tier = lr_get_tier( $lifetime );
-    $multiplier = lr_get_multiplier( $tier );
-    $final_points = (int) floor( $base_points * $multiplier );
-    
+
+    // The public contract has one fixed rate for every member.
+    $final_points = (int) $base_points;
+
     // Award points
     if ( function_exists( 'mycred_add' ) ) {
-        mycred_add( 'purchase', $customer_id, $final_points, 
-            sprintf( 'Achat #%d (%s Ar) - x%.1f %s', $order_id, number_format( $total, 0, ',', ' ' ), $multiplier, lr_get_tier_name( $tier ) )
+        mycred_add( 'purchase', $customer_id, $final_points,
+            sprintf( 'Achat #%d (%s Ar) - 1 point par 1 000 Ar', $order_id, number_format( $total, 0, ',', ' ' ) )
         );
     }
-    
+
     // Mark order as processed.
     $order->update_meta_data( '_lamako_points_awarded', $final_points );
-    $order->update_meta_data( '_lamako_points_multiplier', $multiplier );
+    $order->update_meta_data( '_lamako_points_multiplier', 1 );
     $order->save();
 }
 
@@ -869,16 +1086,15 @@ add_action( 'wp_login', 'lr_daily_login_bonus', 10, 2 );
 
 function lr_daily_login_bonus( $user_login, $user ) {
     $user_id = $user->ID;
-    if ( ! lr_rewards_user_is_eligible( $user_id ) ) return;
     $today = date( 'Y-m-d' );
     $last_login_bonus = get_user_meta( $user_id, '_lamako_last_login_bonus', true );
-    
+
     if ( $last_login_bonus === $today ) return; // Already awarded today
-    
+
     if ( function_exists( 'mycred_add' ) ) {
         mycred_add( 'daily_login', $user_id, LR_LOGIN_BONUS, 'Bonus connexion quotidienne' );
     }
-    
+
     update_user_meta( $user_id, '_lamako_last_login_bonus', $today );
 }
 
@@ -889,9 +1105,13 @@ function lr_daily_login_bonus( $user_login, $user ) {
 add_action( 'user_register', 'lr_registration_bonus', 10, 1 );
 
 function lr_registration_bonus( $user_id ) {
-    // Membership is voluntary. The welcome bonus is awarded by the explicit
-    // membership endpoint, never by generic WordPress account creation.
-    return;
+    // Generate referral code for new user
+    lr_generate_referral_code( $user_id );
+
+    // Award registration bonus
+    if ( function_exists( 'mycred_add' ) ) {
+        mycred_add( 'registration', $user_id, LR_REGISTRATION_BONUS, 'Bonus inscription LamakoRewards' );
+    }
 }
 
 // ============================================================
@@ -903,22 +1123,21 @@ add_action( 'lr_daily_cron', 'lr_check_birthdays' );
 function lr_check_birthdays() {
     global $wpdb;
     $today = date( 'm-d' );
-    
+
     // Find users with birthday today
     $users = $wpdb->get_col( $wpdb->prepare(
         "SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key = '_lamako_birthday' AND RIGHT(meta_value, 5) = %s",
         $today
     ) );
-    
+
     foreach ( $users as $user_id ) {
-        if ( ! lr_rewards_user_is_eligible( $user_id ) ) continue;
         $last_birthday_bonus = get_user_meta( $user_id, '_lamako_last_birthday_bonus', true );
         if ( $last_birthday_bonus === date( 'Y' ) ) continue;
-        
+
         if ( function_exists( 'mycred_add' ) ) {
             mycred_add( 'birthday', (int) $user_id, LR_BIRTHDAY_BONUS, 'Joyeux anniversaire ! 🎂' );
         }
-        
+
         update_user_meta( $user_id, '_lamako_last_birthday_bonus', date( 'Y' ) );
     }
 }
@@ -934,56 +1153,83 @@ if ( ! wp_next_scheduled( 'lr_daily_cron' ) ) {
 
 add_action( 'rest_api_init', function() {
     $namespace = 'lamako-rewards/v1';
-    
+
+    // GET /config
+    register_rest_route( $namespace, '/config', array(
+        'methods' => 'GET',
+        'callback' => 'lr_api_get_config',
+        'permission_callback' => '__return_true',
+        'args' => array(
+            'platform' => array(
+                'sanitize_callback' => 'sanitize_key',
+                'default' => 'web',
+            ),
+        ),
+    ) );
+
+    // GET/POST /admin/config
+    register_rest_route( $namespace, '/admin/config', array(
+        array(
+            'methods' => 'GET',
+            'callback' => 'lr_api_admin_get_config',
+            'permission_callback' => 'lr_api_admin_permission',
+        ),
+        array(
+            'methods' => 'POST',
+            'callback' => 'lr_api_admin_update_config',
+            'permission_callback' => 'lr_api_admin_permission',
+        ),
+    ) );
+
     // GET /balance
     register_rest_route( $namespace, '/balance', array(
         'methods' => 'GET',
         'callback' => 'lr_api_get_balance',
-        'permission_callback' => 'lr_rest_require_user',
+        'permission_callback' => '__return_true',
     ) );
-    
+
     // GET /history
     register_rest_route( $namespace, '/history', array(
         'methods' => 'GET',
         'callback' => 'lr_api_get_history',
-        'permission_callback' => 'lr_rest_require_user',
+        'permission_callback' => '__return_true',
     ) );
-    
+
     // GET /user-by-email
     register_rest_route( $namespace, '/user-by-email', array(
         'methods' => 'GET',
         'callback' => 'lr_api_get_user_by_email',
-        'permission_callback' => 'lr_rest_require_user',
+        'permission_callback' => '__return_true',
     ) );
-    
+
     // POST /redeem
     register_rest_route( $namespace, '/redeem', array(
         'methods' => 'POST',
         'callback' => 'lr_api_redeem_points',
-        'permission_callback' => 'lr_rest_require_user',
+        'permission_callback' => '__return_true',
     ) );
-    
+
     // POST /referral/register
     register_rest_route( $namespace, '/referral/register', array(
         'methods' => 'POST',
         'callback' => 'lr_api_register_referral',
-        'permission_callback' => 'lr_rest_require_user',
+        'permission_callback' => '__return_true',
     ) );
-    
+
     // POST /referral/validate
     register_rest_route( $namespace, '/referral/validate', array(
         'methods' => 'POST',
         'callback' => 'lr_api_validate_referral_code',
-        'permission_callback' => 'lr_rest_require_user',
+        'permission_callback' => '__return_true',
     ) );
-    
+
     // GET /referral/code
     register_rest_route( $namespace, '/referral/code', array(
         'methods' => 'GET',
         'callback' => 'lr_api_get_referral_code',
-        'permission_callback' => 'lr_rest_require_user',
+        'permission_callback' => '__return_true',
     ) );
-    
+
     // GET /tiers
     register_rest_route( $namespace, '/tiers', array(
         'methods' => 'GET',
@@ -992,20 +1238,53 @@ add_action( 'rest_api_init', function() {
     ) );
 });
 
+// ----- CONFIG -----
+function lr_api_get_config( $request ) {
+    $platform = sanitize_key( $request->get_param( 'platform' ) ?: 'web' );
+    return rest_ensure_response( lr_rewards_public_config( $platform ) );
+}
+
+function lr_api_admin_permission() {
+    return lr_rewards_admin_can_manage();
+}
+
+function lr_api_admin_get_config( $request ) {
+    return rest_ensure_response( array(
+        'config' => lr_rewards_get_config(),
+        'audit_log' => lr_rewards_get_audit_log(),
+    ) );
+}
+
+function lr_api_admin_update_config( $request ) {
+    $body = $request->get_json_params();
+    if ( ! is_array( $body ) ) {
+        return new WP_Error( 'invalid_config', 'JSON body must be an object.', array( 'status' => 400 ) );
+    }
+
+    $config = isset( $body['config'] ) && is_array( $body['config'] ) ? $body['config'] : $body;
+    return rest_ensure_response( array(
+        'config' => lr_rewards_update_config( $config, 'admin_rest' ),
+    ) );
+}
+
 // ----- BALANCE -----
 function lr_api_get_balance( $request ) {
-    $user_id = lr_authenticated_user_id( $request, $request->get_param( 'user_id' ) );
-    if ( is_wp_error( $user_id ) ) return $user_id;
-    if ( ! lr_rewards_user_is_eligible( $user_id ) ) return new WP_Error( 'rewards_membership_required', 'Adhesion LamakoRewards requise.', array( 'status' => 403 ) );
-    
+    $auth = lr_authenticate_request( $request );
+    if ( is_wp_error( $auth ) ) return $auth;
+
+    $user_id = (int) $request->get_param( 'user_id' );
+    if ( ! $user_id ) {
+        return new WP_Error( 'missing_param', 'user_id is required.', array( 'status' => 400 ) );
+    }
+
     if ( ! function_exists( 'mycred_get_users_balance' ) ) {
         return new WP_Error( 'mycred_missing', 'myCred plugin not active.', array( 'status' => 500 ) );
     }
-    
+
     $balance = mycred_get_users_balance( $user_id );
     $total_earned = lr_get_total_earned( $user_id );
     $tier = lr_get_tier( $total_earned );
-    
+
     return rest_ensure_response( array(
         'user_id' => $user_id,
         'balance' => (float) $balance,
@@ -1020,27 +1299,32 @@ function lr_api_get_balance( $request ) {
 }
 
 function lr_get_discount_percent( $tier ) {
-    // No automatic discount. Benefits remain conditional on participating offers.
+    // No automatic discount - rewards are experiential (early access, upgrades, backstage)
     // Discounts come from redeeming points only
     return 0;
 }
 
 // ----- HISTORY -----
 function lr_api_get_history( $request ) {
-    $user_id = lr_authenticated_user_id( $request, $request->get_param( 'user_id' ) );
-    if ( is_wp_error( $user_id ) ) return $user_id;
-    if ( ! lr_rewards_user_is_eligible( $user_id ) ) return new WP_Error( 'rewards_membership_required', 'Adhesion LamakoRewards requise.', array( 'status' => 403 ) );
+    $auth = lr_authenticate_request( $request );
+    if ( is_wp_error( $auth ) ) return $auth;
+
+    $user_id = (int) $request->get_param( 'user_id' );
     $limit = min( (int) ( $request->get_param( 'limit' ) ?: 20 ), 100 );
-    
+
+    if ( ! $user_id ) {
+        return new WP_Error( 'missing_param', 'user_id is required.', array( 'status' => 400 ) );
+    }
+
     global $wpdb;
     $table = $wpdb->prefix . 'myCRED_log';
-    
+
     $results = $wpdb->get_results( $wpdb->prepare(
-        "SELECT id, ref AS type, creds AS points, entry AS description, time 
+        "SELECT id, ref AS type, creds AS points, entry AS description, time
          FROM $table WHERE user_id = %d ORDER BY time DESC LIMIT %d",
         $user_id, $limit
     ) );
-    
+
     $history = array();
     foreach ( $results as $row ) {
         $history[] = array(
@@ -1051,31 +1335,28 @@ function lr_api_get_history( $request ) {
             'date' => date( 'c', (int) $row->time ),
         );
     }
-    
+
     return rest_ensure_response( array( 'history' => $history ) );
 }
 
 // ----- USER BY EMAIL -----
 function lr_api_get_user_by_email( $request ) {
-    $authenticated_user_id = lr_authenticated_user_id( $request );
-    if ( is_wp_error( $authenticated_user_id ) ) return $authenticated_user_id;
-    
+    $auth = lr_authenticate_request( $request );
+    if ( is_wp_error( $auth ) ) return $auth;
+
     $email = sanitize_email( $request->get_param( 'email' ) );
     if ( ! $email ) {
         return new WP_Error( 'missing_param', 'email is required.', array( 'status' => 400 ) );
     }
-    
+
     $user = get_user_by( 'email', $email );
     if ( ! $user ) {
         return new WP_Error( 'not_found', 'User not found.', array( 'status' => 404 ) );
     }
-    if ( (int) $user->ID !== (int) $authenticated_user_id ) {
-        return new WP_Error( 'forbidden_user', 'You cannot access another user account.', array( 'status' => 403 ) );
-    }
-    
+
     $balance = function_exists( 'mycred_get_users_balance' ) ? mycred_get_users_balance( $user->ID ) : 0;
     $total_earned = lr_get_total_earned( $user->ID );
-    
+
     return rest_ensure_response( array(
         'user_id' => $user->ID,
         'balance' => (float) $balance,
@@ -1085,68 +1366,191 @@ function lr_api_get_user_by_email( $request ) {
 
 // ----- REDEEM POINTS -----
 function lr_api_redeem_points( $request ) {
+    $auth = lr_authenticate_request( $request );
+    if ( is_wp_error( $auth ) ) return $auth;
+
     $body = $request->get_json_params();
-    $body = is_array( $body ) ? $body : array();
-    $user_id = lr_authenticated_user_id( $request, $body['user_id'] ?? 0 );
-    if ( is_wp_error( $user_id ) ) return $user_id;
-    if ( ! lr_rewards_user_is_eligible( $user_id ) ) return new WP_Error( 'rewards_membership_required', 'Adhesion LamakoRewards requise.', array( 'status' => 403 ) );
+    $user_id = (int) ( $body['user_id'] ?? 0 );
     $points = (int) ( $body['points'] ?? 0 );
 
-    $idempotency_key = $request->get_header( 'Idempotency-Key' );
-    if ( ! $idempotency_key ) {
-        $idempotency_key = $body['idempotencyKey'] ?? ( $body['idempotency_key'] ?? '' );
+    if ( ! $user_id || ! $points ) {
+        return new WP_Error( 'missing_params', 'user_id and points are required.', array( 'status' => 400 ) );
     }
-    $result = lr_redeem_points_for_user( $user_id, $points, $idempotency_key );
-    return is_wp_error( $result ) ? $result : rest_ensure_response( $result );
+
+    $minimum_redeem_points = lr_rewards_minimum_redeem_points();
+    $total_earned = lr_get_total_earned( $user_id );
+    if ( $total_earned < $minimum_redeem_points ) {
+        return new WP_Error( 'tier_too_low',
+            sprintf(
+                'L echange de points est disponible a partir de %d pts cumules (= %s Ar depenses). Il vous manque %d pts.',
+                $minimum_redeem_points,
+                number_format( $minimum_redeem_points * 1000, 0, ',', ' ' ),
+                $minimum_redeem_points - $total_earned
+            ),
+            array( 'status' => 403 )
+        );
+    }
+
+    $discount_value = lr_rewards_redemption_value( $points );
+    if ( $discount_value <= 0 ) {
+        $valid_points = array_map( function( $option ) {
+            return (int) ( $option['points'] ?? 0 );
+        }, lr_rewards_redemption_options() );
+        $valid_points = array_values( array_filter( $valid_points ) );
+        return new WP_Error( 'invalid_points', 'Points must be one of: ' . implode( ', ', $valid_points ) . '.', array( 'status' => 400 ) );
+    }
+
+    if ( ! function_exists( 'mycred_get_users_balance' ) ) {
+        return new WP_Error( 'mycred_missing', 'myCred plugin not active.', array( 'status' => 500 ) );
+    }
+
+    $balance = mycred_get_users_balance( $user_id );
+    if ( $balance < $minimum_redeem_points ) {
+        return new WP_Error(
+            'minimum_balance_required',
+            sprintf( 'Les reductions Rewards sont debloquees a partir de %d points disponibles.', $minimum_redeem_points ),
+            array( 'status' => 403 )
+        );
+    }
+
+    if ( $balance < $points ) {
+        return new WP_Error( 'insufficient_points', 'Solde insuffisant.', array( 'status' => 400 ) );
+    }
+
+    mycred_subtract( 'redemption', $user_id, $points,
+        sprintf( 'Echange %d pts vers %s Ar de reduction', $points, number_format( $discount_value, 0, ',', ' ' ) )
+    );
+
+    $coupon_code = 'LR-' . strtoupper( wp_generate_password( 8, false ) );
+
+    $coupon = new WC_Coupon();
+    $coupon->set_code( $coupon_code );
+    $coupon->set_discount_type( 'fixed_cart' );
+    $coupon->set_amount( $discount_value );
+    $coupon->set_usage_limit( 1 );
+    $coupon->set_usage_limit_per_user( 1 );
+    $coupon->set_date_expires( strtotime( '+30 days' ) );
+    $coupon->set_description( sprintf( 'LamakoRewards - %d points echanges par user #%d', $points, $user_id ) );
+    $coupon->save();
+
+    return rest_ensure_response( array(
+        'success' => true,
+        'coupon_code' => $coupon_code,
+        'discount_value' => $discount_value,
+        'points_deducted' => $points,
+        'new_balance' => mycred_get_users_balance( $user_id ),
+        'expires' => date( 'c', strtotime( '+30 days' ) ),
+    ) );
+
+    // Check minimum lifetime points for redemption (750 pts = 750 000 Ar spent)
+    $total_earned = lr_get_total_earned( $user_id );
+    if ( $total_earned < LR_REDEMPTION_MIN_LIFETIME ) {
+        return new WP_Error( 'tier_too_low',
+            sprintf( 'L\'échange de points est disponible à partir de %d pts cumulés (= %s Ar dépensés). Il vous manque %d pts.',
+                LR_REDEMPTION_MIN_LIFETIME,
+                number_format( LR_REDEMPTION_MIN_LIFETIME * 1000, 0, ',', ' ' ),
+                LR_REDEMPTION_MIN_LIFETIME - $total_earned
+            ),
+            array( 'status' => 403 )
+        );
+    }
+
+    // Validate redemption tiers from the official Rewards config.
+    $valid_tiers = array( 1000, 2000 );
+    if ( ! in_array( $points, $valid_tiers ) ) {
+        return new WP_Error( 'invalid_points', 'Points must be one of: 1000, 2000.', array( 'status' => 400 ) );
+    }
+
+    // Check balance
+    if ( ! function_exists( 'mycred_get_users_balance' ) ) {
+        return new WP_Error( 'mycred_missing', 'myCred plugin not active.', array( 'status' => 500 ) );
+    }
+
+    $balance = mycred_get_users_balance( $user_id );
+    if ( $balance < $points ) {
+        return new WP_Error( 'insufficient_points', 'Solde insuffisant.', array( 'status' => 400 ) );
+    }
+
+    // Calculate discount value from the official Rewards config.
+    $values = array( 1000 => 20000, 2000 => 40000 );
+    $discount_value = $values[ $points ];
+
+    // Deduct points
+    mycred_subtract( 'redemption', $user_id, $points,
+        sprintf( 'Échange %d pts → %s Ar de réduction', $points, number_format( $discount_value, 0, ',', ' ' ) )
+    );
+
+    // Generate coupon code
+    $coupon_code = 'LR-' . strtoupper( wp_generate_password( 8, false ) );
+
+    // Create WooCommerce coupon
+    $coupon = new WC_Coupon();
+    $coupon->set_code( $coupon_code );
+    $coupon->set_discount_type( 'fixed_cart' );
+    $coupon->set_amount( $discount_value );
+    $coupon->set_usage_limit( 1 );
+    $coupon->set_usage_limit_per_user( 1 );
+    $coupon->set_date_expires( strtotime( '+30 days' ) );
+    $coupon->set_description( sprintf( 'LamakoRewards - %d points échangés par user #%d', $points, $user_id ) );
+    $coupon->save();
+
+    return rest_ensure_response( array(
+        'success' => true,
+        'coupon_code' => $coupon_code,
+        'discount_value' => $discount_value,
+        'points_deducted' => $points,
+        'new_balance' => mycred_get_users_balance( $user_id ),
+        'expires' => date( 'c', strtotime( '+30 days' ) ),
+    ) );
 }
 
 // ----- REFERRAL: REGISTER -----
 function lr_api_register_referral( $request ) {
+    $auth = lr_authenticate_request( $request );
+    if ( is_wp_error( $auth ) ) return $auth;
+
     $body = $request->get_json_params();
-    $body = is_array( $body ) ? $body : array();
-    $referee_user_id = lr_authenticated_user_id( $request, $body['referee_user_id'] ?? 0 );
-    if ( is_wp_error( $referee_user_id ) ) return $referee_user_id;
+    $referee_user_id = (int) ( $body['referee_user_id'] ?? 0 );
     $referrer_code = sanitize_text_field( $body['referrer_code'] ?? '' );
-    
-    if ( ! $referrer_code ) {
-        return new WP_Error( 'missing_params', 'referrer_code is required.', array( 'status' => 400 ) );
+
+    if ( ! $referee_user_id || ! $referrer_code ) {
+        return new WP_Error( 'missing_params', 'referee_user_id and referrer_code are required.', array( 'status' => 400 ) );
     }
-    
+
     $result = lr_register_referral( $referee_user_id, $referrer_code );
-    
+
     if ( is_wp_error( $result ) ) {
         return $result;
     }
-    
+
     return rest_ensure_response( $result );
 }
 
 // ----- REFERRAL: VALIDATE CODE -----
 function lr_api_validate_referral_code( $request ) {
-    $user_id = lr_authenticated_user_id( $request );
-    if ( is_wp_error( $user_id ) ) return $user_id;
-    if ( ! lr_rewards_user_is_eligible( $user_id ) ) return new WP_Error( 'rewards_membership_required', 'Adhesion LamakoRewards requise.', array( 'status' => 403 ) );
-    
+    $auth = lr_authenticate_request( $request );
+    if ( is_wp_error( $auth ) ) return $auth;
+
     $body = $request->get_json_params();
     $code = sanitize_text_field( $body['code'] ?? '' );
-    
+
     if ( ! $code ) {
         return new WP_Error( 'missing_param', 'code is required.', array( 'status' => 400 ) );
     }
-    
+
     global $wpdb;
     $referrer_id = $wpdb->get_var( $wpdb->prepare(
         "SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key = '_lamako_referral_code' AND meta_value = %s",
         $code
     ) );
-    
+
     if ( ! $referrer_id ) {
         return rest_ensure_response( array( 'valid' => false, 'message' => 'Code invalide.' ) );
     }
-    
+
     $user = get_userdata( (int) $referrer_id );
     $display_name = $user ? $user->display_name : 'Utilisateur';
-    
+
     return rest_ensure_response( array(
         'valid' => true,
         'referrer_name' => $display_name,
@@ -1156,13 +1560,17 @@ function lr_api_validate_referral_code( $request ) {
 
 // ----- REFERRAL: GET CODE -----
 function lr_api_get_referral_code( $request ) {
-    $user_id = lr_authenticated_user_id( $request, $request->get_param( 'user_id' ) );
-    if ( is_wp_error( $user_id ) ) return $user_id;
-    if ( ! lr_rewards_user_is_eligible( $user_id ) ) return new WP_Error( 'rewards_membership_required', 'Adhesion LamakoRewards requise.', array( 'status' => 403 ) );
-    
+    $auth = lr_authenticate_request( $request );
+    if ( is_wp_error( $auth ) ) return $auth;
+
+    $user_id = (int) $request->get_param( 'user_id' );
+    if ( ! $user_id ) {
+        return new WP_Error( 'missing_param', 'user_id is required.', array( 'status' => 400 ) );
+    }
+
     $code = lr_generate_referral_code( $user_id );
     $referral_count = (int) get_user_meta( $user_id, '_lamako_referral_count', true );
-    
+
     return rest_ensure_response( array(
         'code' => $code,
         'referral_count' => $referral_count,
@@ -1172,6 +1580,31 @@ function lr_api_get_referral_code( $request ) {
 
 // ----- TIERS INFO -----
 function lr_api_get_tiers( $request ) {
+    $earning_actions = lr_rewards_earning_actions();
+
+    return rest_ensure_response( array(
+        'tiers' => lr_rewards_tiers(),
+        'earn_rules' => array(
+            'purchase' => '1 pt / 1 000 Ar',
+            'registration' => (int) lr_rewards_config_get( 'program.signup_bonus_points', LR_REGISTRATION_BONUS ) . ' pts',
+            'daily_login' => (int) ( $earning_actions['daily_login_points'] ?? LR_LOGIN_BONUS ) . ' pts',
+            'attendance' => (int) ( $earning_actions['event_attendance_points'] ?? LR_ATTENDANCE_BONUS ) . ' pts',
+            'review' => (int) ( $earning_actions['review_points'] ?? LR_REVIEW_BONUS ) . ' pts',
+            'referral' => (int) lr_rewards_config_get( 'program.referral.referrer_points', LR_REFERRAL_BONUS ) . ' pts',
+            'referee_bonus' => (int) lr_rewards_config_get( 'program.referral.referred_points', LR_REFEREE_BONUS ) . ' pts',
+            'birthday' => (int) ( $earning_actions['birthday_points'] ?? LR_BIRTHDAY_BONUS ) . ' pts',
+            'share' => (int) ( $earning_actions['social_share_points'] ?? LR_SHARE_BONUS ) . ' pts',
+            'newsletter' => (int) ( $earning_actions['newsletter_points'] ?? LR_NEWSLETTER_BONUS ) . ' pts',
+        ),
+        'minimum_redeem_points' => lr_rewards_minimum_redeem_points(),
+        'redemption' => array_map( function( $option ) {
+            return array(
+                'points' => (int) ( $option['points'] ?? 0 ),
+                'value' => (int) ( $option['amount_ariary'] ?? $option['value'] ?? 0 ),
+            );
+        }, lr_rewards_redemption_options() ),
+    ) );
+
     return rest_ensure_response( array(
         'tiers' => array(
             array(
@@ -1204,7 +1637,7 @@ function lr_api_get_tiers( $request ) {
                 'min_points' => LR_TIER_PLATINUM,
                 'discount' => 0,
                 'multiplier' => LR_MULTIPLIER_PLATINUM,
-                'benefits' => array( 'x1.5 points sur chaque achat éligible', 'Surclassements selon disponibilité', 'Accès VIP selon disponibilité', 'Support dédié selon disponibilité' ),
+                'benefits' => array( 'x1.5 points sur chaque achat', 'Surclassement de billets', 'Accès VIP aux événements', 'Support dédié' ),
             ),
             array(
                 'id' => 'diamond',
@@ -1212,7 +1645,7 @@ function lr_api_get_tiers( $request ) {
                 'min_points' => LR_TIER_DIAMOND,
                 'discount' => 0,
                 'multiplier' => LR_MULTIPLIER_DIAMOND,
-                'benefits' => array( 'x2 points sur chaque achat éligible', 'Expériences exclusives selon disponibilité', 'Expériences spéciales selon disponibilité', 'Conciergerie événementielle selon disponibilité', 'Invitations privées selon disponibilité' ),
+                'benefits' => array( 'x2 points sur chaque achat', 'File prioritaire sur les événements participants', 'Expériences spéciales selon disponibilités', 'Conciergerie événementielle', 'Avantages ponctuels selon disponibilités', 'Invitations privées' ),
             ),
         ),
         'earn_rules' => array(
@@ -1227,10 +1660,8 @@ function lr_api_get_tiers( $request ) {
             'share' => LR_SHARE_BONUS . ' pts',
         ),
         'redemption' => array(
-            array( 'points' => 500, 'value' => 10000 ),
             array( 'points' => 1000, 'value' => 20000 ),
             array( 'points' => 2000, 'value' => 40000 ),
-            array( 'points' => 5000, 'value' => 100000 ),
         ),
     ) );
 }
@@ -1482,7 +1913,7 @@ function lr_shortcode_rewards_page() {
             <img src="<?php echo esc_url( $logo_white ); ?>" alt="LamakoRewards" style="max-width:200px; height:auto; margin-bottom:16px; position:relative;">
             <h2 style="font-size:1.5em; margin-bottom:12px;">Parrainez vos amis</h2>
             <p style="position:relative; max-width:500px; margin:0 auto;">Partagez votre code et gagnez <strong>75 points</strong> quand votre filleul effectue son premier achat.<br>Votre filleul reçoit aussi <strong>25 points bonus</strong> à l'inscription !</p>
-            <?php if ( is_user_logged_in() ) : 
+            <?php if ( is_user_logged_in() ) :
                 $code = lr_generate_referral_code( get_current_user_id() );
                 $count = (int) get_user_meta( get_current_user_id(), '_lamako_referral_count', true );
             ?>
@@ -1582,7 +2013,7 @@ function lr_shortcode_rewards_page() {
         </div>
 
         <!-- User Profile Section (logged in only) -->
-        <?php if ( is_user_logged_in() ) : 
+        <?php if ( is_user_logged_in() ) :
             $user_id = get_current_user_id();
             $balance = function_exists( 'mycred_get_users_balance' ) ? mycred_get_users_balance( $user_id ) : 0;
             $total_earned = lr_get_total_earned( $user_id );
@@ -1631,7 +2062,7 @@ function lr_shortcode_rewards_page() {
                 <a href="https://apps.apple.com/app/ticketbylamako" class="lr-cta" style="display:inline-flex; align-items:center; gap:8px;">🍎 App Store</a>
                 <a href="https://play.google.com/store/apps/details?id=space.manus.ticketbylamako.app" class="lr-cta" style="display:inline-flex; align-items:center; gap:8px; background:linear-gradient(135deg, #3d2314, #663d17);">▶ Google Play</a>
             </div>
-            <p style="color:#999; font-size:0.8em; margin-top:12px;">Application bientôt disponible</p>
+            <p style="color:#999; font-size:0.8em; margin-top:12px;">Disponible sur iOS etAndroid</p>
         </div>
     </div>
     <?php
@@ -1657,25 +2088,97 @@ function lr_shortcode_cta( $atts ) {
 add_shortcode( 'lamako_rewards_checkout_popup', 'lr_shortcode_checkout_popup' );
 
 function lr_shortcode_checkout_popup() {
-    if ( is_user_logged_in() ) return ''; // Don't show to logged-in users
+    if ( is_user_logged_in() ) return '';
+
+    $config = lr_rewards_get_config();
+    $popup = $config['popup']['web'] ?? array();
+    if ( empty( $config['program']['enabled'] ) || empty( $popup['enabled'] ) ) return '';
+
+    $delay = max( 0, absint( $popup['delay_seconds'] ?? 12 ) ) * 1000;
+    $frequency = max( 1, absint( $popup['frequency_days'] ?? 7 ) ) * DAY_IN_SECONDS * 1000;
+    $max_impressions = max( 0, absint( $popup['max_impressions_per_user'] ?? 3 ) );
+    if ( 0 === $max_impressions ) return '';
+
+    $signup_bonus = absint( $config['program']['signup_bonus_points'] ?? 100 );
+    $minimum_redeem = absint( $config['program']['minimum_redeem_points'] ?? 500 );
+    $earn_amount = absint( $config['program']['earn_rate']['amount_ariary'] ?? 1000 );
+    $cta_url = esc_url( $popup['cta_url'] ?? '/lamako-rewards/' );
     ob_start();
     ?>
-    <div id="lr-checkout-popup" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.6); z-index:99999; align-items:center; justify-content:center;">
-        <div style="background:white; border-radius:16px; padding:32px; max-width:400px; width:90%; text-align:center; position:relative;">
-            <button onclick="document.getElementById('lr-checkout-popup').style.display='none'" style="position:absolute; top:12px; right:16px; background:none; border:none; font-size:1.5em; cursor:pointer;">&times;</button>
-            <img src="https://www.ticketbylamako.com/wp-content/uploads/2026/04/LamakoRewards_Dark.png" alt="LamakoRewards" style="height:40px; width:auto; margin-bottom:16px;">
-            <h3 style="margin-bottom:8px; font-family:Raleway,-apple-system,sans-serif; color:#3d2314;">Rejoignez LamakoRewards !</h3>
-            <p style="color:#666; font-size:0.9em; margin-bottom:16px; font-family:Raleway,-apple-system,sans-serif;">Créez votre compte puis choisissez de rejoindre LamakoRewards pour recevoir <strong>100 points de bienvenue</strong>. Les réductions sont disponibles sur les événements et offres participants.</p>
-            <a href="<?php echo wp_registration_url(); ?>" style="display:block; background:linear-gradient(135deg,#3d2314,#663d17); color:white; padding:14px; border-radius:8px; text-decoration:none; font-weight:600; margin-bottom:8px; font-family:Raleway,-apple-system,sans-serif;">S'inscrire gratuitement</a>
-            <button onclick="document.getElementById('lr-checkout-popup').style.display='none'" style="background:none; border:none; color:#666; cursor:pointer; font-size:0.9em; font-family:Raleway,-apple-system,sans-serif;">Non merci, continuer sans compte</button>
+    <style>
+        #lr-rewards-popup { display:none; position:fixed; inset:0; z-index:99999; align-items:center; justify-content:center; padding:20px; background:rgba(11,9,8,.76); }
+        #lr-rewards-popup.lr-rewards-popup--open { display:flex!important; visibility:visible!important; pointer-events:auto!important; }
+        #lr-rewards-popup .lr-rewards-popup__card { position:relative; width:min(100%,430px); overflow:hidden; padding:30px 26px 24px; border:1px solid rgba(255,255,255,.14); border-radius:24px; background:linear-gradient(145deg,#ff4b1f 0%,#ff7a00 45%,#17120e 100%); color:#fff; box-shadow:0 24px 80px rgba(0,0,0,.38); font-family:Raleway,-apple-system,BlinkMacSystemFont,sans-serif; }
+        #lr-rewards-popup .lr-rewards-popup__close { position:absolute; top:14px; right:14px; width:36px; height:36px; border:0; border-radius:50%; background:rgba(0,0,0,.2); color:#fff; font-size:22px; line-height:1; cursor:pointer; }
+        #lr-rewards-popup .lr-rewards-popup__logo { width:145px; height:auto; margin:0 0 18px; }
+        #lr-rewards-popup .lr-rewards-popup__eyebrow { margin:0 0 8px; color:#d8ff36; font-size:11px; font-weight:800; letter-spacing:1.2px; }
+        #lr-rewards-popup h2 { max-width:350px; margin:0; color:#fff; font-size:clamp(28px,6vw,36px); line-height:.98; letter-spacing:-1.2px; }
+        #lr-rewards-popup .lr-rewards-popup__copy { margin:14px 0 18px; color:rgba(255,255,255,.88); font-size:14px; line-height:1.55; }
+        #lr-rewards-popup .lr-rewards-popup__facts { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; overflow:hidden; margin-bottom:18px; border-radius:14px; background:rgba(255,255,255,.18); }
+        #lr-rewards-popup .lr-rewards-popup__fact { padding:13px 8px; background:rgba(20,14,10,.3); text-align:center; }
+        #lr-rewards-popup .lr-rewards-popup__fact strong { display:block; color:#d8ff36; font-size:16px; }
+        #lr-rewards-popup .lr-rewards-popup__fact span { display:block; margin-top:3px; color:rgba(255,255,255,.72); font-size:10px; line-height:1.25; }
+        #lr-rewards-popup .lr-rewards-popup__cta { display:block; padding:14px 18px; border-radius:13px; background:#d8ff36; color:#17120e; text-align:center; text-decoration:none; font-weight:800; }
+        #lr-rewards-popup .lr-rewards-popup__later { display:block; width:100%; margin-top:7px; padding:10px; border:0; background:transparent; color:rgba(255,255,255,.78); cursor:pointer; }
+    </style>
+    <div id="lr-rewards-popup" aria-hidden="true">
+        <div class="lr-rewards-popup__card" role="dialog" aria-modal="true" aria-labelledby="lr-rewards-popup-title">
+            <button type="button" class="lr-rewards-popup__close" aria-label="Fermer">&times;</button>
+            <img class="lr-rewards-popup__logo" src="https://www.ticketbylamako.com/wp-content/uploads/2026/04/LamakoRewards_white.png" alt="LamakoRewards">
+            <p class="lr-rewards-popup__eyebrow">VOS SORTIES. VOTRE VALEUR.</p>
+            <h2 id="lr-rewards-popup-title">Des points qui servent vraiment.</h2>
+            <p class="lr-rewards-popup__copy">Activez volontairement et gratuitement LamakoRewards. Cumulez 1 point par tranche de <?php echo esc_html( number_format_i18n( $earn_amount ) ); ?> Ar sur vos achats eligibles.</p>
+            <div class="lr-rewards-popup__facts">
+                <div class="lr-rewards-popup__fact"><strong>+<?php echo esc_html( $signup_bonus ); ?></strong><span>a l'adhesion</span></div>
+                <div class="lr-rewards-popup__fact"><strong><?php echo esc_html( $minimum_redeem ); ?> pts</strong><span>premiere reduction</span></div>
+                <div class="lr-rewards-popup__fact"><strong>Priority Lane</strong><span>evenements participants</span></div>
+            </div>
+            <a class="lr-rewards-popup__cta" href="<?php echo $cta_url; ?>">Decouvrir LamakoRewards</a>
+            <button type="button" class="lr-rewards-popup__later">Continuer sans activer</button>
         </div>
     </div>
     <script>
     (function() {
-        setTimeout(function() {
-            var popup = document.getElementById('lr-checkout-popup');
-            if (popup) popup.style.display = 'flex';
-        }, 3000);
+        var popup = document.getElementById('lr-rewards-popup');
+        if (!popup) return;
+        var key = 'lamako_rewards_popup_v2';
+        var delay = <?php echo wp_json_encode( $delay ); ?>;
+        var frequency = <?php echo wp_json_encode( $frequency ); ?>;
+        var maxImpressions = <?php echo wp_json_encode( $max_impressions ); ?>;
+        var history = { impressions: 0, lastShownAt: 0 };
+        try {
+            history = JSON.parse(window.localStorage.getItem(key) || 'null') || history;
+        } catch (e) {}
+        if (history.impressions >= maxImpressions || Date.now() - history.lastShownAt < frequency) return;
+
+        var previousFocus = null;
+        var closePopup = function() {
+            popup.classList.remove('lr-rewards-popup--open');
+            popup.setAttribute('aria-hidden', 'true');
+            document.documentElement.style.overflow = '';
+            if (previousFocus) previousFocus.focus();
+        };
+        popup.querySelector('.lr-rewards-popup__close').addEventListener('click', closePopup);
+        popup.querySelector('.lr-rewards-popup__later').addEventListener('click', closePopup);
+        popup.addEventListener('click', function(event) {
+            if (event.target === popup) closePopup();
+        });
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape' && popup.classList.contains('lr-rewards-popup--open')) closePopup();
+        });
+
+        window.setTimeout(function() {
+            previousFocus = document.activeElement;
+            history.impressions += 1;
+            history.lastShownAt = Date.now();
+            try { window.localStorage.setItem(key, JSON.stringify(history)); } catch (e) {}
+            popup.classList.remove('tbl-rewards-suppressed');
+            popup.removeAttribute('style');
+            popup.classList.add('lr-rewards-popup--open');
+            popup.setAttribute('aria-hidden', 'false');
+            document.documentElement.style.overflow = 'hidden';
+            popup.querySelector('.lr-rewards-popup__close').focus();
+        }, delay);
     })();
     </script>
     <?php
@@ -1692,42 +2195,26 @@ add_action( 'woocommerce_before_add_to_cart_form', 'lr_product_page_cta' );
 function lr_product_page_cta() {
     global $product;
     if ( ! $product ) return;
-    
+
     $price = (float) $product->get_price();
     $base_points = floor( $price / 1000 );
-    
+
     if ( $base_points <= 0 ) return;
-    
-    // Get user tier multiplier if logged in
-    $multiplier = 1;
-    $tier_name = '';
-    $tier_emoji = '';
-    if ( is_user_logged_in() ) {
-        $user_id = get_current_user_id();
-        $lifetime = (int) get_user_meta( $user_id, 'lr_lifetime_points', true );
-        if ( $lifetime >= LR_TIER_DIAMOND ) { $multiplier = 2; $tier_name = 'Diamond'; $tier_emoji = '👑'; }
-        elseif ( $lifetime >= LR_TIER_PLATINUM ) { $multiplier = 1.5; $tier_name = 'Platinum'; $tier_emoji = '💎'; }
-        elseif ( $lifetime >= LR_TIER_GOLD ) { $multiplier = 1.25; $tier_name = 'Gold'; $tier_emoji = '🌟'; }
-        else { $multiplier = 1; }
-    }
-    
-    $final_points = floor( $base_points * $multiplier );
+
+    $final_points = $base_points;
     $logo_dark = 'https://www.ticketbylamako.com/wp-content/uploads/2026/04/LamakoRewards_Dark.png';
-    
+
     // Stacked layout (matching mobile app PointsBadge)
     echo '<div style="background:#fdf6ee; border:1px solid #e8d5a3; border-radius:12px; padding:16px; margin-bottom:16px; font-family:Raleway,-apple-system,sans-serif;">';
-    
+
     // Row 1: logo + points text
     echo '<div style="display:flex; align-items:center; gap:10px;">';
     echo '<img src="' . esc_url( $logo_dark ) . '" alt="LamakoRewards" style="width:36px; height:auto; flex-shrink:0;">';
     echo '<div>';
     echo '<div style="font-weight:600; color:#3d2314; font-size:0.9em;">Gagnez <span style="font-weight:700; color:#b45309; font-size:1.05em;">' . $final_points . ' points</span> LamakoRewards</div>';
-    if ( $multiplier > 1 ) {
-        echo '<div style="font-size:0.78em; color:#92400e; margin-top:2px;">' . $tier_emoji . ' Bonus ' . $tier_name . ' : x' . $multiplier . '</div>';
-    }
     echo '</div>';
     echo '</div>';
-    
+
     // Row 2: user info or signup CTA
     if ( ! is_user_logged_in() ) {
         echo '<div style="margin-top:10px; padding-top:10px; border-top:1px solid #e8d5a3; font-size:0.8em; color:#92400e;"><a href="' . wp_registration_url() . '" style="color:#b45309; font-weight:600; text-decoration:underline;">Inscrivez-vous gratuitement</a> pour commencer</div>';
@@ -1735,7 +2222,7 @@ function lr_product_page_cta() {
         $balance = (int) get_user_meta( get_current_user_id(), 'lr_points_balance', true );
         echo '<div style="margin-top:10px; padding-top:10px; border-top:1px solid #e8d5a3; font-size:0.8em; color:#92400e;">Votre solde : <strong>' . $balance . ' pts</strong></div>';
     }
-    
+
     echo '</div>';
 }
 
@@ -1745,10 +2232,10 @@ add_action( 'woocommerce_after_shop_loop_item_title', 'lr_shop_loop_points_badge
 function lr_shop_loop_points_badge() {
     global $product;
     if ( ! $product ) return;
-    
+
     $price = (float) $product->get_price();
     $points = floor( $price / 1000 );
-    
+
     if ( $points > 0 ) {
         $logo_dark = 'https://www.ticketbylamako.com/wp-content/uploads/2026/04/LamakoRewards_Dark.png';
         echo '<div style="font-family:Raleway,-apple-system,sans-serif; font-size:0.78em; color:#b45309; font-weight:600; margin-top:4px; display:flex; align-items:center; gap:4px;">';
@@ -1763,18 +2250,24 @@ add_action( 'wp_footer', 'lr_checkout_page_popup' );
 
 function lr_checkout_page_popup() {
     if ( is_user_logged_in() ) return;
-    // Show on: checkout, cart, events, shop/boutique pages
+
+    if ( ( function_exists( 'is_checkout' ) && is_checkout() )
+        || ( function_exists( 'is_cart' ) && is_cart() )
+        || ( function_exists( 'is_account_page' ) && is_account_page() )
+        || is_page( array( 'checkout', 'cart', 'panier', 'connexion', 'inscription', 'lamako-rewards' ) ) ) {
+        return;
+    }
+
+    $config = lr_rewards_get_config();
+    $popup = $config['popup']['web'] ?? array();
+    if ( empty( $popup['enabled'] ) ) return;
+    $pages = array_map( 'sanitize_key', (array) ( $popup['pages'] ?? array() ) );
+
     $is_target = false;
-    if ( function_exists( 'is_checkout' ) && is_checkout() ) $is_target = true;
-    if ( function_exists( 'is_cart' ) && is_cart() ) $is_target = true;
-    if ( is_page( 'checkout' ) || is_page( 'cart' ) || is_page( 'panier' ) ) $is_target = true;
-    if ( function_exists( 'is_shop' ) && is_shop() ) $is_target = true;
-    if ( is_singular( 'tc_events' ) ) $is_target = true;
-    if ( is_singular( 'product' ) ) $is_target = true;
-    if ( is_post_type_archive( 'tc_events' ) ) $is_target = true;
-    // Fallback: check page ID directly
-    $page_id = get_queried_object_id();
-    if ( $page_id == wc_get_page_id( 'checkout' ) || $page_id == wc_get_page_id( 'cart' ) || $page_id == wc_get_page_id( 'shop' ) ) $is_target = true;
+    if ( in_array( 'home', $pages, true ) && is_front_page() ) $is_target = true;
+    if ( in_array( 'shop', $pages, true ) && ( ( function_exists( 'is_shop' ) && is_shop() ) || is_page( 'boutique' ) ) ) $is_target = true;
+    if ( in_array( 'event', $pages, true ) && ( is_singular( 'tc_events' ) || is_post_type_archive( 'tc_events' ) ) ) $is_target = true;
+    if ( in_array( 'product', $pages, true ) && is_singular( 'product' ) ) $is_target = true;
     if ( ! $is_target ) return;
     echo do_shortcode( '[lamako_rewards_checkout_popup]' );
 }
@@ -1811,35 +2304,34 @@ function lr_account_rewards_content() {
     $total_earned = lr_get_total_earned( $user_id );
     $tier = lr_get_tier( $total_earned );
     $tier_name = lr_get_tier_name( $tier );
-    $multiplier = lr_get_multiplier( $tier );
     $code = lr_generate_referral_code( $user_id );
     $referral_count = (int) get_user_meta( $user_id, '_lamako_referral_count', true );
     $next = lr_get_next_tier( $tier );
     $to_next = lr_get_points_to_next_tier( $total_earned );
     $can_redeem = $total_earned >= LR_REDEMPTION_MIN_LIFETIME;
     $logo_dark = 'https://www.ticketbylamako.com/wp-content/uploads/2026/04/LamakoRewards_Dark.png';
-    
+
     // Tier colors
     $tier_colors = array( 'fan' => '#c79f6c', 'silver' => '#C0C0C0', 'gold' => '#FFD700', 'platinum' => '#a8a8a8', 'diamond' => '#7dd3fc' );
     $tier_color = $tier_colors[ $tier ] ?? '#c79f6c';
     $tier_emojis = array( 'fan' => '🎵', 'silver' => '⭐', 'gold' => '🌟', 'platinum' => '💎', 'diamond' => '👑' );
     $tier_emoji = $tier_emojis[ $tier ] ?? '';
-    
+
     // Progress calculation
     $next_threshold = lr_get_next_tier_threshold( $total_earned );
     $current_threshold = lr_get_current_tier_threshold( $total_earned );
     $range = max( 1, $next_threshold - $current_threshold );
     $progress = $tier === 'diamond' ? 100 : min( 100, ( ( $total_earned - $current_threshold ) / $range ) * 100 );
-    
+
     ?>
     <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <div style="max-width:680px; font-family:'Raleway', -apple-system, sans-serif;">
-        
+
         <!-- Header with logo -->
         <div style="text-align:center; margin-bottom:32px;">
             <img src="<?php echo esc_url( $logo_dark ); ?>" alt="LamakoRewards" style="max-width:220px; height:auto; margin-bottom:12px;">
         </div>
-        
+
         <!-- Stats cards -->
         <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:28px;">
             <div style="background:linear-gradient(135deg, #3d2314, #663d17); padding:24px 16px; border-radius:12px; text-align:center; color:white;">
@@ -1849,14 +2341,14 @@ function lr_account_rewards_content() {
             <div style="background:white; padding:24px 16px; border-radius:12px; text-align:center; border:2px solid <?php echo $tier_color; ?>;">
                 <div style="font-size:1.2em; margin-bottom:4px;"><?php echo $tier_emoji; ?></div>
                 <div style="font-size:1.6em; font-weight:800; color:#3d2314;"><?php echo esc_html( $tier_name ); ?></div>
-                <div style="font-size:0.85em; color:#888; margin-top:4px;">x<?php echo $multiplier; ?> points</div>
+                <div style="font-size:0.85em; color:#888; margin-top:4px;">Progression fidelite</div>
             </div>
             <div style="background:#f9fafb; padding:24px 16px; border-radius:12px; text-align:center;">
                 <div style="font-size:2.2em; font-weight:800; color:#663d17;"><?php echo number_format( $total_earned, 0, ',', ' ' ); ?></div>
                 <div style="font-size:0.85em; color:#888; margin-top:4px;">Points cumulés</div>
             </div>
         </div>
-        
+
         <!-- Progress bar -->
         <?php if ( $next ) : ?>
         <div style="background:#faf8f5; padding:20px 24px; border-radius:12px; margin-bottom:28px; border:1px solid #f0ebe5;">
@@ -1874,18 +2366,18 @@ function lr_account_rewards_content() {
             <div style="font-size:1.1em; font-weight:700; color:#0369a1;">👑 Niveau maximum atteint ! Vous êtes au sommet.</div>
         </div>
         <?php endif; ?>
-        
-        <!-- Cashback status -->
+
+        <!-- Rewards reduction status -->
         <div style="background:<?php echo $can_redeem ? '#f0fdf4' : '#fef3c7'; ?>; padding:20px 24px; border-radius:12px; margin-bottom:28px; border:1px solid <?php echo $can_redeem ? '#bbf7d0' : '#fde68a'; ?>;">
             <?php if ( $can_redeem ) : ?>
-                <div style="font-weight:700; color:#166534; margin-bottom:4px;">✅ Cashback débloqué</div>
-                <div style="font-size:0.9em; color:#15803d;">Vous pouvez échanger vos points contre des réductions. Taux : 20 Ar par point.</div>
+                <div style="font-weight:700; color:#166534; margin-bottom:4px;">Reduction Rewards debloquee</div>
+                <div style="font-size:0.9em; color:#15803d;">Vos points peuvent etre utilises sur les evenements et offres participants Lamako Rewards.</div>
             <?php else : ?>
-                <div style="font-weight:700; color:#92400e; margin-bottom:4px;">🔒 Cashback verrouillé</div>
-                <div style="font-size:0.9em; color:#a16207;">Débloqué dès <?php echo number_format( LR_REDEMPTION_MIN_LIFETIME, 0, ',', ' ' ); ?> pts cumulés (= <?php echo number_format( LR_REDEMPTION_MIN_LIFETIME * 1000, 0, ',', ' ' ); ?> Ar dépensés). Il vous manque <strong><?php echo number_format( LR_REDEMPTION_MIN_LIFETIME - $total_earned, 0, ',', ' ' ); ?> pts</strong>.</div>
+                <div style="font-weight:700; color:#92400e; margin-bottom:4px;">Reduction Rewards verrouillee</div>
+                <div style="font-size:0.9em; color:#a16207;">Les reductions Rewards sont debloquees a partir de <?php echo number_format( lr_rewards_minimum_redeem_points(), 0, ',', ' ' ); ?> points disponibles. Il vous manque <strong><?php echo number_format( max( 0, lr_rewards_minimum_redeem_points() - $balance ), 0, ',', ' ' ); ?> pts</strong>.</div>
             <?php endif; ?>
         </div>
-        
+
         <!-- Referral code -->
         <div style="background:linear-gradient(135deg, #3d2314, #663d17); padding:28px 24px; border-radius:12px; text-align:center; margin-bottom:28px; color:white;">
             <div style="font-size:1.1em; font-weight:700; margin-bottom:12px;">Mon code de parrainage</div>
@@ -1895,7 +2387,7 @@ function lr_account_rewards_content() {
             <div style="font-size:0.9em; opacity:0.85;">Partagez ce code et gagnez <strong>75 pts</strong> par filleul</div>
             <div style="font-size:0.85em; opacity:0.7; margin-top:8px;">Filleuls parrainés : <strong><?php echo $referral_count; ?></strong></div>
         </div>
-        
+
         <!-- CTA -->
         <div style="text-align:center;">
             <a href="/lamako-rewards" style="display:inline-block; background:linear-gradient(135deg, #c79f6c, #a67c52); color:white; padding:14px 32px; border-radius:8px; text-decoration:none; font-weight:700; font-size:1em; transition:opacity 0.2s;">Voir tous les avantages →</a>
@@ -1934,7 +2426,7 @@ function lr_homepage_cta_banner() {
         transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
     ">
         <img src="<?php echo esc_url( $logo_white ); ?>" alt="LamakoRewards" style="height:36px; width:auto;">
-        <span style="font-size:1em; font-weight:600;">Gagnez des points à chaque achat et profitez de cashback exclusif !</span>
+        <span style="font-size:1em; font-weight:600;">Gagnez des points sur vos achats eligibles et suivez votre progression Rewards.</span>
         <a href="/lamako-rewards" style="
             background: white;
             color: #3d2314;
@@ -1983,16 +2475,15 @@ function lr_homepage_cta_banner() {
 add_action( 'user_register', 'lr_send_welcome_email', 20 );
 
 function lr_send_welcome_email( $user_id ) {
-    if ( ! lr_rewards_user_is_eligible( $user_id ) ) return;
     $user = get_userdata( $user_id );
     if ( ! $user ) return;
-    
+
     $first_name = $user->first_name ?: $user->display_name;
     $logo_dark = 'https://www.ticketbylamako.com/wp-content/uploads/2026/04/LamakoRewards_Dark.png';
     $rewards_url = home_url( '/lamako-rewards/' );
-    
+
     $subject = 'Bienvenue chez LamakoRewards ! +100 points offerts';
-    
+
     $body = '
     <html>
     <head>
@@ -2005,18 +2496,18 @@ function lr_send_welcome_email( $user_id ) {
                 <img src="' . esc_url( $logo_dark ) . '" alt="LamakoRewards" style="height:50px; width:auto; filter:brightness(0) invert(1);">
                 <h1 style="color:white; margin:16px 0 0; font-size:1.6em; font-weight:800;">Bienvenue, ' . esc_html( $first_name ) . ' !</h1>
             </div>
-            
+
             <!-- Content -->
             <div style="padding:32px;">
                 <div style="background:linear-gradient(135deg, #fdf6ee, #fef3c7); border:1px solid #e8d5a3; border-radius:12px; padding:24px; text-align:center; margin-bottom:24px;">
                     <div style="font-size:2.5em; font-weight:800; color:#b45309;">+100 pts</div>
                     <div style="font-size:1em; color:#92400e; font-weight:600; margin-top:4px;">Bonus d\'inscription offert !</div>
                 </div>
-                
+
                 <p style="color:#333; font-size:1em; line-height:1.6; margin-bottom:16px;">
-                    Vous faites maintenant partie du programme <strong>LamakoRewards</strong> ! Gagnez des points sur chaque achat de billets et produits, et convertissez-les en <strong>cashback</strong>.
+                    Vous faites maintenant partie du programme <strong>LamakoRewards</strong> ! Gagnez des points sur vos achats eligibles, puis utilisez-les en reduction sur les evenements et offres participants.
                 </p>
-                
+
                 <h3 style="color:#3d2314; margin:24px 0 12px; font-weight:700;">Comment ca marche :</h3>
                 <table style="width:100%; border-collapse:collapse; font-size:0.9em;">
                     <tr style="border-bottom:1px solid #f0f0f0;">
@@ -2032,16 +2523,16 @@ function lr_send_welcome_email( $user_id ) {
                         <td style="padding:10px 0; text-align:right; font-weight:700; color:#b45309;">+10 pts</td>
                     </tr>
                     <tr>
-                        <td style="padding:10px 0;">Cashback (des 750 000 Ar depenses)</td>
-                        <td style="padding:10px 0; text-align:right; font-weight:700; color:#b45309;">2% en Ar</td>
+                        <td style="padding:10px 0;">Reductions Rewards</td>
+                        <td style="padding:10px 0; text-align:right; font-weight:700; color:#b45309;">Des 750 pts disponibles</td>
                     </tr>
                 </table>
-                
+
                 <div style="text-align:center; margin-top:32px;">
                     <a href="' . esc_url( $rewards_url ) . '" style="display:inline-block; background:linear-gradient(135deg, #3d2314, #663d17); color:white; padding:14px 32px; border-radius:8px; text-decoration:none; font-weight:700; font-size:1em;">Decouvrir mes avantages</a>
                 </div>
             </div>
-            
+
             <!-- Footer -->
             <div style="background:#f9fafb; padding:20px 32px; text-align:center; border-top:1px solid #f0f0f0;">
                 <p style="color:#888; font-size:0.8em; margin:0;">TicketByLamako - La billetterie #1 a Madagascar</p>
@@ -2049,12 +2540,12 @@ function lr_send_welcome_email( $user_id ) {
         </div>
     </body>
     </html>';
-    
+
     $headers = array(
         'Content-Type: text/html; charset=UTF-8',
         'From: LamakoRewards <noreply@ticketbylamako.com>',
     );
-    
+
     wp_mail( $user->user_email, $subject, $body, $headers );
 }
 
@@ -2071,19 +2562,19 @@ function lr_send_welcome_email( $user_id ) {
 function lr_header_points_counter() {
     if ( ! is_user_logged_in() ) return;
     if ( is_admin() ) return;
-    
+
     $user_id = get_current_user_id();
     $balance = (int) get_user_meta( $user_id, 'mycred_default', true );
     $lifetime = (int) get_user_meta( $user_id, 'mycred_default_total', true );
     $tier = 'Fan';
     $tier_emoji = '🎵';
     $tier_color = '#9BA1A6';
-    
+
     if ( $lifetime >= LR_TIER_DIAMOND ) { $tier = 'Diamond'; $tier_emoji = '👑'; $tier_color = '#E5E4E2'; }
     elseif ( $lifetime >= LR_TIER_PLATINUM ) { $tier = 'Platinum'; $tier_emoji = '💎'; $tier_color = '#B9F2FF'; }
     elseif ( $lifetime >= LR_TIER_GOLD ) { $tier = 'Gold'; $tier_emoji = '🌟'; $tier_color = '#c79f6c'; }
     elseif ( $lifetime >= LR_TIER_SILVER ) { $tier = 'Silver'; $tier_emoji = '⭐'; $tier_color = '#C0C0C0'; }
-    
+
     $logo_dark = 'https://www.ticketbylamako.com/wp-content/uploads/2026/04/LamakoRewards_Dark.png';
     ?>
     <style>
@@ -2187,13 +2678,13 @@ add_action( 'the_content', 'lr_tickera_event_badge', 5 );
 
 function lr_tickera_event_badge( $content ) {
     if ( ! is_singular( 'tc_events' ) ) return $content;
-    
+
     global $post;
-    
+
     // Get the event's ticket price (from linked ticket products)
     $event_id = $post->ID;
     $price = 0;
-    
+
     // Try to get price from Tickera ticket types linked to this event
     $ticket_types = get_posts( array(
         'post_type' => 'tc_tickets',
@@ -2202,7 +2693,7 @@ function lr_tickera_event_badge( $content ) {
         'posts_per_page' => -1,
         'fields' => 'ids',
     ));
-    
+
     if ( ! empty( $ticket_types ) ) {
         // Get the cheapest ticket price for display
         $min_price = PHP_INT_MAX;
@@ -2214,7 +2705,7 @@ function lr_tickera_event_badge( $content ) {
         }
         if ( $min_price < PHP_INT_MAX ) $price = $min_price;
     }
-    
+
     // Fallback: try WooCommerce product linked to event
     if ( $price <= 0 ) {
         $wc_product_id = get_post_meta( $event_id, '_wc_product_id', true );
@@ -2223,72 +2714,57 @@ function lr_tickera_event_badge( $content ) {
             if ( $product ) $price = (float) $product->get_price();
         }
     }
-    
+
     $base_points = floor( $price / 1000 );
-    
-    // Get user tier multiplier
-    $multiplier = 1;
-    $tier_info = '';
-    $tier_name = '';
-    if ( is_user_logged_in() ) {
-        $user_id = get_current_user_id();
-        $lifetime = (int) get_user_meta( $user_id, 'lr_lifetime_points', true );
-        if ( $lifetime >= LR_TIER_DIAMOND ) { $multiplier = 2; $tier_info = 'x2'; $tier_name = 'Diamond'; }
-        elseif ( $lifetime >= LR_TIER_PLATINUM ) { $multiplier = 1.5; $tier_info = 'x1.5'; $tier_name = 'Platinum'; }
-        elseif ( $lifetime >= LR_TIER_GOLD ) { $multiplier = 1.25; $tier_info = 'x1.25'; $tier_name = 'Gold'; }
-    }
-    
-    $final_points = ( $base_points > 0 ) ? floor( $base_points * $multiplier ) : 0;
-    
+
+    $final_points = ( $base_points > 0 ) ? $base_points : 0;
+
     // Premium dark card style (matching mobile app RewardsPopup)
     $logo_white = 'https://www.ticketbylamako.com/wp-content/uploads/2026/04/LamakoRewards_white.png';
     $register_url = wp_registration_url();
     $login_url = wp_login_url( get_permalink() );
-    
+
     $badge = '<link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;600;700;800&display=swap" rel="stylesheet">';
     $badge .= '<div class="lr-event-badge-premium" style="'
         . 'position:relative; overflow:hidden; border-radius:20px; margin-bottom:28px; '
         . 'background: linear-gradient(135deg, #1a0f0a 0%, #2d1810 40%, #3d2314 100%); '
         . 'box-shadow: 0 8px 32px rgba(0,0,0,0.25), 0 2px 8px rgba(199,159,108,0.1); '
         . 'font-family: Raleway, -apple-system, BlinkMacSystemFont, sans-serif;">';
-    
+
     // Decorative background pattern (subtle radial glow)
     $badge .= '<div style="position:absolute; top:0; left:0; right:0; bottom:0; '
         . 'background: radial-gradient(ellipse at 30% 20%, rgba(199,159,108,0.08) 0%, transparent 60%), '
         . 'radial-gradient(ellipse at 80% 80%, rgba(199,159,108,0.05) 0%, transparent 50%); '
         . 'pointer-events:none;"></div>';
-    
+
     // Content container
     $badge .= '<div style="position:relative; z-index:1; padding:32px 28px; text-align:center;">';
-    
+
     // White logo
     $badge .= '<img src="' . esc_url( $logo_white ) . '" alt="LamakoRewards" style="'
         . 'width:120px; height:auto; margin:0 auto 6px; display:block;">';
-    
+
     // "Rewards" label in gold
     $badge .= '<div style="color:#c79f6c; font-size:13px; font-weight:600; letter-spacing:1px; margin-bottom:18px;">REWARDS</div>';
-    
+
     // Points display (if available)
     if ( $final_points > 0 ) {
         $badge .= '<div style="margin-bottom:14px;">';
         $badge .= '<span style="color:#c79f6c; font-size:32px; font-weight:800; line-height:1;">' . $final_points . '</span>';
         $badge .= '<span style="color:rgba(255,255,255,0.8); font-size:14px; font-weight:600; margin-left:6px;">points</span>';
-        if ( $tier_info ) {
-            $badge .= '<div style="color:#c79f6c; font-size:12px; font-weight:500; margin-top:4px; opacity:0.85;">Bonus ' . $tier_name . ' ' . $tier_info . '</div>';
-        }
         $badge .= '</div>';
     }
-    
+
     // Main text
     $badge .= '<p style="color:#ffffff; font-size:15px; font-weight:600; line-height:1.5; margin:0 0 10px; max-width:320px; margin-left:auto; margin-right:auto;">';
-    $badge .= 'Profitez de reductions et recompenses<br>en gagnant des points !';
+    $badge .= 'Gagnez des points sur vos achats eligibles<br>et suivez votre progression Rewards.';
     $badge .= '</p>';
-    
+
     // Features line
     $badge .= '<p style="color:rgba(255,255,255,0.65); font-size:12px; font-weight:500; margin:0 0 22px; letter-spacing:0.3px;">';
-    $badge .= 'Billets gratuits &bull; Cashback &bull; Evenements exclusifs';
+    $badge .= 'Reductions des 500 pts &bull; Offres participantes &bull; Statut membre';
     $badge .= '</p>';
-    
+
     if ( ! is_user_logged_in() ) {
         // CTA button (gold)
         $badge .= '<a href="' . esc_url( $register_url ) . '" style="'
@@ -2301,7 +2777,7 @@ function lr_tickera_event_badge( $content ) {
             . 'onmouseout="this.style.opacity=1;this.style.transform=\'scale(1)\'">';
         $badge .= 'Rejoindre maintenant !';
         $badge .= '</a>';
-        
+
         // Login link
         $badge .= '<div style="margin-top:14px;">';
         $badge .= '<span style="color:rgba(255,255,255,0.55); font-size:13px;">Deja un compte ? </span>';
@@ -2316,10 +2792,10 @@ function lr_tickera_event_badge( $content ) {
         $badge .= '</div>';
         $badge .= '<div style="margin-top:12px;"><a href="/lamako-rewards" style="color:#c79f6c; font-size:13px; font-weight:600; text-decoration:none;">Voir mes recompenses &rarr;</a></div>';
     }
-    
+
     $badge .= '</div>'; // end content
     $badge .= '</div>'; // end card
-    
+
     return $badge . $content;
 }
 
@@ -2328,3 +2804,139 @@ register_activation_hook( __FILE__, function() {
     lr_add_account_endpoint();
     flush_rewrite_rules();
 });
+// ============================================================
+// EXPLICIT MEMBERSHIP AND FIXED-RATE ENFORCEMENT (3.3)
+// ============================================================
+
+function lr_rewards_user_can_join( $user_id ) {
+    $user = get_userdata( absint( $user_id ) );
+    if ( ! $user ) {
+        return false;
+    }
+
+    $internal_roles = array(
+        'administrator', 'editor', 'author', 'contributor', 'staff',
+        'shop_manager', 'organisateur', 'guichet', 'responsable',
+        'responsable_vente', 'wpseo_manager', 'wpseo_editor',
+        'staff_checkin', 'staff_kiosk', 'event_manager',
+        'checkin_supervisor', 'responsable_finance',
+        'operations_supervisor', 'lamako_support',
+    );
+    if ( array_intersect( (array) $user->roles, $internal_roles ) ) {
+        return false;
+    }
+
+    return (bool) array_intersect( (array) $user->roles, array( 'customer', 'subscriber' ) );
+}
+
+function lr_rewards_member_is_active( $user_id ) {
+    $user_id = absint( $user_id );
+    if ( ! $user_id || ! lr_rewards_user_can_join( $user_id ) ) {
+        return false;
+    }
+
+    if ( 'yes' === get_user_meta( $user_id, '_lamako_rewards_member', true ) ) {
+        return true;
+    }
+
+    $legacy_balance = function_exists( 'mycred_get_users_balance' )
+        ? (float) mycred_get_users_balance( $user_id )
+        : 0;
+    if ( $legacy_balance > 0 ) {
+        update_user_meta( $user_id, '_lamako_rewards_member', 'yes' );
+        update_user_meta( $user_id, '_lamako_rewards_member_since', gmdate( 'c' ) );
+        update_user_meta( $user_id, '_lamako_rewards_welcome_awarded', 'yes' );
+        update_user_meta( $user_id, '_lamako_rewards_membership_migrated', '20260910_runtime' );
+        return true;
+    }
+
+    return false;
+}
+
+function lr_activate_rewards_membership( WP_REST_Request $request ) {
+    $user_id = get_current_user_id();
+    if ( ! $user_id ) {
+        return new WP_Error( 'rest_not_logged_in', __( 'Vous devez être connecté.', 'lamako-rewards' ), array( 'status' => 401 ) );
+    }
+    if ( ! lr_rewards_user_can_join( $user_id ) ) {
+        return new WP_Error( 'lamako_rewards_customer_only', __( 'LamakoRewards est réservé aux comptes clients.', 'lamako-rewards' ), array( 'status' => 403 ) );
+    }
+    if ( lr_rewards_member_is_active( $user_id ) ) {
+        return rest_ensure_response( array(
+            'success'       => true,
+            'active'        => true,
+            'awarded'       => false,
+            'alreadyActive' => true,
+            'points'        => 0,
+            'balance'       => function_exists( 'mycred_get_users_balance' ) ? (float) mycred_get_users_balance( $user_id ) : 0,
+        ) );
+    }
+    if ( ! function_exists( 'mycred_add' ) ) {
+        return new WP_Error( 'lamako_rewards_ledger_unavailable', __( 'Le service Rewards est temporairement indisponible.', 'lamako-rewards' ), array( 'status' => 503 ) );
+    }
+
+    $welcome_awarded = 'yes' === get_user_meta( $user_id, '_lamako_rewards_welcome_awarded', true );
+    $awarded = 0;
+    if ( ! $welcome_awarded ) {
+        $credited = mycred_add( 'registration', $user_id, LR_REGISTRATION_BONUS, 'Bonus adhésion LamakoRewards' );
+        if ( ! $credited ) {
+            return new WP_Error( 'lamako_rewards_credit_failed', __( 'Le bonus n’a pas pu être crédité.', 'lamako-rewards' ), array( 'status' => 503 ) );
+        }
+        $awarded = (int) LR_REGISTRATION_BONUS;
+        update_user_meta( $user_id, '_lamako_rewards_welcome_awarded', 'yes' );
+    }
+
+    update_user_meta( $user_id, '_lamako_rewards_member', 'yes' );
+    update_user_meta( $user_id, '_lamako_rewards_member_since', gmdate( 'c' ) );
+
+    return rest_ensure_response( array(
+        'success'       => true,
+        'active'        => true,
+        'awarded'       => $awarded > 0,
+        'alreadyActive' => false,
+        'points'        => $awarded,
+        'balance'       => function_exists( 'mycred_get_users_balance' ) ? (float) mycred_get_users_balance( $user_id ) : $awarded,
+    ) );
+}
+
+add_action( 'rest_api_init', function () {
+    register_rest_route( 'lamako-mobile/v2', '/rewards/membership/activate', array(
+        'methods'             => WP_REST_Server::CREATABLE,
+        'callback'            => 'lr_activate_rewards_membership',
+        'permission_callback' => function () { return is_user_logged_in(); },
+    ) );
+} );
+
+function lr_award_purchase_points_for_member( $order_id ) {
+    $order = wc_get_order( $order_id );
+    if ( ! $order || ! lr_rewards_member_is_active( $order->get_customer_id() ) ) {
+        return;
+    }
+    lr_award_purchase_points( $order_id );
+}
+
+remove_action( 'woocommerce_payment_complete', 'lr_award_purchase_points', 10 );
+remove_action( 'woocommerce_order_status_processing', 'lr_award_purchase_points', 10 );
+remove_action( 'woocommerce_order_status_completed', 'lr_award_purchase_points', 10 );
+add_action( 'woocommerce_payment_complete', 'lr_award_purchase_points_for_member', 10, 1 );
+add_action( 'woocommerce_order_status_processing', 'lr_award_purchase_points_for_member', 10, 1 );
+add_action( 'woocommerce_order_status_completed', 'lr_award_purchase_points_for_member', 10, 1 );
+
+remove_action( 'user_register', 'lr_registration_bonus', 10 );
+remove_action( 'wp_login', 'lr_daily_login_bonus', 10 );
+remove_action( 'lr_daily_cron', 'lr_check_birthdays' );
+remove_action( 'woocommerce_order_status_completed', 'lr_credit_referrer_on_purchase', 20 );
+
+add_filter( 'rest_pre_dispatch', function ( $result, $server, $request ) {
+    if ( '/lamako-mobile/v2/rewards/engagement/first-app-open' !== $request->get_route() ) {
+        return $result;
+    }
+    if ( ! lr_rewards_member_is_active( get_current_user_id() ) ) {
+        return new WP_Error(
+            'lamako_rewards_membership_required',
+            __( 'Activez LamakoRewards avant de recevoir ce bonus.', 'lamako-rewards' ),
+            array( 'status' => 403 )
+        );
+    }
+    return $result;
+}, 10, 3 );

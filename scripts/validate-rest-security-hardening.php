@@ -235,7 +235,7 @@ function tbl_guard_validator_main(array $arguments): int {
 
     fwrite(
         STDOUT,
-        'PASS strict_mode=1 cookies_only=1 tickera_hook=1 session_start=0 sha256=' . hash('sha256', $source) . "\n"
+        'PASS strict_mode=1 cookies_only=1 tickera_hook=1 session_start=0 sha256=' . hash('sha256', str_replace(array("\r\n", "\r"), "\n", $source)) . "\n"
     );
     return 0;
 }
